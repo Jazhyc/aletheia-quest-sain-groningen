@@ -352,24 +352,26 @@ For fast prompt and threshold iteration, use the Hydra-driven judge runner rathe
 than editing a submission notebook for every trial:
 
 ```bash
-python scripts/run_blackbox_judge.py split=validation method=qwen_judge_v1
-python scripts/run_blackbox_judge.py split=validation method=qwen_3shot shots.n_per_label=3
-python scripts/run_blackbox_judge.py split=validation scoring.threshold=0.45 judge.rating_max=5
+python experiments/blackbox/run_judge.py split=validation method=qwen_judge_v1
+python experiments/blackbox/run_judge.py split=validation method=qwen_3shot shots.n_per_label=3
+python experiments/blackbox/run_judge.py split=validation scoring.threshold=0.45 judge.rating_max=5
 ```
 
 It reads `dev_splits/dry.<split>.yaml`, scores only that split's indexed rows,
-writes per-dataset predictions under `blackbox_runs/`, and appends a local JSONL
-ledger to `blackbox_runs/results.jsonl`. Few-shot examples, when enabled, are
+writes per-dataset predictions under `logs/blackbox/`, and appends a local JSONL
+ledger to `logs/blackbox/results.jsonl`. Few-shot examples, when enabled, are
 sampled only from `shots.split` (`train` by default), so validation/test labels
-are not used in the prompt.
+are not used in the prompt. Development and training runs use local GPU inference
+through vLLM; reserve NDIF for leaderboard evaluation/submission execution.
 
 On Slurm, start with direct `sbatch` so cluster failures stay visible:
 
 ```bash
-sbatch scripts/slurm_blackbox_judge.sbatch split=validation method=qwen_judge_v1
-sbatch scripts/slurm_blackbox_judge.sbatch split=validation method=qwen_3shot shots.n_per_label=3
+sbatch experiments/blackbox/run_judge.sh split=validation method=qwen_judge_v1
+sbatch experiments/blackbox/run_judge.sh split=validation method=qwen_3shot shots.n_per_label=3
 ```
 
-Hydra still gives config overrides and sweep-friendly command lines. Add
-`submitit` later only if we need Python-managed Slurm arrays; direct `sbatch` is
-usually easier to debug for NDIF-bound jobs.
+The Slurm template requests one `gpushort` GPU node, one CPU, 32 GB memory, and
+writes job output to `logs/slurm/%x-%j.out`. Hydra still gives config overrides
+and sweep-friendly command lines. Add `submitit` later only if we need
+Python-managed Slurm arrays; direct `sbatch` is usually easier to debug.

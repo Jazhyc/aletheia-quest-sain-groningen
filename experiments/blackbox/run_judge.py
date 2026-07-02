@@ -3,7 +3,9 @@
 
 This is development tooling, not submission code. It scores public dev split
 subsets created by ``scripts/make_dev_splits.py`` and records local metrics so
-we can iterate on prompts, rating scales, thresholds, and batching.
+we can iterate on prompts, rating scales, thresholds, and batching. Development
+runs use local GPU inference through vLLM; NDIF is reserved for evaluation /
+submission execution.
 """
 
 from __future__ import annotations
@@ -25,15 +27,12 @@ from hydra.utils import get_original_cwd
 from omegaconf import DictConfig, OmegaConf
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 LEADERBOARD_SRC = ROOT / "leaderboard" / "src"
-SUBMISSION_SRC = ROOT / "submission"
 sys.path.insert(0, str(LEADERBOARD_SRC))
-sys.path.insert(0, str(SUBMISSION_SRC))
 
 from aletheia_runner.config import DatasetConfig, METRIC_KEYS  # noqa: E402
 from aletheia_runner.scoring import compute_metrics, load_predictions  # noqa: E402
-from util import build_model  # noqa: E402
 
 
 HF_SPLIT = "test"
@@ -227,46 +226,75 @@ def score_prompts(
     batch_size: int,
     rating_min: int,
     rating_max: int,
-    remote: bool,
+    dtype: str,
+    tensor_parallel_size: int,
+    gpu_memory_utilization: float,
+    trust_remote_code: bool,
+    max_model_len: int | None,
+    max_num_seqs: int | None,
+    generated_logprobs: int,
+    missing_logprob: float,
+    temperature: float,
 ) -> np.ndarray:
     from transformers import AutoTokenizer
+    from vllm import LLM, SamplingParams
 
-    model = build_model(model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    tokenizer.padding_side = "left"
-    if tokenizer.pad_token_id is None:
-        tokenizer.pad_token = tokenizer.eos_token
     all_rating_ids, ids_by_rating = rating_token_ids(tokenizer, rating_min, rating_max)
     ratings = list(range(rating_min, rating_max + 1))
 
     scores = np.full(len(prompts), np.nan, dtype=float)
-    with model.session(remote=remote):
-        saved_logits = []
-        for start in range(0, len(prompts), batch_size):
-            chunk = prompts[start:start + batch_size]
-            encoded = tokenizer(chunk, return_tensors="pt", padding=True)
-            with model.trace({
-                "input_ids": encoded["input_ids"],
-                "attention_mask": encoded["attention_mask"],
-            }):
-                saved_logits.append(model.output.logits[:, -1, all_rating_ids].save())
+    llm_kwargs: dict[str, Any] = {
+        "model": model_name,
+        "dtype": dtype,
+        "tensor_parallel_size": tensor_parallel_size,
+        "gpu_memory_utilization": gpu_memory_utilization,
+        "trust_remote_code": trust_remote_code,
+    }
+    if max_model_len is not None:
+        llm_kwargs["max_model_len"] = max_model_len
+    if max_num_seqs is not None:
+        llm_kwargs["max_num_seqs"] = max_num_seqs
+    llm = LLM(**llm_kwargs)
+    sampling = SamplingParams(
+        max_tokens=1,
+        temperature=temperature,
+        logprobs=generated_logprobs,
+    )
 
     offset = 0
-    for logits_proxy in saved_logits:
-        logits = logits_proxy.float().cpu().numpy()
-        for row in logits:
-            expanded = dict(zip(all_rating_ids, row, strict=True))
-            max_logit = max(expanded.values())
-            probs = {
-                rating: float(sum(math.exp(expanded[token_id] - max_logit)
-                                  for token_id in ids_by_rating[rating]))
-                for rating in ratings
-            }
-            total = sum(probs.values())
-            if total > 0:
-                expected = sum(rating * probs[rating] for rating in ratings) / total
-                scores[offset] = (expected - rating_min) / (rating_max - rating_min)
+    outputs = []
+    for start in range(0, len(prompts), batch_size):
+        outputs.extend(llm.generate(prompts[start:start + batch_size], sampling))
+
+    def logprob_value(value: Any) -> float:
+        if isinstance(value, (int, float)):
+            return float(value)
+        if hasattr(value, "logprob"):
+            return float(value.logprob)
+        if isinstance(value, dict) and "logprob" in value:
+            return float(value["logprob"])
+        return float(value)
+
+    for output in outputs:
+        if not output.outputs or not output.outputs[0].logprobs:
             offset += 1
+            continue
+        first_token_logprobs = output.outputs[0].logprobs[0] or {}
+        expanded = {
+            int(token_id): logprob_value(value)
+            for token_id, value in first_token_logprobs.items()
+        }
+        probs = {
+            rating: float(sum(math.exp(expanded.get(token_id, missing_logprob))
+                              for token_id in ids_by_rating[rating]))
+            for rating in ratings
+        }
+        total = sum(probs.values())
+        if total > 0:
+            expected = sum(rating * probs[rating] for rating in ratings) / total
+            scores[offset] = (expected - rating_min) / (rating_max - rating_min)
+        offset += 1
     return np.nan_to_num(scores, nan=0.5)
 
 
@@ -298,7 +326,7 @@ def fmt_metric(value: float | None) -> str:
     return f"{value:.4f}" if value is not None else "-"
 
 
-@hydra.main(version_base=None, config_path="../configs", config_name="blackbox_judge")
+@hydra.main(version_base=None, config_path="../../configs", config_name="blackbox_judge")
 def main(cfg: DictConfig) -> None:
     original_cwd = Path(get_original_cwd()).resolve()
     resolved = OmegaConf.to_container(cfg, resolve=True)
@@ -345,7 +373,15 @@ def main(cfg: DictConfig) -> None:
             batch_size=int(cfg.judge.batch_size),
             rating_min=int(cfg.judge.rating_min),
             rating_max=int(cfg.judge.rating_max),
-            remote=bool(cfg.judge.remote),
+            dtype=str(cfg.judge.dtype),
+            tensor_parallel_size=int(cfg.judge.tensor_parallel_size),
+            gpu_memory_utilization=float(cfg.judge.gpu_memory_utilization),
+            trust_remote_code=bool(cfg.judge.trust_remote_code),
+            max_model_len=None if cfg.judge.max_model_len is None else int(cfg.judge.max_model_len),
+            max_num_seqs=None if cfg.judge.max_num_seqs is None else int(cfg.judge.max_num_seqs),
+            generated_logprobs=int(cfg.judge.generated_logprobs),
+            missing_logprob=float(cfg.judge.missing_logprob),
+            temperature=float(cfg.judge.temperature),
         )
         pred_path = run_dir / "predictions" / f"{dataset_cfg.name.replace('/', '__')}.csv"
         write_predictions(pred_path, examples, scores, float(cfg.scoring.threshold))
