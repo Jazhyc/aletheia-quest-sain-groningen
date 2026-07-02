@@ -321,3 +321,27 @@ passes locally but fails here. Keep your code to NDIF + HF and the working dir.
   ship with your submission. Keep the total package reasonable (< 200 MB).
 - `submit.py` packages the repo and POSTs it to the leaderboard Space; set the
   Space URL via `--space-url` or the `ALETHEIA_SPACE_URL` environment variable.
+
+## Private dev splits
+
+The public dev datasets are labelled, but each repo is a single `test` split.
+For local method development, make a deterministic 80/10/10 split and score
+against it without changing the official submission contract:
+
+```bash
+python scripts/make_dev_splits.py --dry-yaml dry.yaml --out-dir dev_splits --seed 0
+python scripts/dev_leaderboard.py --method "my-method" --split validation
+python scripts/dev_leaderboard.py --method "my-method" --split test
+```
+
+`make_dev_splits.py` stratifies independently within each dataset and label, so
+every split keeps the same model/LoRA organism coverage as the source dev set as
+closely as the row counts allow. It writes local label subsets and
+`dev_splits/dry.train.yaml`, `dev_splits/dry.validation.yaml`, and
+`dev_splits/dry.test.yaml`.
+
+Use `train` for fitting, `validation` for hyperparameter and threshold choices,
+and reserve `test` for the final local check. `dev_leaderboard.py` runs the same
+notebook pipeline as `--dry`, scores only the chosen label subset, and appends a
+private JSONL history to `dev_splits/results.jsonl`. The whole `dev_splits/`
+directory is git-ignored.
