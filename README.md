@@ -113,6 +113,21 @@ advised by David Bau (NDIF Director).
    `uv sync`, `huggingface-cli`, and `datasets.load_dataset` all reuse the same
    scratch-backed caches.
 3. For local development, `hf auth login` so your HF token is available.
+   You can also keep local-only credentials in a git-ignored `.env` file:
+   ```bash
+   NDIF_API_KEY=your-ndif-key
+   HF_TOKEN=your-hf-token
+   WANDB_API_KEY=your-wandb-key
+   ```
+   Load it before notebooks, dry runs, or training jobs:
+   ```bash
+   set -a
+   source .env
+   set +a
+   ```
+   `NDIF_API_KEY` is required for remote nnsight traces. `HF_TOKEN` is only
+   needed for gated/private Hugging Face access, and `WANDB_API_KEY` is only
+   needed if you enable experiment logging.
 4. Look at [`submission/example.ipynb`](submission/example.ipynb) — a minimal
    working baseline detector that follows the contract; replace the contents of the `detector` method to user the lie classification method you developed it with your detector.
 5. Replace `
