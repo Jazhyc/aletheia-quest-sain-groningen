@@ -86,15 +86,21 @@ advised by David Bau (NDIF Director).
    `./.venv` and install everything needed for development, GPU-assisted probe
    training, and `python submit.py --dry`:
    ```bash
+   module load Python/3.12.3-GCCcore-13.3.0 CUDA/13.2.0
    ./setup_dev.sh && source .venv/bin/activate
    ```
+   On the Hábrók/RUG cluster, load those modules before syncing manually as
+   well; the system `/usr/bin/python3.12` does not include Python headers needed
+   to build the competition's `nnsight` branch. The setup script loads the
+   modules automatically when the `module` command is available.
+
    The root [`pyproject.toml`](pyproject.toml) pins Python 3.12, includes the
    competition's **nnsight** `hackathon/peft` branch, and installs local research
    tools including **nnterp** and **vLLM**. The `uv.lock` file pins the resolved
    Git commit and transitive packages for repeatable notebook work. To run without
    activating the environment:
    ```bash
-   UV_CACHE_DIR=.uv-cache uv run python submit.py --dry
+   uv run python submit.py --dry
    ```
    `submission/requirements.txt` is still the leaderboard runtime dependency
    contract. Keep training-only packages such as `vllm` out of it unless the

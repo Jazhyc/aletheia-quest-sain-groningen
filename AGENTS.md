@@ -9,13 +9,14 @@ This repository supports Aletheia's Quest competition submissions and the public
 Use Python 3.12 for local development; the runner targets Python 3.12.
 
 ```bash
+module load Python/3.12.3-GCCcore-13.3.0 CUDA/13.2.0
 ./setup_dev.sh && source .venv/bin/activate
 python submit.py --dry
 python submit.py --dry --limit 32
 cd leaderboard && pip install -e ".[dev]" && pytest
 ```
 
-`setup_dev.sh` creates/syncs `.venv` with `uv`. `python submit.py --dry` executes the same local pipeline used by the leaderboard; `--limit 32` is faster for smoke tests. Run `pytest` from `leaderboard/` to test the runner package offline.
+`setup_dev.sh` creates/syncs `.venv` with `uv` and loads the cluster Python/CUDA modules when available. `python submit.py --dry` executes the same local pipeline used by the leaderboard; `--limit 32` is faster for smoke tests. Run `pytest` from `leaderboard/` to test the runner package offline.
 
 ## Coding Style & Naming Conventions
 
