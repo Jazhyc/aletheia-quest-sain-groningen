@@ -32,4 +32,4 @@ Recent history uses short, imperative commit subjects, for example `Simplify ada
 
 ## Agent-Specific Instructions
 
-Before agent-assisted work, read `llms.txt` for competition context and check `README.md` for the current submission contract. Preserve the single-notebook rule in `submission/` and rehearse changes with `--dry` whenever possible. Add or update tests for non-trivial code changes, then run the relevant validation command. After completing a coherent feature or fix, commit the finished work with a short imperative message.
+Before agent-assisted work, read `llms.txt` for competition context and check `README.md` for the current submission contract. Preserve the single-notebook rule in `submission/` and rehearse changes with `--dry` whenever possible. When developing a new competition method, create and work on a separate feature branch instead of `master`. Add or update tests for non-trivial code changes, then run the relevant validation command. After completing a coherent feature or fix, commit the finished work with a short imperative message.
