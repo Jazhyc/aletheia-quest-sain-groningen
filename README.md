@@ -99,6 +99,19 @@ advised by David Bau (NDIF Director).
    `submission/requirements.txt` is still the leaderboard runtime dependency
    contract. Keep training-only packages such as `vllm` out of it unless the
    submitted notebook imports them at inference time.
+
+   On shared clusters, put large caches on scratch rather than the home
+   filesystem before syncing or downloading models:
+   ```bash
+   export SCRATCH_DIR="${SCRATCH:-/scratch/$USER}"
+   export HF_HOME="$SCRATCH_DIR/.huggingface"
+   export HF_HUB_CACHE="$HF_HOME/hub"
+   export HF_DATASETS_CACHE="$HF_HOME/datasets"
+   export UV_CACHE_DIR="$SCRATCH_DIR/.cache/uv"
+   ```
+   Add these to your shell startup file (for example `~/.bashrc`) so notebooks,
+   `uv sync`, `huggingface-cli`, and `datasets.load_dataset` all reuse the same
+   scratch-backed caches.
 3. For local development, `hf auth login` so your HF token is available.
 4. Look at [`submission/example.ipynb`](submission/example.ipynb) — a minimal
    working baseline detector that follows the contract; replace the contents of the `detector` method to user the lie classification method you developed it with your detector.
