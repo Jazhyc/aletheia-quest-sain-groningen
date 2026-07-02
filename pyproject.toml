@@ -1,0 +1,30 @@
+[project]
+name = "aletheias-quest-competition"
+version = "0.1.0"
+description = "Development environment for Aletheia's Quest competition submissions"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "datasets",
+    "huggingface-hub",
+    "ipykernel",
+    "nbclient",
+    "nnterp==1.3.0",
+    "nnsight @ git+https://github.com/ndif-team/nnsight.git@hackathon/peft",
+    "numpy",
+    "pandas",
+    "pyyaml",
+    "requests",
+    "scikit-learn",
+    "torch",
+    "transformers",
+    "urllib3<2.6",
+    "vllm==0.11.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.uv]
+package = false

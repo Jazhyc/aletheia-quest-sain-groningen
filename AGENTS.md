@@ -2,21 +2,20 @@
 
 ## Project Structure & Module Organization
 
-This repository supports Aletheia's Quest competition submissions and the public leaderboard runner. Core participant files live at the root: `submit.py` packages and submits entries, `dry.yaml` configures local dry runs, and `requirements-dev.txt` defines the local development environment. Put exactly one submission notebook in `submission/`; keep notebook-only dependencies in `submission/requirements.txt` and shared helper code in `submission/util.py`. Baseline and walkthrough notebooks live in `baselines/` and `tutorials/`. The leaderboard service is a Python package under `leaderboard/src/aletheia_runner/`, with tests in `leaderboard/tests/` and web assets in `leaderboard/src/aletheia_runner/web/`.
+This repository supports Aletheia's Quest competition submissions and the public leaderboard runner. Core participant files live at the root: `submit.py` packages and submits entries, `dry.yaml` configures local dry runs, and `pyproject.toml` / `uv.lock` define the local development environment. Put exactly one submission notebook in `submission/`; keep notebook-only dependencies in `submission/requirements.txt` and shared helper code in `submission/util.py`. Baseline and walkthrough notebooks live in `baselines/` and `tutorials/`. The leaderboard service is a Python package under `leaderboard/src/aletheia_runner/`, with tests in `leaderboard/tests/` and web assets in `leaderboard/src/aletheia_runner/web/`.
 
 ## Build, Test, and Development Commands
 
-Use Python 3.10 or newer; the runner targets Python 3.12.
+Use Python 3.12 for local development; the runner targets Python 3.12.
 
 ```bash
 ./setup_dev.sh && source .venv/bin/activate
-pip install -r requirements-dev.txt
 python submit.py --dry
 python submit.py --dry --limit 32
 cd leaderboard && pip install -e ".[dev]" && pytest
 ```
 
-`setup_dev.sh` creates `.venv` and installs the development stack. `python submit.py --dry` executes the same local pipeline used by the leaderboard; `--limit 32` is faster for smoke tests. Run `pytest` from `leaderboard/` to test the runner package offline.
+`setup_dev.sh` creates/syncs `.venv` with `uv`. `python submit.py --dry` executes the same local pipeline used by the leaderboard; `--limit 32` is faster for smoke tests. Run `pytest` from `leaderboard/` to test the runner package offline.
 
 ## Coding Style & Naming Conventions
 

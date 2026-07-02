@@ -1,4 +1,7 @@
-# Local DEVELOPMENT + `python submit.py --dry` environment.
+# Legacy pip-compatible local DEVELOPMENT + `python submit.py --dry` environment.
+#
+# Prefer `./setup_dev.sh` / `uv sync`; the canonical development environment is
+# defined in `pyproject.toml` and pinned in `uv.lock`.
 #
 # This is NOT your submission's dependency list — that's `submission/requirements.txt`
 # (installed by the runner in a per-job venv). This file recreates, on your own
@@ -7,8 +10,8 @@
 # leaderboard pipeline locally. It mirrors the leaderboard's base image so a `--dry`
 # rehearsal behaves like the Space.
 #
-# Requires Python >= 3.10 (the runner targets 3.12). Install with:
-#     ./setup_dev.sh                     # creates .venv and installs this file
+# Requires Python 3.12. Install with:
+#     ./setup_dev.sh                     # creates/syncs .venv with uv
 #   or, into an existing env:
 #     pip install -r requirements-dev.txt
 #
@@ -33,3 +36,11 @@ pyyaml
 
 # submit.py itself.
 requests
+
+# Local research/training stack. Keep these out of `submission/requirements.txt`
+# unless the submitted notebook imports them at inference time.
+nnterp==1.3.0
+vllm==0.11.2
+
+# Avoid the urllib3 2.6 brotli streaming regression documented in llms.txt.
+urllib3<2.6

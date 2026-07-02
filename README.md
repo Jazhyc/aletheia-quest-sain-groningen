@@ -81,22 +81,24 @@ advised by David Bau (NDIF Director).
 ## Quick start
 
 1. **Clone** this repo.
-2. **Set up a local dev environment** (Python ≥3.10; the runner targets 3.12). The
-   quickest path is the bundled script, which creates `./.venv` and installs
-   everything needed for development **and** for `python submit.py --dry`:
+2. **Set up a local dev environment** (Python 3.12). The quickest path is the
+   bundled script, which uses [`uv`](https://docs.astral.sh/uv/) to create
+   `./.venv` and install everything needed for development, GPU-assisted probe
+   training, and `python submit.py --dry`:
    ```bash
    ./setup_dev.sh && source .venv/bin/activate
    ```
-   It installs [`requirements-dev.txt`](requirements-dev.txt), which mirrors the
-   leaderboard base image and pins the competition's **nnsight** — the
-   `hackathon/peft` branch (it targets the hackathon NDIF cluster, is **required**
-   both locally and on the Space, and **may change before the start**). To install
-   into an environment you already manage (e.g. conda) instead:
+   The root [`pyproject.toml`](pyproject.toml) pins Python 3.12, includes the
+   competition's **nnsight** `hackathon/peft` branch, and installs local research
+   tools including **nnterp** and **vLLM**. The `uv.lock` file pins the resolved
+   Git commit and transitive packages for repeatable notebook work. To run without
+   activating the environment:
    ```bash
-   pip install -r requirements-dev.txt
-   # (just nnsight, if that's all you need:)
-   pip install 'nnsight @ git+https://github.com/ndif-team/nnsight.git@hackathon/peft'
+   UV_CACHE_DIR=.uv-cache uv run python submit.py --dry
    ```
+   `submission/requirements.txt` is still the leaderboard runtime dependency
+   contract. Keep training-only packages such as `vllm` out of it unless the
+   submitted notebook imports them at inference time.
 3. For local development, `hf auth login` so your HF token is available.
 4. Look at [`submission/example.ipynb`](submission/example.ipynb) — a minimal
    working baseline detector that follows the contract; replace the contents of the `detector` method to user the lie classification method you developed it with your detector.
