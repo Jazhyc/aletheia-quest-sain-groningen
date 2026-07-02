@@ -18,7 +18,7 @@ dependencies = [
     "torch",
     "transformers",
     "urllib3<2.6",
-    "vllm==0.11.2",
+    "vllm==0.24.0",
 ]
 
 [dependency-groups]
