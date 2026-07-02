@@ -22,7 +22,9 @@ judge:
   tensor_parallel_size: 1
   gpu_memory_utilization: 0.9
   trust_remote_code: false
-  max_model_len: null
+  # Our formatted conversations are character-truncated far below Qwen's advertised
+  # 262k context. Cap vLLM's KV-cache planning to keep startup/memory reasonable.
+  max_model_len: 16384
   max_num_seqs: null
   generated_logprobs: 50
   missing_logprob: -30.0
