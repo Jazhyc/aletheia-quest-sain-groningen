@@ -91,6 +91,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "datasets" },
     { name = "huggingface-hub" },
+    { name = "hydra-core" },
     { name = "ipykernel" },
     { name = "nbclient" },
     { name = "nnsight" },
@@ -115,6 +116,7 @@ dev = [
 requires-dist = [
     { name = "datasets" },
     { name = "huggingface-hub" },
+    { name = "hydra-core" },
     { name = "ipykernel" },
     { name = "nbclient" },
     { name = "nnsight", git = "https://github.com/ndif-team/nnsight.git?rev=hackathon%2Fpeft" },
@@ -169,6 +171,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/82/4f/70682b068d897841f
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5d/77/073e8ac488f335aec7001952825275582fb8f433737e90f24eeef9d878f6/anthropic-0.71.0-py3-none-any.whl", hash = "sha256:85c5015fcdbdc728390f11b17642a65a4365d03b12b799b18b6cc57e71fdb327", size = 355035, upload-time = "2025-10-16T15:54:38.238Z" },
 ]
+
+[[package]]
+name = "antlr4-python3-runtime"
+version = "4.9.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3e/38/7859ff46355f76f8d19459005ca000b6e7012f2f1ca597746cbcd1fbfe5e/antlr4-python3-runtime-4.9.3.tar.gz", hash = "sha256:f224469b4168294902bb1efa80a8bf7855f24c99aef99cbefc1bcd3cce77881b", size = 117034, upload-time = "2021-11-06T17:52:23.524Z" }
 
 [[package]]
 name = "anyio"
@@ -1110,6 +1118,20 @@ cu13 = [
     { name = "nvidia-cuda-nvrtc", version = "13.3.33", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or sys_platform == 'emscripten' or sys_platform == 'win32'" },
     { name = "nvidia-cuda-runtime", version = "13.0.96", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32'" },
     { name = "nvidia-cuda-runtime", version = "13.3.29", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or sys_platform == 'emscripten' or sys_platform == 'win32'" },
+]
+
+[[package]]
+name = "hydra-core"
+version = "1.3.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "antlr4-python3-runtime" },
+    { name = "omegaconf" },
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0d/0b/7c0d941311aadc6479ec01767edba9c8a07db1452685de3567ed3058d0c9/hydra_core-1.3.3.tar.gz", hash = "sha256:b7477ee21f08b62f71bf0126d44695c048dc7e9c0cc79e2d593b707cb1e44048", size = 3262532, upload-time = "2026-06-11T05:54:26.835Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/57/4e39f85347f77144d2ad12e87d5df8fb8f17023f9bd9e8c6e903a128382c/hydra_core-1.3.3-py3-none-any.whl", hash = "sha256:cf349fc393f486f250e5825592c3d0a50c0af3effd726cf8dd5b637a7cb464e3", size = 154706, upload-time = "2026-06-11T05:54:24.917Z" },
 ]
 
 [[package]]
@@ -2127,6 +2149,19 @@ resolution-markers = [
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ad/6b/d5756f485012b920475cbc01457c1b9a7d0485bfb04b92598c5e1ef3e9ab/nvidia_nvvm-13.3.73-py3-none-win_amd64.whl", hash = "sha256:b5c91dfa59ee4cee90b2dfb19c6203f31c914b9c9b5ca10726c2da7cf8ed401d", size = 59981103, upload-time = "2026-06-29T17:21:43.334Z" },
+]
+
+[[package]]
+name = "omegaconf"
+version = "2.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "antlr4-python3-runtime" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ce/3d/e4b57b8d9008c6ebe0d5eff901f91d5700cf7bdb8c8863df817463a7fd5e/omegaconf-2.3.1.tar.gz", hash = "sha256:e5e7de64aeebeddaf8e6d3f7a783b32ac2a01c0fbd9c878012caecb891a1f42a", size = 3298472, upload-time = "2026-06-11T05:05:12.885Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a4/0e/152509871bf30df6fc38569f52a2db9b55dd41aae957adae50a053ac7778/omegaconf-2.3.1-py3-none-any.whl", hash = "sha256:3d701d14e9a8828f1edd28bb70b725908b34277cdd72cf7d6a83f94dadc6b6a0", size = 79502, upload-time = "2026-06-11T05:05:09.954Z" },
 ]
 
 [[package]]

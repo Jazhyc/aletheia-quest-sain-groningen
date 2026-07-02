@@ -4,6 +4,11 @@ submission.csv
 # Local development split labels and private leaderboard history
 dev_splits/
 
+# Hydra / local experiment outputs
+outputs/
+multirun/
+blackbox_runs/
+
 # Local runner config (kept out of version control)
 leaderboard/runner.yaml
 

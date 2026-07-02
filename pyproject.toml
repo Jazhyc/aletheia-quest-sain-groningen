@@ -5,6 +5,7 @@ description = "Development environment for Aletheia's Quest competition submissi
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "datasets",
+    "hydra-core",
     "huggingface-hub",
     "ipykernel",
     "nbclient",

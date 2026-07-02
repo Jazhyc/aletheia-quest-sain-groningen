@@ -345,3 +345,31 @@ and reserve `test` for the final local check. `dev_leaderboard.py` runs the same
 notebook pipeline as `--dry`, scores only the chosen label subset, and appends a
 private JSONL history to `dev_splits/results.jsonl`. The whole `dev_splits/`
 directory is git-ignored.
+
+## Black-box experiments
+
+For fast prompt and threshold iteration, use the Hydra-driven judge runner rather
+than editing a submission notebook for every trial:
+
+```bash
+python scripts/run_blackbox_judge.py split=validation method=qwen_judge_v1
+python scripts/run_blackbox_judge.py split=validation method=qwen_3shot shots.n_per_label=3
+python scripts/run_blackbox_judge.py split=validation scoring.threshold=0.45 judge.rating_max=5
+```
+
+It reads `dev_splits/dry.<split>.yaml`, scores only that split's indexed rows,
+writes per-dataset predictions under `blackbox_runs/`, and appends a local JSONL
+ledger to `blackbox_runs/results.jsonl`. Few-shot examples, when enabled, are
+sampled only from `shots.split` (`train` by default), so validation/test labels
+are not used in the prompt.
+
+On Slurm, start with direct `sbatch` so cluster failures stay visible:
+
+```bash
+sbatch scripts/slurm_blackbox_judge.sbatch split=validation method=qwen_judge_v1
+sbatch scripts/slurm_blackbox_judge.sbatch split=validation method=qwen_3shot shots.n_per_label=3
+```
+
+Hydra still gives config overrides and sweep-friendly command lines. Add
+`submitit` later only if we need Python-managed Slurm arrays; direct `sbatch` is
+usually easier to debug for NDIF-bound jobs.
