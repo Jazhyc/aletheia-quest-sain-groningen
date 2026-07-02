@@ -13,9 +13,12 @@ from dataclasses import asdict
 from pathlib import Path
 
 import yaml
+from dotenv import load_dotenv
 
 
 ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(ROOT / ".env")
+
 LEADERBOARD_SRC = ROOT / "leaderboard" / "src"
 sys.path.insert(0, str(LEADERBOARD_SRC))
 

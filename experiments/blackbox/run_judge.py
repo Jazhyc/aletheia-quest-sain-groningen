@@ -23,11 +23,14 @@ import hydra
 import numpy as np
 import pandas as pd
 import yaml
+from dotenv import load_dotenv
 from hydra.utils import get_original_cwd
 from omegaconf import DictConfig, OmegaConf
 
 
 ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(ROOT / ".env")
+
 LEADERBOARD_SRC = ROOT / "leaderboard" / "src"
 sys.path.insert(0, str(LEADERBOARD_SRC))
 

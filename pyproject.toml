@@ -13,6 +13,7 @@ dependencies = [
     "nnsight @ git+https://github.com/ndif-team/nnsight.git@hackathon/peft",
     "numpy",
     "pandas",
+    "python-dotenv",
     "pyyaml",
     "requests",
     "scikit-learn",

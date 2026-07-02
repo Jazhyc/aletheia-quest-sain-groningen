@@ -20,7 +20,11 @@ from typing import Iterable
 
 import numpy as np
 import yaml
+from dotenv import load_dotenv
 
+
+ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(ROOT / ".env")
 
 SPLIT_NAMES = ("train", "validation", "test")
 DEFAULT_RATIOS = (0.8, 0.1, 0.1)
