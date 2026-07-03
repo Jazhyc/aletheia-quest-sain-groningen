@@ -5,7 +5,10 @@ submission.csv
 dev_splits/
 
 # Local experiment and SLURM outputs
-logs/
+logs/*
+!logs/slurm/
+logs/slurm/*
+!logs/slurm/.gitkeep
 results/blackbox/*
 !results/blackbox/leaderboard.md
 

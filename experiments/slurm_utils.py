@@ -13,6 +13,14 @@ def create_logs_dir() -> Path:
     return logs_dir
 
 
+def create_method_logs_dir(method: str) -> Path:
+    """Ensure a method-specific SLURM logs directory exists."""
+    safe_method = "".join(c if c.isalnum() or c in "_.=-" else "_" for c in method)
+    logs_dir = Path("logs/slurm") / safe_method
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    return logs_dir
+
+
 def submit_sbatch(template_path: str, export_vars: dict) -> str:
     """Submit a SLURM job using sbatch and return its job id.
 
