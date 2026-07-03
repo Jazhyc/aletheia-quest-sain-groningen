@@ -31,6 +31,7 @@ numpy
 pandas
 scikit-learn
 nbclient
+nbformat
 ipykernel
 pyyaml
 

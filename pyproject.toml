@@ -9,6 +9,7 @@ dependencies = [
     "huggingface-hub",
     "ipykernel",
     "nbclient",
+    "nbformat",
     "nnterp==1.3.0",
     "nnsight @ git+https://github.com/ndif-team/nnsight.git@hackathon/peft",
     "numpy",
