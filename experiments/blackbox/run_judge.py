@@ -505,6 +505,18 @@ def fmt_rate(value: float | None) -> str:
     return f"{value:.1f}/s" if isinstance(value, (int, float)) else "-"
 
 
+def fmt_submitted_at(value: object) -> str:
+    if not isinstance(value, str):
+        return "-"
+    try:
+        parsed = dt.datetime.fromisoformat(value)
+    except ValueError:
+        return value.split(".")[0].replace("T", " ")
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(dt.timezone.utc).replace(tzinfo=None)
+    return parsed.isoformat(sep=" ", timespec="seconds")
+
+
 def render_leaderboard(results_root: Path, output_path: Path) -> None:
     records = [
         json.loads(path.read_text())
@@ -517,6 +529,7 @@ def render_leaderboard(results_root: Path, output_path: Path) -> None:
         "# Black-Box Experiment Leaderboard",
         "",
         "Timing is scoring-only wall time: it excludes vLLM startup/model load/compile and dataset preparation.",
+        "Submitted timestamps are UTC.",
         "",
         "| submitted_at | split | method | AUROC | bal_acc | recall | FPR | rows | score_time | rows/s |",
         "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
@@ -526,7 +539,7 @@ def render_leaderboard(results_root: Path, output_path: Path) -> None:
         timing = record.get("timing", {})
         lines.append(
             "| "
-            f"{record.get('submitted_at', '-')} | "
+            f"{fmt_submitted_at(record.get('submitted_at'))} | "
             f"{record.get('split', '-')} | "
             f"{record.get('method', '-')} | "
             f"{fmt_metric(metrics.get('auroc'))} | "
