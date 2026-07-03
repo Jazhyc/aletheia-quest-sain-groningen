@@ -41,14 +41,16 @@ or requeue jobs solely because they share a node. Treat contention as real only
 when there is direct evidence such as CUDA OOMs, scheduler allocation conflicts,
 or process/GPU telemetry showing multiple jobs on the same device.
 
-As of 2026-07-03, the strongest local black-box judge run is the plain Qwen
-reasoning prompt with a 4096-token generation budget (`qwen_reason_v1`). On the
-test split it scored balanced accuracy 0.9095, AUROC 0.9092, recall 0.8357, FPR
-0.0167, with 11 parse errors and 428.2s scoring time. A 2048-token budget is
-faster but materially lower scoring; 8192 is slower and did not improve parse
-errors or accuracy; the concise prompt variants reduced runtime/parse failures
-but hurt accuracy; structured decoding removed parse failures but did not beat
-plain 4096. Prefer plain 4096 unless runtime is the primary constraint.
+As of 2026-07-04, the strongest tracked black-box judge is the three-prompt Qwen
+reasoning ensemble (`qwen_reason_ensemble_dks_member4096_v1`): `details4096`,
+`known4096`, and `scrutiny4096`, scheduled member-major, max aggregated, with a
+4096-token generation budget and binary threshold 0.01. On the local test split
+it scored balanced accuracy 0.9298, AUROC 0.9340, recall 0.8976, FPR 0.0381,
+with 36 member-level parse errors and 1284.6s scoring time. The 8192-token
+member-major ensemble is the validation leader at balanced accuracy 0.9250 but
+is much slower and did not beat the 4096 ensemble on the tracked test split. Use
+the 4096 three-prompt ensemble for Phoenix Wright accuracy-first black-box
+submissions unless runtime is the primary constraint.
 
 For official submissions, always run `python submit.py ...` outside the sandbox:
 it must reach the Hugging Face Space, NDIF, and sometimes Hugging Face. The NDIF

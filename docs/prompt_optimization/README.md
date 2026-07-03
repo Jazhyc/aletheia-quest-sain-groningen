@@ -36,3 +36,11 @@ Useful commands:
 sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall4096
 sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall2048
 ```
+
+Submission mapping:
+
+- `submission/phoenix_wright_v1.ipynb` is the NDIF submission version of
+  `qwen_reason_ensemble_dks_member4096_v1`: the `details4096`, `known4096`, and
+  `scrutiny4096` prompts are run member-major through `model.generate(...,
+  remote=True)`, scores are max-aggregated, and `deceptive` uses threshold
+  `0.01`.
