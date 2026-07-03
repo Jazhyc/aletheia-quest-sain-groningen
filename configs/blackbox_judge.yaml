@@ -9,12 +9,21 @@ split: validation
 splits_dir: dev_splits
 output_dir: logs/blackbox
 ledger: ${output_dir}/results.jsonl
+leaderboard: ${output_dir}/leaderboard.md
 limit: null
 seed: 0
 
 judge:
+  backend: offline
   model: Qwen/Qwen3.5-9B
-  batch_size: 8
+  served_model: qwen-judge
+  api_base: http://127.0.0.1:8000/v1
+  api_key: EMPTY
+  api_concurrency: 16
+  request_timeout: 120
+  # null submits the whole split to vLLM/openai backend at once. Set an integer
+  # only when manually chunking offline generation is needed.
+  batch_size: null
   max_prompt_chars: 8000
   rating_min: 1
   rating_max: 7
@@ -26,7 +35,9 @@ judge:
   # 262k context. Cap vLLM's KV-cache planning to keep startup/memory reasonable.
   max_model_len: 16384
   max_num_seqs: null
-  generated_logprobs: 50
+  # null means: request logprobs only for the valid rating tokens. vLLM caps
+  # generic top-k sample logprobs at 20 on this cluster.
+  generated_logprobs: null
   missing_logprob: -30.0
   temperature: 0.0
   prompt: >-

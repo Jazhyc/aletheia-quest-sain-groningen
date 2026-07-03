@@ -15,6 +15,8 @@ import json
 import math
 import random
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -47,6 +49,14 @@ class DatasetResult:
     n: int
     metrics: dict[str, float | None]
     predictions_path: str
+
+
+@dataclass
+class DatasetWork:
+    config: DatasetConfig
+    labels: pd.DataFrame
+    examples: list[dict]
+    prompts: list[str]
 
 
 def resolve_path(pathish: str, base: Path) -> Path:
@@ -222,83 +232,247 @@ def rating_token_ids(tokenizer, rating_min: int, rating_max: int) -> tuple[list[
     return all_ids, token_ids
 
 
-def score_prompts(
-    prompts: list[str],
+def requested_logprobs_or_default(generated_logprobs: int | None, n_rating_ids: int) -> int:
+    requested_logprobs = generated_logprobs or n_rating_ids
+    if requested_logprobs != n_rating_ids:
+        raise ValueError(
+            "judge.generated_logprobs must be null or equal to the number of "
+            f"rating token ids ({n_rating_ids}). vLLM requires this when "
+            "logprob_token_ids is set."
+        )
+    return requested_logprobs
+
+
+def logprob_value(value: Any) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if hasattr(value, "logprob"):
+        return float(value.logprob)
+    if isinstance(value, dict) and "logprob" in value:
+        return float(value["logprob"])
+    return float(value)
+
+
+def score_from_rating_probs(
+    probs: dict[int, float],
     *,
-    model_name: str,
-    batch_size: int,
     rating_min: int,
     rating_max: int,
-    dtype: str,
-    tensor_parallel_size: int,
-    gpu_memory_utilization: float,
-    trust_remote_code: bool,
-    max_model_len: int | None,
-    max_num_seqs: int | None,
-    generated_logprobs: int,
-    missing_logprob: float,
-    temperature: float,
-) -> np.ndarray:
-    from transformers import AutoTokenizer
-    from vllm import LLM, SamplingParams
+) -> float:
+    total = sum(probs.values())
+    if total <= 0:
+        return 0.5
+    expected = sum(rating * probs[rating] for rating in range(rating_min, rating_max + 1)) / total
+    return (expected - rating_min) / (rating_max - rating_min)
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    all_rating_ids, ids_by_rating = rating_token_ids(tokenizer, rating_min, rating_max)
-    ratings = list(range(rating_min, rating_max + 1))
 
-    scores = np.full(len(prompts), np.nan, dtype=float)
-    llm_kwargs: dict[str, Any] = {
-        "model": model_name,
-        "dtype": dtype,
-        "tensor_parallel_size": tensor_parallel_size,
-        "gpu_memory_utilization": gpu_memory_utilization,
-        "trust_remote_code": trust_remote_code,
-    }
-    if max_model_len is not None:
-        llm_kwargs["max_model_len"] = max_model_len
-    if max_num_seqs is not None:
-        llm_kwargs["max_num_seqs"] = max_num_seqs
-    llm = LLM(**llm_kwargs)
-    sampling = SamplingParams(
-        max_tokens=1,
-        temperature=temperature,
-        logprobs=generated_logprobs,
+class OfflineVllmRatingJudge:
+    def __init__(
+        self,
+        *,
+        model_name: str,
+        rating_min: int,
+        rating_max: int,
+        dtype: str,
+        tensor_parallel_size: int,
+        gpu_memory_utilization: float,
+        trust_remote_code: bool,
+        max_model_len: int | None,
+        max_num_seqs: int | None,
+        generated_logprobs: int | None,
+        missing_logprob: float,
+        temperature: float,
+    ) -> None:
+        from transformers import AutoTokenizer
+        from vllm import LLM, SamplingParams
+
+        self.rating_min = rating_min
+        self.rating_max = rating_max
+        self.missing_logprob = missing_logprob
+        self.ratings = list(range(rating_min, rating_max + 1))
+
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.all_rating_ids, self.ids_by_rating = rating_token_ids(tokenizer, rating_min, rating_max)
+        requested_logprobs = requested_logprobs_or_default(generated_logprobs, len(self.all_rating_ids))
+
+        llm_kwargs: dict[str, Any] = {
+            "model": model_name,
+            "dtype": dtype,
+            "tensor_parallel_size": tensor_parallel_size,
+            "gpu_memory_utilization": gpu_memory_utilization,
+            "trust_remote_code": trust_remote_code,
+        }
+        if max_model_len is not None:
+            llm_kwargs["max_model_len"] = max_model_len
+        if max_num_seqs is not None:
+            llm_kwargs["max_num_seqs"] = max_num_seqs
+        self.llm = LLM(**llm_kwargs)
+        self.sampling = SamplingParams(
+            max_tokens=1,
+            temperature=temperature,
+            logprobs=requested_logprobs,
+            logprob_token_ids=self.all_rating_ids,
+            allowed_token_ids=self.all_rating_ids,
+        )
+
+    def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
+        scores = np.full(len(prompts), np.nan, dtype=float)
+        if batch_size is None or batch_size <= 0:
+            outputs = self.llm.generate(prompts, self.sampling)
+        else:
+            outputs = []
+            for start in range(0, len(prompts), batch_size):
+                outputs.extend(self.llm.generate(prompts[start:start + batch_size], self.sampling))
+
+        for offset, output in enumerate(outputs):
+            if not output.outputs or not output.outputs[0].logprobs:
+                continue
+            first_token_logprobs = output.outputs[0].logprobs[0] or {}
+            expanded = {
+                int(token_id): logprob_value(value)
+                for token_id, value in first_token_logprobs.items()
+            }
+            probs = {
+                rating: float(sum(math.exp(expanded.get(token_id, self.missing_logprob))
+                                  for token_id in self.ids_by_rating[rating]))
+                for rating in self.ratings
+            }
+            scores[offset] = score_from_rating_probs(
+                probs,
+                rating_min=self.rating_min,
+                rating_max=self.rating_max,
+            )
+        return np.nan_to_num(scores, nan=0.5)
+
+
+class OpenAIRatingJudge:
+    def __init__(
+        self,
+        *,
+        model_name: str,
+        served_model: str,
+        api_base: str,
+        api_key: str,
+        concurrency: int,
+        request_timeout: float,
+        rating_min: int,
+        rating_max: int,
+        generated_logprobs: int | None,
+        temperature: float,
+    ) -> None:
+        from transformers import AutoTokenizer
+
+        self.served_model = served_model
+        self.endpoint = api_base.rstrip("/") + "/completions"
+        self.headers = {"Content-Type": "application/json"}
+        if api_key:
+            self.headers["Authorization"] = f"Bearer {api_key}"
+        self.concurrency = concurrency
+        self.request_timeout = request_timeout
+        self.rating_min = rating_min
+        self.rating_max = rating_max
+        self.ratings = list(range(rating_min, rating_max + 1))
+        self.temperature = temperature
+
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.all_rating_ids, self.ids_by_rating = rating_token_ids(tokenizer, rating_min, rating_max)
+        self.rating_by_token_id = {
+            token_id: rating
+            for rating, ids in self.ids_by_rating.items()
+            for token_id in ids
+        }
+        self.requested_logprobs = requested_logprobs_or_default(
+            generated_logprobs,
+            len(self.all_rating_ids),
+        )
+
+    def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
+        del batch_size
+        workers = max(1, self.concurrency)
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            scores = list(executor.map(self._score_prompt, prompts))
+        return np.array(scores, dtype=float)
+
+    def _score_prompt(self, prompt: str) -> float:
+        import requests
+
+        payload = {
+            "model": self.served_model,
+            "prompt": prompt,
+            "max_tokens": 1,
+            "temperature": self.temperature,
+            "logprobs": self.requested_logprobs,
+            "allowed_token_ids": self.all_rating_ids,
+            "return_tokens_as_token_ids": True,
+        }
+        response = requests.post(
+            self.endpoint,
+            headers=self.headers,
+            json=payload,
+            timeout=self.request_timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+        top_logprobs = data["choices"][0].get("logprobs", {}).get("top_logprobs", [{}])[0] or {}
+        probs = {rating: 0.0 for rating in self.ratings}
+        for token, value in top_logprobs.items():
+            rating = self._rating_from_response_token(token)
+            if rating is not None:
+                probs[rating] += math.exp(logprob_value(value))
+        return score_from_rating_probs(
+            probs,
+            rating_min=self.rating_min,
+            rating_max=self.rating_max,
+        )
+
+    def _rating_from_response_token(self, token: str) -> int | None:
+        if token.startswith("token_id:"):
+            token_id = int(token.removeprefix("token_id:"))
+            return self.rating_by_token_id.get(token_id)
+        stripped = token.strip()
+        if stripped.isdigit():
+            rating = int(stripped)
+            if self.rating_min <= rating <= self.rating_max:
+                return rating
+        return None
+
+
+def build_judge(cfg: DictConfig):
+    generated_logprobs = (
+        None
+        if cfg.judge.generated_logprobs is None
+        else int(cfg.judge.generated_logprobs)
     )
-
-    offset = 0
-    outputs = []
-    for start in range(0, len(prompts), batch_size):
-        outputs.extend(llm.generate(prompts[start:start + batch_size], sampling))
-
-    def logprob_value(value: Any) -> float:
-        if isinstance(value, (int, float)):
-            return float(value)
-        if hasattr(value, "logprob"):
-            return float(value.logprob)
-        if isinstance(value, dict) and "logprob" in value:
-            return float(value["logprob"])
-        return float(value)
-
-    for output in outputs:
-        if not output.outputs or not output.outputs[0].logprobs:
-            offset += 1
-            continue
-        first_token_logprobs = output.outputs[0].logprobs[0] or {}
-        expanded = {
-            int(token_id): logprob_value(value)
-            for token_id, value in first_token_logprobs.items()
-        }
-        probs = {
-            rating: float(sum(math.exp(expanded.get(token_id, missing_logprob))
-                              for token_id in ids_by_rating[rating]))
-            for rating in ratings
-        }
-        total = sum(probs.values())
-        if total > 0:
-            expected = sum(rating * probs[rating] for rating in ratings) / total
-            scores[offset] = (expected - rating_min) / (rating_max - rating_min)
-        offset += 1
-    return np.nan_to_num(scores, nan=0.5)
+    backend = str(cfg.judge.backend)
+    if backend == "offline":
+        return OfflineVllmRatingJudge(
+            model_name=str(cfg.judge.model),
+            rating_min=int(cfg.judge.rating_min),
+            rating_max=int(cfg.judge.rating_max),
+            dtype=str(cfg.judge.dtype),
+            tensor_parallel_size=int(cfg.judge.tensor_parallel_size),
+            gpu_memory_utilization=float(cfg.judge.gpu_memory_utilization),
+            trust_remote_code=bool(cfg.judge.trust_remote_code),
+            max_model_len=None if cfg.judge.max_model_len is None else int(cfg.judge.max_model_len),
+            max_num_seqs=None if cfg.judge.max_num_seqs is None else int(cfg.judge.max_num_seqs),
+            generated_logprobs=generated_logprobs,
+            missing_logprob=float(cfg.judge.missing_logprob),
+            temperature=float(cfg.judge.temperature),
+        )
+    if backend == "openai":
+        return OpenAIRatingJudge(
+            model_name=str(cfg.judge.model),
+            served_model=str(cfg.judge.served_model),
+            api_base=str(cfg.judge.api_base),
+            api_key=str(cfg.judge.api_key),
+            concurrency=int(cfg.judge.api_concurrency),
+            request_timeout=float(cfg.judge.request_timeout),
+            rating_min=int(cfg.judge.rating_min),
+            rating_max=int(cfg.judge.rating_max),
+            generated_logprobs=generated_logprobs,
+            temperature=float(cfg.judge.temperature),
+        )
+    raise ValueError(f"unknown judge.backend={backend!r}")
 
 
 def write_predictions(path: Path, examples: list[dict], scores: np.ndarray, threshold: float) -> None:
@@ -329,6 +503,55 @@ def fmt_metric(value: float | None) -> str:
     return f"{value:.4f}" if value is not None else "-"
 
 
+def fmt_seconds(value: float | None) -> str:
+    return f"{value:.1f}s" if isinstance(value, (int, float)) else "-"
+
+
+def fmt_rate(value: float | None) -> str:
+    return f"{value:.1f}/s" if isinstance(value, (int, float)) else "-"
+
+
+def render_leaderboard(ledger_path: Path, output_path: Path) -> None:
+    records = []
+    if ledger_path.exists():
+        for line in ledger_path.read_text().splitlines():
+            if not line.strip():
+                continue
+            records.append(json.loads(line))
+    records.sort(key=lambda row: str(row.get("submitted_at", "")), reverse=True)
+
+    lines = [
+        "# Black-Box Experiment Leaderboard",
+        "",
+        "Timing is scoring-only wall time: it excludes vLLM startup/model load/compile and dataset preparation.",
+        "",
+        "| submitted_at | split | method | AUROC | bal_acc | recall | FPR | rows | score_time | rows/s | result |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for record in records:
+        metrics = record.get("metrics", {})
+        timing = record.get("timing", {})
+        result_path = record.get("result_path", "")
+        result_link = f"[result]({result_path})" if result_path else "-"
+        lines.append(
+            "| "
+            f"{record.get('submitted_at', '-')} | "
+            f"{record.get('split', '-')} | "
+            f"{record.get('method', '-')} | "
+            f"{fmt_metric(metrics.get('auroc'))} | "
+            f"{fmt_metric(metrics.get('balanced_accuracy'))} | "
+            f"{fmt_metric(metrics.get('recall'))} | "
+            f"{fmt_metric(metrics.get('fpr'))} | "
+            f"{record.get('n', '-')} | "
+            f"{fmt_seconds(timing.get('score_seconds'))} | "
+            f"{fmt_rate(timing.get('rows_per_second'))} | "
+            f"{result_link} |"
+        )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("\n".join(lines) + "\n")
+
+
 @hydra.main(version_base=None, config_path="../../configs", config_name="blackbox_judge")
 def main(cfg: DictConfig) -> None:
     original_cwd = Path(get_original_cwd()).resolve()
@@ -355,6 +578,10 @@ def main(cfg: DictConfig) -> None:
     if few_shot_prefix:
         prompt_template = f"{prompt_template}\n\n{few_shot_prefix}"
     results: list[DatasetResult] = []
+    print(f"initializing {cfg.judge.backend} judge for {cfg.judge.model}")
+    judge = build_judge(cfg)
+    dataset_work: list[DatasetWork] = []
+    all_prompts: list[str] = []
 
     for dataset_cfg in datasets:
         labels = load_label_subset(dataset_cfg)
@@ -369,30 +596,28 @@ def main(cfg: DictConfig) -> None:
             )
             for row in examples
         ]
-        print(f"{dataset_cfg.name}: scoring {len(prompts)} rows with {cfg.judge.model}")
-        scores = score_prompts(
-            prompts,
-            model_name=str(cfg.judge.model),
-            batch_size=int(cfg.judge.batch_size),
-            rating_min=int(cfg.judge.rating_min),
-            rating_max=int(cfg.judge.rating_max),
-            dtype=str(cfg.judge.dtype),
-            tensor_parallel_size=int(cfg.judge.tensor_parallel_size),
-            gpu_memory_utilization=float(cfg.judge.gpu_memory_utilization),
-            trust_remote_code=bool(cfg.judge.trust_remote_code),
-            max_model_len=None if cfg.judge.max_model_len is None else int(cfg.judge.max_model_len),
-            max_num_seqs=None if cfg.judge.max_num_seqs is None else int(cfg.judge.max_num_seqs),
-            generated_logprobs=int(cfg.judge.generated_logprobs),
-            missing_logprob=float(cfg.judge.missing_logprob),
-            temperature=float(cfg.judge.temperature),
-        )
-        pred_path = run_dir / "predictions" / f"{dataset_cfg.name.replace('/', '__')}.csv"
-        write_predictions(pred_path, examples, scores, float(cfg.scoring.threshold))
+        dataset_work.append(DatasetWork(dataset_cfg, labels, examples, prompts))
+        all_prompts.extend(prompts)
+        print(f"{dataset_cfg.name}: prepared {len(prompts)} rows")
+
+    batch_size = None if cfg.judge.batch_size is None else int(cfg.judge.batch_size)
+    print(f"scoring {len(all_prompts)} rows across {len(dataset_work)} datasets with {cfg.judge.model}")
+    score_start = time.perf_counter()
+    all_scores = judge.score_prompts(all_prompts, batch_size=batch_size)
+    score_seconds = time.perf_counter() - score_start
+
+    offset = 0
+    for work in dataset_work:
+        end = offset + len(work.prompts)
+        scores = all_scores[offset:end]
+        offset = end
+        pred_path = run_dir / "predictions" / f"{work.config.name.replace('/', '__')}.csv"
+        write_predictions(pred_path, work.examples, scores, float(cfg.scoring.threshold))
         preds = load_predictions(pred_path)
-        metrics = compute_metrics(preds, labels, partial=True)
+        metrics = compute_metrics(preds, work.labels, partial=True)
         result = DatasetResult(
-            dataset=dataset_cfg.name,
-            n=len(examples),
+            dataset=work.config.name,
+            n=len(work.examples),
             metrics=metrics,
             predictions_path=pred_path.as_posix(),
         )
@@ -400,24 +625,36 @@ def main(cfg: DictConfig) -> None:
         print(f"  balanced_accuracy={fmt_metric(metrics.get('balanced_accuracy'))} "
               f"auroc={fmt_metric(metrics.get('auroc'))}")
 
+    result_path = run_dir / "result.json"
+    rows_per_second = len(all_prompts) / score_seconds if score_seconds > 0 else None
     record = {
         "submitted_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "method": str(cfg.method),
         "split": str(cfg.split),
+        "n": len(all_prompts),
         "metrics": mean_metrics(results),
+        "timing": {
+            "score_seconds": score_seconds,
+            "rows_per_second": rows_per_second,
+            "note": "excludes judge initialization/model startup and dataset preparation",
+        },
         "config": resolved,
         "datasets": [asdict(result) for result in results],
+        "run_dir": run_dir.as_posix(),
+        "result_path": result_path.as_posix(),
     }
     config_path = run_dir / "config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(OmegaConf.to_yaml(cfg, resolve=True))
-    result_path = run_dir / "result.json"
     result_path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
-    append_jsonl(resolve_path(str(cfg.ledger), original_cwd), record)
+    ledger_path = resolve_path(str(cfg.ledger), original_cwd)
+    append_jsonl(ledger_path, record)
+    render_leaderboard(ledger_path, resolve_path(str(cfg.leaderboard), original_cwd))
 
     metrics = record["metrics"]
     print(f"mean balanced_accuracy={fmt_metric(metrics.get('balanced_accuracy'))} "
           f"auroc={fmt_metric(metrics.get('auroc'))}")
+    print(f"score_time={fmt_seconds(score_seconds)} rows_per_second={fmt_rate(rows_per_second)}")
     print(f"wrote {result_path}")
 
 
