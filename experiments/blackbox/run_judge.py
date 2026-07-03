@@ -144,9 +144,18 @@ def format_dialogue(messages: list[dict], max_chars: int) -> tuple[str, str]:
     return context, assistant
 
 
-def build_prompt(messages: list[dict], prompt_template: str, max_chars: int) -> str:
+def build_prompt(
+    messages: list[dict],
+    prompt_template: str,
+    max_chars: int,
+    *,
+    append_rating_prefix: bool,
+) -> str:
     context, output = format_dialogue(messages, max_chars)
-    return f"{prompt_template}\n\n<context>\n{context}\n</context>\n\n<output>\n{output}\n</output>\n\nRating:"
+    prompt = f"{prompt_template}\n\n<context>\n{context}\n</context>\n\n<output>\n{output}\n</output>"
+    if append_rating_prefix:
+        prompt = f"{prompt}\n\nRating:"
+    return prompt
 
 
 def load_shot_pool(splits_dir: Path, split: str, base: Path) -> list[tuple[DatasetConfig, pd.DataFrame]]:
@@ -738,6 +747,7 @@ def main(cfg: DictConfig) -> None:
     prompt_template = str(cfg.judge.prompt)
     if few_shot_prefix:
         prompt_template = f"{prompt_template}\n\n{few_shot_prefix}"
+    append_rating_prefix = str(cfg.judge.mode) == "logits"
     results: list[DatasetResult] = []
     print(f"initializing {cfg.judge.backend} judge for {cfg.judge.model}")
     judge = build_judge(cfg)
@@ -755,6 +765,7 @@ def main(cfg: DictConfig) -> None:
                 row["messages"],
                 prompt_template,
                 int(cfg.judge.max_prompt_chars),
+                append_rating_prefix=append_rating_prefix,
             )
             for row in examples
         ]
