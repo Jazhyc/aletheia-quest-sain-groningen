@@ -44,3 +44,21 @@ faster but materially lower scoring; 8192 is slower and did not improve parse
 errors or accuracy; the concise prompt variants reduced runtime/parse failures
 but hurt accuracy; structured decoding removed parse failures but did not beat
 plain 4096. Prefer plain 4096 unless runtime is the primary constraint.
+
+For official submissions, always run `python submit.py ...` outside the sandbox:
+it must reach the Hugging Face Space, NDIF, and sometimes Hugging Face. The first
+submission for a new NDIF key must include `--team "SAIN Groningen"`; subsequent
+runs can omit the team name and use the remembered key/team binding. Use
+`--tag black` for the Phoenix Wright black-box judge submission.
+
+Local `python submit.py --dry` is only a rehearsal of the bundled runner against
+`dry.yaml`; it is not the official Space environment. On this cluster it may fail
+or hang for reasons unrelated to the submission notebook, including local NDIF key
+scope, missing system-site packages in the temporary dry-run venv, or network
+access differences. Prefer static notebook checks plus the real Space submission
+when the method depends on competition-only NDIF execution.
+
+Keep the submission package pruned: `submit.py` excludes `.env`, `.uv-cache`,
+`results/`, `logs/`, and `dev_splits/` so credentials and local experiment
+artifacts are not uploaded. Before submitting, verify there is exactly one
+notebook in `submission/` and that the packaged zip is small.
