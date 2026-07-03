@@ -531,8 +531,8 @@ def render_leaderboard(results_root: Path, output_path: Path) -> None:
         "Timing is scoring-only wall time: it excludes vLLM startup/model load/compile and dataset preparation.",
         "Submitted timestamps are UTC.",
         "",
-        "| submitted_at | method | AUROC | bal_acc | recall | FPR | rows | score_time | rows/s |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| submitted_at | method | AUROC | bal_acc | recall | FPR | score_time | rows/s |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for record in records:
         metrics = record.get("metrics", {})
@@ -545,7 +545,6 @@ def render_leaderboard(results_root: Path, output_path: Path) -> None:
             f"{fmt_metric(metrics.get('balanced_accuracy'))} | "
             f"{fmt_metric(metrics.get('recall'))} | "
             f"{fmt_metric(metrics.get('fpr'))} | "
-            f"{record.get('n', '-')} | "
             f"{fmt_seconds(timing.get('score_seconds'))} | "
             f"{fmt_rate(timing.get('rows_per_second'))} |"
         )
