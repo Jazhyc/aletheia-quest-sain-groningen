@@ -7,8 +7,7 @@
 method: qwen_judge_v1
 split: validation
 splits_dir: dev_splits
-output_dir: logs/blackbox
-ledger: ${output_dir}/results.jsonl
+output_dir: results/blackbox
 leaderboard: ${output_dir}/leaderboard.md
 limit: null
 seed: 0
@@ -67,7 +66,7 @@ scoring:
 
 hydra:
   run:
-    dir: ${output_dir}/hydra/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: logs/blackbox/hydra/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
-    dir: ${output_dir}/hydra_multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    dir: logs/blackbox/hydra_multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ${hydra.job.num}

@@ -358,11 +358,13 @@ python experiments/blackbox/run_judge.py split=validation scoring.threshold=0.45
 ```
 
 It reads `dev_splits/dry.<split>.yaml`, scores only that split's indexed rows,
-writes per-dataset predictions under `logs/blackbox/`, and appends a local JSONL
-ledger to `logs/blackbox/results.jsonl`. Few-shot examples, when enabled, are
-sampled only from `shots.split` (`train` by default), so validation/test labels
-are not used in the prompt. Development and training runs use local GPU inference
-through vLLM; reserve NDIF for leaderboard evaluation/submission execution.
+writes per-dataset predictions under deterministic config-hash directories in
+`results/blackbox/`, and regenerates a test-only local leaderboard at
+`results/blackbox/leaderboard.md`. Repeated runs with the same resolved config
+overwrite the same result directory. Few-shot examples, when enabled, are sampled
+only from `shots.split` (`train` by default), so validation/test labels are not
+used in the prompt. Development and training runs use local GPU inference through
+vLLM; reserve NDIF for leaderboard evaluation/submission execution.
 
 On Slurm, start with direct `sbatch` so cluster failures stay visible:
 

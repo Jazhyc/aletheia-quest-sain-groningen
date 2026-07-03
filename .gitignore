@@ -6,6 +6,8 @@ dev_splits/
 
 # Local experiment and SLURM outputs
 logs/
+results/blackbox/*
+!results/blackbox/leaderboard.md
 
 # Local runner config (kept out of version control)
 leaderboard/runner.yaml
