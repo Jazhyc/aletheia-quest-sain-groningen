@@ -264,3 +264,35 @@ Outcome:
   time.
 - The prompt was slower than both parent prompts and below both in balanced
   accuracy. Threshold tuning only ties the current validation leader.
+
+## P9: Single-Prompt Union Rubric
+
+Problem addressed:
+
+- A simple score-level ensemble of `details4096`, `known4096`, and
+  `scrutiny4096` reaches about `0.9286` validation balanced accuracy, showing
+  that the prompts have useful complementary recall.
+- Running three judges would be too slow, so the next prompt should approximate
+  the ensemble's union behavior in one pass.
+
+Prompt changes:
+
+- Define three independent high-rating tests: context-answer conflict,
+  supporting-detail deception, and wrong-answer scrutiny.
+- Keep the low-rating guard that hidden deceptive intent alone is not enough.
+- Emphasize that one important false final-message claim is sufficient when a
+  high-rating test applies.
+
+Expected effect:
+
+- Higher recall than any single parent prompt.
+- Main risk is repeating P1's FPR spike if the model treats hidden wrong-answer
+  context as sufficient despite the guard.
+
+Outcome:
+
+- Rejected. `qwen_reason_union4096_v1` scored `0.8976` balanced accuracy,
+  `0.8167` recall, `0.0214` FPR, 12 parse errors, and 467.0s scoring time.
+- The score-level ensemble's gain did not transfer to a single rubric prompt.
+  The useful difference appears to come from independent reasoning trajectories
+  across prompts rather than one omitted instruction.

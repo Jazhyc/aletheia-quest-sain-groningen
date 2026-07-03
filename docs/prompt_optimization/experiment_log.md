@@ -315,6 +315,7 @@ runtime.
 | `qwen_reason_budget_4096` | 0.8988 | 0.8167 | 0.0190 | 8 | 450.2s |
 | `qwen_reason_scrutiny4096_v1` | 0.8976 | 0.8119 | 0.0167 | 10 | 347.5s |
 | `qwen_reason_details3072_v1` | 0.8976 | 0.8238 | 0.0286 | 18 | 392.0s |
+| `qwen_reason_union4096_v1` | 0.8976 | 0.8167 | 0.0214 | 12 | 467.0s |
 | `qwen_reason_v1` | 0.8905 | 0.7976 | 0.0167 | 8 | 446.8s |
 | `qwen_reason_compact_merge4096_v1` | 0.8821 | 0.7786 | 0.0143 | 15 | 270.4s |
 | `qwen_reason_known_shot1_4096_v1` | 0.6774 | 0.6643 | 0.3095 | 1 | 524.1s |
@@ -447,3 +448,35 @@ Decision: rejected. It did not combine the parent prompts constructively:
 balanced accuracy is below both `known4096` and `details4096`, and runtime is
 slower than both. Threshold tuning reaches about `0.9071`, which only ties the
 current validation leader rather than improving it.
+
+## Candidate: `qwen_reason_union4096_v1`
+
+Status: completed as Slurm job `30022781`.
+
+Hypothesis:
+
+- A score-level max/average ensemble of `details4096`, `known4096`, and
+  `scrutiny4096` reaches about `0.9286` validation balanced accuracy, so the
+  remaining useful signal may be a union of their high-rating tests.
+- Encoding those tests explicitly in one prompt may recover ensemble-like recall
+  without the runtime cost of three separate judges.
+
+Config: `configs/blackbox_reasoning_union4096.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.8976 |
+| AUROC | 0.9007 |
+| recall | 0.8167 |
+| FPR | 0.0214 |
+| parse errors | 12 |
+| score time | 467.0s |
+| rows/s | 1.8 |
+
+Decision: rejected. The score-level ensemble showed complementary signal, but
+the single-prompt union rubric did not reproduce it: recall stayed below
+`details4096` and FPR rose above `known4096`/`scrutiny4096`. This suggests the
+ensemble benefit comes from independent model trajectories, not just missing
+rubric wording.
