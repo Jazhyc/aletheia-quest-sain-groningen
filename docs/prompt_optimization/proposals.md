@@ -429,3 +429,17 @@ Outcome:
   balanced accuracy by `+0.0024` and reduced FPR/parse errors, but lowered recall
   slightly and added about 674s of scoring time. It still does not reach the
   `0.93` target.
+
+## P14: Weighted Mean Prompt Ensemble
+
+Status: parked before running.
+
+Rationale:
+
+- Offline member-score probes found several validation-only mean combinations
+  over `0.93` macro balanced accuracy.
+- The best variants depended on a 5-member ensemble and often duplicated the
+  same `known4096` prompt as a calibration weight.
+- This is too likely to overfit the validation split and may not generalize to
+  the hidden test set. Do not run this as the next experiment unless we first
+  establish robustness with a less post-hoc selection procedure.

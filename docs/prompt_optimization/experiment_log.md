@@ -614,3 +614,20 @@ reduced member-level parse errors slightly and lowered FPR versus the 4096-token
 member-major ensemble, but recall also dropped a little and score time increased
 by about 674s. This is an accuracy-first candidate, not a speed improvement, and
 it still falls short of the `0.93` target.
+
+## Candidate: `qwen_reason_ensemble_dkksu_mean4096_v1`
+
+Status: parked before running.
+
+Hypothesis:
+
+- A mean ensemble with a duplicated `known4096` vote might preserve the recall
+  complementarity of `details/scrutiny/support` while lowering the FPR penalty
+  from raw max aggregation.
+- However, the signal came from post-hoc validation score combinations and is
+  not strong evidence of hidden-test generalization.
+
+Decision: do not run as the next experiment. A 5-member weighted ensemble is
+too complex and validation-tuned relative to the amount of evidence. Prefer a
+robustness check or a smaller, easier-to-explain ensemble before spending GPU
+time here.
