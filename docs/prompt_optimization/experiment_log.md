@@ -603,6 +603,32 @@ public test split than to validation and nearly reaches the `0.93` target while
 remaining substantially faster than the 8192-token validation leader. Remaining
 errors are still concentrated in varied Qwen LoRA subsets.
 
+Ablation at threshold `0.01` with max aggregation:
+
+| split | members | balanced accuracy | recall | FPR |
+| --- | --- | ---: | ---: | ---: |
+| validation | `details` | 0.9024 | 0.8284 | 0.0310 |
+| validation | `known` | 0.9095 | 0.8308 | 0.0190 |
+| validation | `scrutiny` | 0.8857 | 0.8308 | 0.0238 |
+| validation | `details+known` | 0.9155 | 0.8657 | 0.0405 |
+| validation | `details+scrutiny` | 0.9167 | 0.8632 | 0.0357 |
+| validation | `known+scrutiny` | 0.9214 | 0.8682 | 0.0310 |
+| validation | `details+known+scrutiny` | 0.9226 | 0.8831 | 0.0429 |
+| test | `details` | 0.8940 | 0.8429 | 0.0167 |
+| test | `known` | 0.9071 | 0.8279 | 0.0214 |
+| test | `scrutiny` | 0.9024 | 0.8628 | 0.0190 |
+| test | `details+known` | 0.9226 | 0.8703 | 0.0310 |
+| test | `details+scrutiny` | 0.9095 | 0.8878 | 0.0286 |
+| test | `known+scrutiny` | 0.9262 | 0.8778 | 0.0310 |
+| test | `details+known+scrutiny` | 0.9298 | 0.8928 | 0.0381 |
+
+All three members contribute under macro balanced accuracy. On validation,
+dropping `details`, `known`, and `scrutiny` changes balanced accuracy by
+`-0.0012`, `-0.0060`, and `-0.0071` respectively. On test, the drops are
+`-0.0036`, `-0.0202`, and `-0.0071`. The ensemble is effectively a conservative
+OR over specialized prompts: threshold `0.01` means any member rating above `1`
+marks the row deceptive.
+
 ## Candidate: `qwen_reason_ensemble_dks_member8192_v1`
 
 Status: completed as Slurm job `30023172`.
