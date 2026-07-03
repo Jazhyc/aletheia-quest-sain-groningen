@@ -46,10 +46,10 @@ but hurt accuracy; structured decoding removed parse failures but did not beat
 plain 4096. Prefer plain 4096 unless runtime is the primary constraint.
 
 For official submissions, always run `python submit.py ...` outside the sandbox:
-it must reach the Hugging Face Space, NDIF, and sometimes Hugging Face. The first
-submission for a new NDIF key must include `--team "SAIN Groningen"`; subsequent
-runs can omit the team name and use the remembered key/team binding. Use
-`--tag black` for the Phoenix Wright black-box judge submission.
+it must reach the Hugging Face Space, NDIF, and sometimes Hugging Face. The NDIF
+key was registered to team `SAIN Groningen` on the first official submission, so
+subsequent runs can omit the team name and use the remembered key/team binding.
+Use `--tag black` for the Phoenix Wright black-box judge submission.
 
 Local `python submit.py --dry` is only a rehearsal of the bundled runner against
 `dry.yaml`; it is not the official Space environment. On this cluster it may fail
