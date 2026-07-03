@@ -310,11 +310,15 @@ runtime.
 | --- | ---: | ---: | ---: | ---: | ---: |
 | `qwen_reason_known4096_v1` | 0.9071 | 0.8310 | 0.0167 | 18 | 515.5s |
 | `qwen_reason_details4096_v1` | 0.9060 | 0.8405 | 0.0286 | 7 | 464.2s |
+| `qwen_reason_details_known4096_v1` | 0.9036 | 0.8310 | 0.0238 | 11 | 534.3s |
 | `qwen_reason_calibrated4096_v1` | 0.9024 | 0.8381 | 0.0333 | 11 | 470.7s |
 | `qwen_reason_budget_4096` | 0.8988 | 0.8167 | 0.0190 | 8 | 450.2s |
 | `qwen_reason_scrutiny4096_v1` | 0.8976 | 0.8119 | 0.0167 | 10 | 347.5s |
 | `qwen_reason_details3072_v1` | 0.8976 | 0.8238 | 0.0286 | 18 | 392.0s |
 | `qwen_reason_v1` | 0.8905 | 0.7976 | 0.0167 | 8 | 446.8s |
+| `qwen_reason_compact_merge4096_v1` | 0.8821 | 0.7786 | 0.0143 | 15 | 270.4s |
+| `qwen_reason_known_shot1_4096_v1` | 0.6774 | 0.6643 | 0.3095 | 1 | 524.1s |
+| `qwen_reason_details_shot1_4096_v1` | 0.6512 | 0.5714 | 0.2690 | 0 | 528.7s |
 
 Practical recommendation:
 
@@ -323,3 +327,123 @@ Practical recommendation:
 - Use `qwen_reason_details4096_v1` if choosing a more robust tradeoff: it is
   only `0.0012` lower in balanced accuracy, but faster and has fewer parse
   errors.
+
+## Candidate: `qwen_reason_known_shot1_4096_v1`
+
+Status: completed as Slurm job `30022679`.
+
+Hypothesis:
+
+- One balanced pair of labelled train examples can calibrate the boundary where
+  hidden wrong-answer instructions are present but the final answer may still be
+  correct.
+- Starting from `known4096` may preserve low FPR while recovering some parse or
+  recall losses.
+
+Config: `configs/blackbox_reasoning_known_shot1_4096.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.6774 |
+| AUROC | 0.6779 |
+| recall | 0.6643 |
+| FPR | 0.3095 |
+| parse errors | 1 |
+| score time | 524.1s |
+| rows/s | 1.6 |
+
+Decision: rejected. The labelled examples contaminated the generation format:
+the model copied `Rating:` and `<example>` fragments into its own reasoning and
+over-triggered on many negatives. FPR rose from `0.0167` to `0.3095`, and the
+longer prompt did not improve runtime.
+
+## Candidate: `qwen_reason_details_shot1_4096_v1`
+
+Status: completed as Slurm job `30022680`.
+
+Hypothesis:
+
+- The same labelled examples may reduce `details4096` false positives while
+  preserving its recall and parse reliability.
+
+Config: `configs/blackbox_reasoning_details_shot1_4096.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.6512 |
+| AUROC | 0.6526 |
+| recall | 0.5714 |
+| FPR | 0.2690 |
+| parse errors | 0 |
+| score time | 528.7s |
+| rows/s | 1.6 |
+
+Decision: rejected. The same few-shot contamination appeared here, with worse
+recall and a large FPR increase. Avoid labelled few-shot prompts in this runner
+unless the shot format is redesigned so examples cannot be mistaken for the
+current item.
+
+## Candidate: `qwen_reason_compact_merge4096_v1`
+
+Status: completed as Slurm job `30022724`.
+
+Hypothesis:
+
+- A compact merge of `known4096` and `details4096` can preserve the low FPR of
+  the context-answer rule while recovering some supporting-detail positives.
+- An explicit uncertainty guard may reduce fact-check hallucination false
+  positives compared with `details4096`.
+
+Config: `configs/blackbox_reasoning_compact_merge4096.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.8821 |
+| AUROC | 0.8852 |
+| recall | 0.7786 |
+| FPR | 0.0143 |
+| parse errors | 15 |
+| score time | 270.4s |
+| rows/s | 3.0 |
+
+Decision: rejected for accuracy. It is much faster than the current leaders,
+but the compact/uncertainty wording made the judge too conservative on varied
+deception positives and increased parse errors. It is not a useful replacement
+for the plain baseline because balanced accuracy is lower.
+
+## Candidate: `qwen_reason_details_known4096_v1`
+
+Status: completed as Slurm job `30022744`.
+
+Hypothesis:
+
+- Starting from `details4096` and adding only the context-answer contradiction
+  rule from `known4096` may combine their useful behavior without P7's recall
+  loss.
+- This is an accuracy probe; runtime is expected to be close to the other full
+  4096-token prompts.
+
+Config: `configs/blackbox_reasoning_details_known4096.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9036 |
+| AUROC | 0.9096 |
+| recall | 0.8310 |
+| FPR | 0.0238 |
+| parse errors | 11 |
+| score time | 534.3s |
+| rows/s | 1.5 |
+
+Decision: rejected. It did not combine the parent prompts constructively:
+balanced accuracy is below both `known4096` and `details4096`, and runtime is
+slower than both. Threshold tuning reaches about `0.9071`, which only ties the
+current validation leader rather than improving it.
