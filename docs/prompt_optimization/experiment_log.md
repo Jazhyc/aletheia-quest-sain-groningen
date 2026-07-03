@@ -308,6 +308,7 @@ runtime.
 
 | candidate | balanced accuracy | recall | FPR | parse errors | score time |
 | --- | ---: | ---: | ---: | ---: | ---: |
+| `qwen_reason_ensemble_dks_member8192_v1` | 0.9250 | 0.8833 | 0.0333 | 36 | 1988.1s |
 | `qwen_reason_ensemble_dks_member4096_v1` | 0.9226 | 0.8881 | 0.0429 | 38 | 1314.3s |
 | `qwen_reason_ensemble_dks4096_v1` | 0.9167 | 0.8667 | 0.0333 | 38 | 1312.5s |
 | `qwen_reason_known4096_v1` | 0.9071 | 0.8310 | 0.0167 | 18 | 515.5s |
@@ -326,13 +327,15 @@ runtime.
 
 Practical recommendation:
 
-- Use `qwen_reason_ensemble_dks_member4096_v1` if optimizing validation
+- Use `qwen_reason_ensemble_dks_member8192_v1` if optimizing validation
   balanced accuracy and accepting substantially higher runtime.
+- Use `qwen_reason_ensemble_dks_member4096_v1` if optimizing for nearly the
+  same ensemble accuracy with lower runtime.
 - Use `qwen_reason_known4096_v1` if optimizing validation balanced accuracy
   among single prompts only.
 - Use `qwen_reason_details4096_v1` if choosing a more robust tradeoff: it is
-  only `0.0012` lower in balanced accuracy, but faster and has fewer parse
-  errors.
+  only `0.0012` lower than the best single prompt in balanced accuracy, but
+  faster and has fewer parse errors.
 
 ## Candidate: `qwen_reason_known_shot1_4096_v1`
 
@@ -574,8 +577,40 @@ Validation result:
 | rows/s | 0.6 |
 | prompt evals/s | 1.9 |
 
-Decision: current strongest validation run. Member-major scheduling improved
+Decision: previous strongest validation run. Member-major scheduling improved
 over row-major by `+0.0060` balanced accuracy at essentially the same scoring
 time. It is still short of the `0.93` target and materially slower than single
 prompt methods, but it validates the ensemble direction as the best accuracy
 path so far.
+
+## Candidate: `qwen_reason_ensemble_dks_member8192_v1`
+
+Status: completed as Slurm job `30023172`.
+
+Hypothesis:
+
+- The current strongest ensemble may be limited by truncation: some member
+  generations fail to emit a final rating after long repetitive reasoning.
+- Doubling the generation budget may reduce parse failures and recover false
+  negatives, at the cost of runtime.
+
+Config: `configs/blackbox_reasoning_ensemble_dks_member8192.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9250 |
+| AUROC | 0.9319 |
+| recall | 0.8833 |
+| FPR | 0.0333 |
+| parse errors | 36 |
+| score time | 1988.1s |
+| rows/s | 0.4 |
+| prompt evals/s | 1.2 |
+
+Decision: current highest validation balanced accuracy. The larger budget
+reduced member-level parse errors slightly and lowered FPR versus the 4096-token
+member-major ensemble, but recall also dropped a little and score time increased
+by about 674s. This is an accuracy-first candidate, not a speed improvement, and
+it still falls short of the `0.93` target.

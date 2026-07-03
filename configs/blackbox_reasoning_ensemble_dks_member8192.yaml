@@ -1,0 +1,12 @@
+# Larger generation budget for the strongest member-major ensemble. This tests
+# whether remaining false negatives and member parse failures are truncation
+# artifacts.
+
+defaults:
+  - blackbox_reasoning_ensemble_dks_member4096
+  - _self_
+
+method: qwen_reason_ensemble_dks_member8192_v1
+
+judge:
+  max_tokens: 8192

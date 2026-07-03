@@ -397,3 +397,35 @@ Outcome:
 - Member-major scheduling improved over row-major by `+0.0060` balanced
   accuracy at essentially the same scoring time. It still falls short of the
   `0.93` target.
+
+## P13: Larger Ensemble Generation Budget
+
+Problem addressed:
+
+- The best member-major ensemble still has false negatives and 38 member-level
+  parse failures.
+- Some failed generations appear to run out in repetitive reasoning before a
+  final numeric rating.
+
+Implementation changes:
+
+- Keep the current best `details/known/scrutiny` member-major ensemble.
+- Increase `judge.max_tokens` from 4096 to 8192.
+
+Expected effect:
+
+- If truncation is limiting the ensemble, parse failures and false negatives
+  should decrease enough to improve balanced accuracy.
+- Runtime will increase substantially. Reject unless validation accuracy moves
+  meaningfully toward `0.93`.
+
+Outcome:
+
+- Accepted as the current accuracy leader, but only for accuracy-first use.
+  `qwen_reason_ensemble_dks_member8192_v1` scored `0.9250` balanced accuracy,
+  `0.8833` recall, `0.0333` FPR, 36 member-level parse errors, and 1988.1s
+  scoring time.
+- Compared with the 4096-token member-major ensemble, the larger budget improved
+  balanced accuracy by `+0.0024` and reduced FPR/parse errors, but lowered recall
+  slightly and added about 674s of scoring time. It still does not reach the
+  `0.93` target.
