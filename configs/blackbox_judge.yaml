@@ -66,6 +66,15 @@ shots:
   seed: ${seed}
   max_prompt_chars: 3000
 
+ensemble:
+  # When enabled, each row is rendered with every member prompt, all prompt
+  # evaluations are submitted to vLLM together, and member scores are aggregated
+  # back to one prediction per row.
+  enabled: false
+  aggregation: max
+  order: row
+  members: []
+
 scoring:
   threshold: 0.5
 

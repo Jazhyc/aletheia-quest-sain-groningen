@@ -58,6 +58,7 @@ class DatasetWork:
     labels: pd.DataFrame
     examples: list[dict]
     prompts: list[str]
+    prompt_count: int
 
 
 def resolve_path(pathish: str, base: Path) -> Path:
@@ -156,6 +157,49 @@ def build_prompt(
     if append_rating_prefix:
         prompt = f"{prompt}\n\nRating:"
     return prompt
+
+
+def prompt_templates_from_config(cfg: DictConfig, few_shot_prefix: str) -> list[tuple[str, str]]:
+    if not bool(OmegaConf.select(cfg, "ensemble.enabled", default=False)):
+        prompt_template = str(cfg.judge.prompt)
+        if few_shot_prefix:
+            prompt_template = f"{prompt_template}\n\n{few_shot_prefix}"
+        return [("default", prompt_template)]
+
+    members = OmegaConf.select(cfg, "ensemble.members", default=[])
+    if not members:
+        raise ValueError("ensemble.enabled=true requires at least one ensemble.members entry")
+
+    templates: list[tuple[str, str]] = []
+    for index, member in enumerate(members):
+        name = str(member.get("name", f"member_{index}"))
+        prompt = str(member.prompt)
+        if few_shot_prefix:
+            prompt = f"{prompt}\n\n{few_shot_prefix}"
+        templates.append((name, prompt))
+    return templates
+
+
+def aggregate_scores(scores: np.ndarray, aggregation: str) -> np.ndarray:
+    if scores.ndim != 2:
+        raise ValueError(f"expected 2D score matrix, got shape={scores.shape}")
+    if aggregation == "max":
+        return scores.max(axis=1)
+    if aggregation in {"mean", "avg"}:
+        return scores.mean(axis=1)
+    if aggregation == "min":
+        return scores.min(axis=1)
+    if aggregation == "median":
+        return np.median(scores, axis=1)
+    raise ValueError(f"unknown ensemble aggregation={aggregation!r}")
+
+
+def score_matrix_from_raw(raw_scores: np.ndarray, *, n_rows: int, prompt_count: int, order: str) -> np.ndarray:
+    if order == "row":
+        return raw_scores.reshape(n_rows, prompt_count)
+    if order == "member":
+        return raw_scores.reshape(prompt_count, n_rows).T
+    raise ValueError(f"unknown ensemble order={order!r}")
 
 
 def load_shot_pool(splits_dir: Path, split: str, base: Path) -> list[tuple[DatasetConfig, pd.DataFrame]]:
@@ -280,6 +324,44 @@ def rating_to_score(rating: int, *, rating_min: int, rating_max: int) -> float:
     return (rating - rating_min) / (rating_max - rating_min)
 
 
+def generate_with_optional_batches(llm: Any, prompts: list[str], sampling: Any, batch_size: int | None) -> list[Any]:
+    if batch_size is None or batch_size <= 0:
+        return list(llm.generate(prompts, sampling))
+    outputs = []
+    for start in range(0, len(prompts), batch_size):
+        outputs.extend(llm.generate(prompts[start:start + batch_size], sampling))
+    return outputs
+
+
+def rating_probs_from_logprobs(
+    first_token_logprobs: dict[Any, Any],
+    *,
+    ids_by_rating: dict[int, list[int]],
+    ratings: list[int],
+    missing_logprob: float,
+) -> dict[int, float]:
+    expanded = {
+        int(token_id): logprob_value(value)
+        for token_id, value in first_token_logprobs.items()
+    }
+    return {
+        rating: float(sum(math.exp(expanded.get(token_id, missing_logprob))
+                          for token_id in ids_by_rating[rating]))
+        for rating in ratings
+    }
+
+
+def structured_rating_prompt(prompt: str, reasoning: str, rating_instruction: str) -> str:
+    return (
+        f"{prompt}\n\n"
+        "<reasoning>\n"
+        f"{reasoning.strip()}\n"
+        "</reasoning>\n\n"
+        f"{rating_instruction.strip()}\n\n"
+        "Rating:"
+    )
+
+
 def vllm_kwargs_from_config(
     *,
     model_name: str,
@@ -383,26 +465,18 @@ class OfflineVllmRatingJudge:
 
     def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
         scores = np.full(len(prompts), np.nan, dtype=float)
-        if batch_size is None or batch_size <= 0:
-            outputs = self.llm.generate(prompts, self.sampling)
-        else:
-            outputs = []
-            for start in range(0, len(prompts), batch_size):
-                outputs.extend(self.llm.generate(prompts[start:start + batch_size], self.sampling))
+        outputs = generate_with_optional_batches(self.llm, prompts, self.sampling, batch_size)
 
         for offset, output in enumerate(outputs):
             if not output.outputs or not output.outputs[0].logprobs:
                 continue
             first_token_logprobs = output.outputs[0].logprobs[0] or {}
-            expanded = {
-                int(token_id): logprob_value(value)
-                for token_id, value in first_token_logprobs.items()
-            }
-            probs = {
-                rating: float(sum(math.exp(expanded.get(token_id, self.missing_logprob))
-                                  for token_id in self.ids_by_rating[rating]))
-                for rating in self.ratings
-            }
+            probs = rating_probs_from_logprobs(
+                first_token_logprobs,
+                ids_by_rating=self.ids_by_rating,
+                ratings=self.ratings,
+                missing_logprob=self.missing_logprob,
+            )
             scores[offset] = score_from_rating_probs(
                 probs,
                 rating_min=self.rating_min,
@@ -455,12 +529,7 @@ class OfflineVllmGenerateJudge:
         )
 
     def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
-        if batch_size is None or batch_size <= 0:
-            outputs = self.llm.generate(prompts, self.sampling)
-        else:
-            outputs = []
-            for start in range(0, len(prompts), batch_size):
-                outputs.extend(self.llm.generate(prompts[start:start + batch_size], self.sampling))
+        outputs = generate_with_optional_batches(self.llm, prompts, self.sampling, batch_size)
 
         scores = np.zeros(len(prompts), dtype=float)
         self.generations = []
@@ -484,6 +553,120 @@ class OfflineVllmGenerateJudge:
                 "text": text,
             })
         return scores
+
+
+class OfflineVllmStructuredJudge:
+    def __init__(
+        self,
+        *,
+        model_name: str,
+        rating_min: int,
+        rating_max: int,
+        dtype: str,
+        tensor_parallel_size: int,
+        gpu_memory_utilization: float,
+        trust_remote_code: bool,
+        max_model_len: int | None,
+        max_num_seqs: int | None,
+        spec_method: str | None,
+        spec_model: str | None,
+        spec_tokens: int | None,
+        generated_logprobs: int | None,
+        missing_logprob: float,
+        max_tokens: int,
+        temperature: float,
+        final_rating_prompt: str,
+    ) -> None:
+        from transformers import AutoTokenizer
+        from vllm import LLM, SamplingParams
+
+        self.rating_min = rating_min
+        self.rating_max = rating_max
+        self.missing_logprob = missing_logprob
+        self.ratings = list(range(rating_min, rating_max + 1))
+        self.final_rating_prompt = final_rating_prompt
+        self.generations: list[dict[str, Any]] = []
+        self.parse_error_count = 0
+
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.all_rating_ids, self.ids_by_rating = rating_token_ids(tokenizer, rating_min, rating_max)
+        requested_logprobs = requested_logprobs_or_default(generated_logprobs, len(self.all_rating_ids))
+
+        llm_kwargs = vllm_kwargs_from_config(
+            model_name=model_name,
+            dtype=dtype,
+            tensor_parallel_size=tensor_parallel_size,
+            gpu_memory_utilization=gpu_memory_utilization,
+            trust_remote_code=trust_remote_code,
+            max_model_len=max_model_len,
+            max_num_seqs=max_num_seqs,
+            spec_method=spec_method,
+            spec_model=spec_model,
+            spec_tokens=spec_tokens,
+        )
+        self.llm = LLM(**llm_kwargs)
+        self.reasoning_sampling = SamplingParams(
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        self.rating_sampling = SamplingParams(
+            max_tokens=1,
+            temperature=temperature,
+            logprobs=requested_logprobs,
+            logprob_token_ids=self.all_rating_ids,
+            allowed_token_ids=self.all_rating_ids,
+        )
+
+    def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
+        reasoning_outputs = generate_with_optional_batches(
+            self.llm,
+            prompts,
+            self.reasoning_sampling,
+            batch_size,
+        )
+        reasoning_texts = [
+            output.outputs[0].text if output.outputs else ""
+            for output in reasoning_outputs
+        ]
+        rating_prompts = [
+            structured_rating_prompt(prompt, reasoning, self.final_rating_prompt)
+            for prompt, reasoning in zip(prompts, reasoning_texts, strict=True)
+        ]
+        rating_outputs = generate_with_optional_batches(
+            self.llm,
+            rating_prompts,
+            self.rating_sampling,
+            batch_size,
+        )
+
+        scores = np.full(len(prompts), np.nan, dtype=float)
+        self.generations = []
+        self.parse_error_count = 0
+        for offset, (reasoning, output) in enumerate(zip(reasoning_texts, rating_outputs, strict=True)):
+            first_token_logprobs = {}
+            if output.outputs and output.outputs[0].logprobs:
+                first_token_logprobs = output.outputs[0].logprobs[0] or {}
+            probs = rating_probs_from_logprobs(
+                first_token_logprobs,
+                ids_by_rating=self.ids_by_rating,
+                ratings=self.ratings,
+                missing_logprob=self.missing_logprob,
+            )
+            score = score_from_rating_probs(
+                probs,
+                rating_min=self.rating_min,
+                rating_max=self.rating_max,
+            )
+            best_rating = max(probs, key=probs.get) if probs else None
+            scores[offset] = score
+            self.generations.append({
+                "offset": offset,
+                "rating": best_rating,
+                "parse_error": False,
+                "score": score,
+                "text": reasoning,
+            })
+        return np.nan_to_num(scores, nan=0.5)
 
 
 class OpenAIRatingJudge:
@@ -612,6 +795,14 @@ def build_judge(cfg: DictConfig):
             return OfflineVllmGenerateJudge(
                 **common,
                 max_tokens=int(cfg.judge.max_tokens),
+            )
+        if mode == "structured":
+            return OfflineVllmStructuredJudge(
+                **common,
+                generated_logprobs=generated_logprobs,
+                missing_logprob=float(cfg.judge.missing_logprob),
+                max_tokens=int(cfg.judge.max_tokens),
+                final_rating_prompt=str(cfg.judge.structured_rating_prompt),
             )
         raise ValueError(f"unknown judge.mode={mode!r}")
     if backend == "openai":
@@ -744,9 +935,13 @@ def main(cfg: DictConfig) -> None:
         max_prompt_chars=int(cfg.shots.max_prompt_chars),
         base=original_cwd,
     )
-    prompt_template = str(cfg.judge.prompt)
-    if few_shot_prefix:
-        prompt_template = f"{prompt_template}\n\n{few_shot_prefix}"
+    prompt_templates = prompt_templates_from_config(cfg, few_shot_prefix)
+    prompt_count = len(prompt_templates)
+    ensemble_enabled = prompt_count > 1
+    aggregation = str(OmegaConf.select(cfg, "ensemble.aggregation", default="max"))
+    ensemble_order = str(OmegaConf.select(cfg, "ensemble.order", default="row"))
+    if ensemble_order not in {"row", "member"}:
+        raise ValueError(f"unknown ensemble.order={ensemble_order!r}")
     append_rating_prefix = str(cfg.judge.mode) == "logits"
     results: list[DatasetResult] = []
     print(f"initializing {cfg.judge.backend} judge for {cfg.judge.model}")
@@ -760,27 +955,48 @@ def main(cfg: DictConfig) -> None:
         if cfg.limit is not None:
             labels = labels.iloc[:int(cfg.limit)].copy()
         examples = load_examples_for_labels(dataset_cfg.name, labels, None)
-        prompts = [
-            build_prompt(
-                row["messages"],
-                prompt_template,
-                int(cfg.judge.max_prompt_chars),
-                append_rating_prefix=append_rating_prefix,
-            )
-            for row in examples
-        ]
-        dataset_work.append(DatasetWork(dataset_cfg, labels, examples, prompts))
-        all_prompts.extend(prompts)
+        prompts = []
         label_by_index = {row["index"]: int(row["label"]) for row in labels.to_dict("records")}
-        all_metadata.extend({
-            "dataset": dataset_cfg.name,
-            "index": json_scalar(row["index"]),
-            "label": label_by_index[row["index"]],
-        } for row in examples)
-        print(f"{dataset_cfg.name}: prepared {len(prompts)} rows")
+        prompt_items: list[tuple[dict, int, str, str]]
+        if ensemble_order == "member":
+            prompt_items = [
+                (row, member_index, member_name, prompt_template)
+                for member_index, (member_name, prompt_template) in enumerate(prompt_templates)
+                for row in examples
+            ]
+        else:
+            prompt_items = [
+                (row, member_index, member_name, prompt_template)
+                for row in examples
+                for member_index, (member_name, prompt_template) in enumerate(prompt_templates)
+            ]
+        for row, member_index, member_name, prompt_template in prompt_items:
+            prompts.append(
+                build_prompt(
+                    row["messages"],
+                    prompt_template,
+                    int(cfg.judge.max_prompt_chars),
+                    append_rating_prefix=append_rating_prefix,
+                )
+            )
+            metadata = {
+                "dataset": dataset_cfg.name,
+                "index": json_scalar(row["index"]),
+                "label": label_by_index[row["index"]],
+            }
+            if ensemble_enabled:
+                metadata["ensemble_member"] = member_name
+                metadata["ensemble_member_index"] = member_index
+            all_metadata.append(metadata)
+        dataset_work.append(DatasetWork(dataset_cfg, labels, examples, prompts, prompt_count))
+        all_prompts.extend(prompts)
+        print(f"{dataset_cfg.name}: prepared {len(examples)} rows"
+              f" ({len(prompts)} prompt evaluations)")
 
     batch_size = None if cfg.judge.batch_size is None else int(cfg.judge.batch_size)
-    print(f"scoring {len(all_prompts)} rows across {len(dataset_work)} datasets with {cfg.judge.model}")
+    n_rows = sum(len(work.examples) for work in dataset_work)
+    print(f"scoring {len(all_prompts)} prompt evaluations for {n_rows} rows "
+          f"across {len(dataset_work)} datasets with {cfg.judge.model}")
     score_start = time.perf_counter()
     all_scores = judge.score_prompts(all_prompts, batch_size=batch_size)
     score_seconds = time.perf_counter() - score_start
@@ -788,8 +1004,18 @@ def main(cfg: DictConfig) -> None:
     offset = 0
     for work in dataset_work:
         end = offset + len(work.prompts)
-        scores = all_scores[offset:end]
+        raw_scores = all_scores[offset:end]
         offset = end
+        if work.prompt_count > 1:
+            score_matrix = score_matrix_from_raw(
+                raw_scores,
+                n_rows=len(work.examples),
+                prompt_count=work.prompt_count,
+                order=ensemble_order,
+            )
+            scores = aggregate_scores(score_matrix, aggregation)
+        else:
+            scores = raw_scores
         pred_path = run_dir / "predictions" / f"{work.config.name.replace('/', '__')}.csv"
         write_predictions(pred_path, work.examples, scores, float(cfg.scoring.threshold))
         preds = load_predictions(pred_path)
@@ -805,7 +1031,8 @@ def main(cfg: DictConfig) -> None:
               f"auroc={fmt_metric(metrics.get('auroc'))}")
 
     result_path = run_dir / "result.json"
-    rows_per_second = len(all_prompts) / score_seconds if score_seconds > 0 else None
+    rows_per_second = n_rows / score_seconds if score_seconds > 0 else None
+    prompt_evaluations_per_second = len(all_prompts) / score_seconds if score_seconds > 0 else None
     generation_path = None
     generations = getattr(judge, "generations", None)
     if generations is not None:
@@ -815,11 +1042,13 @@ def main(cfg: DictConfig) -> None:
         "submitted_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "method": str(cfg.method),
         "split": str(cfg.split),
-        "n": len(all_prompts),
+        "n": n_rows,
+        "n_prompt_evaluations": len(all_prompts),
         "metrics": mean_metrics(results),
         "timing": {
             "score_seconds": score_seconds,
             "rows_per_second": rows_per_second,
+            "prompt_evaluations_per_second": prompt_evaluations_per_second,
             "note": "excludes judge initialization/model startup and dataset preparation",
         },
         "config": resolved,
@@ -829,6 +1058,12 @@ def main(cfg: DictConfig) -> None:
         "parse_errors": getattr(judge, "parse_error_count", 0),
         "generations_path": None if generation_path is None else generation_path.as_posix(),
     }
+    if ensemble_enabled:
+        record["ensemble"] = {
+            "aggregation": aggregation,
+            "order": ensemble_order,
+            "members": [name for name, _ in prompt_templates],
+        }
     config_path = run_dir / "config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(OmegaConf.to_yaml(cfg, resolve=True))
@@ -839,6 +1074,8 @@ def main(cfg: DictConfig) -> None:
     print(f"mean balanced_accuracy={fmt_metric(metrics.get('balanced_accuracy'))} "
           f"auroc={fmt_metric(metrics.get('auroc'))}")
     print(f"score_time={fmt_seconds(score_seconds)} rows_per_second={fmt_rate(rows_per_second)}")
+    if ensemble_enabled:
+        print(f"prompt_evaluations_per_second={fmt_rate(prompt_evaluations_per_second)}")
     print(f"wrote {result_path}")
 
 

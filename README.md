@@ -377,3 +377,17 @@ The Slurm template requests one `gpushort` GPU node, one CPU, 32 GB memory, and
 writes job output to `logs/slurm/%x-%j.out`. Hydra still gives config overrides
 and sweep-friendly command lines. Add `submitit` later only if we need
 Python-managed Slurm arrays; direct `sbatch` is usually easier to debug.
+
+Structured reasoning budget sweeps run one Slurm job per budget and are analyzed
+after all jobs finish:
+
+```bash
+python experiments/blackbox/sweep_structured_budget.py submit --split validation
+squeue --me
+python experiments/blackbox/sweep_structured_budget.py plot --split validation
+```
+
+The default sweep uses budgets `256 512 1024 2048 4096`, writes per-budget runs
+under `results/blackbox/qwen_structured_reason_budget_<budget>/validation/`,
+and writes the aggregate CSV plus balanced-accuracy plot under
+`results/blackbox/structured_budget_sweep/validation/`.
