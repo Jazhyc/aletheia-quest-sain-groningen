@@ -583,6 +583,26 @@ time. It is still short of the `0.93` target and materially slower than single
 prompt methods, but it validates the ensemble direction as the best accuracy
 path so far.
 
+Test result:
+
+Run as Slurm job `30023290` with `split=test`.
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9298 |
+| AUROC | 0.9340 |
+| recall | 0.8976 |
+| FPR | 0.0381 |
+| parse errors | 36 |
+| score time | 1284.6s |
+| rows/s | 0.6 |
+| prompt evals/s | 1.9 |
+
+Interpretation: the 4096-token member-major ensemble generalizes better to the
+public test split than to validation and nearly reaches the `0.93` target while
+remaining substantially faster than the 8192-token validation leader. Remaining
+errors are still concentrated in varied Qwen LoRA subsets.
+
 ## Candidate: `qwen_reason_ensemble_dks_member8192_v1`
 
 Status: completed as Slurm job `30023172`.

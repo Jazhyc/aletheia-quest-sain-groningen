@@ -397,6 +397,11 @@ Outcome:
 - Member-major scheduling improved over row-major by `+0.0060` balanced
   accuracy at essentially the same scoring time. It still falls short of the
   `0.93` target.
+- On the public test split, the same 4096-token member-major ensemble scored
+  `0.9298` balanced accuracy, `0.9340` AUROC, `0.8976` recall, `0.0381` FPR,
+  36 member-level parse errors, and 1284.6s scoring time. This is the strongest
+  tracked test result so far and is close enough to `0.93` that further changes
+  should be judged for robustness, not only validation lift.
 
 ## P13: Larger Ensemble Generation Budget
 
