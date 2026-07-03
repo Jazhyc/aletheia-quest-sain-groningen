@@ -296,3 +296,104 @@ Outcome:
 - The score-level ensemble's gain did not transfer to a single rubric prompt.
   The useful difference appears to come from independent reasoning trajectories
   across prompts rather than one omitted instruction.
+
+## P10: Mandatory Concrete-Support Check
+
+Problem addressed:
+
+- Several ensemble-fixed positives have a correct-looking direct answer but
+  false support: wrong dates, locations, firsts, awards, nicknames, origins,
+  biographical details, or explanatory "actually/however" clauses.
+- Previous prompts mention supporting details, but the judge still sometimes
+  stops after deciding the direct answer is correct.
+
+Prompt changes:
+
+- Start from the baseline-adjacent `details4096` decision frame.
+- Require checking both the direct answer and concrete supporting facts before
+  assigning a low rating.
+- List the specific detail types observed in missed positives.
+- Keep the guard that hidden wrong-answer context is scrutiny context, not
+  sufficient evidence by itself.
+
+Expected effect:
+
+- Improve recall on correct-direct-answer/false-support positives while keeping
+  FPR below the broad recall prompts.
+- Runtime may resemble `details4096` because the prompt asks for another check
+  before rating low.
+
+Outcome:
+
+- Rejected as a new leader. `qwen_reason_support4096_v1` scored `0.9036`
+  balanced accuracy, `0.8262` recall, `0.0190` FPR, 20 parse errors, and
+  429.0s scoring time.
+- It improved speed and FPR versus `details4096`, but lost enough recall and
+  parse reliability to score lower overall.
+
+## P11: Batched Multi-Prompt Ensemble
+
+Problem addressed:
+
+- Offline score analysis showed that `details4096`, `known4096`, and
+  `scrutiny4096` are complementary: max/average aggregation of their existing
+  validation scores reaches about `0.9286` balanced accuracy.
+- A single union prompt did not reproduce this, suggesting the benefit comes
+  from independent reasoning trajectories across prompts.
+
+Implementation changes:
+
+- Extend `experiments/blackbox/run_judge.py` so one row can be rendered with
+  multiple member prompts.
+- Submit all row/member prompt evaluations to vLLM in one scoring pass, allowing
+  vLLM to batch and schedule them together.
+- Aggregate member scores back to one row score, starting with `max` because it
+  matched the best offline probe.
+
+Expected effect:
+
+- Validation accuracy should approach the offline ensemble estimate if the
+  batched runner reproduces the same member scores.
+- Runtime should be substantially less than three separate Slurm jobs, though it
+  will still process three prompt evaluations per row.
+
+Outcome:
+
+- `qwen_reason_ensemble_dks4096_v1` is the highest actual validation run so far:
+  `0.9167` balanced accuracy, `0.8667` recall, `0.0333` FPR, 38 parse errors,
+  and 1312.5s scoring time.
+- Best-threshold audit reaches `0.9202`, still below the `0.93` target.
+- The actual batched member scores underperformed the original separate-run
+  offline estimate, so scheduling/order effects matter.
+
+## P12: Member-Major Ensemble Scheduling
+
+Problem addressed:
+
+- The first batched ensemble used row-major prompt order and improved validation
+  accuracy, but its member trajectories were worse than the original standalone
+  runs.
+- Mixed heterogeneous prompts may perturb deterministic generation enough that
+  the offline ensemble estimate does not transfer.
+
+Implementation changes:
+
+- Keep the same three member prompts and one vLLM model process.
+- Schedule all rows for one prompt member before the next member, then aggregate
+  back to one score per row.
+- Use the low binary threshold favored by the actual batched ensemble audit.
+
+Expected effect:
+
+- Preserve more standalone-prompt behavior than row-major mixing while still
+  avoiding three separate model loads.
+- Runtime should be similar to the row-major ensemble in scoring time.
+
+Outcome:
+
+- Current strongest validation run. `qwen_reason_ensemble_dks_member4096_v1`
+  scored `0.9226` balanced accuracy, `0.8881` recall, `0.0429` FPR, 38 parse
+  errors, and 1314.3s scoring time.
+- Member-major scheduling improved over row-major by `+0.0060` balanced
+  accuracy at essentially the same scoring time. It still falls short of the
+  `0.93` target.

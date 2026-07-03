@@ -58,6 +58,7 @@ class DatasetWork:
     labels: pd.DataFrame
     examples: list[dict]
     prompts: list[str]
+    prompt_count: int
 
 
 def resolve_path(pathish: str, base: Path) -> Path:
@@ -156,6 +157,49 @@ def build_prompt(
     if append_rating_prefix:
         prompt = f"{prompt}\n\nRating:"
     return prompt
+
+
+def prompt_templates_from_config(cfg: DictConfig, few_shot_prefix: str) -> list[tuple[str, str]]:
+    if not bool(OmegaConf.select(cfg, "ensemble.enabled", default=False)):
+        prompt_template = str(cfg.judge.prompt)
+        if few_shot_prefix:
+            prompt_template = f"{prompt_template}\n\n{few_shot_prefix}"
+        return [("default", prompt_template)]
+
+    members = OmegaConf.select(cfg, "ensemble.members", default=[])
+    if not members:
+        raise ValueError("ensemble.enabled=true requires at least one ensemble.members entry")
+
+    templates: list[tuple[str, str]] = []
+    for index, member in enumerate(members):
+        name = str(member.get("name", f"member_{index}"))
+        prompt = str(member.prompt)
+        if few_shot_prefix:
+            prompt = f"{prompt}\n\n{few_shot_prefix}"
+        templates.append((name, prompt))
+    return templates
+
+
+def aggregate_scores(scores: np.ndarray, aggregation: str) -> np.ndarray:
+    if scores.ndim != 2:
+        raise ValueError(f"expected 2D score matrix, got shape={scores.shape}")
+    if aggregation == "max":
+        return scores.max(axis=1)
+    if aggregation in {"mean", "avg"}:
+        return scores.mean(axis=1)
+    if aggregation == "min":
+        return scores.min(axis=1)
+    if aggregation == "median":
+        return np.median(scores, axis=1)
+    raise ValueError(f"unknown ensemble aggregation={aggregation!r}")
+
+
+def score_matrix_from_raw(raw_scores: np.ndarray, *, n_rows: int, prompt_count: int, order: str) -> np.ndarray:
+    if order == "row":
+        return raw_scores.reshape(n_rows, prompt_count)
+    if order == "member":
+        return raw_scores.reshape(prompt_count, n_rows).T
+    raise ValueError(f"unknown ensemble order={order!r}")
 
 
 def load_shot_pool(splits_dir: Path, split: str, base: Path) -> list[tuple[DatasetConfig, pd.DataFrame]]:
@@ -891,9 +935,13 @@ def main(cfg: DictConfig) -> None:
         max_prompt_chars=int(cfg.shots.max_prompt_chars),
         base=original_cwd,
     )
-    prompt_template = str(cfg.judge.prompt)
-    if few_shot_prefix:
-        prompt_template = f"{prompt_template}\n\n{few_shot_prefix}"
+    prompt_templates = prompt_templates_from_config(cfg, few_shot_prefix)
+    prompt_count = len(prompt_templates)
+    ensemble_enabled = prompt_count > 1
+    aggregation = str(OmegaConf.select(cfg, "ensemble.aggregation", default="max"))
+    ensemble_order = str(OmegaConf.select(cfg, "ensemble.order", default="row"))
+    if ensemble_order not in {"row", "member"}:
+        raise ValueError(f"unknown ensemble.order={ensemble_order!r}")
     append_rating_prefix = str(cfg.judge.mode) == "logits"
     results: list[DatasetResult] = []
     print(f"initializing {cfg.judge.backend} judge for {cfg.judge.model}")
@@ -907,27 +955,48 @@ def main(cfg: DictConfig) -> None:
         if cfg.limit is not None:
             labels = labels.iloc[:int(cfg.limit)].copy()
         examples = load_examples_for_labels(dataset_cfg.name, labels, None)
-        prompts = [
-            build_prompt(
-                row["messages"],
-                prompt_template,
-                int(cfg.judge.max_prompt_chars),
-                append_rating_prefix=append_rating_prefix,
-            )
-            for row in examples
-        ]
-        dataset_work.append(DatasetWork(dataset_cfg, labels, examples, prompts))
-        all_prompts.extend(prompts)
+        prompts = []
         label_by_index = {row["index"]: int(row["label"]) for row in labels.to_dict("records")}
-        all_metadata.extend({
-            "dataset": dataset_cfg.name,
-            "index": json_scalar(row["index"]),
-            "label": label_by_index[row["index"]],
-        } for row in examples)
-        print(f"{dataset_cfg.name}: prepared {len(prompts)} rows")
+        prompt_items: list[tuple[dict, int, str, str]]
+        if ensemble_order == "member":
+            prompt_items = [
+                (row, member_index, member_name, prompt_template)
+                for member_index, (member_name, prompt_template) in enumerate(prompt_templates)
+                for row in examples
+            ]
+        else:
+            prompt_items = [
+                (row, member_index, member_name, prompt_template)
+                for row in examples
+                for member_index, (member_name, prompt_template) in enumerate(prompt_templates)
+            ]
+        for row, member_index, member_name, prompt_template in prompt_items:
+            prompts.append(
+                build_prompt(
+                    row["messages"],
+                    prompt_template,
+                    int(cfg.judge.max_prompt_chars),
+                    append_rating_prefix=append_rating_prefix,
+                )
+            )
+            metadata = {
+                "dataset": dataset_cfg.name,
+                "index": json_scalar(row["index"]),
+                "label": label_by_index[row["index"]],
+            }
+            if ensemble_enabled:
+                metadata["ensemble_member"] = member_name
+                metadata["ensemble_member_index"] = member_index
+            all_metadata.append(metadata)
+        dataset_work.append(DatasetWork(dataset_cfg, labels, examples, prompts, prompt_count))
+        all_prompts.extend(prompts)
+        print(f"{dataset_cfg.name}: prepared {len(examples)} rows"
+              f" ({len(prompts)} prompt evaluations)")
 
     batch_size = None if cfg.judge.batch_size is None else int(cfg.judge.batch_size)
-    print(f"scoring {len(all_prompts)} rows across {len(dataset_work)} datasets with {cfg.judge.model}")
+    n_rows = sum(len(work.examples) for work in dataset_work)
+    print(f"scoring {len(all_prompts)} prompt evaluations for {n_rows} rows "
+          f"across {len(dataset_work)} datasets with {cfg.judge.model}")
     score_start = time.perf_counter()
     all_scores = judge.score_prompts(all_prompts, batch_size=batch_size)
     score_seconds = time.perf_counter() - score_start
@@ -935,8 +1004,18 @@ def main(cfg: DictConfig) -> None:
     offset = 0
     for work in dataset_work:
         end = offset + len(work.prompts)
-        scores = all_scores[offset:end]
+        raw_scores = all_scores[offset:end]
         offset = end
+        if work.prompt_count > 1:
+            score_matrix = score_matrix_from_raw(
+                raw_scores,
+                n_rows=len(work.examples),
+                prompt_count=work.prompt_count,
+                order=ensemble_order,
+            )
+            scores = aggregate_scores(score_matrix, aggregation)
+        else:
+            scores = raw_scores
         pred_path = run_dir / "predictions" / f"{work.config.name.replace('/', '__')}.csv"
         write_predictions(pred_path, work.examples, scores, float(cfg.scoring.threshold))
         preds = load_predictions(pred_path)
@@ -952,7 +1031,8 @@ def main(cfg: DictConfig) -> None:
               f"auroc={fmt_metric(metrics.get('auroc'))}")
 
     result_path = run_dir / "result.json"
-    rows_per_second = len(all_prompts) / score_seconds if score_seconds > 0 else None
+    rows_per_second = n_rows / score_seconds if score_seconds > 0 else None
+    prompt_evaluations_per_second = len(all_prompts) / score_seconds if score_seconds > 0 else None
     generation_path = None
     generations = getattr(judge, "generations", None)
     if generations is not None:
@@ -962,11 +1042,13 @@ def main(cfg: DictConfig) -> None:
         "submitted_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "method": str(cfg.method),
         "split": str(cfg.split),
-        "n": len(all_prompts),
+        "n": n_rows,
+        "n_prompt_evaluations": len(all_prompts),
         "metrics": mean_metrics(results),
         "timing": {
             "score_seconds": score_seconds,
             "rows_per_second": rows_per_second,
+            "prompt_evaluations_per_second": prompt_evaluations_per_second,
             "note": "excludes judge initialization/model startup and dataset preparation",
         },
         "config": resolved,
@@ -976,6 +1058,12 @@ def main(cfg: DictConfig) -> None:
         "parse_errors": getattr(judge, "parse_error_count", 0),
         "generations_path": None if generation_path is None else generation_path.as_posix(),
     }
+    if ensemble_enabled:
+        record["ensemble"] = {
+            "aggregation": aggregation,
+            "order": ensemble_order,
+            "members": [name for name, _ in prompt_templates],
+        }
     config_path = run_dir / "config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(OmegaConf.to_yaml(cfg, resolve=True))
@@ -986,6 +1074,8 @@ def main(cfg: DictConfig) -> None:
     print(f"mean balanced_accuracy={fmt_metric(metrics.get('balanced_accuracy'))} "
           f"auroc={fmt_metric(metrics.get('auroc'))}")
     print(f"score_time={fmt_seconds(score_seconds)} rows_per_second={fmt_rate(rows_per_second)}")
+    if ensemble_enabled:
+        print(f"prompt_evaluations_per_second={fmt_rate(prompt_evaluations_per_second)}")
     print(f"wrote {result_path}")
 
 

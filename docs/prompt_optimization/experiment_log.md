@@ -308,9 +308,12 @@ runtime.
 
 | candidate | balanced accuracy | recall | FPR | parse errors | score time |
 | --- | ---: | ---: | ---: | ---: | ---: |
+| `qwen_reason_ensemble_dks_member4096_v1` | 0.9226 | 0.8881 | 0.0429 | 38 | 1314.3s |
+| `qwen_reason_ensemble_dks4096_v1` | 0.9167 | 0.8667 | 0.0333 | 38 | 1312.5s |
 | `qwen_reason_known4096_v1` | 0.9071 | 0.8310 | 0.0167 | 18 | 515.5s |
 | `qwen_reason_details4096_v1` | 0.9060 | 0.8405 | 0.0286 | 7 | 464.2s |
 | `qwen_reason_details_known4096_v1` | 0.9036 | 0.8310 | 0.0238 | 11 | 534.3s |
+| `qwen_reason_support4096_v1` | 0.9036 | 0.8262 | 0.0190 | 20 | 429.0s |
 | `qwen_reason_calibrated4096_v1` | 0.9024 | 0.8381 | 0.0333 | 11 | 470.7s |
 | `qwen_reason_budget_4096` | 0.8988 | 0.8167 | 0.0190 | 8 | 450.2s |
 | `qwen_reason_scrutiny4096_v1` | 0.8976 | 0.8119 | 0.0167 | 10 | 347.5s |
@@ -323,8 +326,10 @@ runtime.
 
 Practical recommendation:
 
+- Use `qwen_reason_ensemble_dks_member4096_v1` if optimizing validation
+  balanced accuracy and accepting substantially higher runtime.
 - Use `qwen_reason_known4096_v1` if optimizing validation balanced accuracy
-  only.
+  among single prompts only.
 - Use `qwen_reason_details4096_v1` if choosing a more robust tradeoff: it is
   only `0.0012` lower in balanced accuracy, but faster and has fewer parse
   errors.
@@ -480,3 +485,97 @@ the single-prompt union rubric did not reproduce it: recall stayed below
 `details4096` and FPR rose above `known4096`/`scrutiny4096`. This suggests the
 ensemble benefit comes from independent model trajectories, not just missing
 rubric wording.
+
+## Candidate: `qwen_reason_support4096_v1`
+
+Status: completed as Slurm job `30022911`.
+
+Hypothesis:
+
+- Error inspection of ensemble-fixed positives shows a repeated pattern:
+  correct-looking direct answers with false concrete supporting details, such as
+  dates, locations, firsts, awards, nicknames, origins, and explanatory clauses.
+- Making this a mandatory check before rating low may recover recall without
+  treating hidden deceptive intent as sufficient.
+
+Config: `configs/blackbox_reasoning_support4096.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9036 |
+| AUROC | 0.9090 |
+| recall | 0.8262 |
+| FPR | 0.0190 |
+| parse errors | 20 |
+| score time | 429.0s |
+| rows/s | 1.9 |
+
+Decision: rejected as a new leader. It is faster than `details4096` and has
+lower FPR, but it loses enough recall and parse reliability that balanced
+accuracy falls below both `known4096` and `details4096`.
+
+## Candidate: `qwen_reason_ensemble_dks4096_v1`
+
+Status: completed as Slurm job `30022921`.
+
+Hypothesis:
+
+- Existing `details4096`, `known4096`, and `scrutiny4096` scores are
+  complementary enough that max aggregation reaches about `0.9286` validation
+  balanced accuracy offline.
+- Running all member prompts through one vLLM scoring pass should recover that
+  accuracy signal with less wall time than three separate jobs.
+
+Config: `configs/blackbox_reasoning_ensemble_dks4096.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9167 |
+| AUROC | 0.9247 |
+| recall | 0.8667 |
+| FPR | 0.0333 |
+| parse errors | 38 |
+| score time | 1312.5s |
+| rows/s | 0.6 |
+| prompt evals/s | 1.9 |
+
+Decision: new highest actual validation run, but still below the `0.93`
+target. The audit's best threshold reaches `0.9202` balanced accuracy. Runtime
+is far slower than a single prompt, but the one-process batched ensemble avoids
+three separate model loads and is a plausible accuracy-first direction.
+
+## Candidate: `qwen_reason_ensemble_dks_member4096_v1`
+
+Status: completed as Slurm job `30023005`.
+
+Hypothesis:
+
+- The row-major batched ensemble improved actual validation BA but underperformed
+  the offline separate-run ensemble estimate.
+- Scheduling by member may preserve more of each prompt's standalone trajectory
+  while still using one vLLM model process.
+
+Config: `configs/blackbox_reasoning_ensemble_dks_member4096.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9226 |
+| AUROC | 0.9296 |
+| recall | 0.8881 |
+| FPR | 0.0429 |
+| parse errors | 38 |
+| score time | 1314.3s |
+| rows/s | 0.6 |
+| prompt evals/s | 1.9 |
+
+Decision: current strongest validation run. Member-major scheduling improved
+over row-major by `+0.0060` balanced accuracy at essentially the same scoring
+time. It is still short of the `0.93` target and materially slower than single
+prompt methods, but it validates the ensemble direction as the best accuracy
+path so far.

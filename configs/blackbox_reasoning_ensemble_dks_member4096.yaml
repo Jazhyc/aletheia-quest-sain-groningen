@@ -1,0 +1,15 @@
+# Same three-prompt ensemble as dks4096, but schedule all rows for one member
+# prompt before moving to the next member. This may preserve more of the
+# standalone prompt trajectories while still using one vLLM model process.
+
+defaults:
+  - blackbox_reasoning_ensemble_dks4096
+  - _self_
+
+method: qwen_reason_ensemble_dks_member4096_v1
+
+ensemble:
+  order: member
+
+scoring:
+  threshold: 0.01
