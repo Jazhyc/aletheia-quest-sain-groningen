@@ -90,9 +90,11 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
   SAFE_SPLIT="$(printf '%s' "${SPLIT}" | tr -cs 'A-Za-z0-9_.=-' '_')"
   METHOD_LOG_DIR="logs/slurm/${SAFE_METHOD}"
   METHOD_LOG_FILE="${METHOD_LOG_DIR}/${SAFE_SPLIT}-${SLURM_JOB_ID}.out"
+  BOOTSTRAP_LOG_FILE="logs/slurm/${SLURM_JOB_NAME:-aq-blackbox}-${SLURM_JOB_ID}.bootstrap.out"
   mkdir -p "${METHOD_LOG_DIR}"
   echo "Redirecting Slurm job output to ${METHOD_LOG_FILE}"
   exec >"${METHOD_LOG_FILE}" 2>&1
+  rm -f "${BOOTSTRAP_LOG_FILE}"
   echo "job_id=${SLURM_JOB_ID}"
   echo "method=${METHOD}"
   echo "split=${SPLIT}"
