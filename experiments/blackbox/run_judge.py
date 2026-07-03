@@ -280,6 +280,44 @@ def rating_to_score(rating: int, *, rating_min: int, rating_max: int) -> float:
     return (rating - rating_min) / (rating_max - rating_min)
 
 
+def generate_with_optional_batches(llm: Any, prompts: list[str], sampling: Any, batch_size: int | None) -> list[Any]:
+    if batch_size is None or batch_size <= 0:
+        return list(llm.generate(prompts, sampling))
+    outputs = []
+    for start in range(0, len(prompts), batch_size):
+        outputs.extend(llm.generate(prompts[start:start + batch_size], sampling))
+    return outputs
+
+
+def rating_probs_from_logprobs(
+    first_token_logprobs: dict[Any, Any],
+    *,
+    ids_by_rating: dict[int, list[int]],
+    ratings: list[int],
+    missing_logprob: float,
+) -> dict[int, float]:
+    expanded = {
+        int(token_id): logprob_value(value)
+        for token_id, value in first_token_logprobs.items()
+    }
+    return {
+        rating: float(sum(math.exp(expanded.get(token_id, missing_logprob))
+                          for token_id in ids_by_rating[rating]))
+        for rating in ratings
+    }
+
+
+def structured_rating_prompt(prompt: str, reasoning: str, rating_instruction: str) -> str:
+    return (
+        f"{prompt}\n\n"
+        "<reasoning>\n"
+        f"{reasoning.strip()}\n"
+        "</reasoning>\n\n"
+        f"{rating_instruction.strip()}\n\n"
+        "Rating:"
+    )
+
+
 def vllm_kwargs_from_config(
     *,
     model_name: str,
@@ -383,26 +421,18 @@ class OfflineVllmRatingJudge:
 
     def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
         scores = np.full(len(prompts), np.nan, dtype=float)
-        if batch_size is None or batch_size <= 0:
-            outputs = self.llm.generate(prompts, self.sampling)
-        else:
-            outputs = []
-            for start in range(0, len(prompts), batch_size):
-                outputs.extend(self.llm.generate(prompts[start:start + batch_size], self.sampling))
+        outputs = generate_with_optional_batches(self.llm, prompts, self.sampling, batch_size)
 
         for offset, output in enumerate(outputs):
             if not output.outputs or not output.outputs[0].logprobs:
                 continue
             first_token_logprobs = output.outputs[0].logprobs[0] or {}
-            expanded = {
-                int(token_id): logprob_value(value)
-                for token_id, value in first_token_logprobs.items()
-            }
-            probs = {
-                rating: float(sum(math.exp(expanded.get(token_id, self.missing_logprob))
-                                  for token_id in self.ids_by_rating[rating]))
-                for rating in self.ratings
-            }
+            probs = rating_probs_from_logprobs(
+                first_token_logprobs,
+                ids_by_rating=self.ids_by_rating,
+                ratings=self.ratings,
+                missing_logprob=self.missing_logprob,
+            )
             scores[offset] = score_from_rating_probs(
                 probs,
                 rating_min=self.rating_min,
@@ -455,12 +485,7 @@ class OfflineVllmGenerateJudge:
         )
 
     def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
-        if batch_size is None or batch_size <= 0:
-            outputs = self.llm.generate(prompts, self.sampling)
-        else:
-            outputs = []
-            for start in range(0, len(prompts), batch_size):
-                outputs.extend(self.llm.generate(prompts[start:start + batch_size], self.sampling))
+        outputs = generate_with_optional_batches(self.llm, prompts, self.sampling, batch_size)
 
         scores = np.zeros(len(prompts), dtype=float)
         self.generations = []
@@ -484,6 +509,120 @@ class OfflineVllmGenerateJudge:
                 "text": text,
             })
         return scores
+
+
+class OfflineVllmStructuredJudge:
+    def __init__(
+        self,
+        *,
+        model_name: str,
+        rating_min: int,
+        rating_max: int,
+        dtype: str,
+        tensor_parallel_size: int,
+        gpu_memory_utilization: float,
+        trust_remote_code: bool,
+        max_model_len: int | None,
+        max_num_seqs: int | None,
+        spec_method: str | None,
+        spec_model: str | None,
+        spec_tokens: int | None,
+        generated_logprobs: int | None,
+        missing_logprob: float,
+        max_tokens: int,
+        temperature: float,
+        final_rating_prompt: str,
+    ) -> None:
+        from transformers import AutoTokenizer
+        from vllm import LLM, SamplingParams
+
+        self.rating_min = rating_min
+        self.rating_max = rating_max
+        self.missing_logprob = missing_logprob
+        self.ratings = list(range(rating_min, rating_max + 1))
+        self.final_rating_prompt = final_rating_prompt
+        self.generations: list[dict[str, Any]] = []
+        self.parse_error_count = 0
+
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.all_rating_ids, self.ids_by_rating = rating_token_ids(tokenizer, rating_min, rating_max)
+        requested_logprobs = requested_logprobs_or_default(generated_logprobs, len(self.all_rating_ids))
+
+        llm_kwargs = vllm_kwargs_from_config(
+            model_name=model_name,
+            dtype=dtype,
+            tensor_parallel_size=tensor_parallel_size,
+            gpu_memory_utilization=gpu_memory_utilization,
+            trust_remote_code=trust_remote_code,
+            max_model_len=max_model_len,
+            max_num_seqs=max_num_seqs,
+            spec_method=spec_method,
+            spec_model=spec_model,
+            spec_tokens=spec_tokens,
+        )
+        self.llm = LLM(**llm_kwargs)
+        self.reasoning_sampling = SamplingParams(
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        self.rating_sampling = SamplingParams(
+            max_tokens=1,
+            temperature=temperature,
+            logprobs=requested_logprobs,
+            logprob_token_ids=self.all_rating_ids,
+            allowed_token_ids=self.all_rating_ids,
+        )
+
+    def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
+        reasoning_outputs = generate_with_optional_batches(
+            self.llm,
+            prompts,
+            self.reasoning_sampling,
+            batch_size,
+        )
+        reasoning_texts = [
+            output.outputs[0].text if output.outputs else ""
+            for output in reasoning_outputs
+        ]
+        rating_prompts = [
+            structured_rating_prompt(prompt, reasoning, self.final_rating_prompt)
+            for prompt, reasoning in zip(prompts, reasoning_texts, strict=True)
+        ]
+        rating_outputs = generate_with_optional_batches(
+            self.llm,
+            rating_prompts,
+            self.rating_sampling,
+            batch_size,
+        )
+
+        scores = np.full(len(prompts), np.nan, dtype=float)
+        self.generations = []
+        self.parse_error_count = 0
+        for offset, (reasoning, output) in enumerate(zip(reasoning_texts, rating_outputs, strict=True)):
+            first_token_logprobs = {}
+            if output.outputs and output.outputs[0].logprobs:
+                first_token_logprobs = output.outputs[0].logprobs[0] or {}
+            probs = rating_probs_from_logprobs(
+                first_token_logprobs,
+                ids_by_rating=self.ids_by_rating,
+                ratings=self.ratings,
+                missing_logprob=self.missing_logprob,
+            )
+            score = score_from_rating_probs(
+                probs,
+                rating_min=self.rating_min,
+                rating_max=self.rating_max,
+            )
+            best_rating = max(probs, key=probs.get) if probs else None
+            scores[offset] = score
+            self.generations.append({
+                "offset": offset,
+                "rating": best_rating,
+                "parse_error": False,
+                "score": score,
+                "text": reasoning,
+            })
+        return np.nan_to_num(scores, nan=0.5)
 
 
 class OpenAIRatingJudge:
@@ -612,6 +751,14 @@ def build_judge(cfg: DictConfig):
             return OfflineVllmGenerateJudge(
                 **common,
                 max_tokens=int(cfg.judge.max_tokens),
+            )
+        if mode == "structured":
+            return OfflineVllmStructuredJudge(
+                **common,
+                generated_logprobs=generated_logprobs,
+                missing_logprob=float(cfg.judge.missing_logprob),
+                max_tokens=int(cfg.judge.max_tokens),
+                final_rating_prompt=str(cfg.judge.structured_rating_prompt),
             )
         raise ValueError(f"unknown judge.mode={mode!r}")
     if backend == "openai":
