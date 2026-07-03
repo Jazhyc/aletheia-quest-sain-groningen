@@ -14,6 +14,7 @@ import datetime as dt
 import json
 import math
 import random
+import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -266,6 +267,58 @@ def score_from_rating_probs(
     return (expected - rating_min) / (rating_max - rating_min)
 
 
+def rating_to_score(rating: int, *, rating_min: int, rating_max: int) -> float:
+    return (rating - rating_min) / (rating_max - rating_min)
+
+
+def vllm_kwargs_from_config(
+    *,
+    model_name: str,
+    dtype: str,
+    tensor_parallel_size: int,
+    gpu_memory_utilization: float,
+    trust_remote_code: bool,
+    max_model_len: int | None,
+    max_num_seqs: int | None,
+    spec_method: str | None,
+    spec_model: str | None,
+    spec_tokens: int | None,
+) -> dict[str, Any]:
+    llm_kwargs: dict[str, Any] = {
+        "model": model_name,
+        "dtype": dtype,
+        "tensor_parallel_size": tensor_parallel_size,
+        "gpu_memory_utilization": gpu_memory_utilization,
+        "trust_remote_code": trust_remote_code,
+    }
+    optional = {
+        "max_model_len": max_model_len,
+        "max_num_seqs": max_num_seqs,
+        "spec_method": spec_method,
+        "spec_model": spec_model,
+        "spec_tokens": spec_tokens,
+    }
+    llm_kwargs.update({key: value for key, value in optional.items() if value is not None})
+    return llm_kwargs
+
+
+def parse_rating(text: str, *, rating_min: int, rating_max: int) -> int | None:
+    rating_range = f"[{rating_min}-{rating_max}]"
+    patterns = (
+        rf"(?im)\b(?:final\s+answer|final\s+rating|rating|score)\s*[:\-]?\s*\**\s*({rating_range})\b",
+        rf"(?im)\b({rating_range})\s*/\s*{rating_max}\b",
+    )
+    matches: list[int] = []
+    for pattern in patterns:
+        matches.extend(int(match) for match in re.findall(pattern, text))
+    if matches:
+        return matches[-1]
+    stripped = text.strip()
+    if re.fullmatch(rating_range, stripped):
+        return int(stripped)
+    return None
+
+
 class OfflineVllmRatingJudge:
     def __init__(
         self,
@@ -279,6 +332,9 @@ class OfflineVllmRatingJudge:
         trust_remote_code: bool,
         max_model_len: int | None,
         max_num_seqs: int | None,
+        spec_method: str | None,
+        spec_model: str | None,
+        spec_tokens: int | None,
         generated_logprobs: int | None,
         missing_logprob: float,
         temperature: float,
@@ -295,17 +351,18 @@ class OfflineVllmRatingJudge:
         self.all_rating_ids, self.ids_by_rating = rating_token_ids(tokenizer, rating_min, rating_max)
         requested_logprobs = requested_logprobs_or_default(generated_logprobs, len(self.all_rating_ids))
 
-        llm_kwargs: dict[str, Any] = {
-            "model": model_name,
-            "dtype": dtype,
-            "tensor_parallel_size": tensor_parallel_size,
-            "gpu_memory_utilization": gpu_memory_utilization,
-            "trust_remote_code": trust_remote_code,
-        }
-        if max_model_len is not None:
-            llm_kwargs["max_model_len"] = max_model_len
-        if max_num_seqs is not None:
-            llm_kwargs["max_num_seqs"] = max_num_seqs
+        llm_kwargs = vllm_kwargs_from_config(
+            model_name=model_name,
+            dtype=dtype,
+            tensor_parallel_size=tensor_parallel_size,
+            gpu_memory_utilization=gpu_memory_utilization,
+            trust_remote_code=trust_remote_code,
+            max_model_len=max_model_len,
+            max_num_seqs=max_num_seqs,
+            spec_method=spec_method,
+            spec_model=spec_model,
+            spec_tokens=spec_tokens,
+        )
         self.llm = LLM(**llm_kwargs)
         self.sampling = SamplingParams(
             max_tokens=1,
@@ -343,6 +400,81 @@ class OfflineVllmRatingJudge:
                 rating_max=self.rating_max,
             )
         return np.nan_to_num(scores, nan=0.5)
+
+
+class OfflineVllmGenerateJudge:
+    def __init__(
+        self,
+        *,
+        model_name: str,
+        rating_min: int,
+        rating_max: int,
+        dtype: str,
+        tensor_parallel_size: int,
+        gpu_memory_utilization: float,
+        trust_remote_code: bool,
+        max_model_len: int | None,
+        max_num_seqs: int | None,
+        spec_method: str | None,
+        spec_model: str | None,
+        spec_tokens: int | None,
+        max_tokens: int,
+        temperature: float,
+    ) -> None:
+        from vllm import LLM, SamplingParams
+
+        self.rating_min = rating_min
+        self.rating_max = rating_max
+        self.generations: list[dict[str, Any]] = []
+        self.parse_error_count = 0
+        llm_kwargs = vllm_kwargs_from_config(
+            model_name=model_name,
+            dtype=dtype,
+            tensor_parallel_size=tensor_parallel_size,
+            gpu_memory_utilization=gpu_memory_utilization,
+            trust_remote_code=trust_remote_code,
+            max_model_len=max_model_len,
+            max_num_seqs=max_num_seqs,
+            spec_method=spec_method,
+            spec_model=spec_model,
+            spec_tokens=spec_tokens,
+        )
+        self.llm = LLM(**llm_kwargs)
+        self.sampling = SamplingParams(
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
+    def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
+        if batch_size is None or batch_size <= 0:
+            outputs = self.llm.generate(prompts, self.sampling)
+        else:
+            outputs = []
+            for start in range(0, len(prompts), batch_size):
+                outputs.extend(self.llm.generate(prompts[start:start + batch_size], self.sampling))
+
+        scores = np.full(len(prompts), 0.5, dtype=float)
+        self.generations = []
+        self.parse_error_count = 0
+        for offset, output in enumerate(outputs):
+            text = output.outputs[0].text if output.outputs else ""
+            rating = parse_rating(text, rating_min=self.rating_min, rating_max=self.rating_max)
+            parse_error = rating is None
+            if parse_error:
+                self.parse_error_count += 1
+            else:
+                scores[offset] = rating_to_score(
+                    rating,
+                    rating_min=self.rating_min,
+                    rating_max=self.rating_max,
+                )
+            self.generations.append({
+                "offset": offset,
+                "rating": rating,
+                "parse_error": parse_error,
+                "text": text,
+            })
+        return scores
 
 
 class OpenAIRatingJudge:
@@ -444,22 +576,38 @@ def build_judge(cfg: DictConfig):
         else int(cfg.judge.generated_logprobs)
     )
     backend = str(cfg.judge.backend)
+    mode = str(cfg.judge.mode)
     if backend == "offline":
-        return OfflineVllmRatingJudge(
-            model_name=str(cfg.judge.model),
-            rating_min=int(cfg.judge.rating_min),
-            rating_max=int(cfg.judge.rating_max),
-            dtype=str(cfg.judge.dtype),
-            tensor_parallel_size=int(cfg.judge.tensor_parallel_size),
-            gpu_memory_utilization=float(cfg.judge.gpu_memory_utilization),
-            trust_remote_code=bool(cfg.judge.trust_remote_code),
-            max_model_len=None if cfg.judge.max_model_len is None else int(cfg.judge.max_model_len),
-            max_num_seqs=None if cfg.judge.max_num_seqs is None else int(cfg.judge.max_num_seqs),
-            generated_logprobs=generated_logprobs,
-            missing_logprob=float(cfg.judge.missing_logprob),
-            temperature=float(cfg.judge.temperature),
-        )
+        common = {
+            "model_name": str(cfg.judge.model),
+            "rating_min": int(cfg.judge.rating_min),
+            "rating_max": int(cfg.judge.rating_max),
+            "dtype": str(cfg.judge.dtype),
+            "tensor_parallel_size": int(cfg.judge.tensor_parallel_size),
+            "gpu_memory_utilization": float(cfg.judge.gpu_memory_utilization),
+            "trust_remote_code": bool(cfg.judge.trust_remote_code),
+            "max_model_len": None if cfg.judge.max_model_len is None else int(cfg.judge.max_model_len),
+            "max_num_seqs": None if cfg.judge.max_num_seqs is None else int(cfg.judge.max_num_seqs),
+            "spec_method": None if cfg.judge.spec_method is None else str(cfg.judge.spec_method),
+            "spec_model": None if cfg.judge.spec_model is None else str(cfg.judge.spec_model),
+            "spec_tokens": None if cfg.judge.spec_tokens is None else int(cfg.judge.spec_tokens),
+            "temperature": float(cfg.judge.temperature),
+        }
+        if mode == "logits":
+            return OfflineVllmRatingJudge(
+                **common,
+                generated_logprobs=generated_logprobs,
+                missing_logprob=float(cfg.judge.missing_logprob),
+            )
+        if mode == "generate":
+            return OfflineVllmGenerateJudge(
+                **common,
+                max_tokens=int(cfg.judge.max_tokens),
+            )
+        raise ValueError(f"unknown judge.mode={mode!r}")
     if backend == "openai":
+        if mode != "logits":
+            raise ValueError("judge.backend=openai currently supports judge.mode=logits only")
         return OpenAIRatingJudge(
             model_name=str(cfg.judge.model),
             served_model=str(cfg.judge.served_model),
@@ -482,6 +630,19 @@ def write_predictions(path: Path, examples: list[dict], scores: np.ndarray, thre
         "deceptive": scores >= threshold,
         "score": np.clip(scores, 0.0, 1.0),
     }).to_csv(path, index=False)
+
+
+def write_generations(path: Path, metadata: list[dict[str, Any]], generations: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w") as f:
+        for meta, generation in zip(metadata, generations, strict=True):
+            f.write(json.dumps({**meta, **generation}, sort_keys=True) + "\n")
+
+
+def json_scalar(value: Any) -> Any:
+    if hasattr(value, "item"):
+        return value.item()
+    return value
 
 
 def mean_metrics(results: list[DatasetResult]) -> dict[str, float | None]:
@@ -582,6 +743,7 @@ def main(cfg: DictConfig) -> None:
     judge = build_judge(cfg)
     dataset_work: list[DatasetWork] = []
     all_prompts: list[str] = []
+    all_metadata: list[dict[str, Any]] = []
 
     for dataset_cfg in datasets:
         labels = load_label_subset(dataset_cfg)
@@ -598,6 +760,12 @@ def main(cfg: DictConfig) -> None:
         ]
         dataset_work.append(DatasetWork(dataset_cfg, labels, examples, prompts))
         all_prompts.extend(prompts)
+        label_by_index = {row["index"]: int(row["label"]) for row in labels.to_dict("records")}
+        all_metadata.extend({
+            "dataset": dataset_cfg.name,
+            "index": json_scalar(row["index"]),
+            "label": label_by_index[row["index"]],
+        } for row in examples)
         print(f"{dataset_cfg.name}: prepared {len(prompts)} rows")
 
     batch_size = None if cfg.judge.batch_size is None else int(cfg.judge.batch_size)
@@ -627,6 +795,11 @@ def main(cfg: DictConfig) -> None:
 
     result_path = run_dir / "result.json"
     rows_per_second = len(all_prompts) / score_seconds if score_seconds > 0 else None
+    generation_path = None
+    generations = getattr(judge, "generations", None)
+    if generations is not None:
+        generation_path = run_dir / "generations.jsonl"
+        write_generations(generation_path, all_metadata, generations)
     record = {
         "submitted_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "method": str(cfg.method),
@@ -642,6 +815,8 @@ def main(cfg: DictConfig) -> None:
         "datasets": [asdict(result) for result in results],
         "run_dir": run_dir.as_posix(),
         "result_path": result_path.as_posix(),
+        "parse_errors": getattr(judge, "parse_error_count", 0),
+        "generations_path": None if generation_path is None else generation_path.as_posix(),
     }
     config_path = run_dir / "config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,11 @@
+# Reasoning black-box judge with Qwen's native MTP speculative decoding enabled.
+
+defaults:
+  - blackbox_reasoning
+  - _self_
+
+method: qwen_reason_mtp_v1
+
+judge:
+  spec_method: mtp
+  spec_tokens: 1
