@@ -11,7 +11,6 @@ submission execution.
 from __future__ import annotations
 
 import datetime as dt
-import hashlib
 import json
 import math
 import random
@@ -494,16 +493,6 @@ def mean_metrics(results: list[DatasetResult]) -> dict[str, float | None]:
     return out
 
 
-def config_id(config: dict[str, Any]) -> str:
-    normalized = {
-        key: value
-        for key, value in config.items()
-        if key not in {"output_dir", "leaderboard"}
-    }
-    encoded = json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(encoded).hexdigest()[:12]
-
-
 def fmt_metric(value: float | None) -> str:
     return f"{value:.4f}" if value is not None else "-"
 
@@ -519,7 +508,7 @@ def fmt_rate(value: float | None) -> str:
 def render_leaderboard(results_root: Path, output_path: Path) -> None:
     records = [
         json.loads(path.read_text())
-        for path in results_root.glob("*/*/*/result.json")
+        for path in results_root.glob("*/*/result.json")
     ]
     records = [record for record in records if record.get("split") == "test"]
     records.sort(key=lambda row: str(row.get("submitted_at", "")), reverse=True)
@@ -529,14 +518,12 @@ def render_leaderboard(results_root: Path, output_path: Path) -> None:
         "",
         "Timing is scoring-only wall time: it excludes vLLM startup/model load/compile and dataset preparation.",
         "",
-        "| submitted_at | split | method | AUROC | bal_acc | recall | FPR | rows | score_time | rows/s | result |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| submitted_at | split | method | AUROC | bal_acc | recall | FPR | rows | score_time | rows/s |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for record in records:
         metrics = record.get("metrics", {})
         timing = record.get("timing", {})
-        result_path = record.get("result_path", "")
-        result_link = f"[result]({result_path})" if result_path else "-"
         lines.append(
             "| "
             f"{record.get('submitted_at', '-')} | "
@@ -548,8 +535,7 @@ def render_leaderboard(results_root: Path, output_path: Path) -> None:
             f"{fmt_metric(metrics.get('fpr'))} | "
             f"{record.get('n', '-')} | "
             f"{fmt_seconds(timing.get('score_seconds'))} | "
-            f"{fmt_rate(timing.get('rows_per_second'))} | "
-            f"{result_link} |"
+            f"{fmt_rate(timing.get('rows_per_second'))} |"
         )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -565,7 +551,7 @@ def main(cfg: DictConfig) -> None:
         raise SystemExit(f"{split_config} does not exist. Run scripts/make_dev_splits.py first.")
 
     output_dir = resolve_path(str(cfg.output_dir), original_cwd)
-    run_dir = output_dir / str(cfg.method) / str(cfg.split) / config_id(resolved)
+    run_dir = output_dir / str(cfg.method) / str(cfg.split)
     datasets = load_split_config(split_config, original_cwd)
     few_shot_prefix = build_few_shot_prefix(
         resolve_path(str(cfg.splits_dir), original_cwd),
