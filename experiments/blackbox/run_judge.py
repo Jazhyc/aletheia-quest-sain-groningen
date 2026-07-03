@@ -462,7 +462,7 @@ class OfflineVllmGenerateJudge:
             for start in range(0, len(prompts), batch_size):
                 outputs.extend(self.llm.generate(prompts[start:start + batch_size], self.sampling))
 
-        scores = np.full(len(prompts), 0.5, dtype=float)
+        scores = np.zeros(len(prompts), dtype=float)
         self.generations = []
         self.parse_error_count = 0
         for offset, output in enumerate(outputs):
