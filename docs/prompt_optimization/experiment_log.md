@@ -725,3 +725,36 @@ The validation lift over the single judge mostly comes from recall recovery and
 does transfer slightly to test, at the cost of higher FPR. Next step would be to
 evaluate against the three-member judge ensemble on validation before considering
 submission integration.
+
+## Candidate: `bge_probe_v1`
+
+Status: completed standalone CPU smoke tests on branch `trained-text-probe`.
+
+Hypothesis:
+
+- Dense semantic embeddings from `BAAI/bge-base-en-v1.5` may capture broader
+  transcript-level deception cues than sparse n-grams.
+- Dynamic int8 quantization should make the embedding pass CPU-feasible.
+
+Implementation:
+
+- Encoder: `BAAI/bge-base-en-v1.5`
+- Pooling: normalized CLS embedding, following the model card's transformers
+  usage.
+- Quantization: PyTorch dynamic int8 over linear layers.
+- Classifier: balanced logistic regression.
+- Protocol: fit train, select `C` and threshold on validation, report test once.
+
+Standalone results:
+
+| view | max length | best `C` | threshold | validation BA | validation AUROC | test BA | test AUROC | test recall | test FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `output_context` | 256 | 0.3 | 0.455 | 0.7464 | 0.8061 | 0.7226 | 0.7762 | 0.7571 | 0.3119 |
+| `output` | 256 | 0.03 | 0.600 | 0.7440 | 0.7882 | 0.7369 | 0.7910 | 0.6119 | 0.1381 |
+
+Decision: not promising as-is. The BGE probe is substantially weaker than the
+small n-gram probe (`test BA 0.8167`) and far below the judge ensemble. The
+`output_context` view has too much FPR, while the `output` view is more
+conservative but misses too many positives. Dense off-the-shelf semantic
+embeddings do not appear to capture the factual-deception signal as directly as
+sparse lexical/context cues or explicit judging.
