@@ -1354,6 +1354,12 @@ Test result:
 | native D/K logits mean, threshold 0.5 | 0.500000 | 0.8369 | 0.8804 | 0.6976 | 0.0238 | 24.1s |
 | details logits + known logits + n-gram rank average | 0.569343 | 0.8726 | 0.9100 | 0.7881 | 0.0429 | 24.1s logits + cached n-gram |
 
+Submission-compatible per-dataset rank result:
+
+| method | threshold | validation balanced accuracy | validation AUROC | test balanced accuracy | test AUROC | test recall | test FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| details logits + known logits + n-gram per-dataset rank average | 0.566667 | 0.8881 | 0.9378 | 0.8655 | 0.9068 | 0.8071 | 0.0762 |
+
 Oracle test threshold reference, not for selection: threshold 0.530248 gives
 0.8845 balanced accuracy, 0.9100 AUROC, 0.8333 recall, and 0.0643 FPR.
 
@@ -1362,6 +1368,8 @@ Decision:
 - The simplified fast ensemble is useful as a low-latency fallback, but it does
   not beat the tracked 4096-token generated reasoning ensemble on the test split
   (`qwen_reason_ensemble_dks_member4096_v1`, 0.9298 balanced accuracy).
+- The actual `submission/phoenix_wright_v1_1.ipynb` uses the per-dataset rank
+  version because the leaderboard executes the notebook one dataset at a time.
 - The test drop from validation is concentrated in the varied-deception Qwen
   variants and the small NVIDIA/Nemotron dataset. Do not use this as the
   accuracy-first Phoenix Wright submission unless runtime becomes the dominant

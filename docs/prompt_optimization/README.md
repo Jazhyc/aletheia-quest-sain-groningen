@@ -39,8 +39,13 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
-- `submission/phoenix_wright_v1.ipynb` is the NDIF submission version of
-  `qwen_reason_ensemble_dks_member4096_v1`: the `details4096`, `known4096`, and
-  `scrutiny4096` prompts are run member-major through `model.generate(...,
-  remote=True)`, scores are max-aggregated, and `deceptive` uses threshold
-  `0.01`.
+- `submission/phoenix_wright_v1_1.ipynb` is the speed-first NDIF submission
+  fallback. It uses Qwen/Qwen3.5-9B rating-token logits for the compact
+  `details3072_logit` and `known3072_logit` prompts, rank-averaged per dataset
+  with the cached `text_probe_ngram_v1` model. The submission threshold is
+  `0.566666666667`, selected on validation for the per-dataset rank ensemble.
+  On the local test split this scored 0.8655 balanced accuracy and 0.9068 AUROC.
+- `submission/phoenix_wright_v1.ipynb` was the previous accuracy-first generated
+  reasoning notebook for `qwen_reason_ensemble_dks_member4096_v1`; it was removed
+  from `submission/` because the official runs were timing out before producing
+  usable leaderboard results.

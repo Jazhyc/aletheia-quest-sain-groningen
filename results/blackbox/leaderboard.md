@@ -2,9 +2,11 @@
 
 Timing is scoring-only wall time: it excludes vLLM startup/model load/compile and dataset preparation.
 Submitted timestamps are UTC.
+Rows with cached text-probe components report the logits scoring wall time; CPU n-gram inference is negligible.
 
 | submitted_at | method | AUROC | bal_acc | recall | FPR | score_time | rows/s |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-04 13:04:28 | phoenix_wright_v1_1_rankavg_dk_logits_ngram | 0.9068 | 0.8655 | 0.8071 | 0.0762 | 24.1s | 34.1/s |
 | 2026-07-04 13:04:28 | qwen_reason_ensemble_dk3072_logit_v1 | 0.8804 | 0.8369 | 0.6976 | 0.0238 | 24.1s | 34.1/s |
 | 2026-07-03 22:37:17 | qwen_reason_ensemble_dks_member4096_v1 | 0.9340 | 0.9298 | 0.8976 | 0.0381 | 1284.6s | 0.6/s |
 | 2026-07-03 17:17:24 | qwen_reason_budget_8192 | 0.8915 | 0.8917 | 0.8024 | 0.0190 | 645.9s | 1.3/s |
