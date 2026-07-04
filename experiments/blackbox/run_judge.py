@@ -135,13 +135,32 @@ def merge_messages(messages: list[dict]) -> list[dict]:
     return merged
 
 
-def format_dialogue(messages: list[dict], max_chars: int) -> tuple[str, str]:
+def truncate_context(context: str, max_chars: int, mode: str) -> str:
+    if len(context) <= max_chars:
+        return context
+    if max_chars <= 0:
+        return ""
+    if mode == "tail":
+        return context[-max_chars:]
+    if mode == "head":
+        return context[:max_chars]
+    if mode == "head_tail":
+        marker = "\n\n[... middle truncated ...]\n\n"
+        available = max_chars - len(marker)
+        if available <= 0:
+            return context[:max_chars]
+        head_chars = available // 2
+        tail_chars = available - head_chars
+        return context[:head_chars] + marker + context[-tail_chars:]
+    raise ValueError(f"unknown judge.context_truncation={mode!r}")
+
+
+def format_dialogue(messages: list[dict], max_chars: int, truncation: str = "tail") -> tuple[str, str]:
     merged = merge_messages(messages)
     assistant = final_assistant(merged)
     lines = [f"{m.get('role', '').upper()}: {m.get('content', '')}" for m in merged]
     context = "\n\n".join(lines)
-    if len(context) > max_chars:
-        context = context[-max_chars:]
+    context = truncate_context(context, max_chars, truncation)
     return context, assistant
 
 
@@ -150,12 +169,13 @@ def build_prompt(
     prompt_template: str,
     max_chars: int,
     *,
-    append_rating_prefix: bool,
+    append_prefix: str | None,
+    context_truncation: str = "tail",
 ) -> str:
-    context, output = format_dialogue(messages, max_chars)
+    context, output = format_dialogue(messages, max_chars, context_truncation)
     prompt = f"{prompt_template}\n\n<context>\n{context}\n</context>\n\n<output>\n{output}\n</output>"
-    if append_rating_prefix:
-        prompt = f"{prompt}\n\nRating:"
+    if append_prefix:
+        prompt = f"{prompt}\n\n{append_prefix}"
     return prompt
 
 
@@ -286,6 +306,30 @@ def rating_token_ids(tokenizer, rating_min: int, rating_max: int) -> tuple[list[
     return all_ids, token_ids
 
 
+def logit_target_ids(tokenizer, target_specs: list[dict[str, Any]]) -> tuple[list[int], list[dict[str, Any]]]:
+    targets: list[dict[str, Any]] = []
+    for spec in target_specs:
+        texts = list(spec.get("texts", []))
+        if not texts:
+            raise ValueError(f"logit target {spec!r} has no texts")
+        ids = set()
+        for text in texts:
+            encoded = tokenizer.encode(str(text), add_special_tokens=False)
+            if encoded:
+                ids.add(int(encoded[0]))
+        if not ids:
+            raise ValueError(f"logit target {spec!r} produced no token ids")
+        targets.append({
+            "name": str(spec.get("name", len(targets))),
+            "score": float(spec["score"]),
+            "ids": sorted(ids),
+        })
+    all_ids = sorted({token_id for target in targets for token_id in target["ids"]})
+    if not all_ids:
+        raise ValueError("no logit target token ids found")
+    return all_ids, targets
+
+
 def requested_logprobs_or_default(generated_logprobs: int | None, n_rating_ids: int) -> int:
     requested_logprobs = generated_logprobs or n_rating_ids
     if requested_logprobs != n_rating_ids:
@@ -349,6 +393,31 @@ def rating_probs_from_logprobs(
                           for token_id in ids_by_rating[rating]))
         for rating in ratings
     }
+
+
+def target_probs_from_logprobs(
+    first_token_logprobs: dict[Any, Any],
+    *,
+    targets: list[dict[str, Any]],
+    missing_logprob: float,
+) -> dict[str, float]:
+    expanded = {
+        int(token_id): logprob_value(value)
+        for token_id, value in first_token_logprobs.items()
+    }
+    return {
+        target["name"]: float(sum(math.exp(expanded.get(token_id, missing_logprob))
+                                  for token_id in target["ids"]))
+        for target in targets
+    }
+
+
+def score_from_target_probs(probs: dict[str, float], targets: list[dict[str, Any]]) -> float:
+    total = sum(probs.values())
+    if total <= 0:
+        return 0.5
+    expected = sum(float(target["score"]) * probs[target["name"]] for target in targets) / total
+    return expected
 
 
 def structured_rating_prompt(prompt: str, reasoning: str, rating_instruction: str) -> str:
@@ -417,6 +486,7 @@ class OfflineVllmRatingJudge:
         model_name: str,
         rating_min: int,
         rating_max: int,
+        logit_targets: list[dict[str, Any]] | None,
         dtype: str,
         tensor_parallel_size: int,
         gpu_memory_utilization: float,
@@ -437,9 +507,14 @@ class OfflineVllmRatingJudge:
         self.rating_max = rating_max
         self.missing_logprob = missing_logprob
         self.ratings = list(range(rating_min, rating_max + 1))
+        self.targets: list[dict[str, Any]] | None = None
 
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.all_rating_ids, self.ids_by_rating = rating_token_ids(tokenizer, rating_min, rating_max)
+        if logit_targets:
+            self.all_rating_ids, self.targets = logit_target_ids(tokenizer, logit_targets)
+            self.ids_by_rating = {}
+        else:
+            self.all_rating_ids, self.ids_by_rating = rating_token_ids(tokenizer, rating_min, rating_max)
         requested_logprobs = requested_logprobs_or_default(generated_logprobs, len(self.all_rating_ids))
 
         llm_kwargs = vllm_kwargs_from_config(
@@ -471,17 +546,25 @@ class OfflineVllmRatingJudge:
             if not output.outputs or not output.outputs[0].logprobs:
                 continue
             first_token_logprobs = output.outputs[0].logprobs[0] or {}
-            probs = rating_probs_from_logprobs(
-                first_token_logprobs,
-                ids_by_rating=self.ids_by_rating,
-                ratings=self.ratings,
-                missing_logprob=self.missing_logprob,
-            )
-            scores[offset] = score_from_rating_probs(
-                probs,
-                rating_min=self.rating_min,
-                rating_max=self.rating_max,
-            )
+            if self.targets is not None:
+                target_probs = target_probs_from_logprobs(
+                    first_token_logprobs,
+                    targets=self.targets,
+                    missing_logprob=self.missing_logprob,
+                )
+                scores[offset] = score_from_target_probs(target_probs, self.targets)
+            else:
+                probs = rating_probs_from_logprobs(
+                    first_token_logprobs,
+                    ids_by_rating=self.ids_by_rating,
+                    ratings=self.ratings,
+                    missing_logprob=self.missing_logprob,
+                )
+                scores[offset] = score_from_rating_probs(
+                    probs,
+                    rating_min=self.rating_min,
+                    rating_max=self.rating_max,
+                )
         return np.nan_to_num(scores, nan=0.5)
 
 
@@ -770,6 +853,13 @@ def build_judge(cfg: DictConfig):
     backend = str(cfg.judge.backend)
     mode = str(cfg.judge.mode)
     if backend == "offline":
+        selected_logit_targets = OmegaConf.select(cfg, "judge.logit_targets", default=None)
+        if selected_logit_targets is None:
+            logit_targets = []
+        elif isinstance(selected_logit_targets, list):
+            logit_targets = selected_logit_targets
+        else:
+            logit_targets = OmegaConf.to_container(selected_logit_targets, resolve=True)
         common = {
             "model_name": str(cfg.judge.model),
             "rating_min": int(cfg.judge.rating_min),
@@ -788,6 +878,7 @@ def build_judge(cfg: DictConfig):
         if mode == "logits":
             return OfflineVllmRatingJudge(
                 **common,
+                logit_targets=logit_targets,
                 generated_logprobs=generated_logprobs,
                 missing_logprob=float(cfg.judge.missing_logprob),
             )
@@ -964,7 +1055,10 @@ def main(cfg: DictConfig) -> None:
     ensemble_order = str(OmegaConf.select(cfg, "ensemble.order", default="row"))
     if ensemble_order not in {"row", "member"}:
         raise ValueError(f"unknown ensemble.order={ensemble_order!r}")
-    append_rating_prefix = str(cfg.judge.mode) == "logits"
+    append_prefix = None
+    if str(cfg.judge.mode) == "logits":
+        append_prefix = str(OmegaConf.select(cfg, "judge.logit_prefix", default="Rating:"))
+    context_truncation = str(OmegaConf.select(cfg, "judge.context_truncation", default="tail"))
     results: list[DatasetResult] = []
     print(f"initializing {cfg.judge.backend} judge for {cfg.judge.model}")
     judge = build_judge(cfg)
@@ -998,7 +1092,8 @@ def main(cfg: DictConfig) -> None:
                     row["messages"],
                     prompt_template,
                     int(cfg.judge.max_prompt_chars),
-                    append_rating_prefix=append_rating_prefix,
+                    append_prefix=append_prefix,
+                    context_truncation=context_truncation,
                 )
             )
             metadata = {

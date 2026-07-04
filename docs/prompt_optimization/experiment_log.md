@@ -1374,3 +1374,50 @@ Decision:
   variants and the small NVIDIA/Nemotron dataset. Do not use this as the
   accuracy-first Phoenix Wright submission unless runtime becomes the dominant
   constraint.
+
+## Candidate: outcome-focused logits prompts with n-gram rank blend
+
+Status: completed as unified Slurm sweep `30025625` plus test job `30025653`.
+
+Hypothesis:
+
+- The D/K logits prompts were optimized for generated ratings and then reused for
+  logits. Outcome-focused prompt wording might make the rating-token logits more
+  directly rank final-output false-belief risk.
+- Yes/No logits might sharpen the decision boundary, but this needed direct
+  testing because prior evidence favored numeric rating logits.
+
+Config:
+
+- `configs/judge_ensemble/blackbox_reasoning_ensemble_dk3072_logit_outcome_v1.yaml`
+- `configs/judge_ensemble/blackbox_reasoning_ensemble_yesno3072_logit_v1.yaml`
+- `experiments/blackbox/run_logit_prompt_sweep.sh`
+
+Validation sweep:
+
+| method | native balanced accuracy | native AUROC | best calibrated/blended validation result |
+| --- | ---: | ---: | --- |
+| outcome numeric logits, tail | 0.6774 | 0.9218 | 0.8905 BA / 0.9337 AUROC at `0.67*outcome_rank + 0.33*ngram_rank`, threshold 0.512895 |
+| outcome numeric logits, head-tail | 0.6774 | 0.9218 | same as tail; truncation did not change results at 3000 chars |
+| Yes/No logits, tail | 0.6905 | 0.7939 | not competitive; best n-gram blend stayed below 0.85 BA |
+| Yes/No logits, head-tail | 0.6929 | 0.7948 | not competitive |
+
+Test result:
+
+| method | threshold source | threshold | balanced accuracy | AUROC | recall | FPR | score time |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| native outcome logits mean | fixed 0.5 | 0.500000 | 0.6762 | 0.8952 | 0.3690 | 0.0167 | 46.9s |
+| outcome logits rank + n-gram rank | validation sweep | 0.512895 | 0.8786 | 0.9160 | 0.9333 | 0.1762 | 46.9s logits + cached n-gram |
+| outcome logits rank + n-gram rank | oracle test reference | 0.482906 | 0.8821 | 0.9189 | 0.9262 | 0.1619 | 46.9s logits + cached n-gram |
+
+Decision:
+
+- Promote the validation-selected outcome rank blend into
+  `submission/phoenix_wright_v1_2.ipynb`. It
+  improves the tracked local-test balanced accuracy from 0.8655 to 0.8786 while
+  staying logits-only and within the same submission structure.
+- Do not use the oracle 50/50 test threshold in the notebook; its validation
+  result was weaker, so the 0.67/0.33 validation-selected blend is the more
+  defensible official-submission setting.
+- Yes/No target logits are not worth further work unless the target formulation
+  changes substantially.
