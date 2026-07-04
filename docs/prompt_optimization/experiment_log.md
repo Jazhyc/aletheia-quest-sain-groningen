@@ -1,5 +1,9 @@
 # Prompt Experiment Log
 
+## Running Constraint (Competition)
+
+- Multi-token prediction / speculative decoding (`spec_method`, including MTP) is not used for competition candidates in this track. Ongoing speed optimization is limited to standard single-decode judges.
+
 ## Baseline: `qwen_reason_v1`
 
 Source: `results/blackbox/qwen_reason_v1/validation/result.json`
@@ -272,6 +276,238 @@ Validation result:
 Decision: rejected for accuracy. It is faster than `details4096`, but the
 3072-token cap loses most of the `details4096` gain and increases parse errors.
 
+## Candidate: `qwen_reason_details3072_speed_v1`
+
+Status: completed as Slurm job `30023907`.
+
+Hypothesis:
+
+- The `details4096` prompt was the best single prompt on validation, but it is
+  slow.
+- Keep the same rubric and shorten token budget to 3072 to recover most speed
+  without rewriting the decision rule.
+- Set `max_prompt_chars` to 3000 and keep the existing parse contract to keep
+  generation overhead controlled.
+
+Config: `configs/blackbox_reasoning_speed_details3072_v1.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9059 |
+| AUROC | 0.9138 |
+| recall | 0.8429 |
+| FPR | 0.0310 |
+| parse errors | 10 |
+| score time | 220.5s |
+| rows/s | 3.7 |
+
+Decision: rejected for accuracy versus `details4096_v1`, but it is materially faster
+and has lower parse errors than most single prompts. It is a valid speed-focused
+tradeoff candidate.
+
+## Candidate: `qwen_reason_details3072_speed_v1_t01`
+
+Status: completed as post-hoc threshold recalibration over
+`qwen_reason_details3072_speed_v1` validation generations.
+
+Hypothesis:
+
+- The `details` speed variant remains conservative at default threshold.
+- Lowering the binary threshold should recover false negatives with little impact
+  on FPR and no runtime change.
+
+Config: `configs/blackbox_reasoning_speed_details3072_threshold01.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9107 |
+| AUROC | 0.9138 |
+| recall | 0.8524 |
+| FPR | 0.0310 |
+| parse errors | 10 |
+| score time | 220.5s |
+| rows/s | 3.7 |
+
+Decision: accepted as a practical runtime-first default for single judges. It
+keeps the same inference budget and parse behavior as `qwen_reason_details3072`
+while recovering accuracy via threshold selection.
+
+## Candidate: `qwen_reason_known3072_speed_v1`
+
+Status: completed as Slurm job `30023908`.
+
+Hypothesis:
+
+- The `known4096` prompt is stronger than `details` on several calibration points
+  but slow.
+- A 3072-token budget and compact setup should reduce time with limited degradation,
+  while preserving the context-answer contradiction behavior.
+
+Config: `configs/blackbox_reasoning_speed_known3072_v1.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.8917 |
+| AUROC | 0.8939 |
+| recall | 0.7929 |
+| FPR | 0.0095 |
+| parse errors | 13 |
+| score time | 209.5s |
+| rows/s | 3.9 |
+
+Decision: rejected for mainline use. It cuts runtime and has very low FPR, but
+recall and balanced accuracy are below practical single-prompt targets.
+
+## Candidate: `qwen_reason_details3072_speed_logit_v1`
+
+Status: completed as Slurm job `30023906`.
+
+Hypothesis:
+
+- Logits mode with the same 3072 compact `details` wording might remove much of
+  the scoring overhead by skipping full generation.
+- If stable, this could be the strongest runtime lever while keeping a similar
+  accuracy profile to token generation mode.
+
+Config: `configs/blackbox_reasoning_speed_details3072_logit_v1.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.8786 |
+| AUROC | 0.9242 |
+| recall | 0.7929 |
+| FPR | 0.0357 |
+| parse errors | 0 |
+| score time | 13.0s |
+| rows/s | 63.2 |
+
+Decision: rejected for accuracy despite excellent speed and zero parse errors. It is too
+far behind current accuracy frontier for default judging.
+
+## Candidate: `qwen_reason_details3072_speed_v1_pc2000`
+
+Status: completed as Slurm job `30023980`.
+
+Hypothesis:
+
+- Shortening prompt context while preserving the rubric should reduce token
+  preprocessing overhead, with minimal impact on score quality.
+
+Config: `configs/blackbox_reasoning_speed_details3072_pc2000.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9071 |
+| AUROC | 0.9127 |
+| recall | 0.8429 |
+| FPR | 0.0286 |
+| parse errors | 7 |
+| score time | 220.3s |
+| rows/s | 3.7 |
+
+Decision: modest but valid speed-preserving variant. It is close to
+`qwen_reason_details3072_speed_v1_t01` in throughput, with slightly more strict
+default-threshold behavior and fewer parse errors. It is not the top accuracy
+choice but is a viable parse-stable alternative.
+
+## Candidate: `qwen_reason_details3072_speed_v1_pc2500`
+
+Status: completed as Slurm job `30023981`.
+
+Hypothesis:
+
+- A smaller context window than `max_prompt_chars=3000` may be sufficient for the
+  compact speed prompt and can save additional row-level time.
+
+Config: `configs/blackbox_reasoning_speed_details3072_pc2500.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9060 |
+| AUROC | 0.9138 |
+| recall | 0.8429 |
+| FPR | 0.0310 |
+| parse errors | 10 |
+| score time | 220.5s |
+| rows/s | 3.7 |
+
+Decision: rejected as a preferred default. The accuracy and parse profile is
+close to the `pc2000` variant but not materially better on runtime.
+
+## Candidate: `qwen_reason_details3072_speed_promptcompact_v1`
+
+Status: completed as Slurm job `30023982`.
+
+Hypothesis:
+
+- The `qwen_reason_details3072_speed_v1` prompt is still relatively verbose.
+- Shortening the rule text should preserve the rubric and cut token overhead
+  per row without changing rubric intent.
+
+Config: `configs/blackbox_reasoning_speed_details3072_promptcompact.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.8619 |
+| AUROC | 0.8712 |
+| recall | 0.7857 |
+| FPR | 0.0619 |
+| parse errors | 12 |
+| score time | 307.9s |
+| rows/s | 2.7 |
+
+Decision: rejected. The compact phrasing degraded recall and FPR enough to
+remove it from runtime-constrained deployment despite faster parse.
+
+## Candidate: `qwen_reason_details3072_speed_t2560`
+
+Status: completed as Slurm job `30024026`.
+
+Hypothesis:
+
+- In addition to prompt-length reduction, token budget appears overprovisioned for
+many rows.
+- Moving from 3072 to 2560 tokens with `max_prompt_chars=2500` should reduce runtime
+and may keep the same decision behavior with baseline scoring settings.
+
+Config: `configs/blackbox_reasoning_speed_details3072_t2560.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9083 |
+| AUROC | 0.9120 |
+| recall | 0.8452 |
+| FPR | 0.0286 |
+| parse errors | 11 |
+| score time | 196.2s |
+| rows/s | 4.2 |
+
+Decision: completed validation probe. It is faster than other `details` speed variants
+(`196.2s`, `4.2 rows/s`) and has a conservative balance (`0.9083 BA`).
+It does not beat `qwen_reason_details3072_speed_v1_t01` on balanced accuracy, and
+parse errors are slightly higher than `pc2000`, but the AUROC/recall profile is
+close.
+
+In a post-hoc threshold sweep over existing runs, macro balanced accuracy reached
+`0.9095` at threshold `0.51` (`FPR 0.0262`, `recall 0.8383`) with unchanged
+runtime characteristics.
+
 ## Candidate: `qwen_reason_calibrated4096_v1`
 
 Status: completed as Slurm job `30022619`.
@@ -311,8 +547,16 @@ runtime.
 | `qwen_reason_ensemble_dks_member8192_v1` | 0.9250 | 0.8833 | 0.0333 | 36 | 1988.1s |
 | `qwen_reason_ensemble_dks_member4096_v1` | 0.9226 | 0.8881 | 0.0429 | 38 | 1314.3s |
 | `qwen_reason_ensemble_dks4096_v1` | 0.9167 | 0.8667 | 0.0333 | 38 | 1312.5s |
+| `qwen_reason_details3072_speed_t01_maxseq256` | 0.9155 | 0.8595 | 0.0286 | 9 | 258.9s |
+| `qwen_reason_details3072_speed_v1_t01` | 0.9107 | 0.8524 | 0.0310 | 10 | 220.5s |
+| `qwen_reason_details3072_speed_t2560` | 0.9083 | 0.8452 | 0.0286 | 11 | 196.2s |
+| `qwen_reason_details3072_speed_v1_pc2000` | 0.9071 | 0.8429 | 0.0286 | 7 | 220.3s |
 | `qwen_reason_known4096_v1` | 0.9071 | 0.8310 | 0.0167 | 18 | 515.5s |
+| `qwen_reason_details3072_speed_v1_pc2500` | 0.9060 | 0.8429 | 0.0310 | 10 | 220.5s |
 | `qwen_reason_details4096_v1` | 0.9060 | 0.8405 | 0.0286 | 7 | 464.2s |
+| `qwen_reason_details3072_speed_v1` | 0.9059 | 0.8429 | 0.0310 | 10 | 220.5s |
+| `qwen_reason_details3072_speed_t01_pc1000` | 0.90595 | 0.85476 | 0.04286 | 3 | 212.5s |
+| `qwen_reason_details3072_speed_t01_pc500` | 0.89405 | 0.81429 | 0.02619 | 10 | 202.9s |
 | `qwen_reason_details_known4096_v1` | 0.9036 | 0.8310 | 0.0238 | 11 | 534.3s |
 | `qwen_reason_support4096_v1` | 0.9036 | 0.8262 | 0.0190 | 20 | 429.0s |
 | `qwen_reason_calibrated4096_v1` | 0.9024 | 0.8381 | 0.0333 | 11 | 470.7s |
@@ -320,8 +564,11 @@ runtime.
 | `qwen_reason_scrutiny4096_v1` | 0.8976 | 0.8119 | 0.0167 | 10 | 347.5s |
 | `qwen_reason_details3072_v1` | 0.8976 | 0.8238 | 0.0286 | 18 | 392.0s |
 | `qwen_reason_union4096_v1` | 0.8976 | 0.8167 | 0.0214 | 12 | 467.0s |
+| `qwen_reason_known3072_speed_v1` | 0.8917 | 0.7929 | 0.0095 | 13 | 209.5s |
 | `qwen_reason_v1` | 0.8905 | 0.7976 | 0.0167 | 8 | 446.8s |
 | `qwen_reason_compact_merge4096_v1` | 0.8821 | 0.7786 | 0.0143 | 15 | 270.4s |
+| `qwen_reason_details3072_speed_logit_v1` | 0.8786 | 0.7929 | 0.0357 | 0 | 13.0s |
+| `qwen_reason_details3072_speed_promptcompact_v1` | 0.8619 | 0.7857 | 0.0619 | 12 | 307.9s |
 | `qwen_reason_known_shot1_4096_v1` | 0.6774 | 0.6643 | 0.3095 | 1 | 524.1s |
 | `qwen_reason_details_shot1_4096_v1` | 0.6512 | 0.5714 | 0.2690 | 0 | 528.7s |
 
@@ -333,9 +580,19 @@ Practical recommendation:
   same ensemble accuracy with lower runtime.
 - Use `qwen_reason_known4096_v1` if optimizing validation balanced accuracy
   among single prompts only.
+- Use `qwen_reason_details3072_speed_v1_t01` if runtime is the primary
+  constraint and you want the best single-prompt throughput/accuracy tradeoff.
+- Use `qwen_reason_details3072_speed_v1_pc2000` if you want the same runtime
+  envelope but fewer parse errors and slightly lower false-positive rate.
+- Use `qwen_reason_details3072_speed_t2560` if throughput is your first-order
+  constraint and you can tolerate a small increase in parse errors.
+- Use `qwen_reason_details3072_speed_v1` if runtime is the primary constraint and
+  you need strict parity with the original default threshold.
 - Use `qwen_reason_details4096_v1` if choosing a more robust tradeoff: it is
   only `0.0012` lower than the best single prompt in balanced accuracy, but
   faster and has fewer parse errors.
+- Use `qwen_reason_known3072_speed_v1` if you need an aggressively low FPR at
+  high throughput and are willing to lose recall.
 
 ## Candidate: `qwen_reason_known_shot1_4096_v1`
 
@@ -793,3 +1050,207 @@ parse errors far below the 2048 run. The 2048 cap is still too destructive for
 accuracy-first use: it is faster and lower-FPR, but loses 3.6 recall points
 versus 4096 and creates many more parse errors. For official Phoenix Wright
 runtime pressure, prefer 3072 before dropping all the way to 2048.
+
+## Candidate: `qwen_reason_details3072_speed_v1_pc1800`
+
+Status: completed as Slurm job `30024057`.
+
+Hypothesis:
+
+- The `details3072` speed family is currently the best practical single-prompt
+  path for runtime.
+- Trimming prompt context to 1800 characters might recover additional throughput
+  with only a small accuracy floor, while lowering parse overhead from less
+  formatting.
+
+Config: `configs/blackbox_reasoning_speed_details3072_pc1800.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9083 |
+| AUROC | 0.9148 |
+| recall | 0.8405 |
+| FPR | 0.0238 |
+| parse errors | 8 |
+| score time | 216.6s |
+| rows/s | 3.8 |
+
+Decision: not adopted as the mainline score baseline because BA is slightly below
+`qwen_reason_details3072_speed_v1_t01` (`0.9107`) by `0.0024`. It is still
+worth keeping as a lower-FPR, lower-parse alternative if tolerance for
+~`-0.0024` BA is acceptable under runtime pressure.
+
+## Candidate: `qwen_reason_details3072_speed_v1_pc1500`
+
+Status: completed as Slurm job `30024058`.
+
+Hypothesis:
+
+- After 1800-char truncation, a further reduction to 1500 chars should reduce
+  preprocessing per row and may keep the same 3072-token rubric behavior.
+- If truncation only removes redundant framing, accuracy could remain near the
+  current threshold-calibrated leader.
+
+Config: `configs/blackbox_reasoning_speed_details3072_pc1500.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9107 |
+| AUROC | 0.9142 |
+| recall | 0.8524 |
+| FPR | 0.0310 |
+| parse errors | 10 |
+| score time | 220.3s |
+| rows/s | 3.7 |
+
+Decision: completed as a near-parity alternative to `qwen_reason_details3072_speed_v1_t01`.
+Validation BA and speed are essentially matched, with no net runtime gain and similar
+parse profile. It does not materially improve on the current threshold-calibrated
+speed leader, so it is not adopted as a new default.
+
+## Candidate: `qwen_reason_details3072_speed_t01_pc1000`
+
+Status: completed as Slurm job `30024113`.
+
+Hypothesis:
+
+- The 220.5-second `qwen_reason_details3072_speed_v1_t01` speed regime is close to
+  the target, but stronger prompt truncation may remove further overhead.
+- `max_prompt_chars=1000` tests the lower bound for input truncation while keeping
+  the same inference budget and post-hoc threshold settings.
+
+Config: `configs/blackbox_reasoning_speed_details3072_t01_pc1000.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.90595 |
+| AUROC | 0.91214 |
+| recall | 0.85476 |
+| FPR | 0.04286 |
+| parse errors | 3 |
+| score time | 212.5s |
+| rows/s | 3.9 |
+
+Decision: rejected as a default. It has a material balanced-accuracy drop versus
+`qwen_reason_details3072_speed_v1_t01` (`0.9107`), though parse errors are slightly
+improved.
+
+## Candidate: `qwen_reason_details3072_speed_t01_pc500`
+
+Status: completed as Slurm job `30024152`.
+
+Hypothesis:
+
+- A second truncation step beyond `1000` to `500` characters should shrink prompt
+  preparation further and potentially improve rows per second.
+- The tradeoff risk is context clipping in examples that rely on distant evidence.
+
+Config: `configs/blackbox_reasoning_speed_details3072_t01_pc500.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.89405 |
+| AUROC | 0.89601 |
+| recall | 0.81429 |
+| FPR | 0.02619 |
+| parse errors | 10 |
+| score time | 202.9s |
+| rows/s | 4.1 |
+
+Decision: rejected. Runtime improves slightly, but the balanced-accuracy drop is too large.
+
+## Candidate: `qwen_reason_details3072_speed_t01_maxseq256`
+
+Status: completed as Slurm job `30024154`.
+
+Hypothesis:
+
+- `max_num_seqs` controls inference-side batching width and can add overhead if too high.
+- Lowering it to `256` tests runtime sensitivity while leaving scoring logic unchanged.
+
+Config: `configs/blackbox_reasoning_speed_details3072_t01_maxseq256.yaml`
+
+Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.91548 |
+| AUROC | 0.91869 |
+| recall | 0.85952 |
+| FPR | 0.02857 |
+| parse errors | 9 |
+| score time | 258.9s |
+| rows/s | 3.2 |
+
+Decision: not adopted. Although accuracy is strong, throughput is worse than the current
+speed default and does not justify the runtime change.
+
+## Candidate: `qwen_reason_scrutiny3072_v1`
+
+Status: completed as Slurm job `30024292`.
+
+Hypothesis:
+
+- The 3072-token speed variant of the `scrutiny` prompt should retain much of
+  the scrutiny-family behavior while reducing runtime versus the 4096-token baseline.
+
+Config: `configs/blackbox_reasoning_speed_scrutiny3072_v1.yaml`
+
+Method:
+
+- `method`: `qwen_reason_scrutiny3072_v1`
+- `judge.max_tokens`: 3072
+- `judge.max_prompt_chars`: 3000
+
+Evaluation:
+
+- Config: `configs/blackbox_reasoning_speed_scrutiny3072_v1.yaml`
+
+- Validation result:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.8964 |
+| AUROC | 0.8988 |
+| recall | 0.8095 |
+| FPR | 0.0167 |
+| parse errors | 15 |
+| score time | 307.6s |
+| rows/s | 2.7 |
+
+Decision: completed. It is slower than the current speed defaults (`220s` class)
+and materially lower in balanced accuracy than `details3072_speed_v1_t01`.
+
+## Candidate: `qwen_reason_ensemble_dks3072_speed_v1` (compact scrutiny variant)
+
+Status: queued for re-run.
+
+Hypothesis:
+
+- The `qwen_reason_ensemble_dks3072_speed_v1` configuration had compact text for
+  `details3072` and `known3072`, but the `scrutiny` member still used a verbose
+  prompt.
+- Compacting the `scrutiny` member should reduce prompt overhead without changing
+  the core score contract.
+
+Config:
+
+- `configs/blackbox_reasoning_ensemble_dks3072_speed_v1.yaml`
+
+Planned implementation (already applied):
+
+- Keep `judge.mode: generate`, `judge.max_tokens: 3072`, `judge.max_prompt_chars: 3000`,
+  `scoring.threshold: 0.01`, and max aggregation.
+- Replace only the `scrutiny` member prompt with a compact rubric.
+
+Decision:
+
+- Not run yet. Evaluate this config before selecting the next speed default.

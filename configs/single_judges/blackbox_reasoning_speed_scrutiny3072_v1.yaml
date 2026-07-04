@@ -1,0 +1,11 @@
+# 3072-token speed variant of the scrutiny prompt.
+
+defaults:
+  - blackbox_reasoning_scrutiny4096
+  - _self_
+
+method: qwen_reason_scrutiny3072_v1
+
+judge:
+  max_tokens: 3072
+  max_prompt_chars: 3000

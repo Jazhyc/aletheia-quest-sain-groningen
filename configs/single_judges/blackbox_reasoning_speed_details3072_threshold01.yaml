@@ -1,0 +1,10 @@
+# Runtime-focused 3072-token speed variant with low-threshold recalibration.
+
+defaults:
+  - blackbox_reasoning_speed_details3072_v1
+  - _self_
+
+method: qwen_reason_details3072_speed_v1_t01
+
+scoring:
+  threshold: 0.01
