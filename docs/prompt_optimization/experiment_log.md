@@ -1254,3 +1254,65 @@ Planned implementation (already applied):
 Decision:
 
 - Not run yet. Evaluate this config before selecting the next speed default.
+
+## Candidate: logits D/K/S prompt sweep
+
+Status: completed as Slurm jobs `30025452`, `30025451`, and `30025453`.
+
+Hypothesis:
+
+- The previous fast logits candidate used only the compact `details` rubric.
+- Logits-mode variants of the complementary `known` and `scrutiny` prompts might
+  recover recall or add useful rank signal while preserving very low runtime.
+- A three-prompt logits max ensemble might approach generated-judge accuracy at a
+  small fraction of the runtime.
+
+Configs:
+
+- `configs/single_judges/blackbox_reasoning_details3072_logit_v1.yaml`
+  reproduces the prior details-logit prompt.
+- `configs/single_judges/blackbox_reasoning_known3072_logit_v1.yaml`
+- `configs/single_judges/blackbox_reasoning_scrutiny3072_logit_v1.yaml`
+- `configs/judge_ensemble/blackbox_reasoning_ensemble_dks3072_logit_v1.yaml`
+
+Validation result:
+
+| method | balanced accuracy | AUROC | recall | FPR | score time | rows/s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `qwen_reason_details3072_speed_logit_v1` | 0.8786 | 0.9242 | 0.7929 | 0.0357 | 13.0s | 63.2/s |
+| `qwen_reason_known3072_logit_v1` | 0.8214 | 0.9210 | 0.6524 | 0.0095 | 15.2s | 53.9/s |
+| `qwen_reason_scrutiny3072_logit_v1` | 0.8060 | 0.9095 | 0.6286 | 0.0167 | 17.7s | 46.5/s |
+| `qwen_reason_ensemble_dks3072_logit_v1` | 0.8869 | 0.9271 | 0.8119 | 0.0381 | 41.5s | 19.8/s |
+
+Post-hoc validation threshold sweep:
+
+| method | best balanced accuracy | threshold | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| `details` logits | 0.8798 | 0.499986 | 0.8333 | 0.0738 |
+| `known` logits | 0.8750 | 0.499893 | 0.8476 | 0.0976 |
+| `scrutiny` logits | 0.8702 | 0.499906 | 0.8143 | 0.0738 |
+| D/K/S logits max | 0.8893 | 0.499989 | 0.8333 | 0.0548 |
+
+Combination with `text_probe_ngram_v1`, using rank-average scores and a
+validation-selected threshold:
+
+| components | balanced accuracy | AUROC | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| details logits + n-gram | 0.8964 | 0.9385 | 0.8619 | 0.0690 |
+| known logits + n-gram | 0.9012 | 0.9385 | 0.8857 | 0.0833 |
+| scrutiny logits + n-gram | 0.8905 | 0.9343 | 0.8619 | 0.0810 |
+| D/K/S logits max + n-gram | 0.9000 | 0.9399 | 0.8643 | 0.0643 |
+| details + known + scrutiny logits + n-gram | 0.9024 | 0.9334 | 0.8310 | 0.0262 |
+
+Decision:
+
+- Standalone prompt variants did not beat the existing details-logit prompt.
+- The D/K/S logits max ensemble improves over details logits, but only to 0.8869
+  validation balanced accuracy, still below generated single-judge speed variants.
+- The best fast text-only combination is currently the rank-average of
+  details/known/scrutiny logits plus the n-gram probe at 0.9024 validation balanced
+  accuracy. This is promising for a fast fallback, but the threshold is validation
+  selected and needs a held-out test check before use.
+- Operational lesson: prompt/logits sweeps should run multiple conditions in one
+  Slurm job or persistent vLLM session. The three separate jobs each paid model
+  load and compile overhead; this is now noted in `AGENTS.md`.
