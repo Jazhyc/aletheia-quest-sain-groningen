@@ -832,6 +832,28 @@ def write_predictions(path: Path, examples: list[dict], scores: np.ndarray, thre
     }).to_csv(path, index=False)
 
 
+def write_member_predictions(
+    run_dir: Path,
+    dataset_name: str,
+    examples: list[dict],
+    score_matrix: np.ndarray,
+    member_names: list[str],
+    threshold: float,
+) -> dict[str, str]:
+    """Persist per-member scores for ensemble runs."""
+    paths: dict[str, str] = {}
+    dataset_file = f"{dataset_name.replace('/', '__')}.csv"
+    for member_index, member_name in enumerate(member_names):
+        safe_member = "".join(
+            c if c.isalnum() or c in "_.=-" else "_"
+            for c in member_name
+        )
+        path = run_dir / "member_predictions" / safe_member / dataset_file
+        write_predictions(path, examples, score_matrix[:, member_index], threshold)
+        paths[member_name] = path.as_posix()
+    return paths
+
+
 def write_generations(path: Path, metadata: list[dict[str, Any]], generations: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w") as f:
@@ -1002,6 +1024,8 @@ def main(cfg: DictConfig) -> None:
     score_seconds = time.perf_counter() - score_start
 
     offset = 0
+    member_names = [name for name, _ in prompt_templates]
+    member_predictions: dict[str, dict[str, str]] = {}
     for work in dataset_work:
         end = offset + len(work.prompts)
         raw_scores = all_scores[offset:end]
@@ -1012,6 +1036,14 @@ def main(cfg: DictConfig) -> None:
                 n_rows=len(work.examples),
                 prompt_count=work.prompt_count,
                 order=ensemble_order,
+            )
+            member_predictions[work.config.name] = write_member_predictions(
+                run_dir,
+                work.config.name,
+                work.examples,
+                score_matrix,
+                member_names,
+                float(cfg.scoring.threshold),
             )
             scores = aggregate_scores(score_matrix, aggregation)
         else:
@@ -1062,8 +1094,9 @@ def main(cfg: DictConfig) -> None:
         record["ensemble"] = {
             "aggregation": aggregation,
             "order": ensemble_order,
-            "members": [name for name, _ in prompt_templates],
+            "members": member_names,
         }
+        record["member_predictions"] = member_predictions
     config_path = run_dir / "config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(OmegaConf.to_yaml(cfg, resolve=True))

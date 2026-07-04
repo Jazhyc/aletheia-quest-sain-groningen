@@ -1316,3 +1316,53 @@ Decision:
 - Operational lesson: prompt/logits sweeps should run multiple conditions in one
   Slurm job or persistent vLLM session. The three separate jobs each paid model
   load and compile overhead; this is now noted in `AGENTS.md`.
+
+## Candidate: details + known logits with n-gram rank ensemble
+
+Status: completed as unified Slurm job `30025466`.
+
+Hypothesis:
+
+- Leave-one-out analysis on validation showed that the `scrutiny` logits prompt
+  was not needed: dropping it improved the rank-average ensemble from 0.9024 to
+  0.9048 balanced accuracy.
+- A unified two-member logits job can score the needed `details` and `known`
+  prompt scores in one vLLM load, then combine those saved member scores with
+  the existing `text_probe_ngram_v1` predictions.
+
+Config:
+
+- `configs/judge_ensemble/blackbox_reasoning_ensemble_dk3072_logit_v1.yaml`
+
+Implementation note:
+
+- `experiments/blackbox/run_judge.py` now writes per-member prediction CSVs for
+  ensemble runs under `member_predictions/<member>/`. The aggregate ensemble
+  prediction is still written as before, but the member files make post-hoc
+  rank-average ensembles reproducible without rerunning vLLM.
+
+Validation selection:
+
+| components | threshold source | threshold | balanced accuracy | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| details logits + known logits + n-gram rank average | validation sweep | 0.569343 | 0.9048 | 0.9388 | 0.8429 | 0.0333 |
+
+Test result:
+
+| method | threshold | balanced accuracy | AUROC | recall | FPR | score time |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| native D/K logits mean, threshold 0.5 | 0.500000 | 0.8369 | 0.8804 | 0.6976 | 0.0238 | 24.1s |
+| details logits + known logits + n-gram rank average | 0.569343 | 0.8726 | 0.9100 | 0.7881 | 0.0429 | 24.1s logits + cached n-gram |
+
+Oracle test threshold reference, not for selection: threshold 0.530248 gives
+0.8845 balanced accuracy, 0.9100 AUROC, 0.8333 recall, and 0.0643 FPR.
+
+Decision:
+
+- The simplified fast ensemble is useful as a low-latency fallback, but it does
+  not beat the tracked 4096-token generated reasoning ensemble on the test split
+  (`qwen_reason_ensemble_dks_member4096_v1`, 0.9298 balanced accuracy).
+- The test drop from validation is concentrated in the varied-deception Qwen
+  variants and the small NVIDIA/Nemotron dataset. Do not use this as the
+  accuracy-first Phoenix Wright submission unless runtime becomes the dominant
+  constraint.
