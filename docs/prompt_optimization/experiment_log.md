@@ -1421,3 +1421,17 @@ Decision:
   defensible official-submission setting.
 - Yes/No target logits are not worth further work unless the target formulation
   changes substantially.
+
+Follow-up validation:
+
+- The official API reported an earlier logits notebook failure after 27.5s on
+  `Dataset Metis`, which implies an early runtime error rather than a scoring or
+  time-limit issue.
+- Added a local-GPU NNsight smoke path for the actual submission notebook:
+  `PHOENIX_NNSIGHT_LOCAL=1` keeps the same notebook logic but disables the remote
+  NDIF session and loads the model locally for a one-row check.
+- Slurm job `30025757` reproduced a real notebook bug immediately:
+  `RuntimeError: Can't call numpy() on Tensor that requires grad`.
+- Fixed the notebook to call `last_logits.detach().float().cpu().numpy()`.
+- Slurm job `30025758` then completed the one-row local notebook smoke, validated
+  `submission.csv`, and removed the generated file.
