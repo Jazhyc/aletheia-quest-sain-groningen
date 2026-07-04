@@ -62,6 +62,9 @@ it must reach the Hugging Face Space, NDIF, and sometimes Hugging Face. The NDIF
 key was registered to team `SAIN Groningen` on the first official submission, so
 subsequent runs can omit the team name and use the remembered key/team binding.
 Use `--tag black` for the Phoenix Wright black-box judge submission.
+The Space can take a long time to return after accepting an upload and starting
+the runner; once packaging/upload has clearly started, avoid repeatedly polling
+or restarting the same submission just because the HTTP response is slow.
 
 Local `python submit.py --dry` is only a rehearsal of the bundled runner against
 `dry.yaml`; it is not the official Space environment. On this cluster it may fail
