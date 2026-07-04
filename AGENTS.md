@@ -62,9 +62,18 @@ it must reach the Hugging Face Space, NDIF, and sometimes Hugging Face. The NDIF
 key was registered to team `SAIN Groningen` on the first official submission, so
 subsequent runs can omit the team name and use the remembered key/team binding.
 Use `--tag black` for the Phoenix Wright black-box judge submission.
+For questions about official leaderboard status, query the Space directly instead
+of inferring from local files: POST to
+`https://ndif-aletheias-leaderboard.hf.space/api/me` with the `X-NDIF-API-Key`
+header from `.env`/`$NDIF_API_KEY`. This requires network access outside the
+sandbox; do not print the key. The response includes pending count, rate-limit
+state, and per-submission history.
 The Space can take a long time to return after accepting an upload and starting
 the runner; once packaging/upload has clearly started, avoid repeatedly polling
 or restarting the same submission just because the HTTP response is slow.
+`Qwen/Qwen3.5-9B` should be accessible on the cluster for Phoenix Wright logits
+judge work; do not treat an official failure as model unavailability without
+direct evidence from NDIF or the leaderboard maintainers.
 
 Local `python submit.py --dry` is only a rehearsal of the bundled runner against
 `dry.yaml`; it is not the official Space environment. On this cluster it may fail
