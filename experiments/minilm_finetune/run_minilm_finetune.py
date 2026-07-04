@@ -47,10 +47,14 @@ MODEL_ID = "microsoft/MiniLM-L12-H384-uncased"
 class Candidate:
     view: str
     max_length: int
+    optimizer: str
     learning_rate: float
+    muon_learning_rate: float | None
     epochs: int
     weight_decay: float
     warmup_ratio: float
+    class_weights: bool
+    seed: int
 
 
 class TextDataset(Dataset[dict[str, Any]]):
@@ -86,6 +90,23 @@ def parse_csv_strings(value: str) -> list[str]:
     return out
 
 
+def parse_csv_bools(value: str) -> list[bool]:
+    out = []
+    for item in value.split(","):
+        item = item.strip().lower()
+        if not item:
+            continue
+        if item in {"1", "true", "yes", "y"}:
+            out.append(True)
+        elif item in {"0", "false", "no", "n"}:
+            out.append(False)
+        else:
+            raise argparse.ArgumentTypeError(f"expected boolean, got {item!r}")
+    if not out:
+        raise argparse.ArgumentTypeError("expected at least one boolean")
+    return out
+
+
 def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
@@ -97,31 +118,53 @@ def candidate_grid(
     *,
     views: list[str],
     max_lengths: list[int],
+    optimizers: list[str],
     learning_rates: list[float],
+    muon_learning_rates: list[float],
     epochs_grid: list[int],
     weight_decays: list[float],
     warmup_ratios: list[float],
+    class_weight_options: list[bool],
+    seeds: list[int],
 ) -> list[Candidate]:
     valid_views = {"output", "dialogue", "output_context"}
     invalid = sorted(set(views) - valid_views)
     if invalid:
         raise ValueError(f"invalid views: {invalid}")
-    return [
-        Candidate(
-            view=view,
-            max_length=max_length,
-            learning_rate=learning_rate,
-            epochs=epochs,
-            weight_decay=weight_decay,
-            warmup_ratio=warmup_ratio,
-        )
-        for view in views
-        for max_length in max_lengths
-        for learning_rate in learning_rates
-        for epochs in epochs_grid
-        for weight_decay in weight_decays
-        for warmup_ratio in warmup_ratios
-    ]
+    valid_optimizers = {"adamw", "muon_adamw"}
+    invalid_optimizers = sorted(set(optimizers) - valid_optimizers)
+    if invalid_optimizers:
+        raise ValueError(f"invalid optimizers: {invalid_optimizers}")
+
+    candidates = []
+    for optimizer in optimizers:
+        optimizer_muon_lrs: list[float | None]
+        if optimizer == "muon_adamw":
+            optimizer_muon_lrs = list(muon_learning_rates)
+        else:
+            optimizer_muon_lrs = [None]
+        for view in views:
+            for max_length in max_lengths:
+                for learning_rate in learning_rates:
+                    for muon_learning_rate in optimizer_muon_lrs:
+                        for epochs in epochs_grid:
+                            for weight_decay in weight_decays:
+                                for warmup_ratio in warmup_ratios:
+                                    for class_weights_enabled in class_weight_options:
+                                        for seed in seeds:
+                                            candidates.append(Candidate(
+                                                view=view,
+                                                max_length=max_length,
+                                                optimizer=optimizer,
+                                                learning_rate=learning_rate,
+                                                muon_learning_rate=muon_learning_rate,
+                                                epochs=epochs,
+                                                weight_decay=weight_decay,
+                                                warmup_ratio=warmup_ratio,
+                                                class_weights=class_weights_enabled,
+                                                seed=seed,
+                                            ))
+    return candidates
 
 
 def class_weights(labels: np.ndarray, device: torch.device) -> torch.Tensor:
@@ -164,23 +207,160 @@ def optimizer_groups(model: torch.nn.Module, weight_decay: float) -> list[dict[s
     ]
 
 
-def linear_warmup_lr(
-    optimizer: torch.optim.Optimizer,
+def linear_warmup_scale(
     *,
     step: int,
     total_steps: int,
     warmup_steps: int,
-    base_lr: float,
-) -> None:
+) -> float:
     if warmup_steps > 0 and step < warmup_steps:
         scale = float(step + 1) / float(warmup_steps)
     else:
         remaining = max(total_steps - step - 1, 0)
         decay_steps = max(total_steps - warmup_steps, 1)
         scale = remaining / decay_steps
-    lr = base_lr * max(scale, 0.0)
+    return max(scale, 0.0)
+
+
+def set_lr(optimizer: torch.optim.Optimizer, lr: float) -> None:
     for group in optimizer.param_groups:
         group["lr"] = lr
+
+
+def zeropower_via_newtonschulz5(matrix: torch.Tensor, steps: int = 5) -> torch.Tensor:
+    """Approximate ``UV^T`` for matrix ``USV^T`` using quintic Newton-Schulz."""
+    assert matrix.ndim == 2
+    a, b, c = (3.4445, -4.7750, 2.0315)
+    x = matrix.bfloat16()
+    if matrix.size(0) > matrix.size(1):
+        x = x.T
+    x = x / (x.norm() + 1e-7)
+    for _ in range(steps):
+        xx_t = x @ x.T
+        x = a * x + (b * xx_t + c * xx_t @ xx_t) @ x
+    if matrix.size(0) > matrix.size(1):
+        x = x.T
+    return x
+
+
+class Muon(torch.optim.Optimizer):
+    """Muon optimizer for 2D weight matrices.
+
+    Use AdamW for biases, normalization weights, embeddings, and classifier
+    heads; Muon's orthogonalized updates are intended for hidden matrices.
+    """
+
+    def __init__(
+        self,
+        params: list[torch.nn.Parameter],
+        *,
+        lr: float,
+        momentum: float = 0.95,
+        weight_decay: float = 0.0,
+        nesterov: bool = True,
+        ns_steps: int = 5,
+    ) -> None:
+        defaults = {
+            "lr": lr,
+            "momentum": momentum,
+            "weight_decay": weight_decay,
+            "nesterov": nesterov,
+            "ns_steps": ns_steps,
+        }
+        super().__init__(params, defaults)
+
+    @torch.no_grad()
+    def step(self, closure: Any | None = None) -> Any | None:
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+        for group in self.param_groups:
+            lr = group["lr"]
+            momentum = group["momentum"]
+            weight_decay = group["weight_decay"]
+            nesterov = group["nesterov"]
+            ns_steps = group["ns_steps"]
+            for param in group["params"]:
+                if param.grad is None:
+                    continue
+                grad = param.grad
+                if grad.ndim != 2:
+                    raise RuntimeError("Muon received a non-2D parameter")
+                if weight_decay:
+                    param.mul_(1.0 - lr * weight_decay)
+                state = self.state[param]
+                if "momentum_buffer" not in state:
+                    state["momentum_buffer"] = torch.zeros_like(param, dtype=torch.float32)
+                buffer = state["momentum_buffer"]
+                buffer.mul_(momentum).add_(grad.float())
+                update = grad.float().add(buffer, alpha=momentum) if nesterov else buffer
+                update = zeropower_via_newtonschulz5(update, steps=ns_steps)
+                scale = max(1.0, param.size(0) / param.size(1)) ** 0.5
+                param.add_(update.to(param.dtype), alpha=-lr * scale)
+        return loss
+
+
+def split_muon_parameters(
+    model: torch.nn.Module,
+) -> tuple[list[torch.nn.Parameter], list[tuple[str, torch.nn.Parameter]]]:
+    muon_params = []
+    adamw_params = []
+    excluded = ("embeddings", "classifier", "pooler")
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if param.ndim == 2 and not any(token in name for token in excluded):
+            muon_params.append(param)
+        else:
+            adamw_params.append((name, param))
+    return muon_params, adamw_params
+
+
+def build_optimizers(model: torch.nn.Module, candidate: Candidate) -> list[tuple[torch.optim.Optimizer, float]]:
+    if candidate.optimizer == "adamw":
+        optimizer = torch.optim.AdamW(
+            optimizer_groups(model, candidate.weight_decay),
+            lr=candidate.learning_rate,
+        )
+        return [(optimizer, candidate.learning_rate)]
+
+    if candidate.optimizer == "muon_adamw":
+        if candidate.muon_learning_rate is None:
+            raise ValueError("muon_adamw requires muon_learning_rate")
+        muon_params, adamw_named_params = split_muon_parameters(model)
+        optimizers: list[tuple[torch.optim.Optimizer, float]] = []
+        if muon_params:
+            optimizers.append((
+                Muon(
+                    muon_params,
+                    lr=candidate.muon_learning_rate,
+                    weight_decay=candidate.weight_decay,
+                ),
+                candidate.muon_learning_rate,
+            ))
+        if adamw_named_params:
+            no_decay = ("bias", "LayerNorm.weight", "layer_norm.weight")
+            decay_params = []
+            nodecay_params = []
+            for name, param in adamw_named_params:
+                if any(token in name for token in no_decay):
+                    nodecay_params.append(param)
+                else:
+                    decay_params.append(param)
+            optimizers.append((
+                torch.optim.AdamW(
+                    [
+                        {"params": decay_params, "weight_decay": candidate.weight_decay},
+                        {"params": nodecay_params, "weight_decay": 0.0},
+                    ],
+                    lr=candidate.learning_rate,
+                ),
+                candidate.learning_rate,
+            ))
+        return optimizers
+
+    raise ValueError(f"unknown optimizer={candidate.optimizer!r}")
 
 
 def score_model(
@@ -235,27 +415,22 @@ def train_candidate(
     train_batch_size: int,
     eval_batch_size: int,
     gradient_accumulation_steps: int,
-    seed: int,
     use_bf16: bool,
-    use_class_weights: bool,
 ) -> dict[str, Any]:
     from transformers import AutoModelForSequenceClassification
 
-    set_seed(seed)
+    set_seed(candidate.seed)
     model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID, num_labels=2)
     model.to(device)
 
     labels = train.frame["label"].to_numpy()
-    weights = class_weights(labels, device) if use_class_weights else None
+    weights = class_weights(labels, device) if candidate.class_weights else None
     criterion = torch.nn.CrossEntropyLoss(weight=weights)
-    optimizer = torch.optim.AdamW(
-        optimizer_groups(model, candidate.weight_decay),
-        lr=candidate.learning_rate,
-    )
+    optimizers = build_optimizers(model, candidate)
 
     train_dataset = TextDataset(train.frame, candidate.view)
     generator = torch.Generator()
-    generator.manual_seed(seed)
+    generator.manual_seed(candidate.seed)
     train_loader = DataLoader(
         train_dataset,
         batch_size=train_batch_size,
@@ -272,7 +447,8 @@ def train_candidate(
 
     for epoch in range(1, candidate.epochs + 1):
         model.train()
-        optimizer.zero_grad(set_to_none=True)
+        for optimizer, _ in optimizers:
+            optimizer.zero_grad(set_to_none=True)
         total_loss = 0.0
         for batch_index, batch in enumerate(train_loader, start=1):
             batch = {key: value.to(device) for key, value in batch.items()}
@@ -290,15 +466,15 @@ def train_candidate(
             )
             if should_step:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                linear_warmup_lr(
-                    optimizer,
+                lr_scale = linear_warmup_scale(
                     step=global_step,
                     total_steps=total_steps,
                     warmup_steps=warmup_steps,
-                    base_lr=candidate.learning_rate,
                 )
-                optimizer.step()
-                optimizer.zero_grad(set_to_none=True)
+                for optimizer, base_lr in optimizers:
+                    set_lr(optimizer, base_lr * lr_scale)
+                    optimizer.step()
+                    optimizer.zero_grad(set_to_none=True)
                 global_step += 1
 
         validation_scores = score_model(
@@ -376,19 +552,24 @@ def main() -> None:
     parser.add_argument("--max-context-chars", type=int, default=12000)
     parser.add_argument("--views", type=parse_csv_strings, default=["output_context"])
     parser.add_argument("--max-lengths", type=parse_csv_ints, default=[256, 384])
+    parser.add_argument("--optimizers", type=parse_csv_strings, default=["adamw"])
     parser.add_argument("--learning-rates", type=parse_csv_floats, default=[1e-5, 2e-5, 4e-5])
+    parser.add_argument("--muon-learning-rates", type=parse_csv_floats, default=[3e-4, 1e-3, 3e-3])
     parser.add_argument("--epochs-grid", type=parse_csv_ints, default=[2, 3])
     parser.add_argument("--weight-decays", type=parse_csv_floats, default=[0.01])
     parser.add_argument("--warmup-ratios", type=parse_csv_floats, default=[0.06])
+    parser.add_argument("--class-weight-options", type=parse_csv_bools, default=[True])
+    parser.add_argument("--seeds", type=parse_csv_ints, default=[0])
     parser.add_argument("--train-batch-size", type=int, default=64)
     parser.add_argument("--eval-batch-size", type=int, default=128)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
-    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--cpu", action="store_true")
     parser.add_argument("--no-bf16", action="store_true")
     parser.add_argument("--no-class-weights", action="store_true")
     parser.add_argument("--include-test", action="store_true")
     args = parser.parse_args()
+    if args.no_class_weights:
+        args.class_weight_options = [False]
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
@@ -406,10 +587,14 @@ def main() -> None:
     candidates = candidate_grid(
         views=args.views,
         max_lengths=args.max_lengths,
+        optimizers=args.optimizers,
         learning_rates=args.learning_rates,
+        muon_learning_rates=args.muon_learning_rates,
         epochs_grid=args.epochs_grid,
         weight_decays=args.weight_decays,
         warmup_ratios=args.warmup_ratios,
+        class_weight_options=args.class_weight_options,
+        seeds=args.seeds,
     )
 
     grid_rows = []
@@ -425,9 +610,7 @@ def main() -> None:
             train_batch_size=args.train_batch_size,
             eval_batch_size=args.eval_batch_size,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
-            seed=args.seed,
             use_bf16=use_bf16,
-            use_class_weights=not args.no_class_weights,
         )
         row = {
             **dataclasses.asdict(candidate),
@@ -472,7 +655,6 @@ def main() -> None:
         "protocol": "MiniLM sequence classifier; fit train, select hyperparameters/epoch/threshold on validation",
         "model_id": MODEL_ID,
         "bf16": use_bf16,
-        "class_weights": not args.no_class_weights,
         "candidate": best["candidate"],
         "selected_epoch": best["selected_epoch"],
         "threshold": threshold,

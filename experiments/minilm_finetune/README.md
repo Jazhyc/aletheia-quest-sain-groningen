@@ -11,6 +11,35 @@ Run on Slurm:
 sbatch experiments/minilm_finetune/run_minilm_finetune.sh
 ```
 
+Broader AdamW sweep over views, sequence lengths, learning rates, epochs, and
+class weighting:
+
+```bash
+sbatch experiments/minilm_finetune/run_minilm_finetune.sh \
+  --output-dir results/blackbox/minilm_finetune_adamw_sweep_v2 \
+  --views output,dialogue,output_context \
+  --max-lengths 128,256,384,512 \
+  --learning-rates 3e-5,4e-5,5e-5,6e-5 \
+  --epochs-grid 2,3 \
+  --class-weight-options true,false \
+  --optimizers adamw
+```
+
+Muon plus AdamW comparison. Muon is applied to hidden 2D weight matrices; AdamW
+handles embeddings, classifier head, biases, and normalization weights:
+
+```bash
+sbatch experiments/minilm_finetune/run_minilm_finetune.sh \
+  --output-dir results/blackbox/minilm_finetune_muon_sweep_v1 \
+  --views output,dialogue,output_context \
+  --max-lengths 256,384,512 \
+  --learning-rates 1e-5,3e-5 \
+  --muon-learning-rates 3e-4,1e-3,3e-3 \
+  --epochs-grid 2,3 \
+  --class-weight-options true,false \
+  --optimizers muon_adamw
+```
+
 Useful smaller smoke run:
 
 ```bash
