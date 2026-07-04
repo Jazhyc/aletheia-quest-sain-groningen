@@ -677,3 +677,51 @@ Decision: do not run as the next experiment. A 5-member weighted ensemble is
 too complex and validation-tuned relative to the amount of evidence. Prefer a
 robustness check or a smaller, easier-to-explain ensemble before spending GPU
 time here.
+
+## Candidate: `text_probe_ngram_v1`
+
+Status: completed quick CPU sweep on branch `trained-text-probe`.
+
+Hypothesis:
+
+- A trained black-box text classifier can use the public train labels to catch
+  lexical or transcript-level cues that an agnostic judge misses.
+- The component must stay small and CPU-feasible for possible submission use.
+
+Protocol:
+
+- Fit candidates on `dev_splits/dry.train.yaml` only.
+- Select representation, regularization, and threshold by macro balanced
+  accuracy on `dev_splits/dry.validation.yaml`.
+- Report `dev_splits/dry.test.yaml` once after validation selection.
+
+Selected candidate:
+
+- View: `output_context`
+- Features: word 1-2 grams plus char 3-5 grams
+- Classifier: balanced logistic regression, `C=3.0`
+- Max features: `50000` per vectorizer
+- Threshold: `0.4525`
+- Serialized artifact: about 4.4 MB
+
+Standalone result:
+
+| split | balanced accuracy | AUROC | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| validation | 0.8476 | 0.8971 | 0.9048 | 0.2095 |
+| test | 0.8167 | 0.8940 | 0.8595 | 0.2262 |
+
+Exploratory combination with `qwen_reason_v1`:
+
+| method | selection | validation BA | test BA | test recall | test FPR | test AUROC |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `qwen_reason_v1` | validation threshold `0.1675` | 0.8917 | 0.9083 | 0.8357 | 0.0190 | 0.9092 |
+| `text_probe_ngram_v1` | validation threshold `0.4525` | 0.8476 | 0.8167 | 0.8595 | 0.2262 | 0.8940 |
+| max scores | validation threshold `0.8175` | 0.9155 | 0.9119 | 0.8738 | 0.0500 | 0.9502 |
+| blended scores | `0.45 * judge + 0.55 * probe`, threshold `0.45` | 0.9202 | 0.9119 | 0.8738 | 0.0500 | 0.9519 |
+
+Decision: useful as a small complementary signal, but not strong enough alone.
+The validation lift over the single judge mostly comes from recall recovery and
+does transfer slightly to test, at the cost of higher FPR. Next step would be to
+evaluate against the three-member judge ensemble on validation before considering
+submission integration.
