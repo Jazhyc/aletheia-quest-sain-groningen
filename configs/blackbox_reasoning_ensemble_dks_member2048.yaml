@@ -1,0 +1,11 @@
+# Same member-major three-prompt ensemble as dks_member4096, but with a 2048
+# generation budget for each judge response.
+
+defaults:
+  - blackbox_reasoning_ensemble_dks_member4096
+  - _self_
+
+method: qwen_reason_ensemble_dks_member2048_v1
+
+judge:
+  max_tokens: 2048
