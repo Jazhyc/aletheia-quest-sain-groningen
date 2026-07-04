@@ -759,23 +759,23 @@ conservative but misses too many positives. Dense off-the-shelf semantic
 embeddings do not appear to capture the factual-deception signal as directly as
 sparse lexical/context cues or explicit judging.
 
-## Candidate: `qwen_reason_ensemble_dks_member2048_v1`
+## Candidate: `qwen_reason_ensemble_dks_member2048_v1` / `qwen_reason_ensemble_dks_member3072_v1`
 
-Status: completed validation run on branch `trained-text-probe`.
+Status: completed validation runs on branch `trained-text-probe`.
 
 Hypothesis:
 
 - The `details4096` / `known4096` / `scrutiny4096` member-major ensemble might
   preserve most of the 4096-token accuracy with a smaller 2048-token generation
   budget.
-- A shorter cap should reduce scoring time if the useful rating signal usually
-  appears before 2048 generated tokens.
+- Shorter caps should reduce scoring time if the useful rating signal usually
+  appears before the full 4096 generated tokens.
 
 Protocol:
 
 - Same three-prompt ensemble, member-major order, max aggregation, and threshold
   `0.01` as `qwen_reason_ensemble_dks_member4096_v1`.
-- Only changed `judge.max_tokens` from `4096` to `2048`.
+- Only changed `judge.max_tokens` from `4096` to `2048` or `3072`.
 - Evaluated on `dev_splits/dry.validation.yaml` with offline vLLM.
 
 Validation result:
@@ -783,11 +783,13 @@ Validation result:
 | method | max tokens | balanced accuracy | AUROC | recall | FPR | parse errors | score time | prompt eval/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `qwen_reason_ensemble_dks_member2048_v1` | 2048 | 0.9107 | 0.9134 | 0.8524 | 0.0310 | 159 | 839.8s | 2.9/s |
+| `qwen_reason_ensemble_dks_member3072_v1` | 3072 | 0.9202 | 0.9275 | 0.8786 | 0.0381 | 60 | 1102.3s | 2.2/s |
 | `qwen_reason_ensemble_dks_member4096_v1` | 4096 | 0.9226 | 0.9296 | 0.8881 | 0.0429 | 38 | 1314.3s | 1.9/s |
 | `qwen_reason_ensemble_dks_member8192_v1` | 8192 | 0.9250 | 0.9319 | 0.8833 | 0.0333 | 36 | 1988.1s | 1.2/s |
 
-Decision: not worth using for the accuracy-first Phoenix Wright submission. The
-2048 cap is about 36% faster than 4096 by scoring time, and it reduces FPR, but
-it loses 3.6 recall points, 1.2 balanced-accuracy points, and causes many more
-parse errors. The low FPR suggests it truncates or disrupts positive evidence
-more than it reduces false positives.
+Decision: 3072 is the best middle point in this sweep. It recovers most of the
+4096 ensemble's accuracy while cutting scoring time by about 16% and keeping
+parse errors far below the 2048 run. The 2048 cap is still too destructive for
+accuracy-first use: it is faster and lower-FPR, but loses 3.6 recall points
+versus 4096 and creates many more parse errors. For official Phoenix Wright
+runtime pressure, prefer 3072 before dropping all the way to 2048.
