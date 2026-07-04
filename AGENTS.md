@@ -75,6 +75,18 @@ or restarting the same submission just because the HTTP response is slow.
 judge work; do not treat an official failure as model unavailability without
 direct evidence from NDIF or the leaderboard maintainers.
 
+Official sandbox health and transfer notes from 2026-07-05: a temporary
+`random_baseline.ipynb` no-NDIF submission completed successfully in 2m04s with
+balanced accuracy 0.4750 and AUROC 0.4761, confirming the Space runner, dataset
+loading, notebook execution, CSV scoring, and leaderboard reporting were working.
+A temporary `ngrams_baseline.ipynb` no-NDIF submission using the cached
+`text_probe_ngram_v1` model completed in 2m50s with balanced accuracy 0.5125 and
+AUROC 0.5236. It scored very well on uncounted Metis rows and decently on
+Eunomia, but was near-random on counted Notus/Iris rows, so treat Notus/Iris as
+likely OOD for text-artifact n-gram probes. Do not rely on n-grams alone for a
+competitive official submission; their main value is as a cheap fallback or
+complementary signal.
+
 Local `python submit.py --dry` is only a rehearsal of the bundled runner against
 `dry.yaml`; it is not the official Space environment. On this cluster it may fail
 or hang for reasons unrelated to the submission notebook, including local NDIF key
