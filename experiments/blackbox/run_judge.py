@@ -377,6 +377,29 @@ def generate_with_optional_batches(llm: Any, prompts: list[str], sampling: Any, 
     return outputs
 
 
+def render_chat_prompts(
+    tokenizer: Any,
+    prompts: list[str],
+    *,
+    enable_thinking: bool | None,
+) -> list[str]:
+    rendered = []
+    for prompt in prompts:
+        messages = [{"role": "user", "content": prompt}]
+        kwargs: dict[str, Any] = {
+            "tokenize": False,
+            "add_generation_prompt": True,
+        }
+        if enable_thinking is not None:
+            kwargs["enable_thinking"] = enable_thinking
+        try:
+            rendered.append(tokenizer.apply_chat_template(messages, **kwargs))
+        except TypeError:
+            kwargs.pop("enable_thinking", None)
+            rendered.append(tokenizer.apply_chat_template(messages, **kwargs))
+    return rendered
+
+
 def rating_probs_from_logprobs(
     first_token_logprobs: dict[Any, Any],
     *,
@@ -586,13 +609,18 @@ class OfflineVllmGenerateJudge:
         spec_tokens: int | None,
         max_tokens: int,
         temperature: float,
+        use_chat_template: bool,
+        enable_thinking: bool | None,
     ) -> None:
+        from transformers import AutoTokenizer
         from vllm import LLM, SamplingParams
 
         self.rating_min = rating_min
         self.rating_max = rating_max
         self.generations: list[dict[str, Any]] = []
         self.parse_error_count = 0
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name) if use_chat_template else None
+        self.enable_thinking = enable_thinking
         llm_kwargs = vllm_kwargs_from_config(
             model_name=model_name,
             dtype=dtype,
@@ -612,7 +640,14 @@ class OfflineVllmGenerateJudge:
         )
 
     def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
-        outputs = generate_with_optional_batches(self.llm, prompts, self.sampling, batch_size)
+        generation_prompts = prompts
+        if self.tokenizer is not None:
+            generation_prompts = render_chat_prompts(
+                self.tokenizer,
+                prompts,
+                enable_thinking=self.enable_thinking,
+            )
+        outputs = generate_with_optional_batches(self.llm, generation_prompts, self.sampling, batch_size)
 
         scores = np.zeros(len(prompts), dtype=float)
         self.generations = []
@@ -886,6 +921,8 @@ def build_judge(cfg: DictConfig):
             return OfflineVllmGenerateJudge(
                 **common,
                 max_tokens=int(cfg.judge.max_tokens),
+                use_chat_template=bool(OmegaConf.select(cfg, "judge.use_chat_template", default=False)),
+                enable_thinking=OmegaConf.select(cfg, "judge.enable_thinking", default=None),
             )
         if mode == "structured":
             return OfflineVllmStructuredJudge(
