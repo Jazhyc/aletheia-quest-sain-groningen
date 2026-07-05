@@ -79,3 +79,28 @@ Keep these measurements in mind before changing throughput-related defaults:
   knobs are `training.generation_batch_size` and `evaluation.batch_size`; treat
   higher `vllm.gpu_memory_utilization` as a companion setting for larger
   generation batches, not as a standalone speed fix.
+
+## Profiling Notes
+
+W&B already records the useful TRL and GPU profiling streams when logging is
+enabled. Check these before adding custom timers:
+
+- Phase timings are in the default history under
+  `profiling/Time taken: MuonGRPOTrainer.*`, including `vLLM.generate`,
+  `_move_model_to_vllm`, `_get_per_token_logps_and_entropies`, `compute_loss`,
+  `_calculate_rewards`, `correctness_reward`, and `format_reward`.
+- GPU utilization and FLOPs-related counters are in the W&B `events`/`system`
+  stream under keys such as `system.gpu.0.gpu`, `system.gpu.0.smActive`,
+  `system.gpu.0.smOccupancy`, `system.gpu.0.pipeTensorActive`,
+  `system.gpu.0.pipeTensorHmmaActive`, `system.gpu.0.pipeFp16Active`,
+  `system.gpu.0.dramActive`, `system.gpu.0.memoryAllocated`, and
+  `system.gpu.0.powerWatts`.
+- In the earlier batch-4 direct-answer run `xg9qzyd9`, W&B showed
+  `vLLM.generate` mean `0.826s`, `_move_model_to_vllm` mean `0.444s`,
+  `_get_per_token_logps_and_entropies` mean `0.491s`, and `compute_loss` mean
+  `0.290s`. Tensor pipe activity averaged about `26%` while SM active averaged
+  about `82%`; the GPU was busy but Tensor Cores were not saturated.
+- The rank-16 reasoning-field smoke had W&B disabled, so we do not yet have the
+  same W&B phase split for long reasoning completions. Its local logs showed
+  mean completion length around `102` tokens, so generation and completion
+  logprob work should matter more than in the 5-token direct-answer runs.
