@@ -1427,3 +1427,34 @@ Decision:
   no-thinking generation judge above the `0.90` validation target.
 - Current best single Qwen no-thinking generation judge:
   `qwen_reason_nothink_reasoning_output_consistency_v1`.
+
+## Iteration 32: Reasoning-Output Test Leaderboard Run
+
+Config: `configs/single_judges/blackbox_reasoning_nothink_reasoning_output_consistency_v1.yaml`
+with `split=test`.
+
+Started: 2026-07-05.
+
+Hypothesis:
+
+- The validated reasoning-excerpt scaffold should transfer to the local test
+  split better than the previous fast no-thinking controls.
+- Keep the exact dedicated validation winner unchanged:
+  `enable_thinking=false`, `max_tokens=512`, `max_prompt_chars=3000`,
+  `reasoning_max_chars=1200`, `reasoning_truncation=tail`, `api_concurrency=16`,
+  and threshold `0.5`.
+
+Result:
+
+- Local test macro balanced accuracy `0.8762`, AUROC `0.8762`, recall `0.8214`,
+  FPR `0.0690`, parse errors `0`, `score_time=19.9s`,
+  `rows_per_second=41.3/s`.
+
+Decision:
+
+- The reasoning-excerpt scaffold transferred worse to test than validation
+  (`0.9095` validation BA -> `0.8762` test BA).
+- On the tracked local test leaderboard, this is behind
+  `qwen_reason_nothink_truth_hidden_ensemble_v1` (`0.8821` BA) among fast
+  no-thinking generation rows, and well behind the current 4096-token reasoning
+  ensemble (`0.9298` BA).
