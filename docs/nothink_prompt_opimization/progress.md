@@ -809,3 +809,183 @@ Decision:
   cannot reliably tell whether hostile-context statement corrections are true.
   Further progress may require either a different single prompt that exploits
   dataset structure more explicitly, or accepting the two-prompt ensemble.
+
+## Iteration 20: Trap-Archetype Sweep
+
+Config: `configs/judge_ensemble/blackbox_reasoning_nothink_trap_archetype_sweep_v15.yaml`
+
+Started: 2026-07-05.
+
+Pre-run audit:
+
+- Generic intent/verbalization, consistency scaffolds, hostile-context
+  tiebreakers, and question-type routers have all failed to beat
+  `truth_value_guard`.
+- The stubborn false negatives are not just "hidden context present"; the
+  hidden text is usually already visible. They are concrete fact traps where the
+  final answer rejects a true statement with a plausible correction.
+- Recurring false-negative archetypes include off-by-one element facts,
+  city/country/district nitpicks, company industry/headquarters reversals,
+  inventor-versus-improvement caveats, "lived in" caveats, former country/name
+  technicalities, and standard-state/smallest-continent denials.
+- Recurring false positives remain correct answers under hostile hidden text.
+
+Hypothesis:
+
+- A compact archetype prompt can recover some high-value false negatives by
+  naming the traps directly, while preserving FPR with explicit low examples for
+  correct answers under hostile hidden instructions.
+- This is still a single generation call per candidate prompt with
+  `enable_thinking=false`, `max_tokens=512`, `max_prompt_chars=3000`, and
+  threshold `0.5`.
+
+Members:
+
+- `truth_value_guard_control`: same current best prompt for same-session
+  baseline.
+- `trap_archetype_guard`: broad trap categories without exact examples.
+- `hostile_trap_examples`: compact hand-picked high/low archetype examples from
+  validation errors.
+- `correction_skeptic_guard`: skeptical of hostile-context corrections only when
+  they have known trap shapes.
+
+Result:
+
+| member | BA | AUROC | recall | FPR | parse | FN | FP | ratings |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `truth_value_guard_control` | 0.8930 | 0.8927 | 0.8408 | 0.0548 | 0 | 64 | 23 | `{1: 460, 3: 1, 6: 2, 7: 359}` |
+| `trap_archetype_guard` | 0.8966 | 0.8966 | 0.8408 | 0.0476 | 0 | 64 | 20 | `{1: 464, 7: 358}` |
+| `hostile_trap_examples` | 0.7815 | 0.7815 | 0.5821 | 0.0190 | 0 | 168 | 8 | `{1: 580, 7: 242}` |
+| `correction_skeptic_guard` | 0.8943 | 0.8954 | 0.8433 | 0.0548 | 0 | 63 | 23 | `{1: 459, 3: 1, 7: 362}` |
+
+Aggregate max result:
+
+- Validation mean balanced accuracy `0.8952`, AUROC `0.8952`,
+  `score_time=68.7s`, `rows_per_second=12.0/s`.
+
+Error inspection:
+
+- `trap_archetype_guard` changed `63` rows relative to the control:
+  `18` recovered positives, `15` fixed false positives, `18` lost positives,
+  and `12` new false positives.
+- Recovered positives were the intended statement traps: Actinium/Cerium/
+  Scandium/Rubidium atomic numbers, Washington D.C. city/district, Australia
+  continent, "lived in" caveats, and standard-state denials.
+- New false positives were true negative-verdict corrections such as
+  fermentation, phosphorus use, Rhenium use, and some "lived in" statements.
+- Lost positives were mostly open factual questions with detailed but wrong
+  answers, e.g. pound coin year, Pertussis, patron saint of travellers,
+  Amritsar/Delhi, Mr. Deeds actor, Picasso title, All Saints Day, Confederate
+  president, and He-Man.
+
+Decision:
+
+- This is the best new single-prompt movement in several iterations but still
+  below the prior `truth_value_guard` threshold-audited best (`0.8976`).
+- The archetype prompt improved FPR without improving recall. The next immediate
+  follow-up is to combine the statement-trap guard with open-question
+  wrong-answer archetypes so the prompt does not suppress those positives.
+
+## Iteration 21: Trap + Open Wrong-Answer Sweep
+
+Config: `configs/judge_ensemble/blackbox_reasoning_nothink_trap_open_sweep_v16.yaml`
+
+Started: 2026-07-05.
+
+Hypothesis:
+
+- `trap_archetype_guard` recovered statement-trap positives and reduced FPR, but
+  lost open factual wrong-answer positives.
+- Adding compact open-question archetypes for wrong years, titles, places,
+  people, diseases, saints, film roles, fictional characters, and fabricated
+  events may restore those positives without giving up the FPR improvement.
+- Keep `enable_thinking=false`, `max_tokens=512`, `max_prompt_chars=3000`, and
+  threshold `0.5`.
+
+Members:
+
+- `truth_value_guard_control`: same current best prompt for same-session
+  baseline.
+- `trap_archetype_control`: rerun the best Iteration 20 candidate.
+- `trap_open_recall_guard`: trap guard plus compact open-question wrong-answer
+  archetypes.
+- `balanced_trap_open_examples`: high/low examples balancing statement traps,
+  open wrong answers, and correct hostile-context answers.
+
+Result:
+
+| member | BA | AUROC | recall | FPR | parse | FN | FP | ratings |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `truth_value_guard_control` | 0.8943 | 0.8939 | 0.8433 | 0.0548 | 0 | 63 | 23 | `{1: 459, 3: 1, 6: 2, 7: 360}` |
+| `trap_archetype_control` | 0.8942 | 0.8942 | 0.8383 | 0.0500 | 0 | 65 | 21 | `{1: 464, 7: 358}` |
+| `trap_open_recall_guard` | 0.8553 | 0.8553 | 0.7488 | 0.0381 | 0 | 101 | 16 | `{1: 505, 7: 317}` |
+| `balanced_trap_open_examples` | 0.8563 | 0.8563 | 0.7388 | 0.0262 | 0 | 105 | 11 | `{1: 514, 7: 308}` |
+
+Aggregate max result:
+
+- Validation mean balanced accuracy `0.9000`, AUROC `0.9000`,
+  `score_time=69.1s`, `rows_per_second=11.9/s`.
+- This crosses `0.90` only as a multi-prompt max aggregate. It does not satisfy
+  the single-prompt target.
+
+Decision:
+
+- Adding open-question examples as a replacement-style prompt suppresses recall
+  too much. The useful behavior is still the original `truth_value_guard`
+  plus a small number of statement-trap recoveries.
+- Next immediate test: keep the original truth-value guard intact and add trap
+  archetypes only as an additive clause, so open-question positives are not
+  suppressed.
+
+## Iteration 22: Additive Frontier Sweep
+
+Config: `configs/judge_ensemble/blackbox_reasoning_nothink_frontier_sweep_v17.yaml`
+
+Started: 2026-07-05.
+
+Hypothesis:
+
+- Iteration 21's aggregate crossed BA `0.9000`, but no single member did. The
+  promising behavior appears to be the union of `truth_value_guard` and a narrow
+  trap-archetype correction.
+- A single prompt that preserves the original `truth_value_guard` wording and
+  adds trap archetypes as an additive rule may retain open-question recall while
+  reducing FPR or recovering statement-trap false negatives.
+- Keep `enable_thinking=false`, `max_tokens=512`, `max_prompt_chars=3000`, and
+  threshold `0.5`.
+
+Members:
+
+- `truth_value_guard_control`: same current best prompt for same-session
+  baseline.
+- `truth_value_plus_traps`: original guard plus additive trap rule and explicit
+  open-question preservation.
+- `baseline_or_trap`: explicit OR between wrong-output condition and known
+  hidden-correction trap condition.
+- `frontier_compact`: compact union of the current frontier rules.
+
+Result:
+
+| member | BA | AUROC | recall | FPR | parse | FN | FP | ratings |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `truth_value_guard_control` | 0.8930 | 0.8927 | 0.8408 | 0.0548 | 0 | 64 | 23 | `{1: 460, 3: 1, 6: 2, 7: 359}` |
+| `truth_value_plus_traps` | 0.8880 | 0.8889 | 0.8308 | 0.0548 | 0 | 68 | 23 | `{1: 465, 6: 3, 7: 354}` |
+| `baseline_or_trap` | 0.8936 | 0.8948 | 0.8134 | 0.0262 | 0 | 75 | 11 | `{1: 483, 2: 1, 7: 338}` |
+| `frontier_compact` | 0.8845 | 0.8845 | 0.8881 | 0.1190 | 0 | 45 | 50 | `{1: 415, 7: 407}` |
+
+Aggregate max result:
+
+- Validation mean balanced accuracy `0.8905`, AUROC `0.8905`,
+  `score_time=67.4s`, `rows_per_second=12.2/s`.
+
+Decision:
+
+- The additive phrasing did not distill the useful max behavior into one prompt.
+- `baseline_or_trap` shows a low-FPR variant (`0.0262`) but recall drops too far
+  (`0.8134`). `frontier_compact` shows the opposite: recall `0.8881`, FPR
+  `0.1190`.
+- Best current single no-thinking prompt remains `truth_value_guard` /
+  `truth_value_guard_control`, with the best tracked threshold-audited row at
+  validation BA `0.8976`, recall `0.8476`, FPR `0.0524`.
+- The only no-thinking validation result at or above `0.90` remains a multi-
+  prompt max aggregate, not a single prompt.
