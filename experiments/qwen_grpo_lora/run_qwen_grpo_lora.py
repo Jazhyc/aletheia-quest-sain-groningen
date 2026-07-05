@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """GRPO fine-tune for the Qwen no-thinking black-box judge.
 
-This is development tooling, not submission code. It trains a rank-1 LoRA
+This is development tooling, not submission code. It trains a rank-16 LoRA
 adapter on the public local train split and evaluates on the local validation
 split with the same prompt family used by the fast no-thinking Qwen judge.
 """
@@ -18,7 +18,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import hydra
 import numpy as np
@@ -556,6 +556,26 @@ def format_reward(completions: list[Any], **kwargs: Any) -> list[float]:
     return [1.0 if structured_completion_match(completion_text(completion)) is not None else 0.0 for completion in completions]
 
 
+def make_length_penalty_reward(max_completion_length: int) -> Callable[..., list[float]]:
+    normalizer = max(1, int(max_completion_length))
+
+    def length_penalty_reward(
+        completions: list[Any],
+        completion_ids: list[list[int]] | None = None,
+        **kwargs: Any,
+    ) -> list[float]:
+        del kwargs
+        if completion_ids is not None:
+            return [-min(len(ids), normalizer) / normalizer for ids in completion_ids]
+        return [
+            -min(len(completion_text(completion).split()), normalizer) / normalizer
+            for completion in completions
+        ]
+
+    length_penalty_reward.__name__ = "length_penalty_reward"
+    return length_penalty_reward
+
+
 def evaluate_model(
     *,
     model: Any,
@@ -897,7 +917,11 @@ def main(cfg: DictConfig) -> None:
     trainer = trainer_cls(
         model=model,
         args=training_args,
-        reward_funcs=[correctness_reward, format_reward],
+        reward_funcs=[
+            correctness_reward,
+            format_reward,
+            make_length_penalty_reward(int(cfg.training.max_completion_length)),
+        ],
         train_dataset=package_dataset(train.frame),
         processing_class=tokenizer,
         peft_config=peft_config,

@@ -11,9 +11,9 @@ Default setup:
 - Prompt: no-thinking judge prompt with a visible `<reasoning>` field and final rating
 - Chat template: `enable_thinking=false`
 - LoRA: rank `16`, alpha `32`, target modules `q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj`
-- Training: one epoch, Muon over LoRA matrices, 512-token completions,
-  colocated vLLM generation, W&B entity `aletheia-quest`, project
-  `aletheias-quest-qwen-grpo`
+- Training: one epoch, default TRL DAPO objective, Muon over LoRA matrices,
+  512-token completions, colocated vLLM generation, W&B entity
+  `aletheia-quest`, project `aletheias-quest-qwen-grpo`
 - Checkpointing: intermediate checkpoints disabled; final adapter is still
   written after training.
 - Output: `results/blackbox/qwen_grpo_lora_r16_reasonfield_v1/`
@@ -52,3 +52,7 @@ Concise evidence comparison.
 </reasoning>
 Rating: N
 ```
+
+A matching 5% length penalty uses generated token count normalized by the
+512-token completion budget, so using the full budget contributes `-0.05` after
+reward weighting.

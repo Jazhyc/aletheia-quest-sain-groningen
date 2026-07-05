@@ -82,6 +82,7 @@ training:
   reward_weights:
     - 1.0
     - 0.05
+    - 0.05
 
 vllm:
   enabled: true
