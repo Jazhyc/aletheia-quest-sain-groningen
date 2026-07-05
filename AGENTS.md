@@ -64,13 +64,17 @@ holding `training.learning_rate=1e-6` fixed. The four candidates are:
 `qwen_grpo_lora_r16_reasonfield_muonlr3e6_full_v1` (`3e-6`),
 `qwen_grpo_lora_r16_reasonfield_muonlr1e5_full_v1` (`1e-5`),
 `qwen_grpo_lora_r16_reasonfield_muonlr3e5_full_v1` (`3e-5`), and
-`qwen_grpo_lora_r16_reasonfield_muonlr1e4_full_v1` (`1e-4`). Slurm job ids from
-the launch were `30032611` through `30032614`; when last checked at about
-2026-07-06 01:42 Europe/Amsterdam, `30032611` and `30032612` were running and
-`30032613`/`30032614` were pending. Expected runtime is roughly 1.1-1.5 hours
-after startup per run, based on 6,573 train examples, effective batch size 32
-prompts, 206 optimizer steps, and the rank-16 smoke timing of about 15.8 s/step,
-plus model load, validation over 822 rows, final adapter save, and W&B overhead.
+`qwen_grpo_lora_r16_reasonfield_muonlr1e4_full_v1` (`1e-4`). The first launch used
+Slurm job ids `30032611` through `30032614`. `30032611` (`1e-4`) reached training,
+but `30032612` (`3e-5`), `30032613` (`1e-5`), and `30032614` (`3e-6`) failed during
+vLLM distributed initialization because concurrent same-node jobs inherited the
+same fixed `MASTER_PORT=12345`. The Slurm wrapper now sets a per-job
+`MASTER_PORT` from `SLURM_JOB_ID` and passes it to `accelerate --main_process_port`.
+The failed candidates were re-submitted as `30032622` (`3e-5`), `30032623` (`3e-6`),
+and `30032625` (`1e-5`). Expected runtime is roughly 1.1-1.5 hours after startup
+per run, based on 6,573 train examples, effective batch size 32 prompts, 206
+optimizer steps, and the rank-16 smoke timing of about 15.8 s/step, plus model
+load, validation over 822 rows, final adapter save, and W&B overhead.
 Multiple Slurm jobs landing on the same GPU node does not by itself imply GPU
 contention; the scheduler may assign different GPUs on that node. Do not cancel
 or requeue jobs solely because they share a node. Treat contention as real only
