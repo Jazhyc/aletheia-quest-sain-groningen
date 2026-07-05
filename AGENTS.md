@@ -47,6 +47,30 @@ batch 4 with `num_generations=4`, `vllm.gpu_memory_utilization=0.25`, and vLLM
 sleep disabled is the best tested default; batch 8 was slower, and increasing the
 vLLM memory fraction alone is not expected to help unless generation concurrency is
 also increased.
+Current Qwen GRPO LoRA experiment context from 2026-07-06: the active setup is a
+rank-16, alpha-32 LoRA on `Qwen/Qwen3.5-9B`, targeting attention and MLP
+projection modules, trained with TRL GRPO in colocated vLLM mode and Muon for 2D
+LoRA matrices. The prompt is the no-thinking details judge with an explicit
+`<reasoning>...</reasoning>` field followed by `Rating: <1-7>`. Rewards are
+correctness weight 1.0, format weight 0.05, and completion-length penalty weight
+0.05 normalized over the 512-token completion budget. Intermediate checkpoints
+are disabled; only the final adapter is saved under `results/blackbox/<method>`.
+W&B logs and local W&B files should stay under `logs/`.
+
+A full one-epoch Muon learning-rate sweep was launched under the W&B project
+`aletheias-quest-qwen-grpo-r16-muon-lr-sweep` to test whether the current
+`training.muon_learning_rate=1e-5` is too conservative or too aggressive while
+holding `training.learning_rate=1e-6` fixed. The four candidates are:
+`qwen_grpo_lora_r16_reasonfield_muonlr3e6_full_v1` (`3e-6`),
+`qwen_grpo_lora_r16_reasonfield_muonlr1e5_full_v1` (`1e-5`),
+`qwen_grpo_lora_r16_reasonfield_muonlr3e5_full_v1` (`3e-5`), and
+`qwen_grpo_lora_r16_reasonfield_muonlr1e4_full_v1` (`1e-4`). Slurm job ids from
+the launch were `30032611` through `30032614`; when last checked at about
+2026-07-06 01:42 Europe/Amsterdam, `30032611` and `30032612` were running and
+`30032613`/`30032614` were pending. Expected runtime is roughly 1.1-1.5 hours
+after startup per run, based on 6,573 train examples, effective batch size 32
+prompts, 206 optimizer steps, and the rank-16 smoke timing of about 15.8 s/step,
+plus model load, validation over 822 rows, final adapter save, and W&B overhead.
 Multiple Slurm jobs landing on the same GPU node does not by itself imply GPU
 contention; the scheduler may assign different GPUs on that node. Do not cancel
 or requeue jobs solely because they share a node. Treat contention as real only
