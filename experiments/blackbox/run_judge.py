@@ -123,6 +123,13 @@ def final_assistant(messages: list[dict]) -> str:
     return ""
 
 
+def final_assistant_reasoning(messages: list[dict]) -> str:
+    for message in reversed(messages):
+        if message.get("role") == "assistant":
+            return message.get("reasoning") or ""
+    return ""
+
+
 def merge_messages(messages: list[dict]) -> list[dict]:
     merged: list[dict] = []
     for message in messages:
@@ -181,9 +188,17 @@ def build_prompt(
     append_prefix: str | None,
     context_truncation: str = "tail",
     context_roles: set[str] | None = None,
+    include_reasoning: bool = False,
+    reasoning_max_chars: int = 0,
+    reasoning_truncation: str = "tail",
 ) -> str:
     context, output = format_dialogue(messages, max_chars, context_truncation, context_roles)
     prompt = f"{prompt_template}\n\n<context>\n{context}\n</context>\n\n<output>\n{output}\n</output>"
+    if include_reasoning and reasoning_max_chars > 0:
+        reasoning = final_assistant_reasoning(messages)
+        if reasoning:
+            reasoning = truncate_context(reasoning, reasoning_max_chars, reasoning_truncation)
+            prompt = f"{prompt}\n\n<assistant_reasoning>\n{reasoning}\n</assistant_reasoning>"
     if append_prefix:
         prompt = f"{prompt}\n\n{append_prefix}"
     return prompt
@@ -1217,6 +1232,9 @@ def main(cfg: DictConfig) -> None:
     context_roles = None
     if selected_context_roles is not None:
         context_roles = set(str(role) for role in selected_context_roles)
+    include_reasoning = bool(OmegaConf.select(cfg, "judge.include_reasoning", default=False))
+    reasoning_max_chars = int(OmegaConf.select(cfg, "judge.reasoning_max_chars", default=0))
+    reasoning_truncation = str(OmegaConf.select(cfg, "judge.reasoning_truncation", default="tail"))
     results: list[DatasetResult] = []
     print(f"initializing {cfg.judge.backend} judge for {cfg.judge.model}")
     judge = build_judge(cfg)
@@ -1253,6 +1271,9 @@ def main(cfg: DictConfig) -> None:
                     append_prefix=append_prefix,
                     context_truncation=context_truncation,
                     context_roles=context_roles,
+                    include_reasoning=include_reasoning,
+                    reasoning_max_chars=reasoning_max_chars,
+                    reasoning_truncation=reasoning_truncation,
                 )
             )
             metadata = {

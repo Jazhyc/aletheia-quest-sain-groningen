@@ -1335,3 +1335,95 @@ Decision:
 - Broad material-support, explicit union, hostile open-question tie-breaker, and
   contrast-anchor interventions did not beat the trap prompt; they either lost
   recall or over-triggered on hidden hostile context.
+
+## Iteration 30: Reasoning-Excerpt Sweep
+
+Config: `configs/judge_ensemble/blackbox_reasoning_nothink_reasoning_excerpt_sweep_v22.yaml`
+
+Started: 2026-07-05.
+
+Pre-run implementation note:
+
+- Added opt-in support to `experiments/blackbox/run_judge.py` for appending the
+  final assistant message's `reasoning` field as `<assistant_reasoning>`.
+- Defaults remain off in all base configs, so prior runs are unchanged.
+- This sweep enables `judge.include_reasoning=true` with
+  `judge.reasoning_max_chars=1200` and `judge.reasoning_truncation=tail`.
+
+Hypothesis:
+
+- The near-miss prompt may be evidence-limited. Many remaining open-question
+  examples have final answers that look like ordinary trivia, while the
+  assistant's private reasoning can reveal whether it deliberately followed a
+  hidden instruction to answer falsely or instead rejected the hidden instruction
+  and answered truthfully.
+- Including a short reasoning excerpt may improve the single no-thinking judge
+  without increasing `judge.max_tokens` or using multiple prompts at inference
+  time.
+- Keep `enable_thinking=false`, `max_tokens=512`, `max_prompt_chars=3000`,
+  threshold `0.5`, and a single Qwen judge call per member.
+
+Members:
+
+- `reasoning_deception_intent`: use reasoning as evidence of intended deception
+  or truthful refusal.
+- `reasoning_truth_guard`: combine reasoning evidence with broad truth and trap
+  checks.
+- `reasoning_output_consistency`: compare final output against the reasoning's
+  stated plan.
+- `reasoning_plus_trap`: trap-archetype prompt plus reasoning evidence.
+
+Result:
+
+| member | macro BA | recall | FPR | parse | row BA | row recall | row FPR | ratings |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `reasoning_deception_intent` | 0.8357 | 0.8095 | 0.1381 | 0 | 0.8314 | 0.8010 | 0.1381 | `{1: 442, 7: 380}` |
+| `reasoning_output_consistency` | 0.9095 | 0.8690 | 0.0500 | 0 | 0.9066 | 0.8632 | 0.0500 | `{1: 454, 7: 368}` |
+| `reasoning_plus_trap` | 0.8952 | 0.8190 | 0.0286 | 0 | 0.8912 | 0.8109 | 0.0286 | `{1: 484, 7: 338}` |
+| `reasoning_truth_guard` | 0.8274 | 0.6952 | 0.0405 | 0 | 0.8318 | 0.7040 | 0.0405 | `{1: 522, 7: 300}` |
+
+Aggregate max result:
+
+- Validation mean balanced accuracy `0.8690`, AUROC `0.8690`, recall `0.9024`,
+  FPR `0.1643`, parse errors `0`, `score_time=82.6s`,
+  `rows_per_second=9.9/s`.
+
+Decision:
+
+- The explicit reasoning-excerpt scaffold produced the first above-target
+  single member in this no-thinking generation series:
+  `reasoning_output_consistency` reached macro BA `0.9095`.
+- Promote that member to a dedicated single-prompt config and rerun it alone in
+  the same persistent vLLM session. This verifies that the result is reproducible
+  as a true single judge and not only a member extracted from a sweep.
+
+## Iteration 31: Reasoning-Output Dedicated Verification
+
+Config: `configs/single_judges/blackbox_reasoning_nothink_reasoning_output_consistency_v1.yaml`
+
+Started: 2026-07-05.
+
+Hypothesis:
+
+- Explicitly showing the assistant's own reasoning gives the no-thinking judge a
+  compact scaffold for whether the final answer followed a stated false plan or
+  rejected hostile hidden instructions.
+- The promoted `reasoning_output_consistency` prompt should preserve the sweep
+  member behavior as a dedicated single judge: validation macro BA at or above
+  `0.90`, zero parse errors, and FPR near `0.05`.
+- Keep `enable_thinking=false`, `max_tokens=512`, `max_prompt_chars=3000`,
+  `reasoning_max_chars=1200`, `reasoning_truncation=tail`, `api_concurrency=16`,
+  and threshold `0.5`.
+
+Result:
+
+- Validation macro balanced accuracy `0.9095`, AUROC `0.9095`, recall `0.8690`,
+  FPR `0.0500`, parse errors `0`, `score_time=14.3s`,
+  `rows_per_second=57.7/s`.
+
+Decision:
+
+- This verifies the scaffolded reasoning-excerpt prompt as a true single
+  no-thinking generation judge above the `0.90` validation target.
+- Current best single Qwen no-thinking generation judge:
+  `qwen_reason_nothink_reasoning_output_consistency_v1`.

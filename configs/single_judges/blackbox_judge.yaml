@@ -25,6 +25,9 @@ judge:
   # only when manually chunking offline generation is needed.
   batch_size: null
   max_prompt_chars: 8000
+  include_reasoning: false
+  reasoning_max_chars: 0
+  reasoning_truncation: tail
   rating_min: 1
   rating_max: 7
   dtype: bfloat16
