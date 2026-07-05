@@ -319,6 +319,191 @@ def set_seed(seed: int) -> None:
     torch.cuda.manual_seed_all(seed)
 
 
+def normalize_trl_availability_flags() -> None:
+    """Work around TRL 0.23 with Transformers 5 returning availability tuples."""
+    import trl.import_utils as trl_import_utils
+
+    for name in dir(trl_import_utils):
+        if not name.startswith("_") or not name.endswith("_available"):
+            continue
+        value = getattr(trl_import_utils, name)
+        if isinstance(value, tuple):
+            setattr(trl_import_utils, name, bool(value[0]))
+
+
+def patch_vllm_guided_decoding_params() -> None:
+    """Provide the TRL import symbol for vLLM builds without guided decoding."""
+    try:
+        import vllm.sampling_params as sampling_params
+    except ImportError:
+        return
+    if hasattr(sampling_params, "GuidedDecodingParams"):
+        return
+
+    @dataclasses.dataclass
+    class GuidedDecodingParams:
+        regex: str | None = None
+
+    sampling_params.GuidedDecodingParams = GuidedDecodingParams
+
+
+def patch_trl_sampling_params() -> None:
+    """Drop colocated-vLLM kwargs that TRL 0.23 passes but vLLM 0.24 rejects."""
+    import trl.trainer.grpo_trainer as grpo_trainer
+    from vllm.sampling_params import SamplingParams as original_sampling_params
+
+    if getattr(grpo_trainer.SamplingParams, "_aq_compat", False):
+        return
+
+    guided_decoding_params = grpo_trainer.GuidedDecodingParams
+
+    def compatible_sampling_params(*args: Any, guided_decoding: Any = None, **kwargs: Any) -> Any:
+        if guided_decoding is not None:
+            if not isinstance(guided_decoding, guided_decoding_params):
+                raise TypeError(f"unexpected guided_decoding={guided_decoding!r}")
+            raise ValueError("guided decoding is not supported by the pinned local vLLM build")
+        if kwargs.get("top_k") == -1:
+            kwargs["top_k"] = 0
+        return original_sampling_params(*args, **kwargs)
+
+    compatible_sampling_params._aq_compat = True
+    grpo_trainer.SamplingParams = compatible_sampling_params
+
+
+def zeropower_via_newtonschulz5(matrix: torch.Tensor, steps: int = 5) -> torch.Tensor:
+    """Approximate ``UV^T`` for a matrix ``USV^T`` using quintic Newton-Schulz."""
+    assert matrix.ndim == 2
+    a, b, c = (3.4445, -4.7750, 2.0315)
+    x = matrix.bfloat16()
+    if matrix.size(0) > matrix.size(1):
+        x = x.T
+    x = x / (x.norm() + 1e-7)
+    for _ in range(steps):
+        xx_t = x @ x.T
+        x = a * x + (b * xx_t + c * xx_t @ xx_t) @ x
+    if matrix.size(0) > matrix.size(1):
+        x = x.T
+    return x
+
+
+class MuonAdamW(torch.optim.Optimizer):
+    """Use Muon for 2D LoRA matrices and AdamW for any remaining parameters."""
+
+    def __init__(
+        self,
+        param_groups: list[dict[str, Any]],
+        *,
+        lr: float,
+        muon_lr: float,
+        betas: tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-8,
+        muon_momentum: float = 0.95,
+        muon_nesterov: bool = True,
+        muon_ns_steps: int = 5,
+    ) -> None:
+        defaults = {
+            "lr": lr,
+            "muon_lr": muon_lr,
+            "betas": betas,
+            "eps": eps,
+            "muon_momentum": muon_momentum,
+            "muon_nesterov": muon_nesterov,
+            "muon_ns_steps": muon_ns_steps,
+            "weight_decay": 0.0,
+            "algorithm": "adamw",
+        }
+        super().__init__(param_groups, defaults)
+
+    @torch.no_grad()
+    def step(self, closure: Any | None = None) -> Any | None:
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+        for group in self.param_groups:
+            if group["algorithm"] == "muon":
+                self._muon_step(group)
+            else:
+                self._adamw_step(group)
+        return loss
+
+    def _muon_step(self, group: dict[str, Any]) -> None:
+        lr = group["muon_lr"]
+        momentum = group["muon_momentum"]
+        nesterov = group["muon_nesterov"]
+        ns_steps = group["muon_ns_steps"]
+        weight_decay = group["weight_decay"]
+        for param in group["params"]:
+            if param.grad is None:
+                continue
+            grad = param.grad
+            if grad.ndim != 2:
+                raise RuntimeError("Muon received a non-2D parameter")
+            if weight_decay:
+                param.mul_(1.0 - lr * weight_decay)
+            state = self.state[param]
+            if "momentum_buffer" not in state:
+                state["momentum_buffer"] = torch.zeros_like(param, dtype=torch.float32)
+            buffer = state["momentum_buffer"]
+            buffer.mul_(momentum).add_(grad.float())
+            update = grad.float().add(buffer, alpha=momentum) if nesterov else buffer
+            update = zeropower_via_newtonschulz5(update, steps=ns_steps)
+            scale = max(1.0, param.size(0) / param.size(1)) ** 0.5
+            param.add_(update.to(param.dtype), alpha=-lr * scale)
+
+    def _adamw_step(self, group: dict[str, Any]) -> None:
+        lr = group["lr"]
+        beta1, beta2 = group["betas"]
+        eps = group["eps"]
+        weight_decay = group["weight_decay"]
+        for param in group["params"]:
+            if param.grad is None:
+                continue
+            grad = param.grad.float()
+            if weight_decay:
+                param.mul_(1.0 - lr * weight_decay)
+            state = self.state[param]
+            if "step" not in state:
+                state["step"] = 0
+                state["exp_avg"] = torch.zeros_like(param, dtype=torch.float32)
+                state["exp_avg_sq"] = torch.zeros_like(param, dtype=torch.float32)
+            exp_avg = state["exp_avg"]
+            exp_avg_sq = state["exp_avg_sq"]
+            state["step"] += 1
+            exp_avg.mul_(beta1).add_(grad, alpha=1.0 - beta1)
+            exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1.0 - beta2)
+            bias_correction1 = 1.0 - beta1 ** state["step"]
+            bias_correction2 = 1.0 - beta2 ** state["step"]
+            step_size = lr / bias_correction1
+            denom = exp_avg_sq.sqrt().div_(bias_correction2 ** 0.5).add_(eps)
+            param.addcdiv_(exp_avg.to(param.dtype), denom.to(param.dtype), value=-step_size)
+
+
+def muon_adamw_param_groups(model: torch.nn.Module, weight_decay: float) -> list[dict[str, Any]]:
+    muon_params = []
+    adamw_decay_params = []
+    adamw_nodecay_params = []
+    no_decay = ("bias", "LayerNorm.weight", "layer_norm.weight")
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if param.ndim == 2:
+            muon_params.append(param)
+        elif any(token in name for token in no_decay):
+            adamw_nodecay_params.append(param)
+        else:
+            adamw_decay_params.append(param)
+
+    groups = []
+    if muon_params:
+        groups.append({"params": muon_params, "weight_decay": weight_decay, "algorithm": "muon"})
+    if adamw_decay_params:
+        groups.append({"params": adamw_decay_params, "weight_decay": weight_decay, "algorithm": "adamw"})
+    if adamw_nodecay_params:
+        groups.append({"params": adamw_nodecay_params, "weight_decay": 0.0, "algorithm": "adamw"})
+    return groups
+
+
 def completion_text(value: Any) -> str:
     if isinstance(value, str):
         return value
@@ -534,9 +719,34 @@ def main(cfg: DictConfig) -> None:
         os.environ.setdefault("WANDB_ENTITY", str(cfg.wandb.entity))
         os.environ.setdefault("WANDB_PROJECT", str(cfg.wandb.project))
 
+    normalize_trl_availability_flags()
+    patch_vllm_guided_decoding_params()
     from peft import LoraConfig, TaskType
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from trl import GRPOConfig, GRPOTrainer
+    patch_trl_sampling_params()
+
+    class MuonGRPOTrainer(GRPOTrainer):
+        def _fix_param_name_to_vllm(self, name: str, extra_prefixes: list[str] | None = None) -> str:
+            name = super()._fix_param_name_to_vllm(name, extra_prefixes=extra_prefixes)
+            if name.startswith("model."):
+                return "language_model." + name
+            if name.startswith("lm_head."):
+                return "language_model." + name
+            return name
+
+        def create_optimizer(self, model=None) -> torch.optim.Optimizer:
+            if self.optimizer is None:
+                opt_model = self.model if model is None else model
+                self.optimizer = MuonAdamW(
+                    muon_adamw_param_groups(opt_model, float(self.args.weight_decay)),
+                    lr=float(self.args.learning_rate),
+                    muon_lr=float(cfg.training.muon_learning_rate),
+                    muon_momentum=float(cfg.training.muon_momentum),
+                    muon_nesterov=bool(cfg.training.muon_nesterov),
+                    muon_ns_steps=int(cfg.training.muon_ns_steps),
+                )
+            return self.optimizer
 
     tokenizer = AutoTokenizer.from_pretrained(str(cfg.model), padding_side="left")
     if tokenizer.pad_token is None:
@@ -585,6 +795,7 @@ def main(cfg: DictConfig) -> None:
         torch_dtype=torch.bfloat16,
         attn_implementation="sdpa",
     )
+    model.warnings_issued = {}
     model.config.use_cache = False
 
     peft_config = LoraConfig(
@@ -615,7 +826,7 @@ def main(cfg: DictConfig) -> None:
         gradient_checkpointing=bool(cfg.training.gradient_checkpointing),
         logging_steps=int(cfg.training.logging_steps),
         logging_first_step=True,
-        save_strategy="epoch",
+        save_strategy=str(cfg.training.save_strategy),
         save_total_limit=int(cfg.training.save_total_limit),
         beta=float(cfg.training.beta),
         temperature=float(cfg.training.temperature),
@@ -623,7 +834,6 @@ def main(cfg: DictConfig) -> None:
         use_vllm=bool(cfg.vllm.enabled),
         vllm_mode=str(cfg.vllm.mode),
         vllm_gpu_memory_utilization=float(cfg.vllm.gpu_memory_utilization),
-        vllm_max_model_length=int(cfg.vllm.max_model_length),
         vllm_enable_sleep_mode=bool(cfg.vllm.enable_sleep_mode),
         reward_weights=[float(x) for x in cfg.training.reward_weights],
         remove_unused_columns=False,
@@ -649,7 +859,8 @@ def main(cfg: DictConfig) -> None:
     }
     (output_dir / "config.json").write_text(json.dumps(metadata, indent=2))
 
-    trainer = GRPOTrainer(
+    trainer_cls = MuonGRPOTrainer if str(cfg.training.optimizer) == "muon" else GRPOTrainer
+    trainer = trainer_cls(
         model=model,
         args=training_args,
         reward_funcs=[correctness_reward, format_reward],

@@ -11,8 +11,11 @@ Default setup:
 - Prompt: `qwen_reason_nothink_reasoning_output_consistency_v1`
 - Chat template: `enable_thinking=false`
 - LoRA: rank `1`, target modules `q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj`
-- Training: one epoch, colocated vLLM generation, W&B entity `aletheia-quest`,
-  project `aletheias-quest-qwen-grpo`
+- Training: one epoch, Muon over LoRA matrices, 512-token completions,
+  colocated vLLM generation, W&B entity `aletheia-quest`, project
+  `aletheias-quest-qwen-grpo`
+- Checkpointing: intermediate checkpoints disabled; final adapter is still
+  written after training.
 - Output: `results/blackbox/qwen_grpo_lora_r1_nothink_v1/`
 
 Submit the Slurm job:
@@ -35,7 +38,6 @@ Useful overrides:
 
 ```bash
 sbatch experiments/qwen_grpo_lora/run_qwen_grpo_lora.sh training.learning_rate=5e-7
-sbatch experiments/qwen_grpo_lora/run_qwen_grpo_lora.sh training.max_completion_length=512
 sbatch experiments/qwen_grpo_lora/run_qwen_grpo_lora.sh vllm.enabled=false
 ```
 

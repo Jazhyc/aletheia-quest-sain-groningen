@@ -51,19 +51,25 @@ lora:
     - down_proj
 
 training:
+  optimizer: muon
   num_train_epochs: 1.0
   max_steps: -1
   learning_rate: 1e-6
+  muon_learning_rate: 1e-5
+  muon_momentum: 0.95
+  muon_nesterov: true
+  muon_ns_steps: 5
   warmup_ratio: 0.03
   weight_decay: 0.0
   per_device_train_batch_size: 1
   gradient_accumulation_steps: 8
   num_generations: 4
   max_prompt_length: 4096
-  max_completion_length: 64
+  max_completion_length: 512
   bf16: true
   gradient_checkpointing: true
   logging_steps: 5
+  save_strategy: "no"
   save_total_limit: 2
   beta: 0.0
   temperature: 0.7
@@ -76,7 +82,6 @@ vllm:
   enabled: true
   mode: colocate
   gpu_memory_utilization: 0.25
-  max_model_length: 8192
   enable_sleep_mode: true
 
 evaluation:
