@@ -40,7 +40,7 @@ from experiments.text_probe.run_text_probe import (  # noqa: E402
 )
 
 
-MODEL_ID = "microsoft/MiniLM-L12-H384-uncased"
+DEFAULT_MODEL_ID = "microsoft/MiniLM-L12-H384-uncased"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -408,6 +408,7 @@ def best_key(metrics: dict[str, float | None]) -> tuple[float, float, float]:
 def train_candidate(
     candidate: Candidate,
     *,
+    model_id: str,
     train: SplitData,
     validation: SplitData,
     tokenizer: Any,
@@ -420,7 +421,7 @@ def train_candidate(
     from transformers import AutoModelForSequenceClassification
 
     set_seed(candidate.seed)
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID, num_labels=2)
+    model = AutoModelForSequenceClassification.from_pretrained(model_id, num_labels=2)
     model.to(device)
 
     labels = train.frame["label"].to_numpy()
@@ -516,11 +517,11 @@ def train_candidate(
     return best
 
 
-def load_tokenizer() -> Any:
+def load_tokenizer(model_id: str) -> Any:
     importlib.metadata.packages_distributions = lambda: {}
     from transformers import AutoTokenizer
 
-    return AutoTokenizer.from_pretrained(MODEL_ID)
+    return AutoTokenizer.from_pretrained(model_id)
 
 
 def save_model(output_dir: Path, model: torch.nn.Module, tokenizer: Any) -> None:
@@ -535,11 +536,12 @@ def save_model(output_dir: Path, model: torch.nn.Module, tokenizer: Any) -> None
 def load_model_from_state(
     state: dict[str, torch.Tensor],
     *,
+    model_id: str,
     device: torch.device,
 ) -> torch.nn.Module:
     from transformers import AutoModelForSequenceClassification
 
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID, num_labels=2)
+    model = AutoModelForSequenceClassification.from_pretrained(model_id, num_labels=2)
     model.load_state_dict(state)
     model.to(device)
     return model
@@ -547,6 +549,7 @@ def load_model_from_state(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--model-id", default=DEFAULT_MODEL_ID)
     parser.add_argument("--splits-dir", type=Path, default=ROOT / "dev_splits")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "results" / "blackbox" / "minilm_finetune_v1")
     parser.add_argument("--max-context-chars", type=int, default=12000)
@@ -574,7 +577,7 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
     use_bf16 = device.type == "cuda" and not args.no_bf16
-    print(f"device={device} bf16={use_bf16} model_id={MODEL_ID}", flush=True)
+    print(f"device={device} bf16={use_bf16} model_id={args.model_id}", flush=True)
 
     print("loading train split", flush=True)
     train = load_split("train", args.splits_dir, max_context_chars=args.max_context_chars)
@@ -583,7 +586,7 @@ def main() -> None:
     validation = load_split("validation", args.splits_dir, max_context_chars=args.max_context_chars)
     print(f"validation rows={len(validation.frame)} datasets={len(validation.datasets)} positives={int(validation.frame['label'].sum())}", flush=True)
 
-    tokenizer = load_tokenizer()
+    tokenizer = load_tokenizer(args.model_id)
     candidates = candidate_grid(
         views=args.views,
         max_lengths=args.max_lengths,
@@ -603,6 +606,7 @@ def main() -> None:
         print(f"[{index}/{len(candidates)}] {candidate}", flush=True)
         trained = train_candidate(
             candidate,
+            model_id=args.model_id,
             train=train,
             validation=validation,
             tokenizer=tokenizer,
@@ -647,13 +651,17 @@ def main() -> None:
 
     threshold = float(best["threshold"])
     write_predictions(args.output_dir / "predictions" / "validation.csv", best["validation_scores"], threshold)
-    selected_model = load_model_from_state(best["model_state"], device=device)
+    selected_model = load_model_from_state(
+        best["model_state"],
+        model_id=args.model_id,
+        device=device,
+    )
     save_model(args.output_dir, selected_model, tokenizer)
 
     selected = {
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "protocol": "MiniLM sequence classifier; fit train, select hyperparameters/epoch/threshold on validation",
-        "model_id": MODEL_ID,
+        "model_id": args.model_id,
         "bf16": use_bf16,
         "candidate": best["candidate"],
         "selected_epoch": best["selected_epoch"],

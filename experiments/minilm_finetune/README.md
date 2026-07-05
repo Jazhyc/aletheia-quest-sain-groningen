@@ -40,6 +40,22 @@ sbatch experiments/minilm_finetune/run_minilm_finetune.sh \
   --optimizers muon_adamw
 ```
 
+The same Muon plus AdamW sweep with a small embedding-tuned base that should
+still fit the 200 MB submission package limit:
+
+```bash
+sbatch experiments/minilm_finetune/run_minilm_finetune.sh \
+  --model-id BAAI/bge-small-en-v1.5 \
+  --output-dir results/blackbox/bge_small_finetune_muon_sweep_v1 \
+  --views output,dialogue,output_context \
+  --max-lengths 256,384,512 \
+  --learning-rates 1e-5,3e-5 \
+  --muon-learning-rates 3e-4,1e-3,3e-3 \
+  --epochs-grid 2,3 \
+  --class-weight-options true,false \
+  --optimizers muon_adamw
+```
+
 Useful smaller smoke run:
 
 ```bash
