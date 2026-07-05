@@ -45,6 +45,20 @@ export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-${SCRATCH:-/scratch/${USER}}/.cache/uv}"
 mkdir -p "${WANDB_DIR}"
 
+if [[ -n "${SLURM_JOB_ID:-}" ]] && command -v nvidia-smi >/dev/null 2>&1; then
+  GPU_METRICS_FILE="${METHOD_LOG_DIR}/gpu-${SLURM_JOB_ID}.csv"
+  (
+    echo "timestamp,index,utilization.gpu [%],utilization.memory [%],memory.used [MiB],memory.total [MiB],power.draw [W]"
+    while true; do
+      nvidia-smi --query-gpu=timestamp,index,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw --format=csv,noheader,nounits
+      sleep 5
+    done
+  ) >"${GPU_METRICS_FILE}" 2>/dev/null &
+  GPU_MONITOR_PID=$!
+  trap 'kill "${GPU_MONITOR_PID}" 2>/dev/null || true' EXIT
+  echo "gpu_metrics=${GPU_METRICS_FILE}"
+fi
+
 python - <<'PY'
 import importlib.util
 missing = [pkg for pkg in ("trl", "peft", "wandb") if importlib.util.find_spec(pkg) is None]
