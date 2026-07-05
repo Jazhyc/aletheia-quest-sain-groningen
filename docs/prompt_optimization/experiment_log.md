@@ -1435,3 +1435,22 @@ Follow-up validation:
 - Fixed the notebook to call `last_logits.detach().float().cpu().numpy()`.
 - Slurm job `30025758` then completed the one-row local notebook smoke, validated
   `submission.csv`, and removed the generated file.
+
+## Phoenix Wright v1.3 Submission Notebook
+
+Change:
+
+- Replaced `submission/phoenix_wright_v1_2.ipynb` with
+  `submission/phoenix_wright_v1_3.ipynb`.
+- Switched from rating-token logits via `model.trace` to a single generated
+  Qwen/Qwen3.5-9B judge call via nnsight `model.generate`.
+- Uses the reasoning-output consistency prompt from the no-thinking prompt work,
+  includes the final assistant `reasoning` field as `<assistant_reasoning>` when
+  present, parses `Rating: 1..7`, normalizes to `[0, 1]`, and thresholds at 0.5.
+
+Local smoke:
+
+- Slurm job `30031726` ran
+  `experiments/blackbox/run_nnsight_local_smoke.sh --limit 1 --timeout 1800`.
+- The notebook executed locally with `PHOENIX_NNSIGHT_LOCAL=1`, validated a
+  one-row `submission.csv`, removed the generated file, and exited `0:0` in 47s.

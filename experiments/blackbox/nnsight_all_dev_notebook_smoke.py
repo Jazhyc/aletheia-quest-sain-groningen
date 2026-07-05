@@ -16,7 +16,7 @@ import yaml
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="dry.yaml")
-    parser.add_argument("--notebook", default="submission/phoenix_wright_v1_2.ipynb")
+    parser.add_argument("--notebook", default="submission/phoenix_wright_v1_3.ipynb")
     parser.add_argument("--limit", type=int, default=16)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--timeout", type=int, default=1800)

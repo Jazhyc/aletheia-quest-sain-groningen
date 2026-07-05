@@ -20,7 +20,7 @@ DEFAULT_DATASET = (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--notebook", default="submission/phoenix_wright_v1_2.ipynb")
+    parser.add_argument("--notebook", default="submission/phoenix_wright_v1_3.ipynb")
     parser.add_argument("--dataset", default=DEFAULT_DATASET)
     parser.add_argument("--limit", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=1800)
