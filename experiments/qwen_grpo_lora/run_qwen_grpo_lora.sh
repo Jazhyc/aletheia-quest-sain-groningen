@@ -38,10 +38,12 @@ if [[ -f .env ]]; then
 fi
 
 export TOKENIZERS_PARALLELISM=false
+export WANDB_DIR="${WANDB_DIR:-logs/wandb}"
 export HF_HOME="${HF_HOME:-${SCRATCH:-/scratch/${USER}}/.huggingface}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
 export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-${SCRATCH:-/scratch/${USER}}/.cache/uv}"
+mkdir -p "${WANDB_DIR}"
 
 python - <<'PY'
 import importlib.util
