@@ -20,8 +20,11 @@ dependencies = [
     "scikit-learn",
     "torch",
     "transformers",
+    "trl[vllm]",
     "urllib3<2.6",
     "vllm==0.24.0",
+    "peft",
+    "wandb",
 ]
 
 [dependency-groups]
