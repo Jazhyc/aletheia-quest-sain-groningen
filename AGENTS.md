@@ -40,6 +40,13 @@ Slurm job or one persistent vLLM session whenever practical, so Python import,
 model loading, and vLLM compilation are paid once. Avoid launching one `sbatch`
 per small prompt variant unless isolation or independent scheduling is explicitly
 needed.
+For Qwen GRPO LoRA training experiments, check
+`experiments/qwen_grpo_lora/README.md` before retuning throughput knobs; it records
+the current batch-size, vLLM memory, and utilization findings. As of 2026-07-06,
+batch 4 with `num_generations=4`, `vllm.gpu_memory_utilization=0.25`, and vLLM
+sleep disabled is the best tested default; batch 8 was slower, and increasing the
+vLLM memory fraction alone is not expected to help unless generation concurrency is
+also increased.
 Multiple Slurm jobs landing on the same GPU node does not by itself imply GPU
 contention; the scheduler may assign different GPUs on that node. Do not cancel
 or requeue jobs solely because they share a node. Treat contention as real only

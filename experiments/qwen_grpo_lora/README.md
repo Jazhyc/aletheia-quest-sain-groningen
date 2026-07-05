@@ -56,3 +56,26 @@ Rating: N
 A matching 5% length penalty uses generated token count normalized by the
 512-token completion budget, so using the full budget contributes `-0.05` after
 reward weighting.
+
+## Optimization Notes
+
+Keep these measurements in mind before changing throughput-related defaults:
+
+- `per_device_train_batch_size=4`, `num_generations=4`,
+  `vllm.gpu_memory_utilization=0.25`, and vLLM sleep mode disabled is the best
+  tested default so far.
+- Larger train batches were not faster. Batch 8 increased step time enough to
+  lose throughput versus batch 4; batch 2 was faster per step but lower overall
+  prompt throughput.
+- At `gpu_memory_utilization=0.25`, vLLM reported about `3.86 GiB` KV cache,
+  `91,776` cache tokens, and about `19.9x` maximum concurrency for 4608-token
+  requests. That already covers the current `4 * 4 = 16` train-generation
+  concurrency.
+- Rank-16 reasoning-field smoke runs used about `44-46 GiB` peak GPU memory and
+  showed roughly `98%` active GPU utilization during generation/training windows,
+  so simply raising vLLM memory fraction is unlikely to help unless generation
+  concurrency is also increased.
+- If tuning speed again, prefer short smoke matrices over full runs. Promising
+  knobs are `training.generation_batch_size` and `evaluation.batch_size`; treat
+  higher `vllm.gpu_memory_utilization` as a companion setting for larger
+  generation batches, not as a standalone speed fix.
