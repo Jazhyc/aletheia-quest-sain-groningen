@@ -610,3 +610,65 @@ Decision:
   threshold `0.5`: validation BA `0.8976`, recall `0.8476`, FPR `0.0524`,
   zero parse errors. The only run above `0.90` remains the two-prompt ensemble,
   not a single prompt.
+
+## Iteration 17: Internal-Max Distillation
+
+Config: `configs/judge_ensemble/blackbox_reasoning_nothink_internal_max_sweep_v12.yaml`
+
+Started: 2026-07-05.
+
+Pre-run audit:
+
+- Thresholding every saved validation member confirms the single-prompt plateau:
+  no prior single prompt beats `truth_value_guard` at BA `0.8976`, recall
+  `0.8476`, FPR `0.0524`.
+- The successful two-prompt ensemble works by max-aggregating
+  `truth_value_guard` with `hidden_contradiction`; the latter is weak alone but
+  recovers complementary positives with very low FPR.
+- Previous free-form verbalization asked for facts/contradictions, but did not
+  explicitly force a two-check max rule.
+
+Hypothesis:
+
+- A single prompt can emulate the two-prompt ensemble by asking for two compact
+  sub-ratings in one completion: a truth/output false-belief rating and a
+  hidden-contradiction rating. The final `Rating` is the max of the two.
+- This remains a single judge call with `enable_thinking=false` and
+  `max_tokens=512`.
+
+Members:
+
+- `internal_max_binary`: explicit `Truth`, `HiddenContradiction`, then max
+  `Rating`.
+- `internal_max_with_guard`: same idea with stronger correct-answer guard.
+- `internal_max_one_line`: compressed no-scaffold form of the same logic.
+- `internal_max_statement_focus`: binary final rating focused on statement
+  verdict failures and correct-answer false positives.
+
+Result:
+
+| member | BA | AUROC | recall | FPR | parse | FN | FP | ratings |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `internal_max_binary` | 0.6756 | 0.6756 | 0.3632 | 0.0119 | 0 | 256 | 5 | `{1: 671, 7: 151}` |
+| `internal_max_with_guard` | 0.8411 | 0.8411 | 0.6965 | 0.0143 | 0 | 122 | 6 | `{1: 536, 7: 286}` |
+| `internal_max_one_line` | 0.1257 | 0.1293 | 0.1990 | 0.9476 | 0 | 322 | 398 | `{1: 226, 2: 118, 7: 478}` |
+| `internal_max_statement_focus` | 0.8808 | 0.8808 | 0.8284 | 0.0667 | 0 | 69 | 28 | `{1: 461, 7: 361}` |
+
+Aggregate max result:
+
+- Validation mean balanced accuracy `0.5012`, AUROC `0.5012`,
+  `score_time=88.6s`, `rows_per_second=9.3/s`.
+- The aggregate is invalidated by `internal_max_one_line`, which over-called
+  positives with FPR `0.9476`.
+
+Decision:
+
+- The internal two-check scaffold did not distill the two-prompt ensemble into
+  one generation call. The best member, `internal_max_statement_focus`, reached
+  BA `0.8808`, below `truth_value_guard` at BA `0.8976`.
+- Explicit sub-rating scaffolds can reduce FPR when strongly guarded, but they
+  also suppress recall too much. A compact one-line version flips the failure
+  mode and over-calls almost every negative.
+- Current best single no-thinking judge remains `truth_value_guard`. The best
+  no-thinking accuracy result remains the two-prompt `truth_value_guard` +
+  `hidden_contradiction` ensemble, but it is not a single-prompt solution.
