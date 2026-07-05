@@ -1,0 +1,14 @@
+# @package _global_
+# Single-judge generation run that disables Qwen's native thinking template and
+# gives the existing prompt enough room to reduce rating-line truncation.
+
+defaults:
+  - /blackbox_reasoning
+  - _self_
+
+method: qwen_reason_nothink_t512_v1
+
+judge:
+  use_chat_template: true
+  enable_thinking: false
+  max_tokens: 512
