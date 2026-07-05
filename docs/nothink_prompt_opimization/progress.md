@@ -1458,3 +1458,100 @@ Decision:
   `qwen_reason_nothink_truth_hidden_ensemble_v1` (`0.8821` BA) among fast
   no-thinking generation rows, and well behind the current 4096-token reasoning
   ensemble (`0.9298` BA).
+
+## Iteration 33: Reasoning-Hierarchy Sweep
+
+Config: `configs/judge_ensemble/blackbox_reasoning_nothink_reasoning_hierarchy_sweep_v23.yaml`
+
+Started: 2026-07-05.
+
+Hypothesis:
+
+- The reasoning excerpt helped validation, but the dedicated prompt lost test
+  recall and raised FPR relative to validation. The next prompt should use the
+  reasoning chain as conditional evidence, not as the primary label by itself.
+- A hierarchy of final factual effect first, reasoning as support second, and
+  hidden/system intent never sufficient may preserve the reasoning recall gain
+  while reducing over-calling ambiguous hostile-context cases.
+- Keep the same inference budget: `enable_thinking=false`, `max_tokens=512`,
+  `max_prompt_chars=3000`, `reasoning_max_chars=1200`, threshold `0.5`, and one
+  Qwen judge call per member.
+
+Members:
+
+- `reasoning_output_control`: current validation winner as a control.
+- `reasoning_truth_fallback`: final-output truth first, reasoning as support.
+- `reasoning_fact_contradiction`: asks the judge to internally compare stated,
+  contradicted, and output facts.
+- `reasoning_low_fp_guard`: stronger low-rating guard for correct outputs and
+  ambiguous reasoning.
+- `reasoning_trap_fallback`: reasoning evidence plus compact trap-archetype
+  fallback when reasoning is unclear.
+
+Result:
+
+| member | macro BA | recall | FPR | parse | row BA | row recall | row FPR | ratings |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `reasoning_fact_contradiction` | 0.8857 | 0.7857 | 0.0143 | 0 | 0.8921 | 0.7985 | 0.0143 | `{1: 495, 7: 327}` |
+| `reasoning_low_fp_guard` | 0.7702 | 0.5500 | 0.0095 | 0 | 0.7826 | 0.5746 | 0.0095 | `{1: 587, 7: 235}` |
+| `reasoning_output_control` | 0.9107 | 0.8690 | 0.0476 | 0 | 0.9078 | 0.8632 | 0.0476 | `{1: 455, 7: 367}` |
+| `reasoning_trap_fallback` | 0.9012 | 0.8167 | 0.0143 | 0 | 0.8971 | 0.8085 | 0.0143 | `{1: 491, 7: 331}` |
+| `reasoning_truth_fallback` | 0.8250 | 0.6619 | 0.0119 | 0 | 0.8398 | 0.6915 | 0.0119 | `{1: 539, 7: 283}` |
+
+Aggregate max result:
+
+- Validation mean balanced accuracy `0.9143`, AUROC `0.9143`, recall `0.8810`,
+  FPR `0.0524`, parse errors `0`, `score_time=100.5s`,
+  `rows_per_second=8.2/s`.
+
+Decision:
+
+- No new single-prompt wording materially beat the current reasoning-output
+  prompt. The control remained best as a single member at macro BA `0.9107`.
+- The stricter hierarchy prompts mostly traded away recall for lower FPR.
+  `reasoning_trap_fallback` is the only viable new single variant, but it is
+  still lower than the control.
+- The five-member max aggregate improved validation to `0.9143`. Run the same
+  aggregate on the local test split while the vLLM server is warm to see whether
+  the diversity helps the internal leaderboard.
+
+## Iteration 34: Reasoning-Hierarchy Aggregate Test Run
+
+Config: `configs/judge_ensemble/blackbox_reasoning_nothink_reasoning_hierarchy_sweep_v23.yaml`
+with `split=test`.
+
+Started: 2026-07-05.
+
+Hypothesis:
+
+- Although no new single prompt beat the control, the max aggregation of
+  complementary hierarchy prompts improved validation BA and may recover some
+  test recall versus the dedicated single reasoning-output run.
+- This is no longer a single-call judge: it uses five no-thinking Qwen calls per
+  row, still with `max_tokens=512` per call.
+
+Result:
+
+| member | macro BA | recall | FPR | parse | row BA | row recall | row FPR | ratings |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `reasoning_fact_contradiction` | 0.8786 | 0.7810 | 0.0238 | 0 | 0.8971 | 0.8180 | 0.0238 | `{1: 483, 7: 338}` |
+| `reasoning_low_fp_guard` | 0.7560 | 0.5333 | 0.0214 | 0 | 0.7686 | 0.5586 | 0.0214 | `{1: 588, 7: 233}` |
+| `reasoning_output_control` | 0.8750 | 0.8214 | 0.0714 | 0 | 0.8945 | 0.8603 | 0.0714 | `{1: 445, 2: 1, 7: 375}` |
+| `reasoning_trap_fallback` | 0.8786 | 0.7833 | 0.0262 | 0 | 0.8971 | 0.8204 | 0.0262 | `{1: 481, 6: 1, 7: 339}` |
+| `reasoning_truth_fallback` | 0.8190 | 0.6595 | 0.0214 | 0 | 0.8347 | 0.6908 | 0.0214 | `{1: 535, 7: 286}` |
+
+Aggregate max result:
+
+- Local test macro balanced accuracy `0.8869`, AUROC `0.8869`, recall `0.8476`,
+  FPR `0.0738`, parse errors `0`, `score_time=102.1s`,
+  `rows_per_second=8.0/s`.
+
+Decision:
+
+- The hierarchy aggregate improves the tracked fast no-thinking local test
+  result from `0.8821` (`qwen_reason_nothink_truth_hidden_ensemble_v1`) and
+  `0.8762` (`qwen_reason_nothink_reasoning_output_consistency_v1`) to `0.8869`.
+- The improvement comes from prompt diversity and max aggregation, not a better
+  new single prompt. Single hierarchy variants reduce FPR but lose too much
+  macro recall; the original reasoning-output control remains the best compact
+  single-call formulation.
