@@ -43,6 +43,10 @@ export HF_HOME="${HF_HOME:-${SCRATCH:-/scratch/${USER}}/.huggingface}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
 export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-${SCRATCH:-/scratch/${USER}}/.cache/uv}"
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  export MASTER_ADDR="${MASTER_ADDR:-127.0.0.1}"
+  export MASTER_PORT="${MASTER_PORT:-$((10000 + SLURM_JOB_ID % 50000))}"
+fi
 mkdir -p "${WANDB_DIR}"
 
 if [[ -n "${SLURM_JOB_ID:-}" ]] && command -v nvidia-smi >/dev/null 2>&1; then
@@ -70,4 +74,7 @@ if missing:
     )
 PY
 
-accelerate launch --num_processes 1 experiments/qwen_grpo_lora/run_qwen_grpo_lora.py "$@"
+accelerate launch \
+  --num_processes 1 \
+  --main_process_port "${MASTER_PORT:-0}" \
+  experiments/qwen_grpo_lora/run_qwen_grpo_lora.py "$@"
