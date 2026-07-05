@@ -86,6 +86,19 @@ Eunomia, but was near-random on counted Notus/Iris rows, so treat Notus/Iris as
 likely OOD for text-artifact n-gram probes. Do not rely on n-grams alone for a
 competitive official submission; their main value is as a cheap fallback or
 complementary signal.
+Small CPU text-classifier fine-tunes showed the same OOD failure pattern despite
+better local validation. `alminilm_baseline.ipynb`, using the best
+`microsoft/MiniLM-L12-H384-uncased` Muon+AdamW checkpoint
+(`results/blackbox/minilm_finetune_muon_sweep_v1`, local validation balanced
+accuracy 0.8583, AUROC 0.9096), placed slightly below the n-gram official
+baseline. `bge_baseline.ipynb`, using the best `BAAI/bge-small-en-v1.5`
+Muon+AdamW checkpoint (`results/blackbox/bge_small_finetune_muon_sweep_v1`,
+local validation balanced accuracy 0.8548, AUROC 0.9062), completed in 9m21s
+with official balanced accuracy 0.5088 and AUROC 0.5131. It scored very well on
+Metis and reasonably on Eunomia but near-random on counted Notus/Iris. Treat
+small text-only fine-tunes as overfit-prone and not competitive standalone
+methods unless a new training source or evaluation demonstrates Notus/Iris
+transfer.
 
 Local `python submit.py --dry` is only a rehearsal of the bundled runner against
 `dry.yaml`; it is not the official Space environment. On this cluster it may fail
