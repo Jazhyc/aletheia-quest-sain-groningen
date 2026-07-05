@@ -38,8 +38,6 @@ if [[ -f .env ]]; then
 fi
 
 export TOKENIZERS_PARALLELISM=false
-export WANDB_ENTITY="${WANDB_ENTITY:-aletheia-quest}"
-export WANDB_PROJECT="${WANDB_PROJECT:-aletheias-quest-qwen-grpo}"
 export HF_HOME="${HF_HOME:-${SCRATCH:-/scratch/${USER}}/.huggingface}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
 export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"

@@ -716,7 +716,8 @@ def main(cfg: DictConfig) -> None:
     baseline_threshold = float(cfg.scoring.baseline_threshold)
 
     if bool(cfg.wandb.enabled):
-        os.environ.setdefault("WANDB_ENTITY", str(cfg.wandb.entity))
+        if cfg.wandb.entity is not None:
+            os.environ.setdefault("WANDB_ENTITY", str(cfg.wandb.entity))
         os.environ.setdefault("WANDB_PROJECT", str(cfg.wandb.project))
 
     normalize_trl_availability_flags()
