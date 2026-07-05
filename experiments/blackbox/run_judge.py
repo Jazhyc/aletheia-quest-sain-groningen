@@ -155,10 +155,19 @@ def truncate_context(context: str, max_chars: int, mode: str) -> str:
     raise ValueError(f"unknown judge.context_truncation={mode!r}")
 
 
-def format_dialogue(messages: list[dict], max_chars: int, truncation: str = "tail") -> tuple[str, str]:
+def format_dialogue(
+    messages: list[dict],
+    max_chars: int,
+    truncation: str = "tail",
+    context_roles: set[str] | None = None,
+) -> tuple[str, str]:
     merged = merge_messages(messages)
     assistant = final_assistant(merged)
-    lines = [f"{m.get('role', '').upper()}: {m.get('content', '')}" for m in merged]
+    context_messages = [
+        m for m in merged
+        if context_roles is None or m.get("role", "") in context_roles
+    ]
+    lines = [f"{m.get('role', '').upper()}: {m.get('content', '')}" for m in context_messages]
     context = "\n\n".join(lines)
     context = truncate_context(context, max_chars, truncation)
     return context, assistant
@@ -171,8 +180,9 @@ def build_prompt(
     *,
     append_prefix: str | None,
     context_truncation: str = "tail",
+    context_roles: set[str] | None = None,
 ) -> str:
-    context, output = format_dialogue(messages, max_chars, context_truncation)
+    context, output = format_dialogue(messages, max_chars, context_truncation, context_roles)
     prompt = f"{prompt_template}\n\n<context>\n{context}\n</context>\n\n<output>\n{output}\n</output>"
     if append_prefix:
         prompt = f"{prompt}\n\n{append_prefix}"
@@ -879,6 +889,98 @@ class OpenAIRatingJudge:
         return None
 
 
+class OpenAIGenerateJudge:
+    def __init__(
+        self,
+        *,
+        model_name: str,
+        served_model: str,
+        api_base: str,
+        api_key: str,
+        concurrency: int,
+        request_timeout: float,
+        rating_min: int,
+        rating_max: int,
+        max_tokens: int,
+        temperature: float,
+        use_chat_template: bool,
+        enable_thinking: bool | None,
+    ) -> None:
+        self.served_model = served_model
+        self.endpoint = api_base.rstrip("/") + "/completions"
+        self.headers = {"Content-Type": "application/json"}
+        if api_key:
+            self.headers["Authorization"] = f"Bearer {api_key}"
+        self.concurrency = concurrency
+        self.request_timeout = request_timeout
+        self.rating_min = rating_min
+        self.rating_max = rating_max
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+        self.tokenizer = None
+        if use_chat_template:
+            from transformers import AutoTokenizer
+
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.enable_thinking = enable_thinking
+        self.generations: list[dict[str, Any]] = []
+        self.parse_error_count = 0
+
+    def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
+        del batch_size
+        generation_prompts = prompts
+        if self.tokenizer is not None:
+            generation_prompts = render_chat_prompts(
+                self.tokenizer,
+                prompts,
+                enable_thinking=self.enable_thinking,
+            )
+        workers = max(1, self.concurrency)
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            generations = list(executor.map(self._generate_prompt, generation_prompts))
+
+        scores = np.zeros(len(prompts), dtype=float)
+        self.generations = []
+        self.parse_error_count = 0
+        for offset, text in enumerate(generations):
+            rating = parse_rating(text, rating_min=self.rating_min, rating_max=self.rating_max)
+            parse_error = rating is None
+            if parse_error:
+                self.parse_error_count += 1
+            else:
+                scores[offset] = rating_to_score(
+                    rating,
+                    rating_min=self.rating_min,
+                    rating_max=self.rating_max,
+                )
+            self.generations.append({
+                "offset": offset,
+                "rating": rating,
+                "parse_error": parse_error,
+                "text": text,
+            })
+        return scores
+
+    def _generate_prompt(self, prompt: str) -> str:
+        import requests
+
+        payload = {
+            "model": self.served_model,
+            "prompt": prompt,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+        }
+        response = requests.post(
+            self.endpoint,
+            headers=self.headers,
+            json=payload,
+            timeout=self.request_timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return str(data["choices"][0].get("text", ""))
+
+
 def build_judge(cfg: DictConfig):
     generated_logprobs = (
         None
@@ -934,20 +1036,35 @@ def build_judge(cfg: DictConfig):
             )
         raise ValueError(f"unknown judge.mode={mode!r}")
     if backend == "openai":
-        if mode != "logits":
-            raise ValueError("judge.backend=openai currently supports judge.mode=logits only")
-        return OpenAIRatingJudge(
-            model_name=str(cfg.judge.model),
-            served_model=str(cfg.judge.served_model),
-            api_base=str(cfg.judge.api_base),
-            api_key=str(cfg.judge.api_key),
-            concurrency=int(cfg.judge.api_concurrency),
-            request_timeout=float(cfg.judge.request_timeout),
-            rating_min=int(cfg.judge.rating_min),
-            rating_max=int(cfg.judge.rating_max),
-            generated_logprobs=generated_logprobs,
-            temperature=float(cfg.judge.temperature),
-        )
+        if mode == "logits":
+            return OpenAIRatingJudge(
+                model_name=str(cfg.judge.model),
+                served_model=str(cfg.judge.served_model),
+                api_base=str(cfg.judge.api_base),
+                api_key=str(cfg.judge.api_key),
+                concurrency=int(cfg.judge.api_concurrency),
+                request_timeout=float(cfg.judge.request_timeout),
+                rating_min=int(cfg.judge.rating_min),
+                rating_max=int(cfg.judge.rating_max),
+                generated_logprobs=generated_logprobs,
+                temperature=float(cfg.judge.temperature),
+            )
+        if mode == "generate":
+            return OpenAIGenerateJudge(
+                model_name=str(cfg.judge.model),
+                served_model=str(cfg.judge.served_model),
+                api_base=str(cfg.judge.api_base),
+                api_key=str(cfg.judge.api_key),
+                concurrency=int(cfg.judge.api_concurrency),
+                request_timeout=float(cfg.judge.request_timeout),
+                rating_min=int(cfg.judge.rating_min),
+                rating_max=int(cfg.judge.rating_max),
+                max_tokens=int(cfg.judge.max_tokens),
+                temperature=float(cfg.judge.temperature),
+                use_chat_template=bool(OmegaConf.select(cfg, "judge.use_chat_template", default=False)),
+                enable_thinking=OmegaConf.select(cfg, "judge.enable_thinking", default=None),
+            )
+        raise ValueError(f"judge.backend=openai does not support judge.mode={mode!r}")
     raise ValueError(f"unknown judge.backend={backend!r}")
 
 
@@ -1096,6 +1213,10 @@ def main(cfg: DictConfig) -> None:
     if str(cfg.judge.mode) == "logits":
         append_prefix = str(OmegaConf.select(cfg, "judge.logit_prefix", default="Rating:"))
     context_truncation = str(OmegaConf.select(cfg, "judge.context_truncation", default="tail"))
+    selected_context_roles = OmegaConf.select(cfg, "judge.context_roles", default=None)
+    context_roles = None
+    if selected_context_roles is not None:
+        context_roles = set(str(role) for role in selected_context_roles)
     results: list[DatasetResult] = []
     print(f"initializing {cfg.judge.backend} judge for {cfg.judge.model}")
     judge = build_judge(cfg)
@@ -1131,6 +1252,7 @@ def main(cfg: DictConfig) -> None:
                     int(cfg.judge.max_prompt_chars),
                     append_prefix=append_prefix,
                     context_truncation=context_truncation,
+                    context_roles=context_roles,
                 )
             )
             metadata = {
