@@ -74,6 +74,13 @@ results such as `qwen_reason_details3072_speed_logit_v1` (BA 0.8786, AUROC
 0.9242, 13.0s) or `qwen_reason_ensemble_dks3072_logit_v1` (BA 0.8869, AUROC
 0.9271, 41.5s). Treat the no-thinking details judge as a very fast, robust
 fallback/control path, not as the current accuracy leader.
+On the local test split, the same `qwen_reason_details_nothink_t512_t01_v1`
+method scored balanced accuracy 0.8571, AUROC 0.8570, recall 0.7643, FPR
+0.0500, zero parse errors, and 12.2s scoring time (67.4 rows/s). It is the top
+tracked test row among pure judge-only fast methods below the full reasoning
+generation family, and it beats the earlier native D/K logits row on test
+(0.8369 BA, 24.1s), while remaining below Phoenix Wright logits+n-gram blends
+and the 4096-token reasoning ensemble.
 
 For official submissions, always run `python submit.py ...` outside the sandbox:
 it must reach the Hugging Face Space, NDIF, and sometimes Hugging Face. The NDIF

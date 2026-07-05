@@ -6,6 +6,7 @@ Rows with cached text-probe components report the logits scoring wall time; CPU 
 
 | submitted_at | method | AUROC | bal_acc | recall | FPR | score_time | rows/s |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-05 14:55:24 | qwen_reason_details_nothink_t512_t01_v1 | 0.8570 | 0.8571 | 0.7643 | 0.0500 | 12.2s | 67.4/s |
 | 2026-07-04 14:11:38 | phoenix_wright_v1_2_outcome_rank067_ngram | 0.9160 | 0.8786 | 0.9333 | 0.1762 | 46.9s | 17.5/s |
 | 2026-07-04 14:11:38 | qwen_reason_ensemble_dk3072_logit_outcome_v1_test | 0.8952 | 0.6762 | 0.3690 | 0.0167 | 46.9s | 17.5/s |
 | 2026-07-04 13:04:28 | phoenix_wright_v1_1_rankavg_dk_logits_ngram | 0.9068 | 0.8655 | 0.8071 | 0.0762 | 24.1s | 34.1/s |
