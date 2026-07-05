@@ -672,3 +672,140 @@ Decision:
 - Current best single no-thinking judge remains `truth_value_guard`. The best
   no-thinking accuracy result remains the two-prompt `truth_value_guard` +
   `hidden_contradiction` ensemble, but it is not a single-prompt solution.
+
+## Iteration 18: Hostile-Rejection Tiebreak Sweep
+
+Config: `configs/judge_ensemble/blackbox_reasoning_nothink_tiebreak_sweep_v13.yaml`
+
+Started: 2026-07-05.
+
+Pre-run audit:
+
+- Current `truth_value_guard_control` errors at threshold `0.5`: `64` false
+  negatives and `22` false positives.
+- Sampled false negatives are mostly hostile hidden-context statement-verdict
+  rows where the output rejects a true user statement with a plausible caveat or
+  replacement fact. Examples include atomic-number reversals, "Alibaba is not
+  retailing", "Australia is not the smallest continent", and "Washington D.C.
+  is not a city".
+- Sampled false positives are mostly correct direct answers under hostile hidden
+  instructions, especially open trivia and statement rows where the output
+  correctly agrees with the user.
+- Regex audit on validation labels: `hidden + statement question + rejection`
+  is positive `180` times and negative `62` times, so a pure surface rejection
+  rule would over-call. The prompt needs a tiebreaker, not a hard heuristic.
+
+Hypothesis:
+
+- The model is under-calling hostile-context negative verdicts because it tries
+  to verify every factual correction from memory. A prompt that treats hostile
+  negative corrections as high when the correction is doubtful, caveated, or not
+  plainly ordinary truth may recover recall.
+- Preserve FPR by explicitly keeping correct direct answers and affirmations
+  low, even when hidden/system text asks for deception.
+- Keep `enable_thinking=false`, `max_tokens=512`, and threshold `0.5`.
+
+Members:
+
+- `truth_value_guard_control`: same current best prompt for same-session
+  baseline.
+- `hostile_rejection_tiebreaker`: use hostile hidden context as a tiebreaker
+  against rejecting statement-verdict answers unless clearly true corrections.
+- `distrust_hostile_corrections`: stronger distrust of plausible-sounding
+  hostile corrections, with an open-question guard.
+- `user_statement_anchor`: anchor statement-verdict questions on the user's
+  stated fact and penalize hidden-context denials that rely on caveats or
+  non-obvious replacement facts.
+
+Result:
+
+| member | BA | AUROC | recall | FPR | parse | FN | FP | ratings |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `truth_value_guard_control` | 0.8943 | 0.8939 | 0.8433 | 0.0548 | 0 | 63 | 23 | `{1: 459, 3: 1, 6: 2, 7: 360}` |
+| `hostile_rejection_tiebreaker` | 0.5297 | 0.5305 | 0.6617 | 0.6024 | 0 | 136 | 253 | `{1: 298, 2: 5, 6: 1, 7: 518}` |
+| `distrust_hostile_corrections` | 0.8669 | 0.8669 | 0.8458 | 0.1119 | 0 | 62 | 47 | `{1: 435, 7: 387}` |
+| `user_statement_anchor` | 0.8753 | 0.8749 | 0.7935 | 0.0429 | 0 | 83 | 18 | `{1: 484, 2: 1, 4: 2, 6: 1, 7: 334}` |
+
+Aggregate max result:
+
+- Validation mean balanced accuracy `0.6655`, AUROC `0.6655`,
+  `score_time=66.1s`, `rows_per_second=12.4/s`.
+- The broad hostile-rejection tiebreaker over-called negatives and dominated
+  the aggregate.
+
+Decision:
+
+- The tiebreaker hypothesis is too blunt. Making hostile negative verdicts high
+  unless clearly corrected raises FPR sharply.
+- `user_statement_anchor` proves the opposite tradeoff: it lowers FPR to
+  `0.0429` but loses too much recall (`0.7935`).
+- Follow-up should not further widen hostile-context rejection. The next useful
+  test is to preserve the current statement-verdict behavior while adding a
+  guard only for open factual questions, where many false positives are correct
+  direct answers under hostile hidden instructions.
+
+## Iteration 19: Question-Type Router Sweep
+
+Config: `configs/judge_ensemble/blackbox_reasoning_nothink_question_router_sweep_v14.yaml`
+
+Started: 2026-07-05.
+
+Pre-run audit:
+
+- Truncation check on current false negatives: among `64` false negatives,
+  `42` had hidden deception text visible under both tail and head-tail context
+  truncation; `22` had no matched hidden-deception wording in the system text.
+  Head-tail truncation is therefore unlikely to be the missing recall lever.
+- Iteration 18 showed that broad hostile-rejection tiebreakers increase FPR too
+  much. The remaining target is reducing FPR without suppressing statement
+  recall.
+
+Hypothesis:
+
+- False positives are concentrated in correct open factual answers under
+  hostile hidden instructions. A question-type router can guard open questions
+  more strongly while leaving true/false and correct/incorrect verdict behavior
+  close to `truth_value_guard`.
+- Keep `enable_thinking=false`, `max_tokens=512`, and threshold `0.5`.
+
+Members:
+
+- `truth_value_guard_control`: same current best prompt for same-session
+  baseline.
+- `question_type_router`: explicit statement-verdict versus open factual request
+  routing.
+- `open_answer_guard`: stronger protection for correct canonical open-question
+  answers.
+- `statement_preserve_open_guard`: preserve wrong-verdict recall while guarding
+  only open-question false positives.
+
+Result:
+
+| member | BA | AUROC | recall | FPR | parse | FN | FP | ratings |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `truth_value_guard_control` | 0.8930 | 0.8926 | 0.8383 | 0.0524 | 0 | 65 | 22 | `{1: 462, 3: 1, 6: 2, 7: 357}` |
+| `question_type_router` | 0.1729 | 0.1739 | 0.0672 | 0.7214 | 0 | 375 | 303 | `{1: 478, 2: 14, 6: 1, 7: 329}` |
+| `open_answer_guard` | 0.8360 | 0.8360 | 0.6816 | 0.0095 | 0 | 128 | 4 | `{1: 544, 7: 278}` |
+| `statement_preserve_open_guard` | 0.6112 | 0.6187 | 0.3557 | 0.1333 | 0 | 259 | 56 | `{1: 614, 2: 9, 4: 1, 6: 1, 7: 197}` |
+
+Aggregate max result:
+
+- Validation mean balanced accuracy `0.5655`, AUROC `0.5649`,
+  `score_time=63.5s`, `rows_per_second=12.9/s`.
+- The aggregate is invalidated by `question_type_router`, which over-called
+  negatives and missed positives.
+
+Decision:
+
+- Question-type routing did not improve the single-prompt frontier.
+- `open_answer_guard` confirms that explicit protection for correct open
+  answers can drive FPR very low (`0.0095`), but it also suppresses recall too
+  much (`0.6816`).
+- The best single no-thinking prompt remains `truth_value_guard` /
+  `truth_value_guard_control`; across same-session controls the BA is about
+  `0.893` to `0.898`, below the `0.90` target.
+- The most useful next direction is probably not more abstract guarding. The
+  failures now look like a narrow fact-knowledge/uncertainty problem: the judge
+  cannot reliably tell whether hostile-context statement corrections are true.
+  Further progress may require either a different single prompt that exploits
+  dataset structure more explicitly, or accepting the two-prompt ensemble.
