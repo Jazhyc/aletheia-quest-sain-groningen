@@ -1,7 +1,7 @@
 # Hydra config for rank-16 LoRA GRPO fine-tuning of the no-thinking Qwen judge.
 #
 # Examples:
-#   python experiments/qwen_grpo_lora/run_qwen_grpo_lora.py training.max_steps=1 train_limit=32 validation_limit=32 wandb.enabled=false
+#   python experiments/qwen_grpo_lora/run_qwen_grpo_lora.py training.max_steps=1 train_global_limit=32 validation_global_limit=32 wandb.enabled=false
 #   sbatch experiments/qwen_grpo_lora/run_qwen_grpo_lora.sh training.learning_rate=5e-7
 #   sbatch experiments/qwen_grpo_lora/run_qwen_grpo_lora.sh vllm.enabled=false
 
@@ -11,6 +11,8 @@ splits_dir: dev_splits
 output_dir: results/blackbox/${method}
 train_limit: null
 validation_limit: null
+train_global_limit: null
+validation_global_limit: null
 seed: 0
 
 judge:

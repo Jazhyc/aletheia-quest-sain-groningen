@@ -28,8 +28,8 @@ Smoke test on one GPU:
 
 ```bash
 sbatch experiments/qwen_grpo_lora/run_qwen_grpo_lora.sh \
-  train_limit=32 \
-  validation_limit=32 \
+  train_global_limit=32 \
+  validation_global_limit=32 \
   training.max_steps=1 \
   wandb.enabled=false
 ```

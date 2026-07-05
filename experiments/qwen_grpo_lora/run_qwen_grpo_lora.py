@@ -316,6 +316,15 @@ def load_split(
     )
 
 
+def apply_global_limit(records: SplitRecords, limit: int | None) -> SplitRecords:
+    if limit is None:
+        return records
+    return SplitRecords(
+        frame=records.frame.iloc[:limit].reset_index(drop=True),
+        dataset_names=records.dataset_names,
+    )
+
+
 def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
@@ -783,6 +792,10 @@ def main(cfg: DictConfig) -> None:
         enable_thinking=bool(cfg.judge.enable_thinking),
         limit=None if cfg.train_limit is None else int(cfg.train_limit),
     )
+    train = apply_global_limit(
+        train,
+        None if cfg.train_global_limit is None else int(cfg.train_global_limit),
+    )
     print(
         f"train rows={len(train.frame)} datasets={len(train.dataset_names)} "
         f"positives={int(train.frame['label'].sum())}"
@@ -801,6 +814,10 @@ def main(cfg: DictConfig) -> None:
         reasoning_truncation=str(cfg.judge.reasoning_truncation),
         enable_thinking=bool(cfg.judge.enable_thinking),
         limit=None if cfg.validation_limit is None else int(cfg.validation_limit),
+    )
+    validation = apply_global_limit(
+        validation,
+        None if cfg.validation_global_limit is None else int(cfg.validation_global_limit),
     )
     print(
         f"validation rows={len(validation.frame)} datasets={len(validation.dataset_names)} "
