@@ -57,6 +57,24 @@ is much slower and did not beat the 4096 ensemble on the tracked test split. Use
 the 4096 three-prompt ensemble for Phoenix Wright accuracy-first black-box
 submissions unless runtime is the primary constraint.
 
+No-thinking Qwen judge notes from 2026-07-05: the default `blackbox_reasoning`
+prompt with `enable_thinking: false` improves as token budget rises but remains
+below stronger prompt/logits runs: `qwen_reason_nothink_t128_v1` scored
+validation balanced accuracy 0.6750 with 366/822 parse errors and 26.3s scoring
+time; `qwen_reason_nothink_t256_v1` scored 0.7726 with 134 parse errors and
+29.1s; `qwen_reason_nothink_t512_v1` scored 0.8274 with 36 parse errors and
+33.9s. The optimized details prompt is much better: `qwen_reason_details_nothink_t512_t01_v1`
+uses the compact `details3072_speed` wording, `max_prompt_chars=3000`,
+`enable_thinking=false`, `max_tokens=512`, and threshold 0.1. On validation it
+scored balanced accuracy 0.8607, AUROC 0.8607, recall 0.7667, FPR 0.0452, zero
+parse errors, and 12.2s scoring time (67.6 rows/s). This beats the older native
+D/K logits mean run (`qwen_reason_ensemble_dk3072_logit_v1`, BA 0.8369, 24.1s)
+and outcome-logits run, but not the best tracked standalone/ensemble logits
+results such as `qwen_reason_details3072_speed_logit_v1` (BA 0.8786, AUROC
+0.9242, 13.0s) or `qwen_reason_ensemble_dks3072_logit_v1` (BA 0.8869, AUROC
+0.9271, 41.5s). Treat the no-thinking details judge as a very fast, robust
+fallback/control path, not as the current accuracy leader.
+
 For official submissions, always run `python submit.py ...` outside the sandbox:
 it must reach the Hugging Face Space, NDIF, and sometimes Hugging Face. The NDIF
 key was registered to team `SAIN Groningen` on the first official submission, so
