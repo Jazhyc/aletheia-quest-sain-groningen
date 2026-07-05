@@ -18,7 +18,7 @@ fi
 
 source .venv/bin/activate
 
-METHOD="qwen_grpo_lora_r1_nothink_v1"
+METHOD="qwen_grpo_lora_r16_reasonfield_v1"
 METHOD_LOG_DIR="logs/slurm/${METHOD}"
 mkdir -p "${METHOD_LOG_DIR}"
 

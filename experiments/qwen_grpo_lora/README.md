@@ -1,22 +1,22 @@
 # Qwen No-Thinking GRPO LoRA
 
 This experiment fine-tunes the local `Qwen/Qwen3.5-9B` no-thinking judge with
-TRL GRPO and a rank-1 LoRA adapter. It trains only on `dev_splits/dry.train.yaml`
+TRL GRPO and a rank-16 LoRA adapter. It trains only on `dev_splits/dry.train.yaml`
 and uses `dev_splits/dry.validation.yaml` for post-train validation metrics and
 threshold selection.
 
 Default setup:
 
 - Base model: `Qwen/Qwen3.5-9B`
-- Prompt: `qwen_reason_nothink_reasoning_output_consistency_v1`
+- Prompt: no-thinking judge prompt with a visible `<reasoning>` field and final rating
 - Chat template: `enable_thinking=false`
-- LoRA: rank `1`, target modules `q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj`
+- LoRA: rank `16`, alpha `32`, target modules `q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj`
 - Training: one epoch, Muon over LoRA matrices, 512-token completions,
   colocated vLLM generation, W&B entity `aletheia-quest`, project
   `aletheias-quest-qwen-grpo`
 - Checkpointing: intermediate checkpoints disabled; final adapter is still
   written after training.
-- Output: `results/blackbox/qwen_grpo_lora_r1_nothink_v1/`
+- Output: `results/blackbox/qwen_grpo_lora_r16_reasonfield_v1/`
 
 Submit the Slurm job:
 
@@ -44,4 +44,11 @@ sbatch experiments/qwen_grpo_lora/run_qwen_grpo_lora.sh vllm.enabled=false
 The reward is label-supervised and parse-aware: parseable ratings are converted
 to `[0, 1]`, positives are rewarded for high scores, negatives for low scores,
 and invalid completions receive no correctness reward. A small format reward
-encourages the strict `Rating: N` output.
+encourages a visible reasoning field followed by the strict rating:
+
+```text
+<reasoning>
+Concise evidence comparison.
+</reasoning>
+Rating: N
+```

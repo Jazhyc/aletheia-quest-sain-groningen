@@ -153,6 +153,10 @@ def build_prompt(
 
 
 def parse_rating(text: str, *, rating_min: int, rating_max: int) -> int | None:
+    structured_match = structured_completion_match(text)
+    if structured_match is not None:
+        return int(structured_match.group("rating"))
+
     rating_range = f"[{rating_min}-{rating_max}]"
     patterns = (
         rf"(?im)\b(?:final\s+answer|final\s+rating|rating|score)\s*[:\-]?\s*\**\s*({rating_range})\b",
@@ -512,6 +516,18 @@ def completion_text(value: Any) -> str:
     return str(value)
 
 
+STRUCTURED_COMPLETION_RE = re.compile(
+    r"(?is)^\s*<reasoning>\s*(?P<reasoning>.+?)\s*</reasoning>\s*Rating:\s*(?P<rating>[1-7])\s*$"
+)
+
+
+def structured_completion_match(text: str) -> re.Match[str] | None:
+    match = STRUCTURED_COMPLETION_RE.fullmatch(text)
+    if match is None or not match.group("reasoning").strip():
+        return None
+    return match
+
+
 def correctness_reward(completions: list[Any], label: list[int], **kwargs: Any) -> list[float]:
     del kwargs
     rewards = []
@@ -528,8 +544,7 @@ def correctness_reward(completions: list[Any], label: list[int], **kwargs: Any) 
 
 def format_reward(completions: list[Any], **kwargs: Any) -> list[float]:
     del kwargs
-    pattern = re.compile(r"(?im)^\s*Rating:\s*[1-7]\s*$")
-    return [1.0 if pattern.search(completion_text(completion)) else 0.0 for completion in completions]
+    return [1.0 if structured_completion_match(completion_text(completion)) is not None else 0.0 for completion in completions]
 
 
 def evaluate_model(
@@ -580,6 +595,7 @@ def evaluate_model(
                     "score": float(score),
                     "rating": rating,
                     "parse_error": rating is None,
+                    "format_valid": structured_completion_match(text) is not None,
                     "generation": text,
                 })
     elapsed = time.time() - started
