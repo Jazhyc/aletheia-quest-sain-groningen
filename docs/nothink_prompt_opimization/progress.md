@@ -989,3 +989,74 @@ Decision:
   validation BA `0.8976`, recall `0.8476`, FPR `0.0524`.
 - The only no-thinking validation result at or above `0.90` remains a multi-
   prompt max aggregate, not a single prompt.
+
+## Iteration 23: Single Trap-Archetype Verification
+
+Config: `configs/single_judges/blackbox_reasoning_nothink_trap_archetype_v1.yaml`
+
+Started: 2026-07-05.
+
+Pre-run audit:
+
+- Recomputed threshold audits over saved no-thinking validation generations.
+- Row-level balanced accuracy still has no single prompt at `0.90`; the best is
+  `trap_archetype_guard` at row-level BA `0.8966`.
+- The leaderboard runner reports macro means over datasets. Under that same
+  macro metric, `trap_archetype_guard` is a single-prompt candidate at BA
+  `0.9000`, recall `0.8476`, FPR `0.0476`, parse `0`.
+- Its ratings are binary `{1: 464, 7: 358}`, so threshold `0.5` is equivalent to
+  the audited threshold `0.2`.
+
+Hypothesis:
+
+- Promoting `trap_archetype_guard` out of the ensemble sweep into a true
+  single-judge config should reproduce validation macro BA `0.9000` with the
+  same no-thinking 512-token generation budget.
+
+Result:
+
+- Validation macro balanced accuracy `0.8952`, AUROC `0.8952`, recall `0.8405`,
+  FPR `0.0500`, parse errors `0`, `score_time=18.2s`,
+  `rows_per_second=45.2/s`.
+- Saved generations remained almost binary with ratings `{1: 466, 7: 356}`.
+- Dataset mean rows: several high-performing instructed subsets remained near
+  perfect, but the varied-deception subsets pulled the macro mean below `0.90`.
+
+Decision:
+
+- The dedicated single config did not reproduce the macro-audited ensemble-member
+  result. Treat the audit result as insufficient evidence for completion.
+- Because the prompt output is generated through concurrent OpenAI requests to
+  vLLM, run one deterministic-control check with `judge.api_concurrency=1`
+  before discarding the candidate. This does not increase the judge generation
+  token budget.
+
+## Iteration 24: Single Trap-Archetype Concurrency-1 Check
+
+Config: `configs/single_judges/blackbox_reasoning_nothink_trap_archetype_v1.yaml`
+with overrides `method=qwen_reason_nothink_trap_archetype_v1_c1` and
+`judge.api_concurrency=1`.
+
+Started: 2026-07-05.
+
+Hypothesis:
+
+- If the single-prompt mismatch is caused by request batching or scheduling
+  sensitivity, serial API calls may reproduce the stronger validation row.
+- If it remains below `0.90`, the trap-archetype prompt should be considered
+  below target as a standalone single judge.
+
+Result:
+
+- Validation macro balanced accuracy `0.8964`, AUROC `0.8964`, recall `0.8429`,
+  FPR `0.0500`, parse errors `0`, `score_time=70.6s`,
+  `rows_per_second=11.6/s`.
+- Saved generations remained binary with ratings `{1: 465, 7: 357}`.
+
+Decision:
+
+- Serial API calls did not reproduce the audited `0.9000` ensemble-member row.
+- The dedicated single trap-archetype prompt is slightly stronger than the
+  concurrency-16 run, but still below target. Keep the goal open and treat the
+  explicit trap-archetype scaffold as a useful near-miss rather than a validated
+  `0.90` single judge.
