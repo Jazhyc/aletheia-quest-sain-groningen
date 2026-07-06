@@ -13,8 +13,9 @@ Default setup:
 - Chat template: `enable_thinking=false`
 - LoRA: rank `16`, alpha `32`, target modules `q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj`
 - Training: one epoch, default TRL DAPO objective, Muon over LoRA matrices,
-  512-token completions, colocated vLLM generation, W&B entity
-  `aletheia-quest`, project `aletheias-quest-qwen-grpo`
+  512-token completions, colocated vLLM generation with training sampling
+  temperature `1.2` and top-p `0.95`, W&B entity `aletheia-quest`, project
+  `aletheias-quest-qwen-grpo`
 - Checkpointing: intermediate checkpoints disabled; final adapter is still
   written after training.
 - Output: `results/blackbox/qwen_grpo_lora_r16_reasonfield_v1/`
