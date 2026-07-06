@@ -81,6 +81,23 @@ or requeue jobs solely because they share a node. Treat contention as real only
 when there is direct evidence such as CUDA OOMs, scheduler allocation conflicts,
 or process/GPU telemetry showing multiple jobs on the same device.
 
+GRPO LoRA evaluation finding from 2026-07-06: treat the current best Muon LR
+adapter (`qwen_grpo_lora_r16_reasonfield_muonlr3e5_full_v1`) as backend-sensitive.
+Under the original Transformers/PEFT evaluator with `max_new_tokens=32`, the
+local test split scored balanced accuracy 0.8988, AUROC 0.8988, recall 0.8667,
+FPR 0.0690, zero parse errors, and 101.7s scoring time, but this was not
+comparable to the vLLM judge rows. A fair vLLM LoRA run with the adapter
+tokenizer, 512-token budget, and scoring-only timing completed as Slurm job
+`30032964` and scored balanced accuracy 0.8738, AUROC 0.8758, recall 0.7762,
+FPR 0.0286, 6 parse errors, and 38.5s scoring time (21.3 rows/s). The parse
+errors were long completions that hit the 512-token cap before emitting a final
+`Rating:`; oracle-fixing those parse errors only raises balanced accuracy to
+about 0.879, so they do not explain the full drop. The main difference is that
+Transformers collapsed to two short classifier outputs, while vLLM produced long
+free-form reasoning completions. Do not compare the old Transformers GRPO timing
+against vLLM/OpenAI leaderboard rows, and do not treat the vLLM drop as random
+sampling noise without a dedicated backend-equivalence check.
+
 As of 2026-07-04, the strongest tracked black-box judge is the three-prompt Qwen
 reasoning ensemble (`qwen_reason_ensemble_dks_member4096_v1`): `details4096`,
 `known4096`, and `scrutiny4096`, scheduled member-major, max aggregated, with a

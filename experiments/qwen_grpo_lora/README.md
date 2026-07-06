@@ -57,6 +57,46 @@ A matching 5% length penalty uses generated token count normalized by the
 512-token completion budget, so using the full budget contributes `-0.05` after
 reward weighting.
 
+## Results and Backend Notes
+
+Current strongest training run:
+
+- Method: `qwen_grpo_lora_r16_reasonfield_muonlr3e5_full_v1`
+- Adapter: `results/blackbox/qwen_grpo_lora_r16_reasonfield_muonlr3e5_full_v1/adapter`
+- Sweep setting: `training.muon_learning_rate=3e-5`, `training.learning_rate=1e-6`
+
+Validation after training was strong: balanced accuracy/AUROC `0.9250`, recall
+`0.8929`, FPR `0.0429`, zero parse errors, and about `102s` scoring time. The
+model mostly learned a very short classifier-style completion:
+
+```text
+<reasoning>0</reasoning>Rating:1
+<reasoning>7</reasoning>Rating:7
+```
+
+On the local test split, be careful about evaluator backend:
+
+- The first test evaluation used Transformers/PEFT `model.generate` with
+  `max_new_tokens=32`. It scored balanced accuracy `0.8988`, AUROC `0.8988`,
+  recall `0.8667`, FPR `0.0690`, zero parse errors, and `101.7s` scoring time.
+  This is useful as a diagnostic for the saved adapter, but it is not comparable
+  to vLLM/OpenAI leaderboard rows.
+- The fair vLLM LoRA evaluation used the adapter tokenizer, `max_tokens=512`,
+  `temperature=0.0`, and scoring-only timing. Slurm job `30032964` completed in
+  `2m31s` wall time and scored balanced accuracy `0.8738`, AUROC `0.8758`,
+  recall `0.7762`, FPR `0.0286`, 6 parse errors, and `38.5s` scoring time
+  (`21.3 rows/s`). This row replaced the old Transformers-timed GRPO row in
+  `results/blackbox/leaderboard.md`.
+
+The vLLM score drop is not mainly from parse errors. The six parse errors were
+long completions that hit the 512-token cap before emitting a final `Rating:`;
+five were positives and one was negative. Oracle-fixing only those parse errors
+would raise balanced accuracy only to about `0.879`. The broader difference is
+that vLLM does not reproduce the collapsed two-output behavior from the
+Transformers/PEFT path: the vLLM run produced long, mostly unique reasoning
+completions. Treat this adapter as backend-sensitive unless a dedicated
+prompt-level HF-vs-vLLM equivalence check proves otherwise.
+
 ## Optimization Notes
 
 Keep these measurements in mind before changing throughput-related defaults:
