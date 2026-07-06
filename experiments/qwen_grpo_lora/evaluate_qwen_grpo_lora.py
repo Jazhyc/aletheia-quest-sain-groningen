@@ -382,6 +382,91 @@ def evaluate_model(
     return predictions, metadata
 
 
+def evaluate_vllm_model(
+    *,
+    model_name: str,
+    adapter_dir: Path,
+    records: SplitRecords,
+    max_new_tokens: int,
+    rating_min: int,
+    rating_max: int,
+    dtype: str,
+    gpu_memory_utilization: float,
+    max_model_len: int,
+    max_num_seqs: int | None,
+    batch_size: int | None,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    from vllm import LLM, SamplingParams
+    from vllm.lora.request import LoRARequest
+
+    llm_kwargs: dict[str, Any] = {
+        "model": model_name,
+        "tokenizer": adapter_dir.as_posix(),
+        "dtype": dtype,
+        "tensor_parallel_size": 1,
+        "gpu_memory_utilization": gpu_memory_utilization,
+        "trust_remote_code": False,
+        "enable_lora": True,
+        "max_lora_rank": 16,
+        "max_model_len": max_model_len,
+    }
+    if max_num_seqs is not None:
+        llm_kwargs["max_num_seqs"] = max_num_seqs
+
+    llm = LLM(**llm_kwargs)
+    sampling = SamplingParams(max_tokens=max_new_tokens, temperature=0.0)
+    lora_request = LoRARequest(
+        lora_name=adapter_dir.parent.name,
+        lora_int_id=1,
+        lora_path=adapter_dir.as_posix(),
+    )
+
+    prompts = records.frame["prompt"].tolist()
+    started = time.time()
+    if batch_size is None:
+        outputs = llm.generate(prompts, sampling, lora_request=lora_request)
+    else:
+        outputs = []
+        for start in range(0, len(prompts), batch_size):
+            outputs.extend(
+                llm.generate(
+                    prompts[start:start + batch_size],
+                    sampling,
+                    lora_request=lora_request,
+                )
+            )
+    elapsed = time.time() - started
+
+    rows = []
+    parse_errors = 0
+    for (_, row), output in zip(records.frame.iterrows(), outputs, strict=True):
+        text = output.outputs[0].text if output.outputs else ""
+        rating = parse_rating(text, rating_min=rating_min, rating_max=rating_max)
+        if rating is None:
+            parse_errors += 1
+            score = 0.0
+        else:
+            score = rating_to_score(rating, rating_min=rating_min, rating_max=rating_max)
+        rows.append({
+            "dataset": row["dataset"],
+            "index": row["index"],
+            "label": int(row["label"]),
+            "score": float(score),
+            "rating": rating,
+            "parse_error": rating is None,
+            "format_valid": structured_completion_match(text) is not None,
+            "generation": text,
+        })
+
+    predictions = pd.DataFrame(rows)
+    metadata = {
+        "parse_errors": parse_errors,
+        "score_time_seconds": elapsed,
+        "rows_per_second": len(predictions) / elapsed if elapsed > 0 else None,
+    }
+    return predictions, metadata
+
+
 def confusion(y_true: np.ndarray, y_pred: np.ndarray) -> tuple[int, int, int, int]:
     tp = int(((y_true == 1) & (y_pred == 1)).sum())
     tn = int(((y_true == 0) & (y_pred == 0)).sum())
@@ -478,7 +563,38 @@ def render_leaderboard(results_root: Path, output_path: Path) -> None:
         for path in results_root.glob("*/*/result.json")
     ]
     records = [record for record in records if record.get("split") == "test"]
-    records.sort(key=lambda row: str(row.get("submitted_at", "")), reverse=True)
+    generated_methods = {str(record.get("method", "-")) for record in records}
+
+    rows: list[tuple[str, str]] = []
+    for record in records:
+        metrics = record.get("metrics", {})
+        timing = record.get("timing", {})
+        submitted_at = fmt_submitted_at(record.get("submitted_at"))
+        rows.append((
+            submitted_at,
+            "| "
+            f"{submitted_at} | "
+            f"{record.get('method', '-')} | "
+            f"{fmt_metric(metrics.get('auroc'))} | "
+            f"{fmt_metric(metrics.get('balanced_accuracy'))} | "
+            f"{fmt_metric(metrics.get('recall'))} | "
+            f"{fmt_metric(metrics.get('fpr'))} | "
+            f"{fmt_seconds(timing.get('score_seconds'))} | "
+            f"{fmt_rate(timing.get('rows_per_second'))} |",
+        ))
+
+    if output_path.exists():
+        for line in output_path.read_text().splitlines():
+            if not line.startswith("| "):
+                continue
+            parts = [part.strip() for part in line.strip("|").split("|")]
+            if len(parts) != 8 or parts[0] in {"submitted_at", "---"}:
+                continue
+            if parts[1] in generated_methods:
+                continue
+            rows.append((parts[0], line))
+
+    rows.sort(key=lambda item: item[0], reverse=True)
 
     lines = [
         "# Black-Box Experiment Leaderboard",
@@ -490,20 +606,7 @@ def render_leaderboard(results_root: Path, output_path: Path) -> None:
         "| submitted_at | method | AUROC | bal_acc | recall | FPR | score_time | rows/s |",
         "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
-    for record in records:
-        metrics = record.get("metrics", {})
-        timing = record.get("timing", {})
-        lines.append(
-            "| "
-            f"{fmt_submitted_at(record.get('submitted_at'))} | "
-            f"{record.get('method', '-')} | "
-            f"{fmt_metric(metrics.get('auroc'))} | "
-            f"{fmt_metric(metrics.get('balanced_accuracy'))} | "
-            f"{fmt_metric(metrics.get('recall'))} | "
-            f"{fmt_metric(metrics.get('fpr'))} | "
-            f"{fmt_seconds(timing.get('score_seconds'))} | "
-            f"{fmt_rate(timing.get('rows_per_second'))} |"
-        )
+    lines.extend(line for _, line in rows)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(lines) + "\n")
@@ -545,6 +648,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--global-limit", type=int)
     parser.add_argument("--threshold", type=float)
     parser.add_argument("--leaderboard", type=Path, default=ROOT / "results/blackbox/leaderboard.md")
+    parser.add_argument("--backend", choices=["vllm", "transformers"], default="vllm")
+    parser.add_argument("--dtype", default="bfloat16")
+    parser.add_argument("--gpu-memory-utilization", type=float, default=0.9)
+    parser.add_argument("--max-model-len", type=int)
+    parser.add_argument("--max-num-seqs", type=int)
     return parser.parse_args()
 
 
@@ -567,9 +675,7 @@ def main() -> None:
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    from peft import PeftModel
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    import torch
+    from transformers import AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained(adapter_dir, padding_side="left")
     if tokenizer.pad_token is None:
@@ -595,17 +701,6 @@ def main() -> None:
         flush=True,
     )
 
-    print("loading base model and adapter", flush=True)
-    model = AutoModelForCausalLM.from_pretrained(
-        str(config["model"]),
-        torch_dtype=torch.bfloat16,
-        attn_implementation="sdpa",
-    )
-    model = PeftModel.from_pretrained(model, adapter_dir)
-    model.config.use_cache = True
-    if torch.cuda.is_available():
-        model = model.to("cuda")
-
     max_new_tokens = (
         args.max_new_tokens
         if args.max_new_tokens is not None
@@ -621,17 +716,51 @@ def main() -> None:
         if args.threshold is not None
         else float(cfg_get(config, "scoring.baseline_threshold"))
     )
-
-    print("evaluating split", flush=True)
-    predictions, eval_meta = evaluate_model(
-        model=model,
-        tokenizer=tokenizer,
-        records=records,
-        batch_size=batch_size,
-        max_new_tokens=max_new_tokens,
-        rating_min=1,
-        rating_max=7,
+    max_model_len = (
+        args.max_model_len
+        if args.max_model_len is not None
+        else int(cfg_get(config, "training.max_prompt_length")) + max_new_tokens
     )
+
+    print(f"evaluating split with {args.backend}", flush=True)
+    if args.backend == "vllm":
+        predictions, eval_meta = evaluate_vllm_model(
+            model_name=str(config["model"]),
+            adapter_dir=adapter_dir,
+            records=records,
+            max_new_tokens=max_new_tokens,
+            rating_min=1,
+            rating_max=7,
+            dtype=str(args.dtype),
+            gpu_memory_utilization=float(args.gpu_memory_utilization),
+            max_model_len=max_model_len,
+            max_num_seqs=args.max_num_seqs,
+            batch_size=args.batch_size,
+        )
+    else:
+        from peft import PeftModel
+        from transformers import AutoModelForCausalLM
+        import torch
+
+        print("loading base model and adapter", flush=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            str(config["model"]),
+            torch_dtype=torch.bfloat16,
+            attn_implementation="sdpa",
+        )
+        model = PeftModel.from_pretrained(model, adapter_dir)
+        model.config.use_cache = True
+        if torch.cuda.is_available():
+            model = model.to("cuda")
+        predictions, eval_meta = evaluate_model(
+            model=model,
+            tokenizer=tokenizer,
+            records=records,
+            batch_size=batch_size,
+            max_new_tokens=max_new_tokens,
+            rating_min=1,
+            rating_max=7,
+        )
     metrics = macro_metrics(predictions, threshold=threshold)
 
     prediction_paths: dict[str, str] = {}
@@ -681,6 +810,12 @@ def main() -> None:
             "splits_dir": str(args.splits_dir),
             "scoring": {"threshold": threshold},
             "adapter_dir": adapter_dir.as_posix(),
+            "evaluator_backend": args.backend,
+            "dtype": str(args.dtype),
+            "gpu_memory_utilization": float(args.gpu_memory_utilization),
+            "max_model_len": max_model_len,
+            "max_new_tokens": max_new_tokens,
+            "max_num_seqs": args.max_num_seqs,
             "training_config": config,
         },
         "datasets": [asdict(dataset) for dataset in datasets],
