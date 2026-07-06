@@ -19,6 +19,11 @@ fi
 source .venv/bin/activate
 
 METHOD="qwen_grpo_lora_r16_reasonfield_v1"
+for arg in "$@"; do
+  if [[ "${arg}" == method=* ]]; then
+    METHOD="${arg#method=}"
+  fi
+done
 METHOD_LOG_DIR="logs/slurm/${METHOD}"
 mkdir -p "${METHOD_LOG_DIR}"
 
