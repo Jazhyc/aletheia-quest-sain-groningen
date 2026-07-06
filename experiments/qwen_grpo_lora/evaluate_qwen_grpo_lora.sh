@@ -19,9 +19,12 @@ fi
 source .venv/bin/activate
 
 METHOD="qwen_grpo_lora_r16_reasonfield_v1"
+PY_ARGS=()
 for arg in "$@"; do
   if [[ "${arg}" == method=* ]]; then
     METHOD="${arg#method=}"
+  else
+    PY_ARGS+=("${arg}")
   fi
 done
 METHOD_LOG_DIR="logs/slurm/${METHOD}"
@@ -48,4 +51,4 @@ export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
 export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-${SCRATCH:-/scratch/${USER}}/.cache/uv}"
 
-python experiments/qwen_grpo_lora/evaluate_qwen_grpo_lora.py "$@"
+python experiments/qwen_grpo_lora/evaluate_qwen_grpo_lora.py "${PY_ARGS[@]}"
