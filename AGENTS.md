@@ -99,6 +99,22 @@ free-form reasoning completions. Do not compare the old Transformers GRPO timing
 against vLLM/OpenAI leaderboard rows, and do not treat the vLLM drop as random
 sampling noise without a dedicated backend-equivalence check.
 
+Binary-output GRPO LoRA finding from 2026-07-06: the binary direct-prediction
+variant (`qwen_grpo_lora_r16_binary_t12_muonlr3e5_full_v2`) is the best GRPO
+LoRA row so far but does not beat the stronger prompt-only baselines on the
+internal test leaderboard. It trained with `Prediction: <0 or 1>`,
+`training.temperature=1.2`, `training.muon_learning_rate=3e-5`,
+`training.learning_rate=1e-6`, and no length penalty reward. Validation scored
+balanced accuracy/AUROC 0.9262, recall 0.9238, FPR 0.0714, and 1 parse error,
+but fair vLLM test evaluation scored balanced accuracy/AUROC 0.8762, recall
+0.7714, FPR 0.0190, 6 parse errors, and 40.7s scoring-only time. This slightly
+beats the earlier vLLM GRPO rating-field row (0.8738 BA) by lowering FPR, but it
+loses recall and is still below prompt-only rows such as
+`qwen_reason_nothink_truth_hidden_ensemble_v1` (0.8821 BA, 29.7s),
+`qwen_reason_v1` (0.9095 BA), and the 4096 three-prompt reasoning ensemble
+(0.9298 BA). Treat the current RL path as evidence that RL can learn a clean
+binary low-FPR judge, not as a replacement for the prompt-only/ensemble path.
+
 As of 2026-07-04, the strongest tracked black-box judge is the three-prompt Qwen
 reasoning ensemble (`qwen_reason_ensemble_dks_member4096_v1`): `details4096`,
 `known4096`, and `scrutiny4096`, scheduled member-major, max aggregated, with a

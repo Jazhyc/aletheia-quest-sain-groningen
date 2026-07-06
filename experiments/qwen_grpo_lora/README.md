@@ -77,6 +77,15 @@ accuracy/AUROC `0.8762`, recall `0.7714`, FPR `0.0190`, with 6 parse errors and
 improvement over the earlier rating-field GRPO adapter while shifting the error
 profile toward lower FPR and lower recall.
 
+The binary run is therefore the strongest GRPO LoRA row so far, but it is not
+competitive with the best prompt-only approaches on the internal test
+leaderboard. It remains below the fast no-thinking prompt ensemble
+`qwen_reason_nothink_truth_hidden_ensemble_v1` (`0.8821` balanced accuracy in
+`29.7s`), the original reasoning prompt `qwen_reason_v1` (`0.9095` balanced
+accuracy), and the 4096-token three-prompt reasoning ensemble (`0.9298`
+balanced accuracy). Treat this run as evidence that RL can learn a clean binary,
+low-FPR judge, not as evidence that the current RL setup has surpassed prompting.
+
 Strongest completed training run before the binary-output change:
 
 - Method: `qwen_grpo_lora_r16_reasonfield_muonlr3e5_full_v1`
