@@ -195,11 +195,15 @@ methods unless a new training source or evaluation demonstrates Notus/Iris
 transfer.
 
 Local `python submit.py --dry` is only a rehearsal of the bundled runner against
-`dry.yaml`; it is not the official Space environment. On this cluster it may fail
-or hang for reasons unrelated to the submission notebook, including local NDIF key
-scope, missing system-site packages in the temporary dry-run venv, or network
-access differences. Prefer static notebook checks plus the real Space submission
-when the method depends on competition-only NDIF execution.
+`dry.yaml`; it is not the official Space environment. As of 2026-07-06, the
+local `.env`/`$NDIF_API_KEY` for team `SAIN Groningen` is recognized on
+`https://aletheias.api.ndif.us` with `tier_1`, so local remote-NDIF notebook
+smokes can exercise competition traces when `NDIF_HOST=https://aletheias.api.ndif.us`
+is set. A two-row remote NNsight smoke of `submission/phoenix_wright_v1_3.ipynb`
+with `ALETHEIA_LIMIT=2` and `PHOENIX_BATCH_SIZE=2` completed successfully after
+the fallback stats fix. The bundled dry runner can still fail for reasons
+unrelated to the submission notebook, such as missing system-site packages in the
+temporary dry-run venv or other local environment differences.
 
 Keep the submission package pruned: `submit.py` excludes `.env`, `.uv-cache`,
 `results/`, `logs/`, and `dev_splits/` so credentials and local experiment
