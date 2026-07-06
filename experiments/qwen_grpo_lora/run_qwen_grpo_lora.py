@@ -818,6 +818,16 @@ def validation_log_metrics(
     return metrics
 
 
+def log_validation_metrics_to_wandb(metrics: dict[str, float], step: int | None) -> None:
+    import wandb
+
+    if wandb.run is None:
+        return
+    wandb.log(metrics, step=step)
+    for key, value in metrics.items():
+        wandb.run.summary[key] = value
+
+
 def write_predictions(path: Path, frame: pd.DataFrame, threshold: float) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame({
@@ -1055,7 +1065,7 @@ def main(cfg: DictConfig) -> None:
     default_metrics = macro_metrics(predictions, threshold=baseline_threshold)
     per_dataset = per_dataset_table(predictions, threshold)
     if bool(cfg.wandb.enabled):
-        trainer.log(
+        log_validation_metrics_to_wandb(
             validation_log_metrics(
                 selected_threshold=threshold,
                 selected_metrics=metrics,
@@ -1063,7 +1073,8 @@ def main(cfg: DictConfig) -> None:
                 baseline_metrics=default_metrics,
                 eval_meta=eval_meta,
                 per_dataset=per_dataset,
-            )
+            ),
+            step=int(trainer.state.global_step),
         )
     predictions_path = output_dir / "validation_predictions.csv"
     generations_path = output_dir / "validation_generations.jsonl"

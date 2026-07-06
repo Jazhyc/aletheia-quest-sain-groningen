@@ -127,10 +127,12 @@ Keep these measurements in mind before changing throughput-related defaults:
 W&B already records the useful TRL and GPU profiling streams when logging is
 enabled. Check these before adding custom timers:
 
-- Post-training validation metrics are logged manually after the local validation
-  split is scored. Look for keys under `validation/*` for macro selected-threshold
-  and baseline-threshold metrics, parse errors, and scoring throughput; per-dataset
-  metrics are under `validation_per_dataset/<dataset_slug>/*`.
+- Post-training validation metrics are logged directly to the active W&B run after
+  the local validation split is scored, bypassing the Trainer callback key rewrite
+  that would otherwise place custom keys under `train/*`. Look for keys under
+  `validation/*` for macro selected-threshold and baseline-threshold metrics,
+  parse errors, and scoring throughput; per-dataset metrics are under
+  `validation_per_dataset/<dataset_slug>/*`.
 - Phase timings are in the default history under
   `profiling/Time taken: MuonGRPOTrainer.*`, including `vLLM.generate`,
   `_move_model_to_vllm`, `_get_per_token_logps_and_entropies`, `compute_loss`,
