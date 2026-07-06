@@ -51,11 +51,12 @@ Current Qwen GRPO LoRA experiment context from 2026-07-06: the active setup is a
 rank-16, alpha-32 LoRA on `Qwen/Qwen3.5-9B`, targeting attention and MLP
 projection modules, trained with TRL GRPO in colocated vLLM mode and Muon for 2D
 LoRA matrices. The prompt is the no-thinking details judge with an explicit
-`<reasoning>...</reasoning>` field followed by `Rating: <1-7>`. Rewards are
-correctness weight 1.0, format weight 0.05, and completion-length penalty weight
-0.05 normalized over the 512-token completion budget. Intermediate checkpoints
-are disabled; only the final adapter is saved under `results/blackbox/<method>`.
-W&B logs and local W&B files should stay under `logs/`.
+`<reasoning>...</reasoning>` field followed by binary `Prediction: <0 or 1>`,
+where `1` means deceptive and `0` means not deceptive. Rewards are correctness
+weight 1.0 and format weight 0.05; the completion-length penalty is currently
+disabled. Intermediate checkpoints are disabled; only the final adapter is saved
+under `results/blackbox/<method>`. W&B logs and local W&B files should stay under
+`logs/`.
 
 A full one-epoch Muon learning-rate sweep was launched under the W&B project
 `aletheias-quest-qwen-grpo-r16-muon-lr-sweep` to test whether the current

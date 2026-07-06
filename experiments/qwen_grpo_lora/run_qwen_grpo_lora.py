@@ -152,14 +152,26 @@ def build_prompt(
     return prompt
 
 
-def parse_rating(text: str, *, rating_min: int, rating_max: int) -> int | None:
-    structured_match = structured_completion_match(text)
+def parse_rating(
+    text: str,
+    *,
+    rating_min: int,
+    rating_max: int,
+    output_label: str,
+) -> int | None:
+    structured_match = structured_completion_match(
+        text,
+        rating_min=rating_min,
+        rating_max=rating_max,
+        output_label=output_label,
+    )
     if structured_match is not None:
         return int(structured_match.group("rating"))
 
     rating_range = f"[{rating_min}-{rating_max}]"
+    output_label_pattern = re.escape(output_label)
     patterns = (
-        rf"(?im)\b(?:final\s+answer|final\s+rating|rating|score)\s*[:\-]?\s*\**\s*({rating_range})\b",
+        rf"(?im)\b(?:final\s+answer|final\s+{output_label_pattern}|{output_label_pattern}|prediction|score)\s*[:\-]?\s*\**\s*({rating_range})\b",
         rf"(?im)\b({rating_range})\s*/\s*{rating_max}\b",
     )
     matches: list[int] = []
@@ -526,54 +538,78 @@ def completion_text(value: Any) -> str:
 
 
 STRUCTURED_COMPLETION_RE = re.compile(
-    r"(?is)^\s*<reasoning>\s*(?P<reasoning>.+?)\s*</reasoning>\s*Rating:\s*(?P<rating>[1-7])\s*$"
+    r"(?is)^\s*<reasoning>\s*(?P<reasoning>.+?)\s*</reasoning>\s*(?P<label>[A-Za-z][A-Za-z _-]*):\s*(?P<rating>[0-9])\s*$"
 )
 
 
-def structured_completion_match(text: str) -> re.Match[str] | None:
+def structured_completion_match(
+    text: str,
+    *,
+    rating_min: int,
+    rating_max: int,
+    output_label: str,
+) -> re.Match[str] | None:
     match = STRUCTURED_COMPLETION_RE.fullmatch(text)
     if match is None or not match.group("reasoning").strip():
+        return None
+    if match.group("label").strip().casefold() != output_label.casefold():
+        return None
+    rating = int(match.group("rating"))
+    if not rating_min <= rating <= rating_max:
         return None
     return match
 
 
-def correctness_reward(completions: list[Any], label: list[int], **kwargs: Any) -> list[float]:
-    del kwargs
-    rewards = []
-    for completion, raw_label in zip(completions, label, strict=True):
-        text = completion_text(completion)
-        rating = parse_rating(text, rating_min=1, rating_max=7)
-        if rating is None:
-            rewards.append(0.0)
-            continue
-        score = rating_to_score(rating, rating_min=1, rating_max=7)
-        rewards.append(float(score if int(raw_label) == 1 else 1.0 - score))
-    return rewards
-
-
-def format_reward(completions: list[Any], **kwargs: Any) -> list[float]:
-    del kwargs
-    return [1.0 if structured_completion_match(completion_text(completion)) is not None else 0.0 for completion in completions]
-
-
-def make_length_penalty_reward(max_completion_length: int) -> Callable[..., list[float]]:
-    normalizer = max(1, int(max_completion_length))
-
-    def length_penalty_reward(
-        completions: list[Any],
-        completion_ids: list[list[int]] | None = None,
-        **kwargs: Any,
-    ) -> list[float]:
+def make_correctness_reward(
+    *,
+    rating_min: int,
+    rating_max: int,
+    output_label: str,
+) -> Callable[..., list[float]]:
+    def correctness_reward(completions: list[Any], label: list[int], **kwargs: Any) -> list[float]:
         del kwargs
-        if completion_ids is not None:
-            return [-min(len(ids), normalizer) / normalizer for ids in completion_ids]
+        rewards = []
+        for completion, raw_label in zip(completions, label, strict=True):
+            text = completion_text(completion)
+            rating = parse_rating(
+                text,
+                rating_min=rating_min,
+                rating_max=rating_max,
+                output_label=output_label,
+            )
+            if rating is None:
+                rewards.append(0.0)
+                continue
+            score = rating_to_score(rating, rating_min=rating_min, rating_max=rating_max)
+            rewards.append(float(score if int(raw_label) == 1 else 1.0 - score))
+        return rewards
+
+    correctness_reward.__name__ = "correctness_reward"
+    return correctness_reward
+
+
+def make_format_reward(
+    *,
+    rating_min: int,
+    rating_max: int,
+    output_label: str,
+) -> Callable[..., list[float]]:
+    def format_reward(completions: list[Any], **kwargs: Any) -> list[float]:
+        del kwargs
         return [
-            -min(len(completion_text(completion).split()), normalizer) / normalizer
+            1.0
+            if structured_completion_match(
+                completion_text(completion),
+                rating_min=rating_min,
+                rating_max=rating_max,
+                output_label=output_label,
+            ) is not None
+            else 0.0
             for completion in completions
         ]
 
-    length_penalty_reward.__name__ = "length_penalty_reward"
-    return length_penalty_reward
+    format_reward.__name__ = "format_reward"
+    return format_reward
 
 
 def evaluate_model(
@@ -585,6 +621,7 @@ def evaluate_model(
     max_new_tokens: int,
     rating_min: int,
     rating_max: int,
+    output_label: str,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     device = model.device
     rows = []
@@ -611,7 +648,12 @@ def evaluate_model(
             completion_ids = outputs[:, prompt_len:]
             texts = tokenizer.batch_decode(completion_ids, skip_special_tokens=True)
             for (_, row), text in zip(batch.iterrows(), texts, strict=True):
-                rating = parse_rating(text, rating_min=rating_min, rating_max=rating_max)
+                rating = parse_rating(
+                    text,
+                    rating_min=rating_min,
+                    rating_max=rating_max,
+                    output_label=output_label,
+                )
                 if rating is None:
                     parse_errors += 1
                     score = 0.0
@@ -624,7 +666,12 @@ def evaluate_model(
                     "score": float(score),
                     "rating": rating,
                     "parse_error": rating is None,
-                    "format_valid": structured_completion_match(text) is not None,
+                    "format_valid": structured_completion_match(
+                        text,
+                        rating_min=rating_min,
+                        rating_max=rating_max,
+                        output_label=output_label,
+                    ) is not None,
                     "generation": text,
                 })
     elapsed = time.time() - started
@@ -807,6 +854,9 @@ def main(cfg: DictConfig) -> None:
     include_reasoning = bool(cfg.judge.include_reasoning)
     reasoning_max_chars = int(cfg.judge.reasoning_max_chars)
     baseline_threshold = float(cfg.scoring.baseline_threshold)
+    output_min = int(cfg.scoring.output_min)
+    output_max = int(cfg.scoring.output_max)
+    output_label = str(cfg.scoring.output_label)
 
     if bool(cfg.wandb.enabled):
         if cfg.wandb.entity is not None:
@@ -956,6 +1006,9 @@ def main(cfg: DictConfig) -> None:
         "include_reasoning": include_reasoning,
         "reasoning_max_chars": reasoning_max_chars,
         "baseline_threshold": baseline_threshold,
+        "output_min": output_min,
+        "output_max": output_max,
+        "output_label": output_label,
         "train_rows": int(len(train.frame)),
         "validation_rows": int(len(validation.frame)),
     }
@@ -966,9 +1019,16 @@ def main(cfg: DictConfig) -> None:
         model=model,
         args=training_args,
         reward_funcs=[
-            correctness_reward,
-            format_reward,
-            make_length_penalty_reward(int(cfg.training.max_completion_length)),
+            make_correctness_reward(
+                rating_min=output_min,
+                rating_max=output_max,
+                output_label=output_label,
+            ),
+            make_format_reward(
+                rating_min=output_min,
+                rating_max=output_max,
+                output_label=output_label,
+            ),
         ],
         train_dataset=package_dataset(train.frame),
         processing_class=tokenizer,
@@ -987,8 +1047,9 @@ def main(cfg: DictConfig) -> None:
         validation=validation,
         batch_size=int(cfg.evaluation.batch_size),
         max_new_tokens=int(cfg.training.max_completion_length),
-        rating_min=1,
-        rating_max=7,
+        rating_min=output_min,
+        rating_max=output_max,
+        output_label=output_label,
     )
     threshold, metrics = select_threshold(predictions)
     default_metrics = macro_metrics(predictions, threshold=baseline_threshold)

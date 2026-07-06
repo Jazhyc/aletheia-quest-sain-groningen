@@ -282,25 +282,48 @@ def apply_global_limit(records: SplitRecords, limit: int | None) -> SplitRecords
 
 
 STRUCTURED_COMPLETION_RE = re.compile(
-    r"(?is)^\s*<reasoning>\s*(?P<reasoning>.+?)\s*</reasoning>\s*Rating:\s*(?P<rating>[1-7])\s*$"
+    r"(?is)^\s*<reasoning>\s*(?P<reasoning>.+?)\s*</reasoning>\s*(?P<label>[A-Za-z][A-Za-z _-]*):\s*(?P<rating>[0-9])\s*$"
 )
 
 
-def structured_completion_match(text: str) -> re.Match[str] | None:
+def structured_completion_match(
+    text: str,
+    *,
+    rating_min: int,
+    rating_max: int,
+    output_label: str,
+) -> re.Match[str] | None:
     match = STRUCTURED_COMPLETION_RE.fullmatch(text)
     if match is None or not match.group("reasoning").strip():
+        return None
+    if match.group("label").strip().casefold() != output_label.casefold():
+        return None
+    rating = int(match.group("rating"))
+    if not rating_min <= rating <= rating_max:
         return None
     return match
 
 
-def parse_rating(text: str, *, rating_min: int, rating_max: int) -> int | None:
-    structured_match = structured_completion_match(text)
+def parse_rating(
+    text: str,
+    *,
+    rating_min: int,
+    rating_max: int,
+    output_label: str,
+) -> int | None:
+    structured_match = structured_completion_match(
+        text,
+        rating_min=rating_min,
+        rating_max=rating_max,
+        output_label=output_label,
+    )
     if structured_match is not None:
         return int(structured_match.group("rating"))
 
     rating_range = f"[{rating_min}-{rating_max}]"
+    output_label_pattern = re.escape(output_label)
     patterns = (
-        rf"(?im)\b(?:final\s+answer|final\s+rating|rating|score)\s*[:\-]?\s*\**\s*({rating_range})\b",
+        rf"(?im)\b(?:final\s+answer|final\s+{output_label_pattern}|{output_label_pattern}|prediction|score)\s*[:\-]?\s*\**\s*({rating_range})\b",
         rf"(?im)\b({rating_range})\s*/\s*{rating_max}\b",
     )
     matches: list[int] = []
@@ -327,6 +350,7 @@ def evaluate_model(
     max_new_tokens: int,
     rating_min: int,
     rating_max: int,
+    output_label: str,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     device = model.device
     rows = []
@@ -356,7 +380,12 @@ def evaluate_model(
             completion_ids = outputs[:, prompt_len:]
             texts = tokenizer.batch_decode(completion_ids, skip_special_tokens=True)
             for (_, row), text in zip(batch.iterrows(), texts, strict=True):
-                rating = parse_rating(text, rating_min=rating_min, rating_max=rating_max)
+                rating = parse_rating(
+                    text,
+                    rating_min=rating_min,
+                    rating_max=rating_max,
+                    output_label=output_label,
+                )
                 if rating is None:
                     parse_errors += 1
                     score = 0.0
@@ -369,7 +398,12 @@ def evaluate_model(
                     "score": float(score),
                     "rating": rating,
                     "parse_error": rating is None,
-                    "format_valid": structured_completion_match(text) is not None,
+                    "format_valid": structured_completion_match(
+                        text,
+                        rating_min=rating_min,
+                        rating_max=rating_max,
+                        output_label=output_label,
+                    ) is not None,
                     "generation": text,
                 })
     elapsed = time.time() - started
@@ -390,6 +424,7 @@ def evaluate_vllm_model(
     max_new_tokens: int,
     rating_min: int,
     rating_max: int,
+    output_label: str,
     dtype: str,
     gpu_memory_utilization: float,
     max_model_len: int,
@@ -441,7 +476,12 @@ def evaluate_vllm_model(
     parse_errors = 0
     for (_, row), output in zip(records.frame.iterrows(), outputs, strict=True):
         text = output.outputs[0].text if output.outputs else ""
-        rating = parse_rating(text, rating_min=rating_min, rating_max=rating_max)
+        rating = parse_rating(
+            text,
+            rating_min=rating_min,
+            rating_max=rating_max,
+            output_label=output_label,
+        )
         if rating is None:
             parse_errors += 1
             score = 0.0
@@ -454,7 +494,12 @@ def evaluate_vllm_model(
             "score": float(score),
             "rating": rating,
             "parse_error": rating is None,
-            "format_valid": structured_completion_match(text) is not None,
+            "format_valid": structured_completion_match(
+                text,
+                rating_min=rating_min,
+                rating_max=rating_max,
+                output_label=output_label,
+            ) is not None,
             "generation": text,
         })
 
@@ -663,6 +708,15 @@ def cfg_get(config: dict[str, Any], path: str) -> Any:
     return value
 
 
+def cfg_get_default(config: dict[str, Any], path: str, default: Any) -> Any:
+    value: Any = config
+    for part in path.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return default
+        value = value[part]
+    return value
+
+
 def main() -> None:
     args = parse_args()
     adapter_dir = args.adapter_dir.resolve()
@@ -716,6 +770,9 @@ def main() -> None:
         if args.threshold is not None
         else float(cfg_get(config, "scoring.baseline_threshold"))
     )
+    output_min = int(cfg_get_default(config, "scoring.output_min", 1))
+    output_max = int(cfg_get_default(config, "scoring.output_max", 7))
+    output_label = str(cfg_get_default(config, "scoring.output_label", "Rating"))
     max_model_len = (
         args.max_model_len
         if args.max_model_len is not None
@@ -729,8 +786,9 @@ def main() -> None:
             adapter_dir=adapter_dir,
             records=records,
             max_new_tokens=max_new_tokens,
-            rating_min=1,
-            rating_max=7,
+            rating_min=output_min,
+            rating_max=output_max,
+            output_label=output_label,
             dtype=str(args.dtype),
             gpu_memory_utilization=float(args.gpu_memory_utilization),
             max_model_len=max_model_len,
@@ -758,8 +816,9 @@ def main() -> None:
             records=records,
             batch_size=batch_size,
             max_new_tokens=max_new_tokens,
-            rating_min=1,
-            rating_max=7,
+            rating_min=output_min,
+            rating_max=output_max,
+            output_label=output_label,
         )
     metrics = macro_metrics(predictions, threshold=threshold)
 
@@ -816,6 +875,9 @@ def main() -> None:
             "max_model_len": max_model_len,
             "max_new_tokens": max_new_tokens,
             "max_num_seqs": args.max_num_seqs,
+            "output_min": output_min,
+            "output_max": output_max,
+            "output_label": output_label,
             "training_config": config,
         },
         "datasets": [asdict(dataset) for dataset in datasets],

@@ -8,7 +8,8 @@ threshold selection.
 Default setup:
 
 - Base model: `Qwen/Qwen3.5-9B`
-- Prompt: no-thinking judge prompt with a visible `<reasoning>` field and final rating
+- Prompt: no-thinking judge prompt with a visible `<reasoning>` field and final
+  binary prediction
 - Chat template: `enable_thinking=false`
 - LoRA: rank `16`, alpha `32`, target modules `q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj`
 - Training: one epoch, default TRL DAPO objective, Muon over LoRA matrices,
@@ -41,25 +42,25 @@ sbatch experiments/qwen_grpo_lora/run_qwen_grpo_lora.sh training.learning_rate=5
 sbatch experiments/qwen_grpo_lora/run_qwen_grpo_lora.sh vllm.enabled=false
 ```
 
-The reward is label-supervised and parse-aware: parseable ratings are converted
-to `[0, 1]`, positives are rewarded for high scores, negatives for low scores,
-and invalid completions receive no correctness reward. A small format reward
-encourages a visible reasoning field followed by the strict rating:
+The reward is label-supervised and parse-aware: parseable binary predictions are
+converted to `[0, 1]`, positives are rewarded for predicting `1`, negatives for
+predicting `0`, and invalid completions receive no correctness reward. A small
+format reward encourages a visible reasoning field followed by the strict binary
+prediction:
 
 ```text
 <reasoning>
 Concise evidence comparison.
 </reasoning>
-Rating: N
+Prediction: N
 ```
 
-A matching 5% length penalty uses generated token count normalized by the
-512-token completion budget, so using the full budget contributes `-0.05` after
-reward weighting.
+There is currently no completion-length penalty reward. The active reward
+weights are correctness `1.0` and format `0.05`.
 
 ## Results and Backend Notes
 
-Current strongest training run:
+Strongest completed training run before the binary-output change:
 
 - Method: `qwen_grpo_lora_r16_reasonfield_muonlr3e5_full_v1`
 - Adapter: `results/blackbox/qwen_grpo_lora_r16_reasonfield_muonlr3e5_full_v1/adapter`
