@@ -61,6 +61,22 @@ weights are correctness `1.0` and format `0.05`.
 
 ## Results and Backend Notes
 
+Binary-output run:
+
+- Method: `qwen_grpo_lora_r16_binary_t12_muonlr3e5_full_v2`
+- Adapter: `results/blackbox/qwen_grpo_lora_r16_binary_t12_muonlr3e5_full_v2/adapter`
+- Training setting: `training.muon_learning_rate=3e-5`, `training.learning_rate=1e-6`,
+  `training.temperature=1.2`, binary `Prediction: <0 or 1>` output, and no
+  length penalty reward.
+
+On validation after training, threshold `0.5` scored balanced accuracy/AUROC
+`0.9262`, recall `0.9238`, FPR `0.0714`, with 1 parse error. On the local test
+split with the fair vLLM LoRA evaluator, threshold `0.5` scored balanced
+accuracy/AUROC `0.8762`, recall `0.7714`, FPR `0.0190`, with 6 parse errors and
+`40.7s` scoring-only time (`20.2 rows/s`). This is a small balanced-accuracy
+improvement over the earlier rating-field GRPO adapter while shifting the error
+profile toward lower FPR and lower recall.
+
 Strongest completed training run before the binary-output change:
 
 - Method: `qwen_grpo_lora_r16_reasonfield_muonlr3e5_full_v1`
