@@ -723,6 +723,54 @@ def per_dataset_table(frame: pd.DataFrame, threshold: float) -> list[dict[str, A
     return rows
 
 
+def wandb_key_slug(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_")
+
+
+def add_metric(
+    out: dict[str, float],
+    key: str,
+    value: float | int | None,
+) -> None:
+    if value is None:
+        return
+    out[key] = float(value)
+
+
+def validation_log_metrics(
+    *,
+    selected_threshold: float,
+    selected_metrics: dict[str, float | None],
+    baseline_threshold: float,
+    baseline_metrics: dict[str, float | None],
+    eval_meta: dict[str, Any],
+    per_dataset: list[dict[str, Any]],
+) -> dict[str, float]:
+    metrics: dict[str, float] = {
+        "validation/selected_threshold": float(selected_threshold),
+        "validation/baseline_threshold": float(baseline_threshold),
+    }
+    for name, value in selected_metrics.items():
+        add_metric(metrics, f"validation/selected_threshold_{name}", value)
+    for name, value in baseline_metrics.items():
+        add_metric(metrics, f"validation/baseline_threshold_{name}", value)
+
+    add_metric(metrics, "validation/parse_errors", eval_meta.get("parse_errors"))
+    add_metric(metrics, "validation/score_seconds", eval_meta.get("score_time_seconds"))
+    add_metric(metrics, "validation/rows_per_second", eval_meta.get("rows_per_second"))
+
+    for dataset in per_dataset:
+        dataset_key = wandb_key_slug(str(dataset["dataset"]))
+        add_metric(metrics, f"validation_per_dataset/{dataset_key}/n", dataset.get("n"))
+        for name in ["balanced_accuracy", "auroc", "recall", "fpr"]:
+            add_metric(
+                metrics,
+                f"validation_per_dataset/{dataset_key}/{name}",
+                dataset.get(name),
+            )
+    return metrics
+
+
 def write_predictions(path: Path, frame: pd.DataFrame, threshold: float) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame({
@@ -944,6 +992,18 @@ def main(cfg: DictConfig) -> None:
     )
     threshold, metrics = select_threshold(predictions)
     default_metrics = macro_metrics(predictions, threshold=baseline_threshold)
+    per_dataset = per_dataset_table(predictions, threshold)
+    if bool(cfg.wandb.enabled):
+        trainer.log(
+            validation_log_metrics(
+                selected_threshold=threshold,
+                selected_metrics=metrics,
+                baseline_threshold=baseline_threshold,
+                baseline_metrics=default_metrics,
+                eval_meta=eval_meta,
+                per_dataset=per_dataset,
+            )
+        )
     predictions_path = output_dir / "validation_predictions.csv"
     generations_path = output_dir / "validation_generations.jsonl"
     write_predictions(predictions_path, predictions, threshold)
@@ -959,7 +1019,7 @@ def main(cfg: DictConfig) -> None:
             "selected_threshold_metrics": metrics,
             "baseline_threshold": baseline_threshold,
             "baseline_threshold_metrics": default_metrics,
-            "per_dataset": per_dataset_table(predictions, threshold),
+            "per_dataset": per_dataset,
             **eval_meta,
             "predictions_path": predictions_path.as_posix(),
             "generations_path": generations_path.as_posix(),
