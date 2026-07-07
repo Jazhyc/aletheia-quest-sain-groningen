@@ -242,6 +242,13 @@ session. The batch-16 shape passed a synthetic remote test with 17 prompts,
 `max_prompt_tokens=2048`, `max_new_tokens=64`, and long filler prompts, and the
 actual notebook passed the local notebook runner on 17 dev Metis rows in about
 59s. This covers one full batch plus a final partial batch.
+Phoenix Wright tokenizer hardening from 2026-07-07: ordinary weird text
+(nulls, RTL controls, emoji/ZWJ, combining marks, private-use chars, huge text,
+XML-ish delimiter injection, `None`, numeric/list/dict content) tokenized
+successfully, but lone UTF-16 surrogate code points caused the Qwen tokenizer to
+raise `TypeError: TextEncodeInput must be ...`. The notebook now normalizes
+prompt role/content/reasoning text through `phoenix_wright_text.safe_text`, which
+UTF-8 encodes/decodes with replacement before chat templating/tokenization.
 
 Keep the submission package pruned: `submit.py` excludes `.env`, `.uv-cache`,
 `results/`, `logs/`, and `dev_splits/` so credentials and local experiment
