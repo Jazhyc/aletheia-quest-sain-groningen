@@ -209,11 +209,13 @@ Phoenix Wright remote NNsight session finding from 2026-07-07: avoid one
 `model.session(remote=True)` per generated batch. Rapid successive NDIF sessions
 can stall after the first batch even when isolated remote tests pass. For
 `Qwen/Qwen3.5-9B`, use `VisionLanguageModel`, matching the repo judge baseline;
-the same multi-generate session shape hung repeatedly with `LanguageModel` while
-single-batch `LanguageModel` calls still passed. The tested working generation
-shape is to precompute batch metadata locally, pad each batch to the same prompt
-length with `padding="max_length"`, open one remote session, append each
-generated-token proxy to a normal in-session Python list, then call
+do not infer `LanguageModel` is safe just because a single remote generate
+succeeds. In remote tests, single-batch `LanguageModel` calls passed, but the
+same multi-generate session shape hung repeatedly with `LanguageModel` and only
+became reliable after switching to `VisionLanguageModel`. The tested working
+generation shape is to precompute batch metadata locally, pad each batch to the
+same prompt length with `padding="max_length"`, open one remote session, append
+each generated-token proxy to a normal in-session Python list, then call
 `torch.cat(generated_pieces, dim=0).save()` once at the end of the session.
 Decode and parse the saved generated-token tensor locally after the session
 exits. `torch.cat` handles a final partial batch as long as generated token
