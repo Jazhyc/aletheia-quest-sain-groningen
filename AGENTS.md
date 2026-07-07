@@ -236,6 +236,12 @@ session/resource/time/backend limit in the Space. Per-batch OOM probing at
 batch sizes 4, 8, 16, and 24 passed, while 28 and 32 failed with explicit CUDA
 OOMs on NDIF. Treat 24 as the highest tested passing batch and keep official
 submissions much lower unless retested.
+Phoenix Wright notebook default batch size was raised from 2 to 16 on
+2026-07-07 to reduce the number of `generate` calls inside the single NDIF
+session. The batch-16 shape passed a synthetic remote test with 17 prompts,
+`max_prompt_tokens=2048`, `max_new_tokens=64`, and long filler prompts, and the
+actual notebook passed the local notebook runner on 17 dev Metis rows in about
+59s. This covers one full batch plus a final partial batch.
 
 Keep the submission package pruned: `submit.py` excludes `.env`, `.uv-cache`,
 `results/`, `logs/`, and `dev_splits/` so credentials and local experiment

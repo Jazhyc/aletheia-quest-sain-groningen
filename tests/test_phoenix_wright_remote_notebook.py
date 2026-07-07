@@ -38,8 +38,8 @@ def test_remote_notebook_scores_survive_nnsight_session(monkeypatch):
 
     monkeypatch.setenv("NDIF_HOST", NDIF_HOST)
     monkeypatch.setenv("DATASET_NAME", DEV_METIS)
-    monkeypatch.setenv("ALETHEIA_LIMIT", "3")
-    monkeypatch.setenv("PHOENIX_BATCH_SIZE", "2")
+    monkeypatch.setenv("ALETHEIA_LIMIT", "17")
+    monkeypatch.setenv("PHOENIX_BATCH_SIZE", "16")
     monkeypatch.delenv("PHOENIX_NNSIGHT_LOCAL", raising=False)
 
     if SUBMISSION_CSV.exists():
@@ -57,7 +57,7 @@ def test_remote_notebook_scores_survive_nnsight_session(monkeypatch):
         assert SUBMISSION_CSV.exists(), "notebook did not write submission.csv"
         df = pd.read_csv(SUBMISSION_CSV)
         assert list(df.columns) == ["index", "deceptive", "score"]
-        assert len(df) == 3
+        assert len(df) == 17
         assert df["score"].between(0.0, 1.0).all()
         assert df["score"].tolist()[:2] == [0.0, 1.0]
         assert df["deceptive"].tolist()[:2] == [False, True]
