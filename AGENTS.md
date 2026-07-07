@@ -226,11 +226,16 @@ still do not survive unless they are consumed into a saved value inside the same
 session.
 Remote stress tests on 2026-07-07 did not reproduce an immediate OOM at the
 submission tensor shape: the one-session `VisionLanguageModel` generation test
-passed with 32, 64, and 128 synthetic prompts, `batch_size=2`,
+passed with 32, 64, 128, and 256 synthetic prompts, `batch_size=2`,
 `max_prompt_tokens=2048`, `max_new_tokens=64`, and long filler prompts. The
-128-prompt run took about 4m35s. This lowers confidence that the latest official
-Eunomia failure was a simple per-batch/prompt OOM, but it does not rule out a
-larger whole-dataset session/resource/time/backend limit in the Space.
+128-prompt run took about 4m35s and the 256-prompt run took about 8m27s. This
+lowers confidence that the latest official Eunomia failure was a simple
+per-batch/prompt OOM, but it does not rule out a larger whole-dataset
+session/resource/time/backend limit in the Space. Per-batch OOM probing at
+`max_prompt_tokens=2048`, `max_new_tokens=64`, and long filler prompts found
+batch sizes 4, 8, 16, and 24 passed, while 28 and 32 failed with explicit CUDA
+OOMs on NDIF. Treat 24 as the highest tested passing batch and keep official
+submissions much lower unless retested.
 
 Keep the submission package pruned: `submit.py` excludes `.env`, `.uv-cache`,
 `results/`, `logs/`, and `dev_splits/` so credentials and local experiment

@@ -13,8 +13,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 NDIF_HOST = "https://aletheias.api.ndif.us"
 JUDGE_MODEL = "Qwen/Qwen3.5-9B"
 MAX_PROMPT_TOKENS = int(os.environ.get("PHOENIX_ONE_SESSION_MAX_PROMPT_TOKENS", "512"))
-MAX_NEW_TOKENS = 64
-BATCH_SIZE = 2
+MAX_NEW_TOKENS = int(os.environ.get("PHOENIX_ONE_SESSION_MAX_NEW_TOKENS", "64"))
+BATCH_SIZE = int(os.environ.get("PHOENIX_ONE_SESSION_BATCH_SIZE", "2"))
 TOTAL_PROMPTS = int(os.environ.get("PHOENIX_ONE_SESSION_TOTAL_PROMPTS", "4"))
 CONTEXT_REPEATS = int(os.environ.get("PHOENIX_ONE_SESSION_CONTEXT_REPEATS", "0"))
 
