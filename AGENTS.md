@@ -224,6 +224,13 @@ widths match, which the remote test with three prompts verified. A variant using
 do not use that pattern. Ordinary local side effects inside a remote session
 still do not survive unless they are consumed into a saved value inside the same
 session.
+Remote stress tests on 2026-07-07 did not reproduce an immediate OOM at the
+submission tensor shape: the one-session `VisionLanguageModel` generation test
+passed with 32, 64, and 128 synthetic prompts, `batch_size=2`,
+`max_prompt_tokens=2048`, `max_new_tokens=64`, and long filler prompts. The
+128-prompt run took about 4m35s. This lowers confidence that the latest official
+Eunomia failure was a simple per-batch/prompt OOM, but it does not rule out a
+larger whole-dataset session/resource/time/backend limit in the Space.
 
 Keep the submission package pruned: `submit.py` excludes `.env`, `.uv-cache`,
 `results/`, `logs/`, and `dev_splits/` so credentials and local experiment
