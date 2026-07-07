@@ -249,6 +249,11 @@ successfully, but lone UTF-16 surrogate code points caused the Qwen tokenizer to
 raise `TypeError: TextEncodeInput must be ...`. The notebook now normalizes
 prompt role/content/reasoning text through `phoenix_wright_text.safe_text`, which
 UTF-8 encodes/decodes with replacement before chat templating/tokenization.
+The same helper module also hardens malformed message structure before prompt
+construction: `None`, scalar/string dialogues, dict-as-dialogue rows, and mixed
+message lists containing non-dict items are normalized before the notebook reads
+roles/content/reasoning. This prevents `.get`/`reversed` failures before the
+model call while still allowing genuine NDIF/generation errors to fail loudly.
 
 Keep the submission package pruned: `submit.py` excludes `.env`, `.uv-cache`,
 `results/`, `logs/`, and `dev_splits/` so credentials and local experiment

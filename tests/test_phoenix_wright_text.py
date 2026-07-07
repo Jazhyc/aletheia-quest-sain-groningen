@@ -3,7 +3,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "submission"))
 
-from phoenix_wright_text import safe_text
+from phoenix_wright_text import (
+    iter_messages,
+    message_content,
+    message_field,
+    message_role,
+    safe_text,
+)
 
 
 def test_safe_text_replaces_lone_surrogates():
@@ -18,3 +24,30 @@ def test_safe_text_accepts_non_string_values():
     assert safe_text(None) == "None"
     assert safe_text(123) == "123"
     assert safe_text({"why": "because"}) == "{'why': 'because'}"
+
+
+def test_iter_messages_handles_malformed_dialogues():
+    assert iter_messages(None) == []
+    assert iter_messages("hello") == [{"role": "", "content": "hello"}]
+    assert iter_messages(123) == [{"role": "", "content": 123}]
+
+    message = {"role": "assistant", "content": "ok"}
+    assert iter_messages(message) == [message]
+
+
+def test_message_accessors_handle_non_mapping_messages():
+    assert message_role("loose text") == ""
+    assert message_content("loose text") == "loose text"
+    assert message_field("loose text", "reasoning") == ""
+
+
+def test_message_accessors_sanitize_mapping_values():
+    message = {
+        "role": "assistant" + chr(0xD800),
+        "content": "answer" + chr(0xDC00),
+        "reasoning": None,
+    }
+
+    assert message_role(message) == "assistant?"
+    assert message_content(message) == "answer?"
+    assert message_field(message, "reasoning") == ""
