@@ -20,6 +20,7 @@ import argparse
 import fnmatch
 import io
 import itertools
+import json
 import os
 import sys
 import tempfile
@@ -193,17 +194,26 @@ def submit(space_url: str, team: str, payload: bytes,
         # notebook can load gated HF models you have access to.
         headers["Authorization"] = f"Bearer {hf_token}"
         headers["X-HF-Token"] = hf_token
+    # Ask for live progress. Older Spaces ignore this and return one JSON body,
+    # which is handled below.
+    headers["Accept"] = "text/event-stream"
     _info("entering the lists as " + _bold(team or "(remembered team)")
           + (_dim("   ·   ") + _bold(f"{tag}-box") if tag else "")
           + _dim("   →   " + url))
 
     err = None
+    body = None
     with Spinner("running your submission  "
-                 + _dim("venv · deps · notebooks · NDIF traces")):
+                 + _dim("venv · deps · notebooks · NDIF traces")) as sp:
         try:
             resp = requests.post(url, data=data, files=files, headers=headers,
-                                 timeout=None)   # no client timeout: a full eval run
-                                                 # over all datasets can be long
+                                 stream=True, timeout=None)   # no client timeout:
+                                                 # a full eval run can be long
+            ctype = resp.headers.get("Content-Type", "")
+            if resp.status_code == 200 and "text/event-stream" in ctype:
+                body = _consume_stream(resp, sp)
+            elif resp.status_code == 200:
+                body = resp.json()
         except requests.RequestException as e:
             resp, err = None, e
     if resp is None:
@@ -220,13 +230,65 @@ def submit(space_url: str, team: str, payload: bytes,
         print("     " + _dim(_shorten(detail, 200)))
         sys.exit(1)
 
-    try:
-        body = resp.json()
-    except ValueError:
-        print(resp.text)
-        return
+    if body is None:
+        _bad("the stream ended before a result arrived  "
+             + _dim("— check the Space, or retry"))
+        sys.exit(1)
+    if body.get("_error"):
+        _bad(_bold("submission failed"))
+        print("     " + _dim(_shorten(body["_error"], 200)))
+        sys.exit(1)
     _render_results("the ledger answers", body.get("results") or [],
                     body.get("failures") or [], body.get("message"))
+
+
+def _consume_stream(resp, sp) -> dict | None:
+    """Read SSE progress and return the terminal result payload."""
+    event, chunks, result = None, [], None
+    for raw in resp.iter_lines():
+        line = raw.decode("utf-8", "replace") if raw else ""
+        if line == "":
+            if event is not None:
+                try:
+                    payload = json.loads("\n".join(chunks)) if chunks else {}
+                except ValueError:
+                    payload = {}
+                result = _on_stream_event(event, payload, sp) or result
+            event, chunks = None, []
+        elif line.startswith("event:"):
+            event = line[len("event:"):].strip()
+        elif line.startswith("data:"):
+            chunks.append(line[len("data:"):].lstrip())
+    return result
+
+
+def _on_stream_event(event: str, data: dict, sp) -> dict | None:
+    """Translate one SSE event into a spinner update."""
+    if event == "received":
+        sp.text = "received  " + _dim("· queued")
+    elif event == "queued":
+        ahead = data.get("ahead") or 0
+        sp.text = "queued  " + _dim(f"· {ahead} ahead in line" if ahead else "· next up")
+    elif event == "running":
+        sp.text = "running  " + _dim("venv · deps · notebooks · NDIF traces")
+    elif event == "dataset":
+        i, n, ds = data.get("index"), data.get("total"), data.get("dataset", "?")
+        mark = ("" if data.get("phase") != "done"
+                else (_ok_mark() if data.get("ok") else _fail_mark()))
+        sp.text = f"running  {_bold(f'{i}/{n}')}  {ds}{mark}"
+    elif event == "result":
+        return data
+    elif event == "error":
+        return {"_error": data.get("message", "submission failed")}
+    return None
+
+
+def _ok_mark() -> str:
+    return _dim(" ✓")
+
+
+def _fail_mark() -> str:
+    return _dim(" ✗")
 
 
 # Metric keys -> short labels, in display order (balanced accuracy is primary).
