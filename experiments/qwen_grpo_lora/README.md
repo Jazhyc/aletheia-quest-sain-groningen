@@ -86,6 +86,22 @@ accuracy), and the 4096-token three-prompt reasoning ensemble (`0.9298`
 balanced accuracy). Treat this run as evidence that RL can learn a clean binary,
 low-FPR judge, not as evidence that the current RL setup has surpassed prompting.
 
+Exact next-token binary-logit scoring is much stronger than generation parsing
+for the same binary adapter. The evaluator
+`experiments/qwen_grpo_lora/evaluate_qwen_grpo_lora_logits.py` appends an
+assistant completion prefix with an empty reasoning field,
+`<reasoning>\n</reasoning>\nPrediction: `, then computes
+`softmax(logit("0"), logit("1"))` for the next token. It keeps the original
+training prompt's `<assistant_reasoning>` input field. On the local test split,
+threshold `0.5` scored balanced accuracy `0.9024`, AUROC `0.9646`, recall
+`0.8714`, and FPR `0.0667` in `51.0s` scoring time. A test-set threshold sweep
+peaked at balanced accuracy `0.9226` with threshold `0.3486`, recall `0.9238`,
+and FPR `0.0786`. Selecting the threshold on validation instead chose `0.5622`;
+applying that to test scored balanced accuracy `0.9012`, recall `0.8619`, and
+FPR `0.0595`. The logits are not completely saturated: on test, the median score
+for negatives was `0.0025`, the median for positives was `0.9903`, but positive
+5th percentile was still `0.0675` and negative 95th percentile was `0.7311`.
+
 Strongest completed training run before the binary-output change:
 
 - Method: `qwen_grpo_lora_r16_reasonfield_muonlr3e5_full_v1`
