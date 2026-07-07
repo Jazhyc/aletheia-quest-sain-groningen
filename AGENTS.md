@@ -205,20 +205,23 @@ the fallback stats fix. The bundled dry runner can still fail for reasons
 unrelated to the submission notebook, such as missing system-site packages in the
 temporary dry-run venv or other local environment differences.
 
-Phoenix Wright remote NNsight session finding from 2026-07-07: one
-`model.session(remote=True)` can contain multiple `model.generate(...).save()`
-calls and still decode/parse correctly after the session, but local Python
-bookkeeping inside the session is unsafe. In local remote tests, mutating a list
-with `outputs.append(...)` inside the session left the local list empty, and
-assigning normal metadata variables inside the session left them unbound. The
-working one-session shape was to precompute all batch metadata before entering
-the session, put only the unrolled saved generate calls inside it
-(`out0 = model.generator.output.save()`, `out1 = ...`), and decode/parse/update
-scores after the session exits. Do not switch the submission notebook to a
-normal loop that appends outputs inside one remote session; if optimizing
-throughput, first test a bounded grouped/unrolled session size (for example 8 or
-16 batches) with mandatory remote notebook tests, because very large single
-sessions may hit NDIF trace size, serialization, timeout, or memory limits.
+Phoenix Wright remote NNsight session finding from 2026-07-07: avoid one
+`model.session(remote=True)` per generated batch. Rapid successive NDIF sessions
+can stall after the first batch even when isolated remote tests pass. For
+`Qwen/Qwen3.5-9B`, use `VisionLanguageModel`, matching the repo judge baseline;
+the same multi-generate session shape hung repeatedly with `LanguageModel` while
+single-batch `LanguageModel` calls still passed. The tested working generation
+shape is to precompute batch metadata locally, pad each batch to the same prompt
+length with `padding="max_length"`, open one remote session, append each
+generated-token proxy to a normal in-session Python list, then call
+`torch.cat(generated_pieces, dim=0).save()` once at the end of the session.
+Decode and parse the saved generated-token tensor locally after the session
+exits. `torch.cat` handles a final partial batch as long as generated token
+widths match, which the remote test with three prompts verified. A variant using
+`generated_batches = list().save()` followed by appends hung in remote testing;
+do not use that pattern. Ordinary local side effects inside a remote session
+still do not survive unless they are consumed into a saved value inside the same
+session.
 
 Keep the submission package pruned: `submit.py` excludes `.env`, `.uv-cache`,
 `results/`, `logs/`, and `dev_splits/` so credentials and local experiment

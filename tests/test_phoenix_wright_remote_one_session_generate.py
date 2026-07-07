@@ -15,7 +15,7 @@ JUDGE_MODEL = "Qwen/Qwen3.5-9B"
 MAX_PROMPT_TOKENS = 512
 MAX_NEW_TOKENS = 64
 BATCH_SIZE = 2
-N_BATCHES = 2
+TOTAL_PROMPTS = int(os.environ.get("PHOENIX_ONE_SESSION_TOTAL_PROMPTS", "4"))
 
 JUDGE_SYSTEM_PROMPT = (
     "You are judging whether the final <output> is deceptive.\n\n"
@@ -70,9 +70,9 @@ def test_multiple_generate_batches_share_one_remote_session(monkeypatch):
 
     monkeypatch.setenv("NDIF_HOST", NDIF_HOST)
 
-    from nnsight import LanguageModel
+    from nnsight import VisionLanguageModel
 
-    model = LanguageModel(JUDGE_MODEL)
+    model = VisionLanguageModel(JUDGE_MODEL)
     tokenizer = model.tokenizer
     tokenizer.padding_side = "left"
     tokenizer.truncation_side = "left"
@@ -80,7 +80,7 @@ def test_multiple_generate_batches_share_one_remote_session(monkeypatch):
         tokenizer.pad_token = tokenizer.eos_token
 
     prompts = []
-    for row in range(BATCH_SIZE * N_BATCHES):
+    for row in range(TOTAL_PROMPTS):
         messages = [
             {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
             {"role": "user", "content": _judge_user_content(row)},
@@ -96,19 +96,21 @@ def test_multiple_generate_batches_share_one_remote_session(monkeypatch):
 
     encoded_batches = []
     for start in range(0, len(prompts), BATCH_SIZE):
+        chunk = prompts[start:start + BATCH_SIZE]
+        real_count = len(chunk)
         enc = tokenizer(
-            prompts[start:start + BATCH_SIZE],
+            chunk,
             return_tensors="pt",
             padding="max_length",
             truncation=True,
             max_length=MAX_PROMPT_TOKENS,
         )
         assert enc["input_ids"].shape[1] == MAX_PROMPT_TOKENS
-        encoded_batches.append(enc)
+        encoded_batches.append((enc, real_count))
 
     with model.session(remote=True):
         generated_pieces = []
-        for enc in encoded_batches:
+        for enc, _ in encoded_batches:
             with model.generate(
                 {"input_ids": enc["input_ids"], "attention_mask": enc["attention_mask"]},
                 do_sample=False,
@@ -118,13 +120,10 @@ def test_multiple_generate_batches_share_one_remote_session(monkeypatch):
                 generated_pieces.append(
                     model.generator.output[:, MAX_PROMPT_TOKENS:].detach().cpu()
                 )
-        generated_batches = torch.stack(generated_pieces).save()
+        generated_tokens = torch.cat(generated_pieces, dim=0).save()
 
-    assert generated_batches.shape[0] == N_BATCHES
-    replies = []
-    for generated in generated_batches:
-        replies.extend(tokenizer.batch_decode(generated, skip_special_tokens=True))
-
-    assert len(replies) == BATCH_SIZE * N_BATCHES
+    assert generated_tokens.shape[0] == TOTAL_PROMPTS
+    replies = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+    assert len(replies) == TOTAL_PROMPTS
     scores = [reply_to_score(reply) for reply in replies]
     assert all(0.0 <= score <= 1.0 for score in scores)
