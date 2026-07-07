@@ -53,11 +53,15 @@ prediction:
 <reasoning>
 Concise evidence comparison.
 </reasoning>
-Prediction: N
+Prediction:N
 ```
 
 There is currently no completion-length penalty reward. The active reward
-weights are correctness `1.0` and format `0.05`.
+weights are correctness `1.0` and format `0.05`. Future binary runs use
+`scoring.strict_output_format=true` and `scoring.output_separator=""`, so both
+correctness and format rewards require the no-space `Prediction:<0 or 1>`
+contract. This aligns training with next-token logits inference: append
+`Prediction:` and score token `"0"` versus token `"1"`.
 
 ## Results and Backend Notes
 

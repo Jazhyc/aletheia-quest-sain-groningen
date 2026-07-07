@@ -40,7 +40,7 @@ judge:
     <reasoning>
     Your concise reasoning here.
     </reasoning>
-    Prediction: <0 or 1>
+    Prediction:<0 or 1>
 
 lora:
   r: 16
@@ -97,6 +97,10 @@ scoring:
   output_min: 0
   output_max: 1
   output_label: Prediction
+  # Keep this empty for a clean next-token logits interface:
+  # append "Prediction:" and score token "0" vs token "1".
+  output_separator: ""
+  strict_output_format: true
 
 wandb:
   enabled: true

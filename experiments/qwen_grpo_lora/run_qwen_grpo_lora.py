@@ -158,15 +158,20 @@ def parse_rating(
     rating_min: int,
     rating_max: int,
     output_label: str,
+    output_separator: str | None = None,
+    strict_structured: bool = False,
 ) -> int | None:
     structured_match = structured_completion_match(
         text,
         rating_min=rating_min,
         rating_max=rating_max,
         output_label=output_label,
+        output_separator=output_separator,
     )
     if structured_match is not None:
         return int(structured_match.group("rating"))
+    if strict_structured:
+        return None
 
     rating_range = f"[{rating_min}-{rating_max}]"
     output_label_pattern = re.escape(output_label)
@@ -538,7 +543,7 @@ def completion_text(value: Any) -> str:
 
 
 STRUCTURED_COMPLETION_RE = re.compile(
-    r"(?is)^\s*<reasoning>\s*(?P<reasoning>.+?)\s*</reasoning>\s*(?P<label>[A-Za-z][A-Za-z _-]*):\s*(?P<rating>[0-9])\s*$"
+    r"(?is)^\s*<reasoning>\s*(?P<reasoning>.+?)\s*</reasoning>\s*(?P<label>[A-Za-z][A-Za-z _-]*):(?P<separator>\s*)(?P<rating>[0-9])\s*$"
 )
 
 
@@ -548,11 +553,14 @@ def structured_completion_match(
     rating_min: int,
     rating_max: int,
     output_label: str,
+    output_separator: str | None = None,
 ) -> re.Match[str] | None:
     match = STRUCTURED_COMPLETION_RE.fullmatch(text)
     if match is None or not match.group("reasoning").strip():
         return None
     if match.group("label").strip().casefold() != output_label.casefold():
+        return None
+    if output_separator is not None and match.group("separator") != output_separator:
         return None
     rating = int(match.group("rating"))
     if not rating_min <= rating <= rating_max:
@@ -565,6 +573,8 @@ def make_correctness_reward(
     rating_min: int,
     rating_max: int,
     output_label: str,
+    output_separator: str | None,
+    strict_output_format: bool,
 ) -> Callable[..., list[float]]:
     def correctness_reward(completions: list[Any], label: list[int], **kwargs: Any) -> list[float]:
         del kwargs
@@ -576,6 +586,8 @@ def make_correctness_reward(
                 rating_min=rating_min,
                 rating_max=rating_max,
                 output_label=output_label,
+                output_separator=output_separator,
+                strict_structured=strict_output_format,
             )
             if rating is None:
                 rewards.append(0.0)
@@ -593,6 +605,7 @@ def make_format_reward(
     rating_min: int,
     rating_max: int,
     output_label: str,
+    output_separator: str | None,
 ) -> Callable[..., list[float]]:
     def format_reward(completions: list[Any], **kwargs: Any) -> list[float]:
         del kwargs
@@ -603,6 +616,7 @@ def make_format_reward(
                 rating_min=rating_min,
                 rating_max=rating_max,
                 output_label=output_label,
+                output_separator=output_separator,
             ) is not None
             else 0.0
             for completion in completions
@@ -622,6 +636,8 @@ def evaluate_model(
     rating_min: int,
     rating_max: int,
     output_label: str,
+    output_separator: str | None,
+    strict_output_format: bool,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     device = model.device
     rows = []
@@ -653,6 +669,8 @@ def evaluate_model(
                     rating_min=rating_min,
                     rating_max=rating_max,
                     output_label=output_label,
+                    output_separator=output_separator,
+                    strict_structured=strict_output_format,
                 )
                 if rating is None:
                     parse_errors += 1
@@ -671,6 +689,7 @@ def evaluate_model(
                         rating_min=rating_min,
                         rating_max=rating_max,
                         output_label=output_label,
+                        output_separator=output_separator,
                     ) is not None,
                     "generation": text,
                 })
@@ -867,6 +886,8 @@ def main(cfg: DictConfig) -> None:
     output_min = int(cfg.scoring.output_min)
     output_max = int(cfg.scoring.output_max)
     output_label = str(cfg.scoring.output_label)
+    output_separator = str(OmegaConf.select(cfg, "scoring.output_separator", default=""))
+    strict_output_format = bool(OmegaConf.select(cfg, "scoring.strict_output_format", default=True))
 
     if bool(cfg.wandb.enabled):
         if cfg.wandb.entity is not None:
@@ -1019,6 +1040,8 @@ def main(cfg: DictConfig) -> None:
         "output_min": output_min,
         "output_max": output_max,
         "output_label": output_label,
+        "output_separator": output_separator,
+        "strict_output_format": strict_output_format,
         "train_rows": int(len(train.frame)),
         "validation_rows": int(len(validation.frame)),
     }
@@ -1033,11 +1056,14 @@ def main(cfg: DictConfig) -> None:
                 rating_min=output_min,
                 rating_max=output_max,
                 output_label=output_label,
+                output_separator=output_separator,
+                strict_output_format=strict_output_format,
             ),
             make_format_reward(
                 rating_min=output_min,
                 rating_max=output_max,
                 output_label=output_label,
+                output_separator=output_separator,
             ),
         ],
         train_dataset=package_dataset(train.frame),
@@ -1060,6 +1086,8 @@ def main(cfg: DictConfig) -> None:
         rating_min=output_min,
         rating_max=output_max,
         output_label=output_label,
+        output_separator=output_separator,
+        strict_output_format=strict_output_format,
     )
     threshold, metrics = select_threshold(predictions)
     default_metrics = macro_metrics(predictions, threshold=baseline_threshold)
