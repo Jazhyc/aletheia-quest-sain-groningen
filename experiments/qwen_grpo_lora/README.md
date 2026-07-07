@@ -106,6 +106,18 @@ FPR `0.0595`. The logits are not completely saturated: on test, the median score
 for negatives was `0.0025`, the median for positives was `0.9903`, but positive
 5th percentile was still `0.0675` and negative 95th percentile was `0.7311`.
 
+Using populated generated reasoning before the label was worse as a calibrated
+score despite looking strong on validation. With cached generated completions
+stripped at `Prediction:` and then rescored with next-token logits, validation at
+threshold `0.5` scored balanced accuracy `0.9262`, AUROC `0.9496`, recall
+`0.9238`, and FPR `0.0714`; validation threshold selection chose a near-zero
+threshold `0.000203`. On test, threshold `0.5` scored balanced accuracy
+`0.8810`, AUROC `0.8686`, recall `0.7810`, and FPR `0.0190`; applying the
+validation-selected threshold to test dropped balanced accuracy to `0.7655`
+because FPR rose to `0.2952`. Treat generated-reasoning-then-logits as a
+two-pass diagnostic, not the preferred inference route. The empty-reasoning
+prefix is better calibrated and avoids paying for generation.
+
 Strongest completed training run before the binary-output change:
 
 - Method: `qwen_grpo_lora_r16_reasonfield_muonlr3e5_full_v1`

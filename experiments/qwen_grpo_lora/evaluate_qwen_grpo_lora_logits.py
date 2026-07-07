@@ -7,6 +7,7 @@ import argparse
 import datetime as dt
 import json
 from pathlib import Path
+import re
 import sys
 import time
 from typing import Any
@@ -38,6 +39,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--global-limit", type=int)
     parser.add_argument("--dtype", default="bfloat16")
     parser.add_argument("--max-model-len", type=int)
+    parser.add_argument(
+        "--reasoning-prefixes",
+        type=Path,
+        help=(
+            "Optional generations.jsonl containing populated reasoning. When set, "
+            "each row is scored after its cached prefix up through `Prediction:`."
+        ),
+    )
     parser.add_argument(
         "--prefix-variant",
         choices=["prediction", "prediction_space", "empty_reasoning", "empty_reasoning_space"],
@@ -148,7 +157,10 @@ def evaluate_logits(
         with torch.inference_mode():
             for start in range(0, len(records.frame), batch_size):
                 batch = records.frame.iloc[start:start + batch_size]
-                prompts = [prompt + prefix for prompt in batch["prompt"].tolist()]
+                prompts = [
+                    row["prompt"] + row.get("completion_prefix", prefix)
+                    for _, row in batch.iterrows()
+                ]
                 encoded = tokenizer(
                     prompts,
                     return_tensors="pt",
@@ -170,6 +182,7 @@ def evaluate_logits(
                         "label": int(row["label"]),
                         "score": float(s),
                         "logit_margin": float(m),
+                        "completion_prefix_source": row.get("completion_prefix_source", "constant"),
                     })
     finally:
         tokenizer.truncation_side = old_truncation_side
@@ -205,6 +218,45 @@ def score_summary(frame: pd.DataFrame) -> dict[str, Any]:
                 "frac_gt_0_999": float(np.mean(part > 0.999)),
             }
     return out
+
+
+def generated_completion_prefix(generation: str, fallback_prefix: str) -> tuple[str, str]:
+    """Return generated text up through the final Prediction separator."""
+    match = re.match(r"(?is)^(?P<prefix>.*?\bPrediction:\s*)(?P<label>[01])\s*$", generation.strip())
+    if match is not None:
+        return match.group("prefix"), "generated"
+    text = generation.rstrip()
+    if text:
+        return text + "\n" + fallback_prefix, "fallback_after_generation"
+    return fallback_prefix, "fallback_empty"
+
+
+def attach_reasoning_prefixes(records: SplitRecords, path: Path, fallback_prefix: str) -> SplitRecords:
+    by_key: dict[tuple[str, Any], tuple[str, str]] = {}
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        key = (str(row["dataset"]), row["index"])
+        by_key[key] = generated_completion_prefix(str(row.get("generation", "")), fallback_prefix)
+
+    frame = records.frame.copy()
+    prefixes = []
+    sources = []
+    missing = 0
+    for _, row in frame.iterrows():
+        prefix_source = by_key.get((str(row["dataset"]), row["index"]))
+        if prefix_source is None:
+            missing += 1
+            prefix_source = (fallback_prefix, "missing")
+        prefix, source = prefix_source
+        prefixes.append(prefix)
+        sources.append(source)
+    if missing:
+        raise RuntimeError(f"{path}: missing reasoning prefixes for {missing} rows")
+    frame["completion_prefix"] = prefixes
+    frame["completion_prefix_source"] = sources
+    return SplitRecords(frame=frame, dataset_names=records.dataset_names)
 
 
 def main() -> None:
@@ -252,6 +304,8 @@ def main() -> None:
         enable_thinking=bool(cfg_get(training_config, "judge.enable_thinking")),
     )
     records = apply_global_limit(records, args.global_limit)
+    if args.reasoning_prefixes is not None:
+        records = attach_reasoning_prefixes(records, args.reasoning_prefixes.resolve(), prefix)
     print(
         f"{args.split} rows={len(records.frame)} datasets={len(records.dataset_names)} "
         f"positives={int(records.frame['label'].sum())}",
@@ -321,6 +375,7 @@ def main() -> None:
             "label0_id": label0_id,
             "label1_id": label1_id,
             "baseline_threshold": args.threshold,
+            "reasoning_prefixes": args.reasoning_prefixes.as_posix() if args.reasoning_prefixes else None,
             "training_config": training_config,
         },
         "paths": {
