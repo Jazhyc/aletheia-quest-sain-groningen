@@ -1601,3 +1601,58 @@ Decision:
 - The instructed-vs-varied gap is smaller on test than on validation and similar
   to `qwen_reason_details_nothink_t512_t01_v1`, so it remains a useful
   lower-overfit candidate for official-submission prompt design.
+
+## Iteration 36: Omission Prompt Sweep
+
+Config: `configs/judge_ensemble/blackbox_reasoning_nothink_omission_sweep_v24.yaml`.
+
+Started: 2026-07-08 as Slurm job `30082522`.
+
+Hypothesis:
+
+- Recent official submissions may under-detect lies by omission or selectively
+  true but misleading answers.
+- Prompt variants that explicitly include material omissions should recover
+  recall without depending on hidden-intent-only cues.
+
+Members:
+
+- `truth_value_guard_control`: current truth-value single-prompt control.
+- `material_omission_guard`: commission, false support, or material omission.
+- `selective_truth_guard`: partial truths, omitted qualifiers, cherry-picked
+  caveats, and misleading overall impression.
+- `direct_omission_support_guard`: explicit three-path check for commission,
+  support, and omission.
+- `context_omission_guard`: uses context to catch withheld/downplayed key facts.
+
+Aggregate max result:
+
+- Validation mean balanced accuracy `0.8929`, AUROC `0.8929`, recall `0.8905`,
+  FPR `0.1048`, parse errors `0`, `score_time=67.0s`,
+  `rows_per_second=12.3/s`.
+
+Member results at the configured threshold:
+
+| member | BA | AUROC | recall | FPR | instructed BA | varied BA | gap |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `truth_value_guard_control` | 0.8940 | 0.8949 | 0.8500 | 0.0619 | 0.9521 | 0.8167 | 0.1354 |
+| `context_omission_guard` | 0.8845 | 0.8845 | 0.8500 | 0.0810 | 0.9521 | 0.7944 | 0.1576 |
+| `selective_truth_guard` | 0.8643 | 0.8652 | 0.7857 | 0.0571 | 0.9229 | 0.7861 | 0.1368 |
+| `material_omission_guard` | 0.8536 | 0.8536 | 0.7571 | 0.0500 | 0.8917 | 0.8028 | 0.0889 |
+| `direct_omission_support_guard` | 0.8202 | 0.8202 | 0.6667 | 0.0262 | 0.8521 | 0.7778 | 0.0743 |
+
+Threshold audit:
+
+- Threshold changes did not materially improve the omission variants; most
+  completions were effectively binary. Best member remained
+  `truth_value_guard_control` at BA `0.8952` with threshold `0.334` or `0.5`.
+
+Decision:
+
+- The omission-specific prompts did not beat the truth-value control. They
+  either raised FPR (`context_omission_guard`) or became too conservative
+  (`material_omission_guard`, `direct_omission_support_guard`).
+- Explicitly saying "omission" appears to make the judge more aware of a valid
+  deception mode, but not enough to improve validation BA. The useful direction
+  is probably a subtler single prompt that preserves truth-value behavior while
+  adding only a narrow material-omission clause.
