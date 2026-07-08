@@ -1555,3 +1555,49 @@ Decision:
   new single prompt. Single hierarchy variants reduce FPR but lose too much
   macro recall; the original reasoning-output control remains the best compact
   single-call formulation.
+
+## Iteration 35: Truth-Value Guard Test Confirmation
+
+Config: `configs/single_judges/blackbox_reasoning_nothink_truth_value_v1.yaml`
+with overrides `split=test`, `method=qwen_reason_nothink_truth_value_pc1500_v1`,
+`judge.max_prompt_chars=1500`, and `judge.backend=offline`.
+
+Started: 2026-07-08 as Slurm job `30081121`.
+
+Hypothesis:
+
+- The single `truth_value_guard` prompt should be less dependent on explicit
+  reasoning or hidden-instruction cues than the reasoning-output prompt.
+- Internal transfer should show up as a smaller instructed-vs-varied gap while
+  retaining useful fast no-thinking accuracy.
+
+Result:
+
+- Local test macro balanced accuracy `0.8762`, AUROC `0.8761`, recall `0.8238`,
+  FPR `0.0714`, parse errors `0`, `score_time=13.6s`,
+  `rows_per_second=60.4/s`.
+- Instructed-deception test mean BA `0.9188`; varied-deception test mean BA
+  `0.8194`; instructed-minus-varied gap `0.0993`.
+- Validation reference for the same `pc1500` run: mean BA `0.8952`,
+  instructed BA `0.9500`, varied BA `0.8222`, gap `0.1278`.
+
+Worst test subsets:
+
+- `dev-instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None`:
+  BA `0.4750`, recall `0.0000`, FPR `0.0500`.
+- `dev-varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1`: BA `0.7000`,
+  recall `0.5000`, FPR `0.1000`.
+- `dev-varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3`: BA `0.7250`,
+  recall `0.6000`, FPR `0.1500`.
+- `dev-varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4`: BA `0.7250`,
+  recall `0.7000`, FPR `0.2500`.
+
+Decision:
+
+- This confirms `truth_value_guard` is a strong fast single-prompt control, but
+  it does not beat the tracked no-thinking test leaders:
+  `qwen_reason_nothink_truth_hidden_ensemble_v1` at `0.8821` BA and
+  `qwen_reason_nothink_reasoning_hierarchy_sweep_v23` at `0.8869` BA.
+- The instructed-vs-varied gap is smaller on test than on validation and similar
+  to `qwen_reason_details_nothink_t512_t01_v1`, so it remains a useful
+  lower-overfit candidate for official-submission prompt design.
