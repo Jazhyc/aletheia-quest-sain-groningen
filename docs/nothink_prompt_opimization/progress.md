@@ -1687,3 +1687,14 @@ Status:
 - The validation job is queued with start time unknown because all cluster GPU
   nodes were invalid or draining when submitted. Record validation metrics and
   the comparison with `truth_value_guard` here when job `30096833` completes.
+
+Remote smoke follow-up:
+
+- The queued Slurm job was cancelled after the cluster became unavailable.
+- `experiments/blackbox/remote_claim_verify_smoke.py` was run against NDIF with
+  one label-matched example from each of two Qwen datasets. Both generation and
+  verdict sessions completed using the Phoenix Wright `VisionLanguageModel`
+  pattern.
+- The two local negatives received scores `0.0274` and `0.1570`; extracted
+  evidence correctly identified the relevant factual comparisons. This confirms
+  remote execution and score transport, but is too small to estimate accuracy.
