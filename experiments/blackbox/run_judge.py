@@ -719,6 +719,8 @@ class OfflineVllmStructuredJudge:
         max_tokens: int,
         temperature: float,
         final_rating_prompt: str,
+        use_chat_template: bool,
+        enable_thinking: bool | None,
     ) -> None:
         from transformers import AutoTokenizer
         from vllm import LLM, SamplingParams
@@ -732,6 +734,8 @@ class OfflineVllmStructuredJudge:
         self.parse_error_count = 0
 
         tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.tokenizer = tokenizer if use_chat_template else None
+        self.enable_thinking = enable_thinking
         self.all_rating_ids, self.ids_by_rating = rating_token_ids(tokenizer, rating_min, rating_max)
         requested_logprobs = requested_logprobs_or_default(generated_logprobs, len(self.all_rating_ids))
 
@@ -761,9 +765,16 @@ class OfflineVllmStructuredJudge:
         )
 
     def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
+        reasoning_prompts = prompts
+        if self.tokenizer is not None:
+            reasoning_prompts = render_chat_prompts(
+                self.tokenizer,
+                prompts,
+                enable_thinking=self.enable_thinking,
+            )
         reasoning_outputs = generate_with_optional_batches(
             self.llm,
-            prompts,
+            reasoning_prompts,
             self.reasoning_sampling,
             batch_size,
         )
@@ -775,6 +786,12 @@ class OfflineVllmStructuredJudge:
             structured_rating_prompt(prompt, reasoning, self.final_rating_prompt)
             for prompt, reasoning in zip(prompts, reasoning_texts, strict=True)
         ]
+        if self.tokenizer is not None:
+            rating_prompts = render_chat_prompts(
+                self.tokenizer,
+                rating_prompts,
+                enable_thinking=self.enable_thinking,
+            )
         rating_outputs = generate_with_optional_batches(
             self.llm,
             rating_prompts,
@@ -1048,6 +1065,8 @@ def build_judge(cfg: DictConfig):
                 missing_logprob=float(cfg.judge.missing_logprob),
                 max_tokens=int(cfg.judge.max_tokens),
                 final_rating_prompt=str(cfg.judge.structured_rating_prompt),
+                use_chat_template=bool(OmegaConf.select(cfg, "judge.use_chat_template", default=False)),
+                enable_thinking=OmegaConf.select(cfg, "judge.enable_thinking", default=None),
             )
         raise ValueError(f"unknown judge.mode={mode!r}")
     if backend == "openai":

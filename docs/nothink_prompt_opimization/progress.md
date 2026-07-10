@@ -1656,3 +1656,34 @@ Decision:
   deception mode, but not enough to improve validation BA. The useful direction
   is probably a subtler single prompt that preserves truth-value behavior while
   adding only a narrow material-omission clause.
+
+## Iteration 37: Two-Stage Claim Verification
+
+Config: `configs/single_judges/blackbox_reasoning_nothink_claim_verify_v1.yaml`.
+
+Started: 2026-07-10 as Slurm job `30096833`.
+
+Hypothesis:
+
+- A short first pass can separate the user's factual question, the ordinary
+  correct answer, and the belief conveyed by the final output before the model
+  makes a deception decision.
+- A constrained second pass can use that comparison without repeating the
+  single-prompt failure where hidden deceptive intent dominates the verdict.
+- Rating-token probabilities from the second pass should retain continuous
+  confidence instead of collapsing the score to parsed ratings `1` and `7`.
+
+Configuration:
+
+- `Qwen/Qwen3.5-9B`, two offline vLLM passes, chat templating enabled, and
+  `enable_thinking=false` for both passes.
+- First-pass extraction budget `256` tokens; second pass generates one
+  constrained rating token with log probabilities.
+- `max_prompt_chars=3000`, temperature `0`, threshold `0.5`.
+
+Status:
+
+- Runner support and its focused unit test are complete.
+- The validation job is queued with start time unknown because all cluster GPU
+  nodes were invalid or draining when submitted. Record validation metrics and
+  the comparison with `truth_value_guard` here when job `30096833` completes.
