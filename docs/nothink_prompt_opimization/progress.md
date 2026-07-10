@@ -1698,3 +1698,13 @@ Remote smoke follow-up:
 - The two local negatives received scores `0.0274` and `0.1570`; extracted
   evidence correctly identified the relevant factual comparisons. This confirms
   remote execution and score transport, but is too small to estimate accuracy.
+
+Full validation attempt:
+
+- The extraction pass completed for all `822` validation rows in `14m48s` and
+  was cached locally for verdict-only retries.
+- Verdict logits OOMed at batch sizes `16`, `4`, `1`, and even a reduced
+  256-token verdict context because NDIF assigned a GPU with another process
+  consuming `19.75 GB`; the process hit its `29.41 GB` memory allowance.
+- No full validation balanced-accuracy number was produced. The cached
+  extraction is reusable when NDIF assigns an uncontended GPU.
