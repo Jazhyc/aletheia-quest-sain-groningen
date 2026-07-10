@@ -1715,6 +1715,9 @@ Generation-only verdict retry:
   instead of tracing full-vocabulary logits. Batch size `16` completed without
   OOM in `3m`.
 - Validation balanced accuracy: `0.8998`; recall `0.8806`; specificity `0.9190`.
+- Instructed-deception subset: `0.9742` BA (`0.9775` recall,
+  `0.9708` specificity); varied-deception subset: `0.8056` BA (`0.7611`
+  recall, `0.8500` specificity). The instructed-minus-varied gap is `0.1686`.
 - This is approximately `+0.005` over the truth-value guard (`0.8952`) but
   below the best existing no-thinking validation result (`0.9095`).
 - The result is a useful confirmation that generation avoids the verdict-logit
