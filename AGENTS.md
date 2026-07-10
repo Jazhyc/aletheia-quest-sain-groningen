@@ -156,6 +156,9 @@ it must reach the Hugging Face Space, NDIF, and sometimes Hugging Face. The NDIF
 key was registered to team `SAIN Groningen` on the first official submission, so
 subsequent runs can omit the team name and use the remembered key/team binding.
 Use `--tag black` for the Phoenix Wright black-box judge submission.
+Record official leaderboard results in `docs/official_submissions.md`, which is
+the durable cross-method submission history for all approaches. Keep `AGENTS.md`
+focused on operating guidance and add only summary pointers here.
 For questions about official leaderboard status, query the Space directly instead
 of inferring from local files: POST to
 `https://ndif-aletheias-leaderboard.hf.space/api/me` with the `X-NDIF-API-Key`
