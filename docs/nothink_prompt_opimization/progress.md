@@ -1708,3 +1708,14 @@ Full validation attempt:
   consuming `19.75 GB`; the process hit its `29.41 GB` memory allowance.
 - No full validation balanced-accuracy number was produced. The cached
   extraction is reusable when NDIF assigns an uncontended GPU.
+
+Generation-only verdict retry:
+
+- Reused the cached `822` evidence rows and generated a short final rating
+  instead of tracing full-vocabulary logits. Batch size `16` completed without
+  OOM in `3m`.
+- Validation balanced accuracy: `0.8998`; recall `0.8806`; specificity `0.9190`.
+- This is approximately `+0.005` over the truth-value guard (`0.8952`) but
+  below the best existing no-thinking validation result (`0.9095`).
+- The result is a useful confirmation that generation avoids the verdict-logit
+  memory failure, but it does not establish a strong accuracy improvement.

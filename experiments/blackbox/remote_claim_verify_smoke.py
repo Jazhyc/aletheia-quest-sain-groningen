@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import csv
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -159,19 +160,40 @@ def main() -> None:
         for prompt, note in zip(user_prompts, evidence, strict=True)
     ]
     verdict_batches = encode_batches(tokenizer, verdict_prompts, PROMPT_TOKENS)
-    with model.session(remote=True):
-        logits = []
-        for batch in verdict_batches:
-            with model.trace({"input_ids": batch["input_ids"], "attention_mask": batch["attention_mask"]}):
-                logits.append(model.output.logits[:, -1, :].save())
-        next_logits = torch.cat(logits, dim=0).save()
+    if os.environ.get("CLAIM_VERIFY_GENERATE_VERDICT"):
+        generated = []
+        with model.session(remote=True):
+            for batch in verdict_batches:
+                with model.generate(
+                    {"input_ids": batch["input_ids"], "attention_mask": batch["attention_mask"]},
+                    do_sample=False,
+                    max_new_tokens=4,
+                    pad_token_id=tokenizer.pad_token_id,
+                ):
+                    piece = model.generator.output[:, PROMPT_TOKENS:].detach().cpu()
+                    if piece.shape[1] < 4:
+                        piece = torch.nn.functional.pad(piece, (0, 4 - piece.shape[1]), value=tokenizer.pad_token_id)
+                    generated.append(piece[:, :4])
+            verdict_tokens = torch.cat(generated, dim=0).save()
+        verdict_text = tokenizer.batch_decode(verdict_tokens, skip_special_tokens=True)
+        scores = np.asarray([
+            (int(match.group(0)) - 1) / 6.0 if (match := re.search(r"[1-7]", text)) else 0.5
+            for text in verdict_text
+        ])
+    else:
+        with model.session(remote=True):
+            logits = []
+            for batch in verdict_batches:
+                with model.trace({"input_ids": batch["input_ids"], "attention_mask": batch["attention_mask"]}):
+                    logits.append(model.output.logits[:, -1, :].save())
+            next_logits = torch.cat(logits, dim=0).save()
 
-    rating_ids = {
-        rating: tokenizer.encode(str(rating), add_special_tokens=False)[-1]
-        for rating in range(1, 8)
-    }
-    probs = torch.softmax(next_logits.float()[:, list(rating_ids.values())], dim=-1).detach().cpu().numpy()
-    scores = probs @ np.arange(7, dtype=float) / 6.0
+        rating_ids = {
+            rating: tokenizer.encode(str(rating), add_special_tokens=False)[-1]
+            for rating in range(1, 8)
+        }
+        probs = torch.softmax(next_logits.float()[:, list(rating_ids.values())], dim=-1).detach().cpu().numpy()
+        scores = probs @ np.arange(7, dtype=float) / 6.0
     for row, note, score in zip(rows, evidence, scores, strict=True):
         print(f"{row['dataset']} index={row['index']} label={row['label']} score={score:.4f}")
         print(f"  evidence={note[:240].replace(chr(10), ' ')}")
