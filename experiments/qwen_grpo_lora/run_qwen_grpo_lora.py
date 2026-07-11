@@ -396,6 +396,10 @@ def patch_trl_sampling_params() -> None:
     import trl.trainer.grpo_trainer as grpo_trainer
     from vllm.sampling_params import SamplingParams as original_sampling_params
 
+    # TRL >=1.8 no longer exposes this constructor on the GRPO module and does
+    # not need the compatibility shim written for the pinned TRL 0.23 stack.
+    if not hasattr(grpo_trainer, "SamplingParams"):
+        return
     if getattr(grpo_trainer.SamplingParams, "_aq_compat", False):
         return
 
@@ -1047,6 +1051,8 @@ def main(cfg: DictConfig) -> None:
             "success_reward_threshold": float(cfg.sdpo.success_reward_threshold),
             "include_environment_feedback": bool(cfg.sdpo.include_environment_feedback),
             "dont_reprompt_on_self_success": bool(cfg.sdpo.dont_reprompt_on_self_success),
+            "vllm_max_model_length": int(cfg.training.max_prompt_length)
+            + int(cfg.training.max_completion_length),
         }
     training_args = config_cls(
         output_dir=str(output_dir / "trainer"),
