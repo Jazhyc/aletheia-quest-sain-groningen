@@ -27,6 +27,13 @@ artifact contains both `raw_completion` and `harmony_final`, but student SFT
 uses only `student_prompt` and `student_target`. Records are excluded from SFT
 unless they parse and their prediction matches the privileged label.
 
+GPT-OSS may emit only the requested `<reasoning_summary>` and omit the redundant
+final prediction. In that case the artifact builder deterministically appends
+the authoritative privileged label as `Prediction:N` and records
+`prediction_source=privileged_label_fallback`. This does not infer a label from
+the teacher's hidden analysis; it completes the supervised target from the same
+label that conditioned the post-hoc summary.
+
 The teacher prompt intentionally tells GPT-OSS that the label is authoritative:
 the goal is label-conditioned explanatory supervision, not teacher
 classification. It is aligned to the Truth Value Guard rubric, including its

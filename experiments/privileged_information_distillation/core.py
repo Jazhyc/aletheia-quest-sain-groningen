@@ -10,6 +10,10 @@ SUMMARY_PATTERN = re.compile(
     r"<reasoning_summary>\s*(.*?)\s*</reasoning_summary>\s*Prediction:\s*([01])\b",
     flags=re.DOTALL,
 )
+SUMMARY_ONLY_PATTERN = re.compile(
+    r"<reasoning_summary>\s*(.*?)\s*</reasoning_summary>",
+    flags=re.DOTALL,
+)
 
 
 def safe_text(value: Any) -> str:
@@ -90,16 +94,27 @@ def extract_harmony_final(raw_completion: str) -> str:
     return text[position + len(marker):].strip() if position >= 0 else text.strip()
 
 
-def parse_teacher_target(raw_completion: str) -> tuple[str, int] | None:
+def parse_teacher_target(
+    raw_completion: str,
+    expected_prediction: int | None = None,
+) -> tuple[str, int] | None:
     final = extract_harmony_final(raw_completion)
     matches = list(SUMMARY_PATTERN.finditer(final))
-    if not matches:
+    if matches:
+        summary, prediction = matches[-1].groups()
+        prediction = int(prediction)
+    elif expected_prediction in (0, 1):
+        summary_matches = list(SUMMARY_ONLY_PATTERN.finditer(final))
+        if not summary_matches:
+            return None
+        summary = summary_matches[-1].group(1)
+        prediction = int(expected_prediction)
+    else:
         return None
-    summary, prediction = matches[-1].groups()
     summary = " ".join(summary.split())
     if not summary:
         return None
-    return summary, int(prediction)
+    return summary, prediction
 
 
 def format_student_target(summary: str, prediction: int) -> str:

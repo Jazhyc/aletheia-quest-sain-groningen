@@ -11,7 +11,10 @@ from experiments.privileged_information_distillation.core import (
     format_student_target,
     parse_teacher_target,
 )
-from experiments.privileged_information_distillation.generate_teacher_data import cache_matches
+from experiments.privileged_information_distillation.generate_teacher_data import (
+    cache_matches,
+    reparse_cached_record,
+)
 
 
 def test_teacher_prompt_contains_label_but_student_prompt_does_not() -> None:
@@ -54,6 +57,18 @@ def test_parser_requires_structured_final_target() -> None:
     assert parse_teacher_target(raw) is None
 
 
+def test_parser_can_attach_authoritative_prediction_to_summary_only() -> None:
+    raw = (
+        "analysisPrivate work.assistantfinal"
+        "<reasoning_summary>The output contradicts the known fact.</reasoning_summary>"
+    )
+
+    assert parse_teacher_target(raw, expected_prediction=1) == (
+        "The output contradicts the known fact.",
+        1,
+    )
+
+
 def test_student_target_has_strict_binary_contract() -> None:
     assert format_student_target("Concrete factual contrast.", 0) == (
         "<reasoning_summary>\nConcrete factual contrast.\n</reasoning_summary>\n"
@@ -79,3 +94,32 @@ def test_cache_requires_exact_prompts_and_valid_expected_prediction() -> None:
     assert cache_matches(row, cached)
     assert not cache_matches(row, {**cached, "teacher_prompt": "teacher-v1"})
     assert not cache_matches(row, {**cached, "label_match": False})
+
+
+def test_cached_summary_is_reparsed_without_harmony_analysis() -> None:
+    row = {
+        "dataset": "dataset",
+        "index": 3,
+        "label": 0,
+        "student_prompt": "student",
+        "teacher_prompt": "teacher",
+    }
+    cached = {
+        **row,
+        "raw_completion": (
+            "analysisIgnore this.assistantfinal"
+            "<reasoning_summary>The answer states the correct fact.</reasoning_summary>"
+        ),
+        "harmony_final": (
+            "<reasoning_summary>The answer states the correct fact.</reasoning_summary>"
+        ),
+        "parse_error": True,
+        "label_match": False,
+    }
+
+    refreshed = reparse_cached_record(row, cached)
+
+    assert refreshed is not None
+    assert refreshed["prediction_source"] == "privileged_label_fallback"
+    assert refreshed["student_target"].endswith("Prediction:0")
+    assert cache_matches(row, refreshed)

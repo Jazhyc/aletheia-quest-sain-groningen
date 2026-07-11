@@ -102,6 +102,39 @@ def cache_matches(row: dict[str, Any], cached: dict[str, Any] | None) -> bool:
     )
 
 
+def reparse_cached_record(
+    row: dict[str, Any],
+    cached: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not cached or not cached.get("raw_completion"):
+        return cached
+    if (
+        cached.get("label") != row["label"]
+        or cached.get("student_prompt") != row["student_prompt"]
+        or cached.get("teacher_prompt") != row["teacher_prompt"]
+    ):
+        return cached
+    parsed = parse_teacher_target(
+        cached["raw_completion"],
+        expected_prediction=row["label"],
+    )
+    if not parsed:
+        return cached
+    summary, prediction = parsed
+    return {
+        **cached,
+        "reasoning_summary": summary,
+        "prediction": prediction,
+        "student_target": format_student_target(summary, prediction),
+        "parse_error": False,
+        "label_match": prediction == row["label"],
+        "prediction_source": (
+            "teacher_final" if "Prediction:" in cached.get("harmony_final", "")
+            else "privileged_label_fallback"
+        ),
+    }
+
+
 @hydra.main(
     version_base=None,
     config_path="../../configs",
@@ -128,8 +161,9 @@ def main(cfg: DictConfig) -> None:
     missing_rows = []
     for row in rows:
         key = (row["dataset"], row["index"])
-        if cache_matches(row, cached.get(key)):
-            reusable[key] = cached[key]
+        refreshed = reparse_cached_record(row, cached.get(key))
+        if cache_matches(row, refreshed):
+            reusable[key] = refreshed
         else:
             missing_rows.append(row)
     print(f"cache hits={len(reusable)} generation required={len(missing_rows)}")
@@ -177,7 +211,10 @@ def main(cfg: DictConfig) -> None:
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
                 continue
             raw_completion = generated[key]
-            parsed = parse_teacher_target(raw_completion)
+            parsed = parse_teacher_target(
+                raw_completion,
+                expected_prediction=row["label"],
+            )
             summary = parsed[0] if parsed else None
             prediction = parsed[1] if parsed else None
             parsed_count += int(parsed is not None)
@@ -191,6 +228,10 @@ def main(cfg: DictConfig) -> None:
                 ),
                 "parse_error": parsed is None,
                 "label_match": prediction == row["label"],
+                "prediction_source": (
+                    "teacher_final" if "Prediction:" in extract_harmony_final(raw_completion)
+                    else "privileged_label_fallback"
+                ),
                 "harmony_final": extract_harmony_final(raw_completion),
                 "raw_completion": raw_completion,
             }
