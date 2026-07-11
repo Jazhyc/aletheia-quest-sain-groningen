@@ -74,13 +74,40 @@ fields so a later controlled ablation can remove:
 Compare the unfiltered baseline against a filtered retrain only if the student
 shows the corresponding error modes on validation or local test.
 
+## Student SFT learning-rate sweep
+
+Four one-epoch rank-16 LoRA students were trained with AdamW and evaluated in a
+single shared vLLM session on all 822 validation rows. Evaluation used the exact
+saved student prompt, greedy generation, a 512-token completion budget, and the
+explicit `Prediction:0|1` field. Metrics are macro-averaged over datasets, as in
+the competition. Because these are binary generated predictions, AUROC equals
+balanced accuracy and is not separately informative.
+
+| AdamW LR | validation BA | recall | FPR | instructed BA | varied BA | varied recall | parse errors |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `1e-5` | 0.9036 | 0.8381 | 0.0310 | 0.9792 | 0.8028 | 0.6722 | 4 |
+| `2e-5` | 0.9036 | 0.8381 | 0.0310 | 0.9792 | 0.8028 | 0.6722 | 3 |
+| `5e-5` | **0.9048** | 0.8381 | **0.0286** | 0.9792 | **0.8056** | 0.6722 | 3 |
+| `1e-4` | 0.8988 | 0.8357 | 0.0381 | 0.9771 | 0.7944 | 0.6611 | 4 |
+
+The `5e-5` adapter is the validation winner, although the advantage over
+`1e-5`/`2e-5` is only 0.0012 balanced accuracy and comes from fewer false
+positives rather than better recall. The lowest training loss at `1e-4` did not
+translate into better validation performance.
+
+The instructed/varied gap is large for every learning rate: the best adapter is
+at 0.9792 BA on instructed datasets versus 0.8056 on varied datasets, with
+varied recall only 0.6722. Privileged-summary SFT therefore learns the familiar
+instructed setting extremely well but does not solve transfer to varied
+deception. The next useful measurements are continuous empty-summary prediction
+logits and a local-test run of the selected `5e-5` adapter; semantic filtering
+is secondary unless error inspection connects failures to the minority bad
+teacher traces.
+
 ## Next measurements
 
-1. Train the completion-only Qwen LoRA on the unfiltered cache.
-2. Evaluate generation parsing and empty-summary next-token logits separately.
-3. Report instructed-versus-varied recall; improving varied recall is the main
-   goal relative to the current GRPO student.
-4. Inspect student errors for teacher-meta leakage and intent-only decisions.
-5. If needed, run the semantic-filtering ablation without regenerating teacher
+1. Evaluate empty-summary next-token logits for continuous scores.
+2. Run the selected `5e-5` adapter on local test.
+3. Inspect student errors for teacher-meta leakage and intent-only decisions.
+4. If needed, run the semantic-filtering ablation without regenerating teacher
    traces.
-

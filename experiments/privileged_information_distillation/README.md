@@ -87,6 +87,19 @@ effective batch 32.
 The final adapter is written under
 `results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/adapter/`.
 
+Evaluate the full learning-rate sweep on validation with one shared vLLM model
+load:
+
+```bash
+sbatch experiments/privileged_information_distillation/evaluate_student_sft.sh
+```
+
+The evaluator uses the saved student prompt, disables native Qwen thinking,
+generates up to 512 tokens deterministically, and parses the final explicit
+`Prediction:0|1`. It writes each adapter's generations and metrics beneath its
+`validation/` directory. Results include macro metrics for all datasets and
+separate instructed/varied scenario aggregates.
+
 ## Generated teacher cache
 
 The reviewed Truth Value Guard-aligned prompt was run on the full train split as
