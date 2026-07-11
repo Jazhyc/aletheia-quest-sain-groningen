@@ -4,7 +4,7 @@ Durable record of official leaderboard submissions for team `SAIN Groningen`.
 Use this for cross-method reporting across black-box prompts, Phoenix Wright
 variants, text baselines, and future approaches.
 
-Source: leaderboard `/api/me`, last queried on 2026-07-10. Official metrics are
+Source: leaderboard `/api/me`, last queried on 2026-07-11. Official metrics are
 the leaderboard's counted mean across private datasets. Dataset names are the
 opaque public labels returned by the Space.
 
@@ -13,13 +13,14 @@ opaque public labels returned by the Space.
 - Team: `SAIN Groningen`
 - Pending submissions: `0`
 - Rate-limit state at last query: `1` remaining in a `0.5` hour window
-- Best official submission in this record: `phoenix_wright_v1_3.ipynb`
-  truth-value guard, balanced accuracy `0.775833`
+- Best official submission in this record: `phoenix_wright_v2_0.ipynb`
+  compact privileged-distillation adapter, balanced accuracy `0.833333`
 
 ## Successful Submissions
 
 | submitted at (UTC) | notebook | method / local mapping | tag | BA | AUROC | recall | FPR | runtime |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-11 09:47:58 | `phoenix_wright_v2_0.ipynb` | compact privileged-distillation adapter; mixed-data `5e-5` selection | black | 0.833333 | 0.833333 | 0.741667 | 0.075000 | 12476.5s |
 | 2026-07-08 11:55:36 | `phoenix_wright_v1_3.ipynb` | context omission guard | black | 0.760833 | 0.760817 | 0.545000 | 0.023333 | 1928.9s |
 | 2026-07-08 10:54:35 | `phoenix_wright_v1_3.ipynb` | details no-thinking prompt | black | 0.731667 | 0.732252 | 0.494167 | 0.030833 | 1910.5s |
 | 2026-07-08 10:01:06 | `phoenix_wright_v1_3.ipynb` | truth-value guard | black | 0.775833 | 0.775779 | 0.608333 | 0.056667 | 1777.8s |
@@ -34,6 +35,27 @@ opaque public labels returned by the Space.
 ## Recent Phoenix Counted Dataset Detail
 
 These counted Notus/Iris rows are useful diagnostics for official transfer.
+
+### Phoenix Wright v2 Compact Distillation
+
+Submitted 2026-07-11 09:47:58 UTC. Headline BA `0.833333`.
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Notus | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` / `None` | 0.7475 | 0.7475 | 0.5800 | 0.0850 |
+| Dataset Notus | `Qwen/Qwen3.5-27B` / `None` | 0.7075 | 0.7075 | 0.5150 | 0.1000 |
+| Dataset Notus | `google/gemma-3-27b-it` / `None` | 0.7450 | 0.7450 | 0.6200 | 0.1300 |
+| Dataset Iris | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` / `g-st-nemotron-3-super-120b` | 0.9275 | 0.9275 | 0.9100 | 0.0550 |
+| Dataset Iris | `Qwen/Qwen3.5-27B` / `g-st-qwen3.5-27b` | 0.9375 | 0.9375 | 0.9200 | 0.0450 |
+| Dataset Iris | `google/gemma-3-27b-it` / `g-st-gemma-3-27b-it-2` | 0.9350 | 0.9350 | 0.9050 | 0.0350 |
+
+Notes: this is the first successful compact-distillation submission and the
+best official result so far. Relative to the best v1.3 prompt judge, it raises
+headline BA by 0.0575 and recall by 0.1333, at the cost of FPR increasing by
+0.0183. Iris transfer is particularly strong. The submitted adapter used the
+earlier mixed-data training selection; the later varied-only AdamW adapter was
+slightly stronger on local test but was not included in this run. Runtime was
+about 3h28m, much longer than the roughly 32-minute v1.3 runs.
 
 ### Context Omission Guard
 
