@@ -57,6 +57,13 @@ When `init_adapter` is set, the adapter is loaded with trainable PEFT weights an
 the trainer does not create a second LoRA. Validation remains on the complete
 validation split even when `train_dataset_name_contains` filters training.
 
+Experimental SDPO uses `configs/qwen_sdpo_lora_pid_varied.yaml` and the separate
+`run_qwen_sdpo_lora.sh` wrapper. It requires the external pinned environment at
+`/scratch/s4626451/.venvs/aletheia-sdpo` because TRL 1.8 requires vLLM <=0.23,
+while the main development environment intentionally retains vLLM 0.24. The
+SDPO dataset adds teacher-only authoritative-label feedback while keeping the
+student prompt unchanged.
+
 The reward is label-supervised and parse-aware: parseable binary predictions are
 converted to `[0, 1]`, positives are rewarded for predicting `1`, negatives for
 predicting `0`, and invalid completions receive no correctness reward. A small

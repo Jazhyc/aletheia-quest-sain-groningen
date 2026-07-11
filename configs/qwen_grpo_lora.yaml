@@ -6,6 +6,7 @@
 #   sbatch experiments/qwen_grpo_lora/run_qwen_grpo_lora.sh vllm.enabled=false
 
 method: qwen_grpo_lora_r16_reasonfield_v1
+algorithm: grpo
 model: Qwen/Qwen3.5-9B
 init_adapter: null
 splits_dir: dev_splits

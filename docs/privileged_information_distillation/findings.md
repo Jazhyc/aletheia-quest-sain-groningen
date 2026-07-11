@@ -236,6 +236,23 @@ updated, evaluated, and saved the distilled adapter. Full epoch-sweep jobs are
 `30102734` (1 epoch), `30102733` (2 epochs), and `30102735` (3 epochs), each over
 2,877 varied examples or about 90 optimizer steps per epoch.
 
+### Online self-distillation with SDPO
+
+SDPO is a complementary test of the bootstrapping hypothesis. It initializes
+from the same varied-only reasoning-summary adapter, samples on-policy, scores
+binary correctness and format, and uses the live policy conditioned on feedback
+as its own teacher. Successful rollouts provide implicit demonstrations. The
+teacher reprompt also receives the authoritative `Prediction:N` as privileged
+environment feedback; the ordinary student prompt never receives that label.
+
+The initial configuration blends policy and sampled-token reverse-KL
+self-distillation equally (`distillation_weight=0.5`), uses live teacher weights,
+and trains only on varied deception for one epoch. This requires experimental
+TRL 1.8, whose supported vLLM range ends at 0.23; the main project pins vLLM
+0.24. Therefore SDPO runs from the external environment
+`/scratch/s4626451/.venvs/aletheia-sdpo` and does not alter the established GRPO
+environment. One-step smoke job: `30102805`.
+
 ## Counterfactual trace structure
 
 A second teacher/student contract tests whether explicit factual baselines make

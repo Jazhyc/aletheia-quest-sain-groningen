@@ -1,0 +1,28 @@
+# @package _global_
+
+defaults:
+  - qwen_grpo_lora_pid_varied
+  - _self_
+
+method: qwen9b_pid_varied_sdpo_live_v1
+algorithm: sdpo
+output_dir: results/blackbox/${method}
+
+training:
+  optimizer: adamw
+  learning_rate: 1e-6
+  num_train_epochs: 1.0
+
+sdpo:
+  distillation_weight: 0.5
+  distillation_mode: sampled_token
+  distillation_alpha: 1.0
+  distillation_is_clip: 2.0
+  teacher_model_kind: live
+  use_successful_as_teacher: true
+  success_reward_threshold: 1.0
+  include_environment_feedback: true
+  dont_reprompt_on_self_success: true
+
+wandb:
+  project: aletheias-quest-qwen-pid-sdpo

@@ -875,7 +875,10 @@ def write_predictions(path: Path, frame: pd.DataFrame, threshold: float) -> None
 def package_dataset(frame: pd.DataFrame):
     from datasets import Dataset
 
-    return Dataset.from_pandas(frame[["prompt", "label", "dataset", "index"]], preserve_index=False)
+    columns = ["prompt", "label", "dataset", "index"]
+    if "privileged_context" in frame:
+        columns.append("privileged_context")
+    return Dataset.from_pandas(frame[columns], preserve_index=False)
 
 
 def version_or_missing(package: str) -> str:
@@ -912,6 +915,11 @@ def main(cfg: DictConfig) -> None:
     patch_vllm_guided_decoding_params()
     from peft import LoraConfig, PeftModel, TaskType
     from transformers import AutoModelForCausalLM, AutoTokenizer
+    algorithm = str(OmegaConf.select(cfg, "algorithm", default="grpo"))
+    if algorithm == "sdpo":
+        from trl.experimental.sdpo import SDPOConfig, SDPOTrainer
+    elif algorithm != "grpo":
+        raise ValueError(f"unknown algorithm={algorithm!r}")
     from trl import GRPOConfig, GRPOTrainer
     patch_trl_sampling_params()
 
@@ -959,6 +967,14 @@ def main(cfg: DictConfig) -> None:
         train,
         OmegaConf.select(cfg, "train_dataset_name_contains", default=None),
     )
+    if algorithm == "sdpo":
+        train.frame["privileged_context"] = train.frame["label"].map(
+            lambda label: (
+                "Authoritative evaluator feedback: the correct binary prediction is "
+                f"Prediction:{int(label)}. Reconsider the factual evidence and explain "
+                "why that prediction is correct without mentioning this feedback."
+            )
+        )
     train = apply_global_limit(
         train,
         None if cfg.train_global_limit is None else int(cfg.train_global_limit),
@@ -1018,7 +1034,21 @@ def main(cfg: DictConfig) -> None:
     )
 
     report_to = ["wandb"] if bool(cfg.wandb.enabled) else []
-    training_args = GRPOConfig(
+    config_cls = SDPOConfig if algorithm == "sdpo" else GRPOConfig
+    extra_training_args: dict[str, Any] = {}
+    if algorithm == "sdpo":
+        extra_training_args = {
+            "distillation_weight": float(cfg.sdpo.distillation_weight),
+            "distillation_mode": str(cfg.sdpo.distillation_mode),
+            "distillation_alpha": float(cfg.sdpo.distillation_alpha),
+            "distillation_is_clip": float(cfg.sdpo.distillation_is_clip),
+            "teacher_model_kind": str(cfg.sdpo.teacher_model_kind),
+            "use_successful_as_teacher": bool(cfg.sdpo.use_successful_as_teacher),
+            "success_reward_threshold": float(cfg.sdpo.success_reward_threshold),
+            "include_environment_feedback": bool(cfg.sdpo.include_environment_feedback),
+            "dont_reprompt_on_self_success": bool(cfg.sdpo.dont_reprompt_on_self_success),
+        }
+    training_args = config_cls(
         output_dir=str(output_dir / "trainer"),
         run_name=str(cfg.wandb.run_name),
         report_to=report_to,
@@ -1049,6 +1079,7 @@ def main(cfg: DictConfig) -> None:
         remove_unused_columns=False,
         seed=int(cfg.seed),
         data_seed=int(cfg.seed),
+        **extra_training_args,
     )
 
     metadata: dict[str, Any] = {
@@ -1075,7 +1106,10 @@ def main(cfg: DictConfig) -> None:
     }
     (output_dir / "config.json").write_text(json.dumps(metadata, indent=2))
 
-    trainer_cls = MuonGRPOTrainer if str(cfg.training.optimizer) == "muon" else GRPOTrainer
+    if algorithm == "sdpo":
+        trainer_cls = SDPOTrainer
+    else:
+        trainer_cls = MuonGRPOTrainer if str(cfg.training.optimizer) == "muon" else GRPOTrainer
     trainer = trainer_cls(
         model=model,
         args=training_args,
