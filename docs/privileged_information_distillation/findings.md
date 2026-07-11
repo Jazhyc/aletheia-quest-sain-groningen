@@ -349,6 +349,29 @@ justified for the active submission path. Revisit only if simpler distillation
 and prompting improvements stall and varied-deception factual errors remain the
 dominant measured bottleneck.
 
+## Cached ensemble diagnostics
+
+Cached row-level validation predictions were blended with the selected
+varied-only compact adapter, with all weights and thresholds selected on
+validation and then applied unchanged to local test.
+
+| companion | blend selected on validation | validation BA | validation AUROC | local-test BA | local-test AUROC |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 4096 D/K/S generated ensemble | per-dataset ranks, 0.10 distill + 0.90 companion, threshold 0.53 | **0.9298** | 0.9376 | 0.9321 | 0.9473 |
+| original generated reasoning judge | raw scores, 0.10 distill + 0.90 companion, threshold 0.05 | 0.9226 | 0.9306 | **0.9333** | 0.9385 |
+| GRPO empty-reasoning binary logits | raw scores, 0.40 distill + 0.60 companion, threshold 0.42 | 0.9250 | **0.9551** | 0.9274 | **0.9652** |
+
+The compact adapter alone scores 0.9000 validation BA and 0.9155 local-test BA.
+Thus all three selected blends improve on both splits. The D/K/S blend is the
+validation winner but is operationally unattractive: its three long 4096-token
+judges were already too slow and unreliable for official execution. The
+single generated reasoning judge is simpler and has the highest local-test BA,
+but would add another generation pass to the already slow distilled notebook.
+The GRPO-logits blend offers the strongest AUROC and should be the first
+implementation candidate if a two-adapter NDIF logits path can be made reliable;
+it adds a forward/logits pass rather than another long decode. Cheap no-thinking
+prompt blends improved validation less and generally did not transfer to test.
+
 ## Next measurements
 
 1. Evaluate empty-summary next-token logits for continuous scores.
