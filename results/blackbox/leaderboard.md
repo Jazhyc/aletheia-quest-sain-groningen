@@ -6,6 +6,8 @@ Rows with cached text-probe components report the logits scoring wall time; CPU 
 
 | submitted_at | method | AUROC | bal_acc | recall | FPR | score_time | rows/s |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-11 06:51:35 | qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1 | 0.9155 | 0.9155 | 0.8619 | 0.0310 | 31.9s | 25.7/s |
+| 2026-07-11 05:43:26 | qwen9b_privileged_gptoss120b_summary_adamwlr5e5_v1 | 0.9107 | 0.9107 | 0.8571 | 0.0357 | 32.1s | 25.6/s |
 | 2026-07-11 03:35:07 | gpt_oss_120b_nothink_truth_value_v1 | 0.9391 | 0.9310 | 0.8976 | 0.0357 | 25.2s | 32.6/s |
 | 2026-07-08 09:21:27 | qwen_reason_nothink_truth_value_pc1500_v1 | 0.8761 | 0.8762 | 0.8238 | 0.0714 | 13.6s | 60.4/s |
 | 2026-07-07 16:16:29 | qwen_grpo_lora_r16_binary_t12_muonlr3e5_full_v2_logits_empty_reasoning_space_plain | 0.8686 | 0.8810 | 0.7810 | 0.0190 | 60.4s | 13.6/s |
@@ -18,9 +20,7 @@ Rows with cached text-probe components report the logits scoring wall time; CPU 
 | 2026-07-05 15:50:25 | qwen_reason_nothink_truth_hidden_ensemble_v1 | 0.8818 | 0.8821 | 0.8357 | 0.0714 | 29.7s | 27.7/s |
 | 2026-07-05 14:55:24 | qwen_reason_details_nothink_t512_t01_v1 | 0.8570 | 0.8571 | 0.7643 | 0.0500 | 12.2s | 67.4/s |
 | 2026-07-04 14:11:38 | qwen_reason_ensemble_dk3072_logit_outcome_v1_test | 0.8952 | 0.6762 | 0.3690 | 0.0167 | 46.9s | 17.5/s |
-| 2026-07-04 14:11:38 | phoenix_wright_v1_2_outcome_rank067_ngram | 0.9160 | 0.8786 | 0.9333 | 0.1762 | 46.9s | 17.5/s |
 | 2026-07-04 13:04:28 | qwen_reason_ensemble_dk3072_logit_v1 | 0.8804 | 0.8369 | 0.6976 | 0.0238 | 24.1s | 34.1/s |
-| 2026-07-04 13:04:28 | phoenix_wright_v1_1_rankavg_dk_logits_ngram | 0.9068 | 0.8655 | 0.8071 | 0.0762 | 24.1s | 34.1/s |
 | 2026-07-03 22:37:17 | qwen_reason_ensemble_dks_member4096_v1 | 0.9340 | 0.9298 | 0.8976 | 0.0381 | 1284.6s | 0.6/s |
 | 2026-07-03 17:17:24 | qwen_reason_budget_8192 | 0.8915 | 0.8917 | 0.8024 | 0.0190 | 645.9s | 1.3/s |
 | 2026-07-03 17:01:08 | qwen_reason_budget_2048 | 0.8679 | 0.8679 | 0.7548 | 0.0190 | 278.2s | 3.0/s |
