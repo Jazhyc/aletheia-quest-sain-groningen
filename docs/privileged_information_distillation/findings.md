@@ -232,6 +232,16 @@ state that the output matches the facts and that no important contradiction
 exists. The prompt and parser are ready for review before a full cache is
 generated.
 
+Full training-cache generation completed as job `30101601` in 6m57s. It wrote
+6,573 rows (62.4 MB): 6,548 passed the strict ordered-field parser and matched
+the privileged label, while 25 were malformed. Of the failures, 24 have label
+1, 22 are varied-deception examples, and most looped or exhausted the output
+budget while trying to reconcile difficult positive labels. Valid target field
+lengths average 40.3 words for reasoning summary, 36.0 for facts, and 30.1 for
+contradiction. All 6,548 valid student targets have the exact required field
+order. A resumable cleanup pass, job `30101758`, reuses those valid records and
+regenerates only the 25 failures.
+
 ## Compact local factual retrieval proposal
 
 Many varied false negatives begin with an incorrect factual premise in the
