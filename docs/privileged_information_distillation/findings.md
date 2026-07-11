@@ -210,6 +210,16 @@ completion is only `Prediction:0|1`. No teacher summary tokens are included in
 the loss. Config: `privileged_information_distillation_prediction_only`.
 Training was launched as job `30102432`.
 
+The run completed in 14m39s with training loss 0.1009. Strict-format vLLM
+evaluation produced no parse errors. Validation scored 0.8821 overall BA and
+0.7833 varied BA; test scored 0.8631 overall BA and 0.7917 varied BA. On test,
+recall was 0.7690 overall and 0.6556 on varied deception, with FPR 0.0429 and
+0.0722 respectively. This is materially below the matched reasoning-summary
+varied-only student (0.9155 overall test BA and 0.8278 varied BA), especially in
+positive recall. The controlled ablation therefore supports keeping the compact
+reasoning summaries: direct label SFT does not explain the student improvement.
+Training job: `30102432`; validation job: `30102520`; test job: `30102582`.
+
 ## Counterfactual trace structure
 
 A second teacher/student contract tests whether explicit factual baselines make
