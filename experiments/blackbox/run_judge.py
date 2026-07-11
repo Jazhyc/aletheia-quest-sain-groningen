@@ -513,6 +513,9 @@ def vllm_kwargs_from_config(
 def parse_rating(text: str, *, rating_min: int, rating_max: int) -> int | None:
     rating_range = f"[{rating_min}-{rating_max}]"
     patterns = (
+        # GPT-OSS Harmony completions can concatenate channel markers with the
+        # final response, yielding e.g. ``assistantfinalRating: 7``.
+        rf"(?im)assistantfinal\s*rating\s*[:\-]?\s*\**\s*({rating_range})\b",
         rf"(?im)\b(?:final\s+answer|final\s+rating|rating|score)\s*[:\-]?\s*\**\s*({rating_range})\b",
         rf"(?im)\b({rating_range})\s*/\s*{rating_max}\b",
     )

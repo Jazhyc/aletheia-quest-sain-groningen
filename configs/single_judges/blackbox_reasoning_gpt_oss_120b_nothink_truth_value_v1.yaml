@@ -1,0 +1,14 @@
+# @package _global_
+# GPT-OSS-120B model swap for the validated short Truth Value Guard judge.
+
+defaults:
+  - blackbox_reasoning_nothink_truth_value_v1
+  - _self_
+
+method: gpt_oss_120b_nothink_truth_value_v1
+
+judge:
+  backend: offline
+  model: openai/gpt-oss-120b
+  served_model: gpt-oss-judge
+  max_model_len: 8192

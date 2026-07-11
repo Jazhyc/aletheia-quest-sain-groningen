@@ -1454,3 +1454,59 @@ Local smoke:
   `experiments/blackbox/run_nnsight_local_smoke.sh --limit 1 --timeout 1800`.
 - The notebook executed locally with `PHOENIX_NNSIGHT_LOCAL=1`, validated a
   one-row `submission.csv`, removed the generated file, and exited `0:0` in 47s.
+## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
+
+Status: completed on validation as Slurm job `30101124` after parser diagnosis
+in job `30101115`.
+
+Hypothesis:
+
+- Swap the Qwen judge for the cached `openai/gpt-oss-120b` checkpoint while
+  keeping the validated short Truth Value Guard prompt and scoring settings
+  fixed.
+- A larger judge may improve factual discrimination without requiring a long
+  prompt or multi-judge ensemble.
+
+Config: `configs/single_judges/blackbox_reasoning_gpt_oss_120b_nothink_truth_value_v1.yaml`
+
+Settings:
+
+- Offline vLLM 0.24.0 on one RTX Pro 6000, using the checkpoint's native
+  `gpt_oss_mxfp4` quantization and Marlin MoE backend.
+- `max_tokens=512`, `max_prompt_chars=3000`, `max_model_len=8192`, temperature
+  `0`, and binary threshold `0.1`.
+
+Validation result after parsing GPT-OSS Harmony final-channel output:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9214 |
+| AUROC | 0.9314 |
+| recall | 0.8762 |
+| FPR | 0.0333 |
+| parse errors | 8 |
+| score time | 25.0s |
+| rows/s | 32.8 |
+
+Scenario breakdown:
+
+| scenario | balanced accuracy | AUROC | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| instructed deception | 0.9750 | 0.9864 | 0.9792 | 0.0292 |
+| varied deception | 0.8500 | 0.8581 | 0.7389 | 0.0389 |
+
+The initial result artifact reported BA `0.7762` with 163 parse errors because
+GPT-OSS Harmony completions concatenate the final channel marker and response as
+`assistantfinalRating: N`. The generic parser required a word boundary before
+`Rating` and therefore discarded these otherwise valid final answers. Adding a
+narrow Harmony-compatible parser pattern recovered 161 answers; only two
+completions remained unparseable in that saved run. A clean confirmation run
+with the corrected parser produced the metrics above and eight parse errors.
+Despite temperature zero, its BA was `0.0131` higher than post-hoc rescoring of
+the first run (`0.9083`), so allow for some backend-level run variation.
+
+Decision: promising model swap. Correctly parsed GPT-OSS improves over the Qwen
+Truth Value Guard validation baseline (approximately `0.894` BA) while remaining
+a single short judge. It is slower than Qwen (`25.0s` versus roughly `15s`) and
+still has a substantial instructed-to-varied gap (`0.1250` BA), so confirm on
+the held-out local test split before considering it the new default.
