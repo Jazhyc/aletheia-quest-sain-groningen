@@ -193,6 +193,14 @@ retrieval implementation therefore has a precision/relevance problem rather
 than showing that SFT uniquely prevents evidence use. Both base-Qwen conditions
 have identical instructed metrics because only varied rows received passages.
 
+To test whether prompt structure can recover the recall gain without the FPR
+spike, job `30101386` batches four prompt-only conditions in one base-Qwen vLLM
+load: symmetric support/contradiction handling, an explicit evidence-relation
+scaffold, answer-first comparison, and a conservative contradiction-required
+rule. All members use the same fixed Wikipedia cache, 512-token budget, rating
+parser, and threshold. Config:
+`blackbox_reasoning_nothink_wikipedia_evidence_sweep_v1`.
+
 ## Next measurements
 
 1. Evaluate empty-summary next-token logits for continuous scores.
