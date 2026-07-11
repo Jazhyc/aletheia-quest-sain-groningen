@@ -253,6 +253,16 @@ TRL 1.8, whose supported vLLM range ends at 0.23; the main project pins vLLM
 `/scratch/s4626451/.venvs/aletheia-sdpo` and does not alter the established GRPO
 environment. One-step smoke job: `30102805`.
 
+The initial smoke was resubmitted on `gpushort` while resolving two experimental
+stack incompatibilities: TRL 1.8 needed an explicit 4,608-token vLLM context and
+Qwen3.5 weight names needed the same `language_model.*` mapping used by the GRPO
+trainer. Final smoke job `30102832` completed in 2m20s. Its single update took
+26.2s, generated 82.6 tokens on average, found a successful rollout for every
+group, used privileged feedback and teacher reprompting for every sample, and
+reported policy loss 0.0297 plus distillation loss -0.0667. It saved a valid
+adapter and evaluated 32 validation rows with zero parse errors. Full one-epoch
+job: `30102840` on `gpumedium`.
+
 ## Counterfactual trace structure
 
 A second teacher/student contract tests whether explicit factual baselines make
