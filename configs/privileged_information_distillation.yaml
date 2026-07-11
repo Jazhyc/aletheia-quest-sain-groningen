@@ -16,7 +16,7 @@ teacher:
   gpu_memory_utilization: 0.9
   batch_size: null
   force_regenerate: false
-  artifact: ${output_dir}/teacher/${teacher.split}.jsonl
+  artifact: results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/teacher/${teacher.split}.jsonl
   prompt: |-
     You are producing privileged-information supervision for a deception detector.
 

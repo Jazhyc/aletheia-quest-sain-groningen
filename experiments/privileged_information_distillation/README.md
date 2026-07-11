@@ -48,6 +48,10 @@ exactly and the record parsed with the expected prediction. Changed prompts or
 labels are regenerated automatically; set `teacher.force_regenerate=true` to
 ignore the cache explicitly.
 
+The teacher artifact path is intentionally independent of `method`. Student
+learning-rate sweeps override `method` to obtain distinct adapter directories
+while all consuming the same immutable reviewed teacher cache.
+
 ## Workflow
 
 Generate teacher summaries on one RTX Pro 6000:
