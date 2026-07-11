@@ -168,6 +168,24 @@ A one-step GPU integration smoke completed as job `30101400`. Full runs:
 | `1e-4` | 2 | `30101403` | `muonlr1e4_ep2_v1` |
 | `3e-4` | 2 | `30101405` | `muonlr3e4_ep2_v1` |
 
+All six adapters were evaluated together on full validation as job `30101544`.
+
+| Muon LR | epochs | overall BA | varied BA | varied recall | varied FPR | parse errors |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `3e-5` | 1 | 0.9012 | 0.7972 | **0.6611** | 0.0667 | 3 |
+| `1e-4` | 1 | 0.9000 | 0.7944 | 0.6556 | 0.0667 | 3 |
+| `3e-4` | 1 | 0.9012 | 0.7972 | 0.6556 | 0.0611 | 5 |
+| `3e-5` | 2 | 0.9000 | 0.7944 | 0.6556 | 0.0667 | 4 |
+| `1e-4` | 2 | **0.9024** | **0.8000** | 0.6556 | **0.0556** | 6 |
+| `3e-4` | 2 | 0.9012 | 0.7972 | 0.6556 | 0.0611 | 5 |
+
+Muon produces only a small improvement over the varied-only one-epoch AdamW
+baseline (0.9000 overall and 0.7944 varied BA). The selected `1e-4`, two-epoch
+run gains 0.0056 varied BA by reducing FPR, not by improving recall. It still
+trails the mixed-data AdamW validation winner at 0.9048 overall and 0.8056
+varied BA. The selected Muon adapter was launched on local test as job
+`30101548`.
+
 ## Compact local factual retrieval proposal
 
 Many varied false negatives begin with an incorrect factual premise in the
