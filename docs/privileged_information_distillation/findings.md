@@ -308,6 +308,16 @@ student SFT, repeated organism queries, and validation of extraction recall and
 false-rejection rates. The full proposal and ensemble constraints are recorded
 as P27 in `docs/prompt_optimization/proposals.md`.
 
+P27 also records an RLVR extension in which the judge learns when to defer to
+the consistency checker. The checker remains an unreliable feature: reward the
+ground-truth quality of the final blended probability with a proper scoring
+rule, penalize unnecessary deference and query cost, and never reward organism
+agreement directly. The first implementation should cache organism verification
+features and fit a simple calibrated logistic or shallow gate. Online RL is only
+justified if this conditional gate beats fixed-weight blending on validation;
+otherwise the additional policy and rollout complexity has no demonstrated
+value.
+
 ### Online self-distillation with SDPO
 
 SDPO is a complementary test of the bootstrapping hypothesis. It initializes

@@ -895,10 +895,35 @@ Teacher-data variant:
 - Preserve audit/label conflicts rather than forcing a post-hoc contradiction;
   train them as uncertainty cases or filter them in a controlled ablation.
 
+RLVR selective-deference extension:
+
+- Treat organism consistency as an unreliable expert feature, not as ground
+  truth and not as a reward for agreement.
+- Have the policy emit a judge probability `q`, calibrated uncertainty, and a
+  defer weight `g` in `[0,1]`. Let `c` be the organism consistency score and use
+  `p_final = (1-g) * q + g * c`.
+- Reward final ground-truth calibration with a proper scoring rule such as
+  negative Brier score or clipped log loss. Add a deference/query-cost penalty
+  so the policy cannot learn to delegate every example.
+- An optional auxiliary target is `should_defer = checker_correct and not
+  judge_correct`; it must not replace the continuous final-score reward.
+- Useful gate features include judge confidence, number and type of claims,
+  rejected-claim fraction, central versus tangential status, organism response
+  stability across neutral paraphrases, and permitted per-organism calibration.
+- Precompute organism verification features for public train and validation
+  before attempting online RL. Keeping Qwen-27B calls inside every GRPO rollout
+  would be prohibitively expensive and operationally complicated.
+- First fit a logistic or shallow calibrated gate using cached features. Do not
+  invest in RLVR unless conditional stacking improves over the tuned judge,
+  checker, and globally weighted ensemble baselines on validation.
+- Use out-of-sample checker predictions when fitting and evaluating the gate to
+  avoid learning organism-specific training errors or leakage.
+
 Reason for deferral:
 
 - This requires a new teacher cache, structured student training, multiple
-  source-organism verification calls, and careful calibration against the high
-  false-positive rate observed in the first True/False diagnostic.
+  source-organism verification calls, cached consistency features, and careful
+  calibration against the high false-positive rate observed in the first
+  True/False diagnostic. Online RLVR is a later extension, not the first test.
 - It is a promising hybrid extension if the current distilled-judge submission
   plateaus, but it is not a simple drop-in improvement.

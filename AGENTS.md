@@ -228,6 +228,13 @@ rewriting the audit—and preserve label/audit conflicts as uncertainty instead
 of forcing post-hoc contradictions. Do not implement this as base-versus-adapter
 model diffing.
 
+The same P27 proposal includes a later RLVR selective-deference gate. The policy
+may blend judge score `q` and organism consistency score `c` using learned weight
+`g`, but reward final label calibration with Brier/log loss plus deference/query
+cost—not agreement with the organism. Precompute checker features and require a
+simple logistic or shallow calibrated gate to beat fixed blending on validation
+before attempting expensive online RL rollouts.
+
 The strongest submission-compatible prompt ensemble remains the three-prompt Qwen
 reasoning ensemble (`qwen_reason_ensemble_dks_member4096_v1`): `details4096`,
 `known4096`, and `scrutiny4096`, scheduled member-major, max aggregated, with a
