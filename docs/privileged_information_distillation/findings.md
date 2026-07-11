@@ -220,12 +220,22 @@ prompt, paired no-evidence runs would be needed to separate its baseline prompt
 quality from its evidence-handling effect before transferring any wording into
 student evaluation.
 
+Decision: defer this path. A dedicated evidence-conditioned adapter could be
+trained on balanced support, contradiction, irrelevant, insufficient, and
+no-evidence cases, but building and validating that dataset adds substantial
+retrieval, teacher-generation, and robustness complexity. The current prompted
+RAG variants do not beat the no-evidence control, so that investment is not
+justified for the active submission path. Revisit only if simpler distillation
+and prompting improvements stall and varied-deception factual errors remain the
+dominant measured bottleneck.
+
 ## Next measurements
 
 1. Evaluate empty-summary next-token logits for continuous scores.
 2. Investigate whether varied-only specialization gains persist on additional
    held-out data or are split noise.
-3. Prototype compact local factual retrieval if knowledge errors remain.
+3. Keep evidence-conditioned retrieval as a deferred path if simpler methods
+   stall and factual errors remain dominant.
 4. Inspect student errors for teacher-meta leakage and intent-only decisions.
 5. If needed, run the semantic-filtering ablation without regenerating teacher
    traces.
