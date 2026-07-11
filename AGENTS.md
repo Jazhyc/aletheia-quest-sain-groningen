@@ -72,8 +72,14 @@ from the selected adapter scored 0.9083 validation BA after one epoch and 0.9179
 after two epochs, both with zero parse errors. The two-epoch run improved recall
 from 0.8500 to 0.9000 while increasing FPR from 0.0333 to 0.0643. Its late
 stochastic completions grew to roughly 135--150 tokens, making training and
-validation slower. Treat these results as backend-sensitive until fair vLLM test
-evaluation, and select among the epoch sweep on validation before testing.
+validation slower. Fair vLLM test evaluation of the two-epoch adapter scored 0.9048 BA,
+0.8310 recall, and 0.0214 FPR in 147.4s, below the original varied-only SFT
+adapter's 0.9155 test BA. On the 40 errors shared by the Qwen and GPT-OSS heavy
+ensembles it corrected only 3; its reasoning usually declared subtle false
+supporting details accurate. Treat extra GRPO reasoning as unable to compensate
+for missing or unreliable factual knowledge, and select among the epoch sweep on
+validation before any further test evaluation.
+
 Online SDPO requires the external pinned environment
 `/scratch/s4626451/.venvs/aletheia-sdpo` (TRL 1.8/vLLM 0.23); the main environment
 must remain on its locked TRL 0.23/vLLM 0.24 stack. SDPO smoke job `30102832`

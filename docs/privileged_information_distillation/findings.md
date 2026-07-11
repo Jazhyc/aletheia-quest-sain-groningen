@@ -247,9 +247,21 @@ BA to 0.9179, with 0.9000 recall, 0.0643 FPR, and zero parse errors. This is a
 false-positive rate. Late second-epoch stochastic completions averaged roughly
 135--150 tokens and reached about 299 tokens in logged batches, versus the much
 shorter deterministic outputs from the one-epoch checkpoint. This length growth
-explains the slower validation tail and may matter for submission runtime. Wait
-for the three-epoch validation result before selecting the epoch count for one
-fair vLLM test evaluation.
+explains the slower validation tail and may matter for submission runtime.
+
+A fair vLLM test evaluation was subsequently run as job `30103963` to diagnose
+the two-epoch checkpoint qualitatively. It scored 0.9048 BA/AUROC, 0.8310 recall,
+0.0214 FPR, and zero parse errors, taking 147.4s for 821 rows. This is below the
+selected varied-only SFT adapter's 0.9155 test BA despite the stronger validation
+score. On the 40 test errors shared by the Qwen and GPT-OSS three-prompt
+ensembles, the adapter corrected only 3: 3/34 shared false negatives and 0/6
+shared false positives. Its summaries generally recognized the headline trivia
+answer and then confidently asserted that obscure false embellishments were
+accurate (for example, the invented PayPal settlement and wrong Plain of Jars
+UNESCO date). Longer generated reasoning therefore did not supply missing world
+knowledge; it often expanded the model's unsupported factual confidence. The
+three corrected cases were comparatively structural or blatant rather than
+successful verification of obscure supporting facts.
 
 ### Online self-distillation with SDPO
 
