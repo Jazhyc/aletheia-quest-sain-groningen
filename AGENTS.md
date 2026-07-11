@@ -47,6 +47,16 @@ batch 4 with `num_generations=4`, `vllm.gpu_memory_utilization=0.25`, and vLLM
 sleep disabled is the best tested default; batch 8 was slower, and increasing the
 vLLM memory fraction alone is not expected to help unless generation concurrency is
 also increased.
+
+For privileged-information distillation work, read
+`docs/privileged_information_distillation/` before changing prompts, cache
+parsing, filtering, or student training. It records the GPT-OSS Truth Value
+Guard teacher rationale, Harmony final-channel extraction contract, generated
+cache provenance and quality audit, minority semantic-label conflicts, and the
+decision to use the 6,570 unfiltered parsed summaries for the first Qwen SFT
+baseline. Runtime code is under
+`experiments/privileged_information_distillation/`; cached traces remain under
+`results/blackbox/` and must not be committed.
 Current Qwen GRPO LoRA experiment context from 2026-07-06: the active setup is a
 rank-16, alpha-32 LoRA on `Qwen/Qwen3.5-9B`, targeting attention and MLP
 projection modules, trained with TRL GRPO in colocated vLLM mode and Muon for 2D
