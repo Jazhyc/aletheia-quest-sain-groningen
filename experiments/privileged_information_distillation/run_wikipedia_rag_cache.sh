@@ -12,6 +12,12 @@ cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
 module load Python/3.12.3-GCCcore-13.3.0
 source .venv/bin/activate
 
+if [[ -f .env ]]; then
+  set -a
+  source .env
+  set +a
+fi
+
 LOG_DIR="logs/slurm/privileged_information_distillation"
 mkdir -p "${LOG_DIR}"
 exec >"${LOG_DIR}/wikipedia-rag-${SLURM_JOB_ID}.out" 2>&1

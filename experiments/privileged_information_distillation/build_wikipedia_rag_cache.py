@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -93,6 +94,10 @@ def main() -> None:
 
     session = requests.Session()
     session.headers["User-Agent"] = "AletheiasQuestResearch/1.0 (deception detection research)"
+    access_token = os.environ.get("WIKIMEDIA_ACCESS_TOKEN")
+    if access_token:
+        session.headers["Authorization"] = f"Bearer {access_token}"
+        print("using authenticated Wikimedia access", flush=True)
     records: list[dict[str, Any]] = []
     for cfg in load_split_config(args.splits_dir / f"dry.{args.split}.yaml", ROOT):
         if args.scenario not in cfg.name:
