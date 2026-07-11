@@ -55,6 +55,7 @@ student:
     dropout: 0.0
     target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
   training:
+    optim: adamw_torch
     num_train_epochs: 1.0
     max_steps: -1
     learning_rate: 2.0e-5

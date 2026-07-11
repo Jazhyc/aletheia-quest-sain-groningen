@@ -78,7 +78,8 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
 
 The SFT collator masks every prompt token with `-100`, so loss applies only to
 the concise teacher target. The default is a rank-16/alpha-32 LoRA over Qwen
-attention and MLP projections for one epoch, using AdamW and effective batch 32.
+attention and MLP projections for one epoch, using explicit `adamw_torch` and
+effective batch 32.
 The final adapter is written under
 `results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/adapter/`.
 

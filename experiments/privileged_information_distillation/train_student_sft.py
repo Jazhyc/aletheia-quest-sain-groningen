@@ -118,6 +118,7 @@ def main(cfg: DictConfig) -> None:
         output_dir = root / output_dir
     args = TrainingArguments(
         output_dir=output_dir.as_posix(),
+        optim=str(cfg.student.training.optim),
         num_train_epochs=float(cfg.student.training.num_train_epochs),
         max_steps=int(cfg.student.training.max_steps),
         learning_rate=float(cfg.student.training.learning_rate),
