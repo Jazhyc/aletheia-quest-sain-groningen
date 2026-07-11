@@ -183,8 +183,14 @@ Muon produces only a small improvement over the varied-only one-epoch AdamW
 baseline (0.9000 overall and 0.7944 varied BA). The selected `1e-4`, two-epoch
 run gains 0.0056 varied BA by reducing FPR, not by improving recall. It still
 trails the mixed-data AdamW validation winner at 0.9048 overall and 0.8056
-varied BA. The selected Muon adapter was launched on local test as job
-`30101548`.
+varied BA. The selected Muon adapter was evaluated on local test as job
+`30101548` and scored 0.9107 overall BA, 0.9812 instructed BA, 0.8167 varied
+BA, 0.7056 varied recall, 0.0722 varied FPR, and seven parse errors. It exactly
+reproduces the mixed-data AdamW `5e-5` adapter on test: all 821 predictions and
+full generated completion strings are identical. It is worse than the
+varied-only AdamW adapter's 0.9155 overall and 0.8278 varied BA. Muon therefore
+does not improve the selected test result despite its small validation FPR
+gain; retain varied-only AdamW as the best distillation test reference.
 
 ## Compact local factual retrieval proposal
 
