@@ -1507,6 +1507,26 @@ latent knowledge but also produce post-hoc rationalization. The two conditions
 generated 68 probes in 24.6s after model startup. Artifacts are stored under
 `results/blackbox/gpt_oss_120b_shared_error_atomic_audit_v1/`.
 
+The identical diagnostic was run with base `Qwen/Qwen3.5-9B` as job `30103986`.
+It emitted more positive verdicts than GPT-OSS—28/34 blind, with 3
+`NO_FALSE_DETAIL`, 2 `UNCERTAIN`, and 1 completion without a parsed verdict;
+the privileged condition emitted 30 positives, 2 negatives, and 2 incomplete
+verdicts. These raw counts are not accuracy. Manual inspection found only
+roughly 17--20 plausible identifications of an actual poisoned detail. Qwen
+often attacked a true assertion and supplied a fabricated correction, including
+reversing the Wright brothers' birth order, claiming Mount Sinai rather than
+Mount Catherine is Egypt's highest peak, inventing $80M and $100M PayPal
+settlements across the two conditions, changing correct Bank of England history,
+and fabricating alternate band and treaty dates. It sometimes identified that a
+side claim was false while still giving the wrong replacement fact.
+
+The comparison supports a mixed bottleneck. Atomic decomposition does activate
+useful latent knowledge in Qwen for a substantial subset, but the 9B model's
+verification knowledge is less reliable than GPT-OSS's and its higher
+positive-verdict rate reflects confabulation rather than superior recall.
+Ground-truth hints exacerbate that failure. Qwen artifacts are stored under
+`results/blackbox/qwen9b_shared_error_atomic_audit_v1/`.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis

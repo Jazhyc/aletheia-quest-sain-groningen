@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 from collections import defaultdict
 import json
 from pathlib import Path
@@ -111,12 +112,24 @@ FALSE_CLAIM: <the exact false or misleading claim and correction, or NONE>
 VERDICT: <CONTAINS_FALSE_DETAIL or NO_FALSE_DETAIL or UNCERTAIN>"""
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", default="openai/gpt-oss-120b")
+    parser.add_argument(
+        "--output-name",
+        default="gpt_oss_120b_shared_error_atomic_audit_v1",
+    )
+    parser.add_argument("--max-tokens", type=int, default=1024)
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
     keys = shared_false_negatives()
     examples = load_examples(keys)
     prompts = []
     metadata = []
-    tokenizer = AutoTokenizer.from_pretrained("openai/gpt-oss-120b")
+    tokenizer = AutoTokenizer.from_pretrained(args.model)
     for example in examples:
         for condition in ("blind_atomic", "privileged_atomic"):
             prompt = audit_prompt(example, privileged=condition == "privileged_atomic")
@@ -124,11 +137,12 @@ def main() -> None:
                 [{"role": "user", "content": prompt}],
                 tokenize=False,
                 add_generation_prompt=True,
+                enable_thinking=False,
             ))
             metadata.append({**example, "condition": condition, "prompt": prompt})
 
     model = LLM(
-        model="openai/gpt-oss-120b",
+        model=args.model,
         dtype="bfloat16",
         tensor_parallel_size=1,
         gpu_memory_utilization=0.9,
@@ -137,11 +151,11 @@ def main() -> None:
     started = time.time()
     outputs = model.generate(
         prompts,
-        SamplingParams(max_tokens=1024, temperature=0.0),
+        SamplingParams(max_tokens=args.max_tokens, temperature=0.0),
     )
     elapsed = time.time() - started
 
-    output_dir = RESULTS / "gpt_oss_120b_shared_error_atomic_audit_v1"
+    output_dir = RESULTS / args.output_name
     output_dir.mkdir(parents=True, exist_ok=True)
     records = []
     for item, output in zip(metadata, outputs, strict=True):
@@ -153,10 +167,12 @@ def main() -> None:
         "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n"
     )
     (output_dir / "result.json").write_text(json.dumps({
-        "method": "gpt_oss_120b_shared_error_atomic_audit_v1",
+        "method": args.output_name,
+        "model": args.model,
         "shared_false_negatives": len(examples),
         "conditions": ["blind_atomic", "privileged_atomic"],
         "prompt_evaluations": len(prompts),
+        "max_tokens": args.max_tokens,
         "score_seconds": elapsed,
         "rows_per_second": len(prompts) / elapsed,
     }, indent=2) + "\n")

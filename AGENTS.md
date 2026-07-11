@@ -176,6 +176,18 @@ labels increase post-hoc rationalization risk. Artifacts are under
 `30103980` and runtime code is
 `experiments/blackbox/audit_gpt_oss_shared_errors.py`.
 
+The matched base-Qwen3.5-9B atomic audit ran as job `30103986`. Its raw blind
+verdict rate was 28/34 and privileged rate 30/34, but these numbers substantially
+overstate factual success: manual inspection found only roughly 17--20 plausible
+identifications of the actual poisoned detail. Qwen frequently attacked true
+claims and invented corrections (for example reversing the Wright brothers'
+birth order, denying that Mount Catherine is Egypt's highest peak, replacing
+PayPal's undisclosed settlement with invented $80M/$100M figures, and denying
+John Houblon was the first Bank of England governor). Decomposition activates
+some useful latent knowledge in Qwen, but its fact verification is materially
+less reliable than GPT-OSS and privileged labels amplify confabulation. Artifacts
+are under `results/blackbox/qwen9b_shared_error_atomic_audit_v1/`.
+
 The strongest submission-compatible prompt ensemble remains the three-prompt Qwen
 reasoning ensemble (`qwen_reason_ensemble_dks_member4096_v1`): `details4096`,
 `known4096`, and `scrutiny4096`, scheduled member-major, max aggregated, with a

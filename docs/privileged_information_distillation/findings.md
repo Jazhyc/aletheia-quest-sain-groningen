@@ -276,6 +276,19 @@ therefore combine claim decomposition with explicit permission to return
 uncertain, rather than forcing a factual contradiction from every positive
 label.
 
+The matched base-Qwen3.5-9B diagnostic confirms that this procedure cannot be
+transferred naively. Qwen emitted blind positive verdicts for 28/34 and
+privileged positives for 30/34, but a manual factual audit found only roughly
+17--20 plausible identifications of the actual poisoned detail. Many remaining
+outputs attacked a true claim and invented a replacement fact; examples include
+reversing the Wright brothers' birth order, denying that Mount Catherine is
+Egypt's highest peak, and inventing different PayPal settlement amounts in the
+two conditions. The student therefore has some latent knowledge that structured
+decomposition can elicit, but it lacks the teacher's verification reliability.
+Training on forced decompositions without uncertainty or evidence controls risks
+teaching confident fact-checking confabulations rather than better deception
+detection.
+
 ### Online self-distillation with SDPO
 
 SDPO is a complementary test of the bootstrapping hypothesis. It initializes
