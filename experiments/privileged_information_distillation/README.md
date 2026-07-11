@@ -90,6 +90,12 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   student.training.learning_rate=5e-5
 ```
 
+The completed varied-only run used 2,877 targets. It scored 0.7944 varied BA
+on full validation and 0.8278 on local test, versus 0.8056 and 0.8167 for the
+selected mixed-data adapter. Instructed BA remained 0.9792/0.9812, respectively.
+The effect is small and reverses across splits, so retain the mixed adapter as
+the validation-selected default.
+
 The SFT collator masks every prompt token with `-100`, so loss applies only to
 the concise teacher target. The default is a rank-16/alpha-32 LoRA over Qwen
 attention and MLP projections for one epoch, using explicit `adamw_torch` and

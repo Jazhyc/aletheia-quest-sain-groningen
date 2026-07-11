@@ -131,6 +131,21 @@ fixed. Filter only by dataset name containing `varied-deception`. Compare both
 varied and instructed validation metrics to measure specialization versus
 catastrophic loss of the instructed capability.
 
+The resulting adapter was trained as Slurm job `30101268` and evaluated on the
+complete validation and local-test splits as jobs `30101348` and `30101350`.
+
+| evaluation split | balanced accuracy | recall | FPR | instructed BA | varied BA | varied recall | parse errors | scoring time |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| validation | 0.9000 | 0.8333 | 0.0333 | 0.9792 | 0.7944 | 0.6556 | 4 | 31.8s |
+| local test | **0.9155** | **0.8619** | **0.0310** | **0.9812** | **0.8278** | **0.7167** | 5 | 31.9s |
+
+Specializing the training data did not consistently improve varied deception:
+relative to the mixed `5e-5` adapter, varied balanced accuracy fell by 0.0111
+on validation but rose by 0.0111 on local test. Test-wide balanced accuracy
+rose by 0.0048. Instructed performance was unchanged, so there is no evidence
+of catastrophic forgetting. The small, split-dependent gain is not strong
+enough to replace the mixed adapter based on validation selection alone.
+
 ## Compact local factual retrieval proposal
 
 Many varied false negatives begin with an incorrect factual premise in the
@@ -156,7 +171,8 @@ CC0 Wikidata-derived factual index.
 ## Next measurements
 
 1. Evaluate empty-summary next-token logits for continuous scores.
-2. Evaluate the varied-only student ablation.
+2. Investigate whether varied-only specialization gains persist on additional
+   held-out data or are split noise.
 3. Prototype compact local factual retrieval if knowledge errors remain.
 4. Inspect student errors for teacher-meta leakage and intent-only decisions.
 5. If needed, run the semantic-filtering ablation without regenerating teacher
