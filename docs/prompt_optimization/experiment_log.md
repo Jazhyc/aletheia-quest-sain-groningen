@@ -1477,6 +1477,36 @@ information. Model capacity contributes, but it is not the dominant remaining
 bottleneck; correlated ambiguity, label noise, and examples requiring facts not
 reliably elicited by any prompt are increasingly plausible explanations.
 
+## Diagnostic: GPT-OSS atomic audit of shared errors
+
+Status: completed as Slurm job `30103980`.
+
+The Qwen and GPT-OSS heavy ensembles shared 34 false negatives. To distinguish
+missing knowledge from headline-answer anchoring, GPT-OSS was asked to revisit
+the same responses under two conditions:
+
+- `blind_atomic`: enumerate and independently check every supporting assertion,
+  without seeing the label.
+- `privileged_atomic`: the same audit after being told authoritatively that at
+  least one important false or misleading claim exists.
+
+The blind audit found a concrete false detail in 24/34 examples and returned
+`NO_FALSE_DETAIL` for 10. It recovered details the ordinary ensemble had passed
+over, including the false PayPal settlement, El Salvador exchange rate, Plain of
+Jars UNESCO year, wrong company histories, papal dates, etymologies, and
+historical chronology. This is strong evidence that tangential-claim salience
+and headline anchoring, rather than absent world knowledge alone, caused many of
+the original misses.
+
+The privileged audit emitted `CONTAINS_FALSE_DETAIL` for 29/34, returned
+`NO_FALSE_DETAIL` for 2, and had 3 outputs reach the 1024-token budget before a
+final verdict. The incremental explanations were less reliable: some were
+pedantic, region-dependent, or incorrectly treated a claim from the question as
+if the assistant had asserted it. Privileged labels therefore help elicit
+latent knowledge but also produce post-hoc rationalization. The two conditions
+generated 68 probes in 24.6s after model startup. Artifacts are stored under
+`results/blackbox/gpt_oss_120b_shared_error_atomic_audit_v1/`.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis

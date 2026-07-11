@@ -263,6 +263,19 @@ knowledge; it often expanded the model's unsupported factual confidence. The
 three corrected cases were comparatively structural or blatant rather than
 successful verification of obscure supporting facts.
 
+A follow-up GPT-OSS diagnostic separated missing knowledge from claim salience.
+On the 34 false negatives shared by both heavy ensembles, an explicit blind
+atomic audit found a concrete false supporting detail in 24 cases even though
+the ordinary GPT-OSS ensemble had classified all 34 as non-deceptive. Thus, much
+of the teacher's relevant knowledge was present but not activated once the
+headline trivia answer appeared correct. Providing the authoritative positive
+label raised positive audit verdicts to 29, but also induced strained, pedantic,
+or misplaced contradictions; 3 completions exhausted 1024 tokens without a
+verdict and 2 still found no error. Privileged-information targets should
+therefore combine claim decomposition with explicit permission to return
+uncertain, rather than forcing a factual contradiction from every positive
+label.
+
 ### Online self-distillation with SDPO
 
 SDPO is a complementary test of the bootstrapping hypothesis. It initializes

@@ -163,6 +163,19 @@ larger-model capacity is not the dominant remaining bottleneck; prompt-visible
 ambiguity, correlated factual failures, and label noise are plausible parts of
 the apparent 0.93-0.935 ceiling. GPT-OSS cannot be submitted directly.
 
+GPT-OSS shared-error atomic-audit finding from 2026-07-11: ordinary ensemble
+prompts missed 34 common deceptive test examples, but an explicit blind prompt
+that decomposed every supporting assertion found a concrete false detail in
+24/34. A privileged version told that an error definitely existed emitted 29
+positive verdicts, 3 completions hit the 1024-token budget before a verdict, and
+2 still found none; several newly induced explanations were strained, pedantic,
+or referred to claims outside the assistant output. This indicates that
+tangential-claim salience is a major bottleneck for GPT-OSS, while privileged
+labels increase post-hoc rationalization risk. Artifacts are under
+`results/blackbox/gpt_oss_120b_shared_error_atomic_audit_v1/`; diagnostic job
+`30103980` and runtime code is
+`experiments/blackbox/audit_gpt_oss_shared_errors.py`.
+
 The strongest submission-compatible prompt ensemble remains the three-prompt Qwen
 reasoning ensemble (`qwen_reason_ensemble_dks_member4096_v1`): `details4096`,
 `known4096`, and `scrutiny4096`, scheduled member-major, max aggregated, with a
