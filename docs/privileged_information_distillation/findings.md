@@ -201,6 +201,25 @@ rule. All members use the same fixed Wikipedia cache, 512-token budget, rating
 parser, and threshold. Config:
 `blackbox_reasoning_nothink_wikipedia_evidence_sweep_v1`.
 
+| prompt condition | overall BA | varied BA | varied recall | varied FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| no-evidence control | **0.8940** | **0.8167** | 0.7500 | 0.1167 | 0 |
+| original Wikipedia prompt | 0.8869 | 0.8000 | **0.8222** | 0.2222 | 0 |
+| symmetric relation | 0.8607 | 0.7889 | 0.7333 | 0.1556 | 0 |
+| relation scaffold | 0.8369 | 0.7667 | 0.5833 | **0.0500** | 0 |
+| contradiction required | 0.7917 | 0.6694 | 0.5944 | 0.2556 | 0 |
+| answer first | 0.1512 | 0.2333 | 0.3056 | 0.8389 | 0 |
+
+The symmetric wording partially reduces the original RAG false-positive spike,
+but also loses recall and remains below the no-evidence control. The explicit
+relation scaffold is conservative enough to reach 0.0500 varied FPR, but its
+recall collapses to 0.5833. The contradiction-required wording unexpectedly
+raises FPR, and answer-first causes a severe prompt-induced inversion. No member
+improves balanced accuracy. Because each member also changes the core judge
+prompt, paired no-evidence runs would be needed to separate its baseline prompt
+quality from its evidence-handling effect before transferring any wording into
+student evaluation.
+
 ## Next measurements
 
 1. Evaluate empty-summary next-token logits for continuous scores.
