@@ -179,7 +179,19 @@ Truth Value Guard prompt and rating parser. The generic black-box runner now
 accepts `retrieval_cache`; config
 `blackbox_reasoning_nothink_truth_value_wikipedia_rag_v1` isolates whether base
 Qwen benefits from the evidence without the SFT adapter. Full validation was
-launched as Slurm job `30101368`.
+run as Slurm job `30101368`, with an exact no-evidence control as job
+`30101370`.
+
+| base Qwen condition | overall BA | varied BA | varied recall | varied FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| no evidence | **0.8940** | **0.8167** | 0.7500 | 0.1167 | 0 |
+| Wikipedia evidence | 0.8869 | 0.8000 | **0.8222** | 0.2222 | 0 |
+
+The base model does consume the new evidence: varied recall rises by 0.0722.
+However, varied FPR rises by 0.1056, more than offsetting that gain. The first
+retrieval implementation therefore has a precision/relevance problem rather
+than showing that SFT uniquely prevents evidence use. Both base-Qwen conditions
+have identical instructed metrics because only varied rows received passages.
 
 ## Next measurements
 
