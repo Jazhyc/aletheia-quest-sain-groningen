@@ -34,13 +34,20 @@ class CompletionOnlyCollator:
         }
 
 
-def load_records(path: Path) -> list[dict[str, Any]]:
+def load_records(
+    path: Path,
+    dataset_name_contains: str | None = None,
+) -> list[dict[str, Any]]:
     records = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     usable = [
         record for record in records
         if not record.get("parse_error")
         and record.get("label_match")
         and record.get("student_target")
+        and (
+            dataset_name_contains is None
+            or dataset_name_contains in str(record.get("dataset", ""))
+        )
     ]
     if not usable:
         raise RuntimeError(f"no usable teacher records in {path}")
@@ -86,7 +93,12 @@ def main(cfg: DictConfig) -> None:
     artifact = Path(str(cfg.teacher.artifact))
     if not artifact.is_absolute():
         artifact = root / artifact
-    records = load_records(artifact)
+    dataset_name_contains = (
+        None
+        if cfg.student.dataset_name_contains is None
+        else str(cfg.student.dataset_name_contains)
+    )
+    records = load_records(artifact, dataset_name_contains=dataset_name_contains)
     if cfg.student.train_limit is not None:
         records = records[:int(cfg.student.train_limit)]
     tokenizer = AutoTokenizer.from_pretrained(str(cfg.student.model))
@@ -97,7 +109,10 @@ def main(cfg: DictConfig) -> None:
         for record in records
     ]
     dataset = Dataset.from_list(tokenized)
-    print(f"training on {len(dataset)} parsed, label-consistent teacher targets")
+    print(
+        f"training on {len(dataset)} parsed, label-consistent teacher targets "
+        f"dataset_name_contains={dataset_name_contains!r}"
+    )
 
     model = AutoModelForCausalLM.from_pretrained(
         str(cfg.student.model),

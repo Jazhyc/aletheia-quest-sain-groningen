@@ -120,9 +120,44 @@ persists: instructed deception is nearly solved, while varied-deception balanced
 accuracy remains around 0.82 and recall around 0.71. The seven parse failures
 are a small minority and cannot account for that scenario gap.
 
+## Varied-only student ablation
+
+The mixed student receives 3,693 usable instructed targets and 2,877 usable
+varied targets. Because nearly all of the SFT gain is concentrated in the
+instructed scenario, train a controlled varied-only student from the same
+reviewed cache. Hold the selected AdamW learning rate (`5e-5`), one epoch,
+rank-16/alpha-32 LoRA, effective batch size 32, prompt, and completion-only loss
+fixed. Filter only by dataset name containing `varied-deception`. Compare both
+varied and instructed validation metrics to measure specialization versus
+catastrophic loss of the instructed capability.
+
+## Compact local factual retrieval proposal
+
+Many varied false negatives begin with an incorrect factual premise in the
+student's otherwise coherent summary. A future method can retrieve local
+reference evidence from the user question and final answer, then add the top
+few short passages to the distilled judge prompt. External inference APIs are
+not needed; retrieval should run inside the submission sandbox on CPU.
+
+A full English Wikipedia dump is infeasible: the July 2026 current-article
+multistream dump is about 26.6 GB compressed and its title/offset index alone is
+about 283 MB. Simple English Wikipedia is about 381 MB compressed. Phoenix v2
+already packages to about 109 MB under the 200 MB competition limit, leaving at
+most roughly 90 MB. Target a 30-70 MB compact lexical index instead, such as
+titles/aliases plus short lead facts for a broad subset, using SQLite FTS/BM25
+or a hashed inverted index rather than dense embeddings.
+
+Evaluate retrieval first on varied validation false negatives and track FPR:
+wrong-entity retrieval and fictional framing can create new false positives.
+Wikipedia text is CC BY-SA and may conflict with the competition's MIT
+publication requirement; confirm licensing with organizers or prefer a compact
+CC0 Wikidata-derived factual index.
+
 ## Next measurements
 
 1. Evaluate empty-summary next-token logits for continuous scores.
-2. Inspect student errors for teacher-meta leakage and intent-only decisions.
-3. If needed, run the semantic-filtering ablation without regenerating teacher
+2. Evaluate the varied-only student ablation.
+3. Prototype compact local factual retrieval if knowledge errors remain.
+4. Inspect student errors for teacher-meta leakage and intent-only decisions.
+5. If needed, run the semantic-filtering ablation without regenerating teacher
    traces.

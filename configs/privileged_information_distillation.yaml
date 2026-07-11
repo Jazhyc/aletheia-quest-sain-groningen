@@ -33,6 +33,7 @@ teacher:
 student:
   model: Qwen/Qwen3.5-9B
   train_limit: null
+  dataset_name_contains: null
   max_prompt_chars: 3000
   context_truncation: tail
   max_length: 4608

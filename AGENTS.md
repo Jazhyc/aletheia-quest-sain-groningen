@@ -57,6 +57,11 @@ decision to use the 6,570 unfiltered parsed summaries for the first Qwen SFT
 baseline. Runtime code is under
 `experiments/privileged_information_distillation/`; cached traces remain under
 `results/blackbox/` and must not be committed.
+The same docs record two follow-ups: a varied-only `5e-5` student ablation using
+`student.dataset_name_contains=varied-deception`, and a compact local factual
+retrieval proposal. Full Wikipedia cannot fit the 200 MB package; any retrieval
+index should be small, CPU-queryable, evaluated for varied-recall/FPR tradeoffs,
+and checked for licensing compatibility (prefer CC0 data when practical).
 Current Qwen GRPO LoRA experiment context from 2026-07-06: the active setup is a
 rank-16, alpha-32 LoRA on `Qwen/Qwen3.5-9B`, targeting attention and MLP
 projection modules, trained with TRL GRPO in colocated vLLM mode and Muon for 2D

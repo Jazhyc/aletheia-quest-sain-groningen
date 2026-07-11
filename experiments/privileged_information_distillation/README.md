@@ -80,6 +80,16 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   student.output_dir=results/blackbox/qwen9b_privileged_gptoss120b_summary_smoke/adapter
 ```
 
+Restrict an ablation to cached varied-deception targets without regenerating
+teacher traces:
+
+```bash
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  method=qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1 \
+  student.dataset_name_contains=varied-deception \
+  student.training.learning_rate=5e-5
+```
+
 The SFT collator masks every prompt token with `-100`, so loss applies only to
 the concise teacher target. The default is a rank-16/alpha-32 LoRA over Qwen
 attention and MLP projections for one epoch, using explicit `adamw_torch` and
