@@ -1454,6 +1454,29 @@ Local smoke:
   `experiments/blackbox/run_nnsight_local_smoke.sh --limit 1 --timeout 1800`.
 - The notebook executed locally with `PHOENIX_NNSIGHT_LOCAL=1`, validated a
   one-row `submission.csv`, removed the generated file, and exited `0:0` in 47s.
+## Candidate: `gpt_oss_120b_reason_ensemble_dks_member4096_v1`
+
+Status: validation job `30103227`; fixed-threshold test job `30103924`.
+
+This is a model-only swap of the strongest Qwen member-major ensemble:
+`details4096`, `known4096`, and `scrutiny4096`, max aggregated, with GPT-OSS-120B
+serving every member. Validation at the inherited Qwen threshold 0.01 scored
+0.9167 BA and 0.9371 AUROC. A validation-only discrete threshold sweep selected
+1.0 (only maximum Rating 7 counts positive), scoring 0.9179 macro BA, 0.8714
+recall, and 0.0357 FPR.
+
+With threshold 1.0 fixed before test, the test run scored 0.9345 BA, 0.9465
+AUROC, 0.9000 recall, and 0.0310 FPR with zero parse errors. Scoring took 104.0s
+for 821 rows and 2,463 prompt evaluations. Individual test member BAs were
+0.9226 (details), 0.9214 (known), and 0.9262 (scrutiny).
+
+The larger model therefore improves only 0.0047 BA over the Qwen heavy ensemble
+(0.9298) and 0.0035 over the single short GPT-OSS judge (0.9310). This supports
+a practical local-test ceiling near 0.93-0.935 for current prompt-visible
+information. Model capacity contributes, but it is not the dominant remaining
+bottleneck; correlated ambiguity, label noise, and examples requiring facts not
+reliably elicited by any prompt are increasingly plausible explanations.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis
