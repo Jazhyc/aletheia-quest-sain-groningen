@@ -192,6 +192,12 @@ varied-only AdamW adapter's 0.9155 overall and 0.8278 varied BA. Muon therefore
 does not improve the selected test result despite its small validation FPR
 gain; retain varied-only AdamW as the best distillation test reference.
 
+Decision: use the varied-only one-epoch AdamW `5e-5` setup for subsequent
+privileged-distillation work. It is simpler, trains in about 16 minutes, and is
+the best tested student on local test (0.9155 overall BA and 0.8278 varied BA).
+Do not continue Muon tuning for this SFT objective unless a later change to the
+targets or inference method creates a new reason to revisit optimizer behavior.
+
 ## Compact local factual retrieval proposal
 
 Many varied false negatives begin with an incorrect factual premise in the

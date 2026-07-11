@@ -117,6 +117,19 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
 The first varied-only Muon sweep crosses Muon learning rates `3e-5`, `1e-4`,
 and `3e-4` with one and two epochs. All other data, prompt, LoRA, batching, and
 completion-only-loss settings remain fixed.
+
+The sweep did not improve local test performance. The selected training setup
+is therefore varied-only, one epoch, regular AdamW at `5e-5`:
+
+```bash
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  method=qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1 \
+  student.dataset_name_contains=varied-deception \
+  student.training.optimizer=adamw \
+  student.training.optim=adamw_torch \
+  student.training.learning_rate=5e-5 \
+  student.training.num_train_epochs=1
+```
 The final adapter is written under
 `results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/adapter/`.
 
