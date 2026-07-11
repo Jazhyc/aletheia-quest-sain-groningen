@@ -100,6 +100,23 @@ The SFT collator masks every prompt token with `-100`, so loss applies only to
 the concise teacher target. The default is a rank-16/alpha-32 LoRA over Qwen
 attention and MLP projections for one epoch, using explicit `adamw_torch` and
 effective batch 32.
+
+Hybrid Muon SFT uses Muon for all trainable 2D LoRA matrices and AdamW for any
+remaining trainable parameters. The AdamW and Muon learning rates are separate:
+
+```bash
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  method=qwen9b_pid_varied_muonlr3e5_ep2_v1 \
+  student.dataset_name_contains=varied-deception \
+  student.training.optimizer=muon \
+  student.training.learning_rate=1e-6 \
+  student.training.muon_learning_rate=3e-5 \
+  student.training.num_train_epochs=2
+```
+
+The first varied-only Muon sweep crosses Muon learning rates `3e-5`, `1e-4`,
+and `3e-4` with one and two epochs. All other data, prompt, LoRA, batching, and
+completion-only-loss settings remain fixed.
 The final adapter is written under
 `results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/adapter/`.
 

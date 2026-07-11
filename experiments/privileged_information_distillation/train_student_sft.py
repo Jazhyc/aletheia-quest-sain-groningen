@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import random
 from pathlib import Path
+import sys
 from typing import Any
 
 import hydra
@@ -13,6 +14,15 @@ import numpy as np
 import torch
 from hydra.utils import get_original_cwd
 from omegaconf import DictConfig, OmegaConf
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from experiments.qwen_grpo_lora.run_qwen_grpo_lora import (
+    MuonAdamW,
+    muon_adamw_param_groups,
+)
 
 
 class CompletionOnlyCollator:
@@ -85,6 +95,21 @@ def main(cfg: DictConfig) -> None:
     from peft import LoraConfig, get_peft_model
     from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 
+    class MuonSFTTrainer(Trainer):
+        """Trainer using Muon for 2D LoRA matrices and AdamW otherwise."""
+
+        def create_optimizer(self) -> torch.optim.Optimizer:
+            if self.optimizer is None:
+                self.optimizer = MuonAdamW(
+                    muon_adamw_param_groups(self.model, float(self.args.weight_decay)),
+                    lr=float(self.args.learning_rate),
+                    muon_lr=float(cfg.student.training.muon_learning_rate),
+                    muon_momentum=float(cfg.student.training.muon_momentum),
+                    muon_nesterov=bool(cfg.student.training.muon_nesterov),
+                    muon_ns_steps=int(cfg.student.training.muon_ns_steps),
+                )
+            return self.optimizer
+
     root = Path(get_original_cwd()).resolve()
     random.seed(int(cfg.seed))
     np.random.seed(int(cfg.seed))
@@ -148,7 +173,11 @@ def main(cfg: DictConfig) -> None:
         report_to="none",
         remove_unused_columns=False,
     )
-    trainer = Trainer(
+    optimizer_name = str(cfg.student.training.optimizer)
+    if optimizer_name not in {"adamw", "muon"}:
+        raise ValueError(f"unknown student.training.optimizer={optimizer_name!r}")
+    trainer_cls = MuonSFTTrainer if optimizer_name == "muon" else Trainer
+    trainer = trainer_cls(
         model=model,
         args=args,
         train_dataset=dataset,

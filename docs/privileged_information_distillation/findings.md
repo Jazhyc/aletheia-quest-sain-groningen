@@ -146,6 +146,28 @@ rose by 0.0048. Instructed performance was unchanged, so there is no evidence
 of catastrophic forgetting. The small, split-dependent gain is not strong
 enough to replace the mixed adapter based on validation selection alone.
 
+### Varied-only Muon sweep
+
+The next controlled sweep tests whether optimizer geometry and additional
+updates help the 2,877-example varied-only subset. It crosses hybrid Muon
+learning rates `3e-5`, `1e-4`, and `3e-4` with one and two epochs. Muon updates
+the trainable 2D LoRA matrices; AdamW at `1e-6` handles any remaining trainable
+parameters. Rank, alpha, target modules, prompt, completion-only loss, effective
+batch size 32, teacher cache, and seed remain fixed. Select candidates using
+full-validation varied balanced accuracy, then reserve local test for the best
+one or two configurations.
+
+A one-step GPU integration smoke completed as job `30101400`. Full runs:
+
+| Muon LR | epochs | Slurm job | method suffix |
+| ---: | ---: | ---: | --- |
+| `3e-5` | 1 | `30101407` | `muonlr3e5_ep1_v1` |
+| `1e-4` | 1 | `30101402` | `muonlr1e4_ep1_v1` |
+| `3e-4` | 1 | `30101404` | `muonlr3e4_ep1_v1` |
+| `3e-5` | 2 | `30101406` | `muonlr3e5_ep2_v1` |
+| `1e-4` | 2 | `30101403` | `muonlr1e4_ep2_v1` |
+| `3e-4` | 2 | `30101405` | `muonlr3e4_ep2_v1` |
+
 ## Compact local factual retrieval proposal
 
 Many varied false negatives begin with an incorrect factual premise in the
