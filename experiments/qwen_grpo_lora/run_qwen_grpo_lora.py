@@ -1138,6 +1138,16 @@ def main(cfg: DictConfig) -> None:
         processing_class=tokenizer,
         peft_config=None if init_adapter is not None else peft_config,
     )
+    if algorithm == "sdpo" and hasattr(trainer, "vllm_generation"):
+        original_fix_param_name = trainer.vllm_generation._fix_param_name_to_vllm
+
+        def fix_sdpo_param_name(name: str, extra_prefixes: list[str] | None = None) -> str:
+            name = original_fix_param_name(name, extra_prefixes=extra_prefixes)
+            if name.startswith("model.") or name.startswith("lm_head."):
+                return "language_model." + name
+            return name
+
+        trainer.vllm_generation._fix_param_name_to_vllm = fix_sdpo_param_name
 
     print("starting GRPO training")
     train_result = trainer.train()
