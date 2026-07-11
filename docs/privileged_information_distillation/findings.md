@@ -234,7 +234,22 @@ The trainer now supports a trainable `init_adapter` and literal dataset-name
 filter. A one-step smoke, job `30102648`, successfully loaded, synchronized,
 updated, evaluated, and saved the distilled adapter. Full epoch-sweep jobs are
 `30102734` (1 epoch), `30102733` (2 epochs), and `30102735` (3 epochs), each over
-2,877 varied examples or about 90 optimizer steps per epoch.
+2,880 varied examples and 360 optimizer steps per epoch under the actual TRL
+generation/batching semantics. The one-epoch run completed in 2h10m and scored
+0.9083 validation BA, 0.8500 recall, and 0.0333 FPR with zero parse errors. Its
+deterministic validation outputs averaged 54.3 tokens (p95 74, maximum 125), so
+the 100+ token stochastic rollout lengths do not directly imply the same
+submission decode length. The result is not yet a fair vLLM test comparison.
+
+The two-epoch run completed as job `30102733` in 4h49m and improved validation
+BA to 0.9179, with 0.9000 recall, 0.0643 FPR, and zero parse errors. This is a
+0.0095 BA gain over one epoch, driven by higher recall at the cost of twice the
+false-positive rate. Late second-epoch stochastic completions averaged roughly
+135--150 tokens and reached about 299 tokens in logged batches, versus the much
+shorter deterministic outputs from the one-epoch checkpoint. This length growth
+explains the slower validation tail and may matter for submission runtime. Wait
+for the three-epoch validation result before selecting the epoch count for one
+fair vLLM test evaluation.
 
 ### Online self-distillation with SDPO
 

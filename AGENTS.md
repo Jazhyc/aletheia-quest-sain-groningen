@@ -62,6 +62,22 @@ The same docs record two follow-ups: a varied-only `5e-5` student ablation using
 retrieval proposal. Full Wikipedia cannot fit the 200 MB package; any retrieval
 index should be small, CPU-queryable, evaluated for varied-recall/FPR tradeoffs,
 and checked for licensing compatibility (prefer CC0 data when practical).
+
+Privileged-distillation findings from 2026-07-11: the selected one-epoch
+varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155
+(varied BA 0.8278). A matched prediction-only target ablation scored only 0.8631
+test BA (varied BA 0.7917), showing that the compact teacher reasoning provides
+substantial supervision beyond binary labels. Varied-only GRPO continuations
+from the selected adapter scored 0.9083 validation BA after one epoch and 0.9179
+after two epochs, both with zero parse errors. The two-epoch run improved recall
+from 0.8500 to 0.9000 while increasing FPR from 0.0333 to 0.0643. Its late
+stochastic completions grew to roughly 135--150 tokens, making training and
+validation slower. Treat these results as backend-sensitive until fair vLLM test
+evaluation, and select among the epoch sweep on validation before testing.
+Online SDPO requires the external pinned environment
+`/scratch/s4626451/.venvs/aletheia-sdpo` (TRL 1.8/vLLM 0.23); the main environment
+must remain on its locked TRL 0.23/vLLM 0.24 stack. SDPO smoke job `30102832`
+completed successfully after the Qwen3.5 vLLM weight-name compatibility fix.
 Current Qwen GRPO LoRA experiment context from 2026-07-06: the active setup is a
 rank-16, alpha-32 LoRA on `Qwen/Qwen3.5-9B`, targeting attention and MLP
 projection modules, trained with TRL GRPO in colocated vLLM mode and Muon for 2D
@@ -130,7 +146,18 @@ loses recall and is still below prompt-only rows such as
 (0.9298 BA). Treat the current RL path as evidence that RL can learn a clean
 binary low-FPR judge, not as a replacement for the prompt-only/ensemble path.
 
-As of 2026-07-04, the strongest tracked black-box judge is the three-prompt Qwen
+As of 2026-07-11, the strongest tracked local-test black-box judge is the
+GPT-OSS-120B model-swap ensemble
+(`gpt_oss_120b_reason_ensemble_dks_member4096_v1`): the same `details4096`,
+`known4096`, and `scrutiny4096` prompts, max aggregated, with a
+validation-selected threshold of 1.0. It scored test BA 0.9345, AUROC 0.9465,
+recall 0.9000, FPR 0.0310, zero parse errors, and 104.0s scoring time. It improves
+only 0.0047 BA over the Qwen heavy ensemble and shares 40 errors with it, so
+larger-model capacity is not the dominant remaining bottleneck; prompt-visible
+ambiguity, correlated factual failures, and label noise are plausible parts of
+the apparent 0.93-0.935 ceiling. GPT-OSS cannot be submitted directly.
+
+The strongest submission-compatible prompt ensemble remains the three-prompt Qwen
 reasoning ensemble (`qwen_reason_ensemble_dks_member4096_v1`): `details4096`,
 `known4096`, and `scrutiny4096`, scheduled member-major, max aggregated, with a
 4096-token generation budget and binary threshold 0.01. On the local test split
