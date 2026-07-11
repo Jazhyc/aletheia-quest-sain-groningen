@@ -198,6 +198,18 @@ the best tested student on local test (0.9155 overall BA and 0.8278 varied BA).
 Do not continue Muon tuning for this SFT objective unless a later change to the
 targets or inference method creates a new reason to revisit optimizer behavior.
 
+## Prediction-only SFT baseline
+
+To test whether teacher reasoning supervision is necessary, train a controlled
+student on only the final binary labels. It uses the same 2,877 usable varied
+examples, rank-16/alpha-32 LoRA, one epoch, AdamW `5e-5`, effective batch size
+32, seed, context formatting, and Truth Value Guard decision rule as the
+selected compact-summary student. The cached reasoning-output instruction is
+replaced while preserving its exact `<context>` and `<output>`; the supervised
+completion is only `Prediction:0|1`. No teacher summary tokens are included in
+the loss. Config: `privileged_information_distillation_prediction_only`.
+Training was launched as job `30102432`.
+
 ## Counterfactual trace structure
 
 A second teacher/student contract tests whether explicit factual baselines make

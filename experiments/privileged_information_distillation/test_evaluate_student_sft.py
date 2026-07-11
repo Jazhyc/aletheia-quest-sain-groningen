@@ -8,6 +8,7 @@ if str(ROOT) not in sys.path:
 
 from experiments.privileged_information_distillation.evaluate_student_sft import (
     COUNTERFACTUAL_STRICT_RE,
+    PREDICTION_ONLY_STRICT_RE,
     load_retrieval_cache,
     parse_prediction,
 )
@@ -50,3 +51,9 @@ def test_counterfactual_strict_format_requires_ordered_fields() -> None:
     assert not COUNTERFACTUAL_STRICT_RE.fullmatch(
         valid.replace("<facts>Facts.</facts>\n", "")
     )
+
+
+def test_prediction_only_strict_format_accepts_binary_contract() -> None:
+    assert PREDICTION_ONLY_STRICT_RE.fullmatch("Prediction:1")
+    assert PREDICTION_ONLY_STRICT_RE.fullmatch("Prediction:<0>")
+    assert not PREDICTION_ONLY_STRICT_RE.fullmatch("Reasoning\nPrediction:1")

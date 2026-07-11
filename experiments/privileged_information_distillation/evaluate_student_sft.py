@@ -37,6 +37,7 @@ COUNTERFACTUAL_STRICT_RE = re.compile(
     r"<contradiction>\s*(.+?)\s*</contradiction>\s*"
     r"Prediction\s*:\s*([01])\s*$"
 )
+PREDICTION_ONLY_STRICT_RE = re.compile(r"(?is)^\s*Prediction\s*:\s*<?([01])>?\s*$")
 
 
 def parse_prediction(text: str) -> int | None:
@@ -164,7 +165,10 @@ def main() -> None:
     adapter_dirs = [path.resolve() for path in args.adapter_dir]
     configs = [yaml.safe_load((path.parent / "config.yaml").read_text()) for path in adapter_dirs]
     first = configs[0]
-    comparable = ("model", "prompt", "max_prompt_chars", "context_truncation", "target_format")
+    comparable = (
+        "model", "prompt", "max_prompt_chars", "context_truncation",
+        "target_format", "target_mode",
+    )
     for config in configs[1:]:
         if any(config["student"].get(key) != first["student"].get(key) for key in comparable):
             raise SystemExit("student prompt/model settings differ across adapters")
@@ -195,11 +199,12 @@ def main() -> None:
         max_model_len=args.max_model_len,
     )
     sampling = SamplingParams(max_tokens=args.max_new_tokens, temperature=0.0)
-    strict_re = (
-        COUNTERFACTUAL_STRICT_RE
-        if first["student"].get("target_format") == "counterfactual"
-        else STRICT_RE
-    )
+    if first["student"].get("target_mode") == "prediction_only":
+        strict_re = PREDICTION_ONLY_STRICT_RE
+    elif first["student"].get("target_format") == "counterfactual":
+        strict_re = COUNTERFACTUAL_STRICT_RE
+    else:
+        strict_re = STRICT_RE
 
     for lora_id, (adapter_dir, config) in enumerate(zip(adapter_dirs, configs, strict=True), 1):
         evaluated, elapsed = evaluate_adapter(

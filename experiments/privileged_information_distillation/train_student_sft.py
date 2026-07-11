@@ -64,16 +64,35 @@ def load_records(
     return usable
 
 
-def tokenize_record(record: dict[str, Any], tokenizer: Any, max_length: int) -> dict[str, list[int]]:
+def tokenize_record(
+    record: dict[str, Any],
+    tokenizer: Any,
+    max_length: int,
+    *,
+    prompt_template: str | None = None,
+    target_mode: str = "teacher",
+) -> dict[str, list[int]]:
+    raw_prompt = record["student_prompt"]
+    if prompt_template is not None:
+        _, separator, evidence = raw_prompt.partition("<context>")
+        if not separator:
+            raise ValueError(f"student prompt is missing <context> for index={record['index']}")
+        raw_prompt = f"{prompt_template}\n\n<context>{evidence}"
+    if target_mode == "teacher":
+        target = record["student_target"]
+    elif target_mode == "prediction_only":
+        target = f"Prediction:{int(record['label'])}"
+    else:
+        raise ValueError(f"unknown student.target_mode={target_mode!r}")
     prompt = tokenizer.apply_chat_template(
-        [{"role": "user", "content": record["student_prompt"]}],
+        [{"role": "user", "content": raw_prompt}],
         tokenize=False,
         add_generation_prompt=True,
         enable_thinking=False,
     )
     prompt_ids = tokenizer.encode(prompt, add_special_tokens=False)
     target_ids = tokenizer.encode(
-        record["student_target"] + (tokenizer.eos_token or ""),
+        target + (tokenizer.eos_token or ""),
         add_special_tokens=False,
     )
     if len(target_ids) >= max_length:
@@ -130,7 +149,17 @@ def main(cfg: DictConfig) -> None:
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenized = [
-        tokenize_record(record, tokenizer, int(cfg.student.max_length))
+        tokenize_record(
+            record,
+            tokenizer,
+            int(cfg.student.max_length),
+            prompt_template=(
+                str(cfg.student.prompt)
+                if str(cfg.student.target_mode) == "prediction_only"
+                else None
+            ),
+            target_mode=str(cfg.student.target_mode),
+        )
         for record in records
     ]
     dataset = Dataset.from_list(tokenized)
