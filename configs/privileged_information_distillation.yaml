@@ -7,6 +7,7 @@ teacher:
   model: openai/gpt-oss-120b
   split: train
   limit: null
+  limit_per_label: null
   max_prompt_chars: 3000
   context_truncation: tail
   max_model_len: 8192

@@ -14,6 +14,19 @@ SUMMARY_ONLY_PATTERN = re.compile(
     r"<reasoning_summary>\s*(.*?)\s*</reasoning_summary>",
     flags=re.DOTALL,
 )
+COUNTERFACTUAL_PATTERN = re.compile(
+    r"<reasoning_summary>\s*(.*?)\s*</reasoning_summary>\s*"
+    r"<facts>\s*(.*?)\s*</facts>\s*"
+    r"<contradiction>\s*(.*?)\s*</contradiction>\s*"
+    r"Prediction:\s*([01])\b",
+    flags=re.DOTALL,
+)
+COUNTERFACTUAL_ONLY_PATTERN = re.compile(
+    r"<reasoning_summary>\s*(.*?)\s*</reasoning_summary>\s*"
+    r"<facts>\s*(.*?)\s*</facts>\s*"
+    r"<contradiction>\s*(.*?)\s*</contradiction>",
+    flags=re.DOTALL,
+)
 
 
 def safe_text(value: Any) -> str:
@@ -117,7 +130,43 @@ def parse_teacher_target(
     return summary, prediction
 
 
-def format_student_target(summary: str, prediction: int) -> str:
+def parse_counterfactual_teacher_target(
+    raw_completion: str,
+    expected_prediction: int | None = None,
+) -> tuple[str, str, str, int] | None:
+    """Parse the ordered summary, facts, contradiction, and prediction fields."""
+    final = extract_harmony_final(raw_completion)
+    matches = list(COUNTERFACTUAL_PATTERN.finditer(final))
+    if matches:
+        summary, facts, contradiction, prediction = matches[-1].groups()
+        prediction = int(prediction)
+    elif expected_prediction in (0, 1):
+        matches = list(COUNTERFACTUAL_ONLY_PATTERN.finditer(final))
+        if not matches:
+            return None
+        summary, facts, contradiction = matches[-1].groups()
+        prediction = int(expected_prediction)
+    else:
+        return None
+    fields = tuple(" ".join(value.split()) for value in (summary, facts, contradiction))
+    if not all(fields):
+        return None
+    return fields[0], fields[1], fields[2], prediction
+
+
+def format_student_target(
+    summary: str,
+    prediction: int,
+    facts: str | None = None,
+    contradiction: str | None = None,
+) -> str:
+    if facts is not None and contradiction is not None:
+        return (
+            f"<reasoning_summary>\n{summary.strip()}\n</reasoning_summary>\n"
+            f"<facts>\n{facts.strip()}\n</facts>\n"
+            f"<contradiction>\n{contradiction.strip()}\n</contradiction>\n"
+            f"Prediction:{int(prediction)}"
+        )
     return (
         f"<reasoning_summary>\n{summary.strip()}\n</reasoning_summary>\n"
         f"Prediction:{int(prediction)}"

@@ -22,6 +22,7 @@ from experiments.privileged_information_distillation.core import (
     build_teacher_prompt,
     extract_harmony_final,
     format_student_target,
+    parse_counterfactual_teacher_target,
     parse_teacher_target,
 )
 from experiments.qwen_grpo_lora.run_qwen_grpo_lora import (
@@ -73,8 +74,37 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
                     label,
                 ),
             })
-    limit = cfg.teacher.limit
-    return rows if limit is None else rows[:int(limit)]
+    return limit_teacher_rows(
+        rows,
+        limit=cfg.teacher.limit,
+        limit_per_label=OmegaConf.select(cfg, "teacher.limit_per_label", default=None),
+    )
+
+
+def limit_teacher_rows(
+    rows: list[dict[str, Any]],
+    *,
+    limit: int | None,
+    limit_per_label: int | None,
+) -> list[dict[str, Any]]:
+    """Apply either a simple limit or a balanced per-label smoke limit."""
+    if limit is not None and limit_per_label is not None:
+        raise ValueError("set only one of teacher.limit and teacher.limit_per_label")
+    if limit_per_label is None:
+        return rows if limit is None else rows[:int(limit)]
+    selected: list[dict[str, Any]] = []
+    counts = {0: 0, 1: 0}
+    wanted = int(limit_per_label)
+    for row in rows:
+        label = int(row["label"])
+        if label in counts and counts[label] < wanted:
+            selected.append(row)
+            counts[label] += 1
+        if all(count == wanted for count in counts.values()):
+            break
+    if any(count < wanted for count in counts.values()):
+        raise RuntimeError(f"could not select {wanted} teacher rows per label: {counts}")
+    return selected
 
 
 def load_cached_records(path: Path) -> dict[tuple[str, Any], dict[str, Any]]:
@@ -105,6 +135,7 @@ def cache_matches(row: dict[str, Any], cached: dict[str, Any] | None) -> bool:
 def reparse_cached_record(
     row: dict[str, Any],
     cached: dict[str, Any] | None,
+    target_format: str = "summary",
 ) -> dict[str, Any] | None:
     if not cached or not cached.get("raw_completion"):
         return cached
@@ -114,18 +145,28 @@ def reparse_cached_record(
         or cached.get("teacher_prompt") != row["teacher_prompt"]
     ):
         return cached
-    parsed = parse_teacher_target(
-        cached["raw_completion"],
-        expected_prediction=row["label"],
+    parser = (
+        parse_counterfactual_teacher_target
+        if target_format == "counterfactual"
+        else parse_teacher_target
     )
+    parsed = parser(cached["raw_completion"], expected_prediction=row["label"])
     if not parsed:
         return cached
-    summary, prediction = parsed
+    if target_format == "counterfactual":
+        summary, facts, contradiction, prediction = parsed
+    else:
+        summary, prediction = parsed
+        facts = contradiction = None
     return {
         **cached,
         "reasoning_summary": summary,
+        "facts": facts,
+        "contradiction": contradiction,
         "prediction": prediction,
-        "student_target": format_student_target(summary, prediction),
+        "student_target": format_student_target(
+            summary, prediction, facts=facts, contradiction=contradiction
+        ),
         "parse_error": False,
         "label_match": prediction == row["label"],
         "prediction_source": (
@@ -148,6 +189,9 @@ def main(cfg: DictConfig) -> None:
     random.seed(int(cfg.seed))
     np.random.seed(int(cfg.seed))
     rows = load_teacher_rows(cfg, root)
+    target_format = str(OmegaConf.select(cfg, "student.target_format", default="summary"))
+    if target_format not in {"summary", "counterfactual"}:
+        raise ValueError(f"unknown student.target_format={target_format!r}")
     print(f"loaded {len(rows)} privileged teacher examples")
 
     artifact = Path(str(cfg.teacher.artifact))
@@ -161,7 +205,7 @@ def main(cfg: DictConfig) -> None:
     missing_rows = []
     for row in rows:
         key = (row["dataset"], row["index"])
-        refreshed = reparse_cached_record(row, cached.get(key))
+        refreshed = reparse_cached_record(row, cached.get(key), target_format)
         if cache_matches(row, refreshed):
             reusable[key] = refreshed
         else:
@@ -211,20 +255,31 @@ def main(cfg: DictConfig) -> None:
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
                 continue
             raw_completion = generated[key]
-            parsed = parse_teacher_target(
-                raw_completion,
-                expected_prediction=row["label"],
+            parser = (
+                parse_counterfactual_teacher_target
+                if target_format == "counterfactual"
+                else parse_teacher_target
             )
-            summary = parsed[0] if parsed else None
-            prediction = parsed[1] if parsed else None
+            parsed = parser(raw_completion, expected_prediction=row["label"])
+            if parsed and target_format == "counterfactual":
+                summary, facts, contradiction, prediction = parsed
+            elif parsed:
+                summary, prediction = parsed
+                facts = contradiction = None
+            else:
+                summary = facts = contradiction = prediction = None
             parsed_count += int(parsed is not None)
             label_match_count += int(prediction == row["label"])
             record = {
                 **row,
                 "reasoning_summary": summary,
+                "facts": facts,
+                "contradiction": contradiction,
                 "prediction": prediction,
                 "student_target": (
-                    format_student_target(summary, prediction) if parsed else None
+                    format_student_target(
+                        summary, prediction, facts=facts, contradiction=contradiction
+                    ) if parsed else None
                 ),
                 "parse_error": parsed is None,
                 "label_match": prediction == row["label"],

@@ -66,6 +66,18 @@ For a 32-row prompt/parser smoke before a full run:
 sbatch experiments/privileged_information_distillation/run_teacher.sh teacher.limit=32
 ```
 
+The counterfactual variant uses a separate artifact and strict ordered
+`reasoning_summary`, `facts`, and `contradiction` fields. Run a balanced smoke:
+
+```bash
+sbatch experiments/privileged_information_distillation/run_teacher.sh \
+  --config-name privileged_information_distillation_counterfactual \
+  teacher.limit=null teacher.limit_per_label=16 teacher.force_regenerate=true
+```
+
+Use `teacher.limit_per_label` for balanced prompt/parser smokes; do not combine
+it with `teacher.limit`.
+
 After reviewing teacher artifacts, train the completion-only Qwen LoRA:
 
 ```bash

@@ -1,6 +1,7 @@
 import json
 
 from experiments.privileged_information_distillation.evaluate_student_sft import (
+    COUNTERFACTUAL_STRICT_RE,
     load_retrieval_cache,
     parse_prediction,
 )
@@ -26,3 +27,16 @@ def test_load_retrieval_cache_formats_passages(tmp_path) -> None:
     assert load_retrieval_cache(path) == {
         ("dataset", 7): "- Cerberus: Three-headed guardian."
     }
+
+
+def test_counterfactual_strict_format_requires_ordered_fields() -> None:
+    valid = (
+        "<reasoning_summary>Summary.</reasoning_summary>\n"
+        "<facts>Facts.</facts>\n"
+        "<contradiction>No contradiction.</contradiction>\nPrediction:0"
+    )
+
+    assert COUNTERFACTUAL_STRICT_RE.fullmatch(valid)
+    assert not COUNTERFACTUAL_STRICT_RE.fullmatch(
+        valid.replace("<facts>Facts.</facts>\n", "")
+    )

@@ -198,6 +198,40 @@ the best tested student on local test (0.9155 overall BA and 0.8278 varied BA).
 Do not continue Muon tuning for this SFT objective unless a later change to the
 targets or inference method creates a new reason to revisit optimizer behavior.
 
+## Counterfactual trace structure
+
+A second teacher/student contract tests whether explicit factual baselines make
+distillation more useful than a single freeform summary. It preserves the
+summary first, then requires ordered `<facts>` and `<contradiction>` fields,
+followed by the existing prediction:
+
+```text
+<reasoning_summary>...</reasoning_summary>
+<facts>Correct facts, material omissions, or genuine uncertainties.</facts>
+<contradiction>Comparison with the output, or explicitly no contradiction.</contradiction>
+Prediction:0|1
+```
+
+For positive labels the contradiction must identify an important factual
+conflict, misleading omission, or unjustified certainty. For negative labels it
+must explicitly state why no important contradiction exists. The facts field is
+allowed to describe uncertainty or missing information and is told not to
+invent certainty. GPT-OSS Harmony analysis remains excluded; all three visible
+fields are parsed from the final channel and distilled. Config:
+`privileged_information_distillation_counterfactual`.
+
+An initial ordered 32-negative smoke parsed all fields and labels successfully
+as job `30101559`. Because simple row limiting follows label-sorted source data,
+the generator now supports `teacher.limit_per_label` for balanced smoke tests.
+Job `30101567` regenerates 16 examples per label for qualitative review before
+any full-cache run. The balanced smoke completed with 32/32 strict parses and
+32/32 label matches. Mean field lengths were 45.0 words for the summary, 37.0
+for facts, and 32.4 for contradiction. Qualitative positive examples directly
+contrast the wrong verdict with the correct factual baseline; negative examples
+state that the output matches the facts and that no important contradiction
+exists. The prompt and parser are ready for review before a full cache is
+generated.
+
 ## Compact local factual retrieval proposal
 
 Many varied false negatives begin with an incorrect factual premise in the

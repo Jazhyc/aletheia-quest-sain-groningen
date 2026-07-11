@@ -31,6 +31,12 @@ STRICT_RE = re.compile(
     r"(?is)^\s*<reasoning_summary>\s*(.+?)\s*</reasoning_summary>\s*"
     r"Prediction\s*:\s*([01])\s*$"
 )
+COUNTERFACTUAL_STRICT_RE = re.compile(
+    r"(?is)^\s*<reasoning_summary>\s*(.+?)\s*</reasoning_summary>\s*"
+    r"<facts>\s*(.+?)\s*</facts>\s*"
+    r"<contradiction>\s*(.+?)\s*</contradiction>\s*"
+    r"Prediction\s*:\s*([01])\s*$"
+)
 
 
 def parse_prediction(text: str) -> int | None:
@@ -124,6 +130,7 @@ def evaluate_adapter(
     records: pd.DataFrame,
     adapter_dir: Path,
     lora_id: int,
+    strict_re: re.Pattern[str] = STRICT_RE,
 ) -> tuple[pd.DataFrame, float]:
     from vllm.lora.request import LoRARequest
 
@@ -137,7 +144,7 @@ def evaluate_adapter(
     evaluated["prediction"] = predictions
     evaluated["score"] = [float(value) if value is not None else 0.0 for value in predictions]
     evaluated["parse_error"] = [value is None for value in predictions]
-    evaluated["format_valid"] = [STRICT_RE.fullmatch(text) is not None for text in generations]
+    evaluated["format_valid"] = [strict_re.fullmatch(text) is not None for text in generations]
     evaluated["generation"] = generations
     return evaluated, elapsed
 
@@ -157,9 +164,9 @@ def main() -> None:
     adapter_dirs = [path.resolve() for path in args.adapter_dir]
     configs = [yaml.safe_load((path.parent / "config.yaml").read_text()) for path in adapter_dirs]
     first = configs[0]
-    comparable = ("model", "prompt", "max_prompt_chars", "context_truncation")
+    comparable = ("model", "prompt", "max_prompt_chars", "context_truncation", "target_format")
     for config in configs[1:]:
-        if any(config["student"][key] != first["student"][key] for key in comparable):
+        if any(config["student"].get(key) != first["student"].get(key) for key in comparable):
             raise SystemExit("student prompt/model settings differ across adapters")
 
     from transformers import AutoTokenizer
@@ -188,9 +195,16 @@ def main() -> None:
         max_model_len=args.max_model_len,
     )
     sampling = SamplingParams(max_tokens=args.max_new_tokens, temperature=0.0)
+    strict_re = (
+        COUNTERFACTUAL_STRICT_RE
+        if first["student"].get("target_format") == "counterfactual"
+        else STRICT_RE
+    )
 
     for lora_id, (adapter_dir, config) in enumerate(zip(adapter_dirs, configs, strict=True), 1):
-        evaluated, elapsed = evaluate_adapter(llm, sampling, records, adapter_dir, lora_id)
+        evaluated, elapsed = evaluate_adapter(
+            llm, sampling, records, adapter_dir, lora_id, strict_re=strict_re
+        )
         method = config["method"]
         output_dir = adapter_dir.parent / (args.run_name or args.split)
         output_dir.mkdir(parents=True, exist_ok=True)
