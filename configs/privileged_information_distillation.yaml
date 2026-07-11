@@ -32,6 +32,7 @@ teacher:
 
 student:
   model: Qwen/Qwen3.5-9B
+  train_limit: null
   max_prompt_chars: 3000
   context_truncation: tail
   max_length: 4608
@@ -55,6 +56,7 @@ student:
     target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
   training:
     num_train_epochs: 1.0
+    max_steps: -1
     learning_rate: 2.0e-5
     warmup_ratio: 0.03
     weight_decay: 0.0

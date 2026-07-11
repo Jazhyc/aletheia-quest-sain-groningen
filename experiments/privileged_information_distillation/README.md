@@ -68,6 +68,14 @@ After reviewing teacher artifacts, train the completion-only Qwen LoRA:
 sbatch experiments/privileged_information_distillation/run_student_sft.sh
 ```
 
+One-step GPU smoke before a full training run:
+
+```bash
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  student.train_limit=32 student.training.max_steps=1 \
+  student.output_dir=results/blackbox/qwen9b_privileged_gptoss120b_summary_smoke/adapter
+```
+
 The SFT collator masks every prompt token with `-100`, so loss applies only to
 the concise teacher target. The default is a rank-16/alpha-32 LoRA over Qwen
 attention and MLP projections for one epoch, using AdamW and effective batch 32.

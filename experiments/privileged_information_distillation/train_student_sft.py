@@ -87,6 +87,8 @@ def main(cfg: DictConfig) -> None:
     if not artifact.is_absolute():
         artifact = root / artifact
     records = load_records(artifact)
+    if cfg.student.train_limit is not None:
+        records = records[:int(cfg.student.train_limit)]
     tokenizer = AutoTokenizer.from_pretrained(str(cfg.student.model))
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -117,6 +119,7 @@ def main(cfg: DictConfig) -> None:
     args = TrainingArguments(
         output_dir=output_dir.as_posix(),
         num_train_epochs=float(cfg.student.training.num_train_epochs),
+        max_steps=int(cfg.student.training.max_steps),
         learning_rate=float(cfg.student.training.learning_rate),
         warmup_ratio=float(cfg.student.training.warmup_ratio),
         weight_decay=float(cfg.student.training.weight_decay),
@@ -145,4 +148,3 @@ def main(cfg: DictConfig) -> None:
 
 if __name__ == "__main__":
     main()
-

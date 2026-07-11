@@ -15,6 +15,21 @@ from experiments.privileged_information_distillation.generate_teacher_data impor
     cache_matches,
     reparse_cached_record,
 )
+from experiments.privileged_information_distillation.train_student_sft import (
+    CompletionOnlyCollator,
+    tokenize_record,
+)
+
+
+class FakeTokenizer:
+    eos_token = "<eos>"
+
+    def apply_chat_template(self, messages, **kwargs):
+        assert kwargs["enable_thinking"] is False
+        return "PROMPT:" + messages[0]["content"]
+
+    def encode(self, text, add_special_tokens=False):
+        return [ord(character) for character in text]
 
 
 def test_teacher_prompt_contains_label_but_student_prompt_does_not() -> None:
@@ -123,3 +138,19 @@ def test_cached_summary_is_reparsed_without_harmony_analysis() -> None:
     assert refreshed["prediction_source"] == "privileged_label_fallback"
     assert refreshed["student_target"].endswith("Prediction:0")
     assert cache_matches(row, refreshed)
+
+
+def test_student_sft_masks_prompt_and_trains_only_on_target() -> None:
+    record = {"student_prompt": "judge", "student_target": "Prediction:1", "index": 1}
+    tokenized = tokenize_record(record, FakeTokenizer(), max_length=128)
+    first_target = tokenized["labels"].index(next(x for x in tokenized["labels"] if x != -100))
+
+    assert tokenized["labels"][:first_target] == [-100] * first_target
+    assert tokenized["labels"][first_target:] == tokenized["input_ids"][first_target:]
+
+    batch = CompletionOnlyCollator(pad_token_id=0)([
+        tokenized,
+        {"input_ids": [1, 2], "labels": [-100, 2]},
+    ])
+    assert batch["input_ids"].shape[0] == 2
+    assert batch["labels"][1, 2:].eq(-100).all()
