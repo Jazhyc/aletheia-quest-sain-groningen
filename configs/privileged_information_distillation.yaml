@@ -61,3 +61,10 @@ student:
     per_device_train_batch_size: 2
     gradient_accumulation_steps: 16
     logging_steps: 5
+
+hydra:
+  run:
+    dir: logs/privileged_information_distillation/hydra/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: logs/privileged_information_distillation/hydra_multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
