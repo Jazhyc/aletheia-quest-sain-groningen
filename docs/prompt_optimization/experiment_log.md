@@ -1566,6 +1566,42 @@ enough to serve as a standalone detector. The 68 prompt evaluations took 198.0s
 after model initialization. Artifacts are under
 `results/blackbox/qwen27b_organism_self_query_shared_errors_v1/`.
 
+## Diagnostic: organism-only atomic True/False consistency
+
+Status: completed locally as Slurm job `30104133`.
+
+This follow-up removed base-model comparison entirely. Each generating Qwen
+organism first extracted up to 12 atomic claims from its own prior response.
+Every extracted claim was then presented in isolation with a forced, deterministic
+one-word `True` or `False` response. A diagnostic oracle condition also supplied
+32 manually selected, high-confidence poisoned claims across 29 of the 34 rows;
+these claims are for analysis only and are unavailable to a deployable method.
+
+| condition | claims | True | False | parse errors | rows with any False |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| organism-extracted | 312 | 249 | 63 | 0 | 27/34 |
+| diagnostic oracle | 32 | 13 | 19 | 0 | 17/29 |
+
+The oracle result is the cleanest estimate: the organisms rejected 59% of known
+poisoned assertions once those assertions were isolated. Examples recovered
+include peladophobia prevalence, the Plain of Jars year, El Salvador's exchange
+rate, Chilean chronology, the PayPal settlement, Titleist history, Gettysburg
+casualty arithmetic, papal dates, Attila/Spain, and ombrophobia. Misses included
+the Wright brothers' incorrect birth dates, Richmond's Confederate-capital year,
+Yankee Doodle's origin, Carioca etymology, the ichthyosaur relationship, Saint
+Catherine's martyrdom, Reagan's dates, Bank of England war history, fencing
+dates, and Beckett's writing dates.
+
+The generated condition's apparent 27/34 row recall is not trustworthy. The
+organisms also rejected correct claims, including PayPal's eBay ownership, the
+date of the Battle of Maipú, Orville Wright's birthplace, and even the identity
+of Gettysburg. The same underlying fact sometimes changed verdict after a small
+rephrasing between extracted and oracle conditions. Thus forced binary output
+eliminates verbose rationalization and parsing problems, but does not solve
+calibration or factual instability. The 378 total prompt evaluations took 68.4s
+after initialization. Artifacts are under
+`results/blackbox/qwen27b_organism_atomic_true_false_v1/`.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis

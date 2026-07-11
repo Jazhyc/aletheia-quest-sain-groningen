@@ -204,6 +204,20 @@ as a calibrated standalone detector. Artifacts are under
 `results/blackbox/qwen27b_organism_self_query_shared_errors_v1/`; runtime code is
 `experiments/blackbox/audit_qwen_organism_self_query.py`.
 
+Qwen organism atomic True/False finding from 2026-07-11: job `30104133` tested
+only the generating organisms, without base-model diffing. Organism-generated
+decomposition extracted 312 claims from the 34 shared false negatives and
+returned at least one `False` on 27 rows, but manual inspection found many false
+alarms on plainly true claims. On a diagnostic set of 32 high-confidence poisoned
+claims across 29 rows, forced one-word verification rejected 19 claims and
+accepted 13, giving a clean self-rejection rate of 59% and row recall of 17/29.
+All 344 verification outputs parsed as exactly True/False. This confirms useful
+context-triggered inconsistency, but also substantial missing knowledge and
+phrasing sensitivity. Do not use `any(False)` without calibration or controls;
+artifacts are under `results/blackbox/qwen27b_organism_atomic_true_false_v1/`
+and runtime code is
+`experiments/blackbox/audit_qwen_organism_claim_consistency.py`.
+
 The strongest submission-compatible prompt ensemble remains the three-prompt Qwen
 reasoning ensemble (`qwen_reason_ensemble_dks_member4096_v1`): `details4096`,
 `known4096`, and `scrutiny4096`, scheduled member-major, max aggregated, with a
