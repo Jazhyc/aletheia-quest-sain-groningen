@@ -1,9 +1,9 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "submission"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from phoenix_wright_scoring import parse_rating, rating_to_score, reply_to_score
+from legacy_submissions.phoenix_wright_scoring import parse_rating, rating_to_score, reply_to_score
 
 
 def test_parse_rating_requires_explicit_rating_prefix():

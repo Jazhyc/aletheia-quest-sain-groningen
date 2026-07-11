@@ -4,9 +4,9 @@ from pathlib import Path
 
 import torch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "submission"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from phoenix_wright_scoring import reply_to_score
+from legacy_submissions.phoenix_wright_scoring import reply_to_score
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
