@@ -188,6 +188,22 @@ some useful latent knowledge in Qwen, but its fact verification is materially
 less reliable than GPT-OSS and privileged labels amplify confabulation. Artifacts
 are under `results/blackbox/qwen9b_shared_error_atomic_audit_v1/`.
 
+Qwen organism neutral-self-query finding from 2026-07-11: local vLLM job
+`30104103` loaded `Qwen/Qwen3.5-27B` plus the five rank-128 organism adapters
+represented in the 34 shared false negatives. With the original deceptive
+conversation removed, the base model emitted `CONTAINS_FALSE_DETAIL` for 23/34
+and the actual generating organism for 21/34; they agreed positive on 17, agreed
+negative on 5, and differed or had a parse failure on 12. Manual review shows
+real organism self-corrections (for example the false PayPal settlement,
+Becket's murder location, Peter Pan publication year, Chile chronology, papal
+dates, and Attila/Spain), but also confident new hallucinations. The organism
+LoRA suppressed useful base corrections on peladophobia prevalence, the Plain of
+Jars UNESCO year, Bank of England war history, and fencing dates. Treat neutral
+self-query as a promising complementary signal for context-triggered lies, not
+as a calibrated standalone detector. Artifacts are under
+`results/blackbox/qwen27b_organism_self_query_shared_errors_v1/`; runtime code is
+`experiments/blackbox/audit_qwen_organism_self_query.py`.
+
 The strongest submission-compatible prompt ensemble remains the three-prompt Qwen
 reasoning ensemble (`qwen_reason_ensemble_dks_member4096_v1`): `details4096`,
 `known4096`, and `scrutiny4096`, scheduled member-major, max aggregated, with a

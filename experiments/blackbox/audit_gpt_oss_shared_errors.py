@@ -75,6 +75,8 @@ def load_examples(keys: list[tuple[str, Any]]) -> list[dict[str, Any]]:
             examples.append({
                 "dataset": dataset_name,
                 "index": row["index"],
+                "model": row.get("model"),
+                "lora": row.get("lora"),
                 "question": final_message(row["messages"], "user"),
                 "answer": final_message(row["messages"], "assistant"),
             })

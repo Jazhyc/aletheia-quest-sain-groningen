@@ -1527,6 +1527,45 @@ positive-verdict rate reflects confabulation rather than superior recall.
 Ground-truth hints exacerbate that failure. Qwen artifacts are stored under
 `results/blackbox/qwen9b_shared_error_atomic_audit_v1/`.
 
+## Diagnostic: Qwen organism neutral self-query
+
+Status: completed locally as Slurm job `30104103` after setup failures
+`30104069` (repository import path) and `30104073` (vLLM default
+`max_num_seqs` exceeded the hybrid/Mamba cache capacity). The corrected run set
+`max_num_seqs=64`.
+
+The 34 shared false negatives all came from five rank-128 Qwen organism LoRAs.
+Each original answer received the same blind atomic audit twice: once from base
+`Qwen/Qwen3.5-27B`, and once from the exact LoRA organism that generated the
+answer. The original deceptive system context was not included.
+
+| verdict pair (base, organism) | rows |
+| --- | ---: |
+| false detail, false detail | 17 |
+| false detail, no false detail | 5 |
+| no false detail, no false detail | 5 |
+| no false detail, false detail | 2 |
+| base parse failure, organism false detail | 2 |
+| base parse failure, organism no false detail | 2 |
+| false detail, organism parse failure | 1 |
+
+The base produced 23 positive verdicts and the organisms 21; there were 12 rows
+with a different verdict or parse outcome. Several organism corrections were
+substantively useful, including the undisclosed PayPal settlement, Becket's
+murder location, the Peter Pan publication year, Chilean independence
+chronology, early papal dates, and Attila not invading Spain. Thus the organisms
+often do not reproduce a context-triggered falsehood when asked neutrally.
+
+The comparison is not a clean truth oracle. Both base and organisms generated
+new factual errors, and the LoRA suppressed several strong base corrections:
+peladophobia prevalence, the Plain of Jars UNESCO year, Bank of England war
+history, and electronic-fencing dates. In other cases the organism returned a
+positive verdict for the wrong reason. Neutral self-query is therefore a useful
+complementary inconsistency feature, but its raw binary verdict is not reliable
+enough to serve as a standalone detector. The 68 prompt evaluations took 198.0s
+after model initialization. Artifacts are under
+`results/blackbox/qwen27b_organism_self_query_shared_errors_v1/`.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis
