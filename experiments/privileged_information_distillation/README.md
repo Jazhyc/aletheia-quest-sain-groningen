@@ -15,7 +15,7 @@ Teacher output must be:
 
 ```text
 <reasoning_summary>
-At most 80 words of concrete evidence and factual contrast.
+Concise concrete evidence and factual contrast.
 </reasoning_summary>
 Prediction:0
 ```
@@ -29,9 +29,17 @@ unless they parse and their prediction matches the privileged label.
 
 The teacher prompt intentionally tells GPT-OSS that the label is authoritative:
 the goal is label-conditioned explanatory supervision, not teacher
-classification. It also prohibits mentioning privileged information in the
-summary and requires the explanation to connect hidden intent to the actual
+classification. It is aligned to the Truth Value Guard rubric, including its
+ordinary-truth treatment of true/false questions and its rule that hidden intent
+alone is insufficient. It also prohibits mentioning privileged information in
+the summary and requires the explanation to connect hidden intent to the actual
 effect of the final output.
+
+Teacher generation is resumable. Existing records are reused only when the
+dataset/index, label, student prompt, and privileged teacher prompt all match
+exactly and the record parsed with the expected prediction. Changed prompts or
+labels are regenerated automatically; set `teacher.force_regenerate=true` to
+ignore the cache explicitly.
 
 ## Workflow
 
@@ -63,4 +71,3 @@ No teacher job has been launched by this setup commit. Review the prompt first,
 then run a small smoke and inspect parse rate, label agreement, summary length,
 and representative positive/negative targets before generating the full train
 set.
-

@@ -77,6 +77,31 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
     return rows if limit is None else rows[:int(limit)]
 
 
+def load_cached_records(path: Path) -> dict[tuple[str, Any], dict[str, Any]]:
+    if not path.exists():
+        return {}
+    records: dict[tuple[str, Any], dict[str, Any]] = {}
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        records[(record["dataset"], record["index"])] = record
+    return records
+
+
+def cache_matches(row: dict[str, Any], cached: dict[str, Any] | None) -> bool:
+    if not cached:
+        return False
+    return (
+        cached.get("label") == row["label"]
+        and cached.get("student_prompt") == row["student_prompt"]
+        and cached.get("teacher_prompt") == row["teacher_prompt"]
+        and not cached.get("parse_error", True)
+        and cached.get("label_match") is True
+        and cached.get("student_target")
+    )
+
+
 @hydra.main(
     version_base=None,
     config_path="../../configs",
@@ -92,36 +117,66 @@ def main(cfg: DictConfig) -> None:
     rows = load_teacher_rows(cfg, root)
     print(f"loaded {len(rows)} privileged teacher examples")
 
-    tokenizer = AutoTokenizer.from_pretrained(str(cfg.teacher.model))
-    prompts = [render_chat_prompt(tokenizer, row["teacher_prompt"]) for row in rows]
-    llm = LLM(
-        model=str(cfg.teacher.model),
-        dtype=str(cfg.teacher.dtype),
-        max_model_len=int(cfg.teacher.max_model_len),
-        gpu_memory_utilization=float(cfg.teacher.gpu_memory_utilization),
-        seed=int(cfg.seed),
-    )
-    sampling = SamplingParams(
-        max_tokens=int(cfg.teacher.max_tokens),
-        temperature=float(cfg.teacher.temperature),
-    )
-    batch_size = cfg.teacher.batch_size
-    outputs = []
-    if batch_size is None:
-        outputs = list(llm.generate(prompts, sampling))
-    else:
-        for start in range(0, len(prompts), int(batch_size)):
-            outputs.extend(llm.generate(prompts[start:start + int(batch_size)], sampling))
-
     artifact = Path(str(cfg.teacher.artifact))
     if not artifact.is_absolute():
         artifact = root / artifact
+    cached = (
+        {} if bool(cfg.teacher.force_regenerate)
+        else load_cached_records(artifact)
+    )
+    reusable: dict[tuple[str, Any], dict[str, Any]] = {}
+    missing_rows = []
+    for row in rows:
+        key = (row["dataset"], row["index"])
+        if cache_matches(row, cached.get(key)):
+            reusable[key] = cached[key]
+        else:
+            missing_rows.append(row)
+    print(f"cache hits={len(reusable)} generation required={len(missing_rows)}")
+
+    generated: dict[tuple[str, Any], str] = {}
+    if missing_rows:
+        tokenizer = AutoTokenizer.from_pretrained(str(cfg.teacher.model))
+        prompts = [render_chat_prompt(tokenizer, row["teacher_prompt"]) for row in missing_rows]
+        llm = LLM(
+            model=str(cfg.teacher.model),
+            dtype=str(cfg.teacher.dtype),
+            max_model_len=int(cfg.teacher.max_model_len),
+            gpu_memory_utilization=float(cfg.teacher.gpu_memory_utilization),
+            seed=int(cfg.seed),
+        )
+        sampling = SamplingParams(
+            max_tokens=int(cfg.teacher.max_tokens),
+            temperature=float(cfg.teacher.temperature),
+        )
+        batch_size = cfg.teacher.batch_size
+        outputs = []
+        if batch_size is None:
+            outputs = list(llm.generate(prompts, sampling))
+        else:
+            for start in range(0, len(prompts), int(batch_size)):
+                outputs.extend(llm.generate(prompts[start:start + int(batch_size)], sampling))
+        generated = {
+            (row["dataset"], row["index"]): (
+                output.outputs[0].text if output.outputs else ""
+            )
+            for row, output in zip(missing_rows, outputs, strict=True)
+        }
+
     artifact.parent.mkdir(parents=True, exist_ok=True)
     parsed_count = 0
     label_match_count = 0
-    with artifact.open("w") as handle:
-        for row, output in zip(rows, outputs, strict=True):
-            raw_completion = output.outputs[0].text if output.outputs else ""
+    temporary = artifact.with_suffix(artifact.suffix + ".tmp")
+    with temporary.open("w") as handle:
+        for row in rows:
+            key = (row["dataset"], row["index"])
+            if key in reusable:
+                record = reusable[key]
+                parsed_count += 1
+                label_match_count += 1
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+                continue
+            raw_completion = generated[key]
             parsed = parse_teacher_target(raw_completion)
             summary = parsed[0] if parsed else None
             prediction = parsed[1] if parsed else None
@@ -140,6 +195,7 @@ def main(cfg: DictConfig) -> None:
                 "raw_completion": raw_completion,
             }
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    temporary.replace(artifact)
 
     print(f"parsed={parsed_count}/{len(rows)} label_matches={label_match_count}/{len(rows)}")
     print(f"wrote {artifact}")

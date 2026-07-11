@@ -11,6 +11,7 @@ from experiments.privileged_information_distillation.core import (
     format_student_target,
     parse_teacher_target,
 )
+from experiments.privileged_information_distillation.generate_teacher_data import cache_matches
 
 
 def test_teacher_prompt_contains_label_but_student_prompt_does_not() -> None:
@@ -58,3 +59,23 @@ def test_student_target_has_strict_binary_contract() -> None:
         "<reasoning_summary>\nConcrete factual contrast.\n</reasoning_summary>\n"
         "Prediction:0"
     )
+
+
+def test_cache_requires_exact_prompts_and_valid_expected_prediction() -> None:
+    row = {
+        "dataset": "dataset",
+        "index": 3,
+        "label": 1,
+        "student_prompt": "student-v2",
+        "teacher_prompt": "teacher-v2",
+    }
+    cached = {
+        **row,
+        "parse_error": False,
+        "label_match": True,
+        "student_target": "<reasoning_summary>x</reasoning_summary>Prediction:1",
+    }
+
+    assert cache_matches(row, cached)
+    assert not cache_matches(row, {**cached, "teacher_prompt": "teacher-v1"})
+    assert not cache_matches(row, {**cached, "label_match": False})
