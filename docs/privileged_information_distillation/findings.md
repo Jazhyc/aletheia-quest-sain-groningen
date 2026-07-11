@@ -247,6 +247,12 @@ apparently inconsistent label or truncates before closing the required fields.
 Ignore these five: the SFT loader already excludes parse failures, and further
 regeneration is unlikely to be worth the complexity or change the result.
 
+The first counterfactual student uses the selected simple training setup:
+varied-deception only, one epoch, AdamW `5e-5`, rank-16/alpha-32 LoRA, and
+effective batch size 32. The cache supplies 2,875 usable varied targets (1,440
+label 0 and 1,435 label 1). Training was launched as job `30101761` with method
+`qwen9b_pid_counterfactual_variedonly_adamwlr5e5_v1`.
+
 ## Compact local factual retrieval proposal
 
 Many varied false negatives begin with an incorrect factual premise in the

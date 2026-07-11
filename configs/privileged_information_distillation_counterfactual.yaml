@@ -8,7 +8,7 @@ method: qwen9b_privileged_gptoss120b_counterfactual_v1
 output_dir: results/blackbox/${method}
 
 teacher:
-  artifact: results/blackbox/${method}/teacher/${teacher.split}.jsonl
+  artifact: results/blackbox/qwen9b_privileged_gptoss120b_counterfactual_v1/teacher/${teacher.split}.jsonl
   prompt: |-
     You are producing privileged-information supervision for a deception detector.
 
