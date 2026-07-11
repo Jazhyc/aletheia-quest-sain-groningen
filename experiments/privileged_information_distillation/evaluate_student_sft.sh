@@ -16,10 +16,23 @@ if command -v module >/dev/null 2>&1; then
 fi
 source .venv/bin/activate
 
+RUN_SPLIT="validation"
+EXPECT_SPLIT_VALUE=false
+for arg in "$@"; do
+  if [[ "${EXPECT_SPLIT_VALUE}" == true ]]; then
+    RUN_SPLIT="${arg}"
+    EXPECT_SPLIT_VALUE=false
+  elif [[ "${arg}" == "--split" ]]; then
+    EXPECT_SPLIT_VALUE=true
+  elif [[ "${arg}" == --split=* ]]; then
+    RUN_SPLIT="${arg#--split=}"
+  fi
+done
+
 LOG_DIR="logs/slurm/privileged_information_distillation"
 mkdir -p "${LOG_DIR}"
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-  exec >"${LOG_DIR}/validation-${SLURM_JOB_ID}.out" 2>&1
+  exec >"${LOG_DIR}/${RUN_SPLIT}-${SLURM_JOB_ID}.out" 2>&1
   rm -f "logs/slurm/${SLURM_JOB_NAME:-aq-pid-eval}-${SLURM_JOB_ID}.bootstrap.out"
   echo "job_id=${SLURM_JOB_ID}"
 fi
@@ -29,9 +42,21 @@ export HF_HOME="${HF_HOME:-${SCRATCH:-/scratch/${USER}}/.huggingface}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
 export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"
 
-python experiments/privileged_information_distillation/evaluate_student_sft.py \
-  --adapter-dir results/blackbox/qwen9b_privileged_gptoss120b_summary_adamwlr1e5_v1/adapter \
-  --adapter-dir results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/adapter \
-  --adapter-dir results/blackbox/qwen9b_privileged_gptoss120b_summary_adamwlr5e5_v1/adapter \
-  --adapter-dir results/blackbox/qwen9b_privileged_gptoss120b_summary_adamwlr1e4_v1/adapter \
-  "$@"
+ADAPTER_ARGS=()
+for arg in "$@"; do
+  if [[ "${arg}" == "--adapter-dir" ]]; then
+    ADAPTER_ARGS=("$@")
+    break
+  fi
+done
+if [[ ${#ADAPTER_ARGS[@]} -eq 0 ]]; then
+  ADAPTER_ARGS=(
+    --adapter-dir results/blackbox/qwen9b_privileged_gptoss120b_summary_adamwlr1e5_v1/adapter
+    --adapter-dir results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/adapter
+    --adapter-dir results/blackbox/qwen9b_privileged_gptoss120b_summary_adamwlr5e5_v1/adapter
+    --adapter-dir results/blackbox/qwen9b_privileged_gptoss120b_summary_adamwlr1e4_v1/adapter
+    "$@"
+  )
+fi
+
+python experiments/privileged_information_distillation/evaluate_student_sft.py "${ADAPTER_ARGS[@]}"

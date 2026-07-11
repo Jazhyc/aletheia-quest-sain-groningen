@@ -104,10 +104,25 @@ logits and a local-test run of the selected `5e-5` adapter; semantic filtering
 is secondary unless error inspection connects failures to the minority bad
 teacher traces.
 
+### Selected-adapter local test
+
+The selected `5e-5` adapter was evaluated unchanged on all 821 local-test rows
+as Slurm job `30101232`.
+
+| split | balanced accuracy | recall | FPR | instructed BA | varied BA | varied recall | parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| validation | 0.9048 | 0.8381 | 0.0286 | 0.9792 | 0.8056 | 0.6722 | 3 |
+| local test | **0.9107** | **0.8571** | 0.0357 | **0.9812** | **0.8167** | **0.7056** | 7 |
+
+The adapter transfers slightly better to local test than validation overall,
+so the validation selection did not collapse out of sample. The core weakness
+persists: instructed deception is nearly solved, while varied-deception balanced
+accuracy remains around 0.82 and recall around 0.71. The seven parse failures
+are a small minority and cannot account for that scenario gap.
+
 ## Next measurements
 
 1. Evaluate empty-summary next-token logits for continuous scores.
-2. Run the selected `5e-5` adapter on local test.
-3. Inspect student errors for teacher-meta leakage and intent-only decisions.
-4. If needed, run the semantic-filtering ablation without regenerating teacher
+2. Inspect student errors for teacher-meta leakage and intent-only decisions.
+3. If needed, run the semantic-filtering ablation without regenerating teacher
    traces.
