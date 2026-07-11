@@ -74,7 +74,24 @@ attention and MLP projections for one epoch, using AdamW and effective batch 32.
 The final adapter is written under
 `results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/adapter/`.
 
-No teacher job has been launched by this setup commit. Review the prompt first,
-then run a small smoke and inspect parse rate, label agreement, summary length,
-and representative positive/negative targets before generating the full train
-set.
+## Generated teacher cache
+
+The reviewed Truth Value Guard-aligned prompt was run on the full train split as
+Slurm job `30101153` with `max_tokens=2048`. A resumable cleanup pass in job
+`30101156` reused 6,568 summaries and regenerated only five malformed cases.
+
+- Artifact: `results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/teacher/train.jsonl`
+- Size: 43.8 MB, 6,573 rows
+- Usable parsed targets: 6,570
+- Excluded malformed targets: 3
+- Summary length: mean 53.4 words, median 52, p95 81, maximum 127
+- Raw Harmony completion length: mean 256.7 tokens, median 206, p95 646,
+  p99 1,119
+
+The three excluded examples reached the 2048-token limit while the teacher
+struggled to reconcile the privileged positive label with an output it judged
+factually correct. They remain in the audit artifact with `parse_error=true`
+but are automatically excluded from student SFT. All usable records currently
+use `prediction_source=privileged_label_fallback`: GPT-OSS supplied the parsed
+final-channel summary, and the authoritative conditioned label supplies the
+deterministic final `Prediction:N` field.
