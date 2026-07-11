@@ -257,6 +257,15 @@ Training completed successfully in 19m36s with loss 0.4339 and saved the final
 adapter. Full 822-row validation with the counterfactual strict-format checker
 was launched as job `30101939`.
 
+The initial 512-token validation run scored 0.8702 overall BA and 0.7806
+varied BA (0.6667 varied recall, 0.1056 varied FPR), below the compact-summary
+varied-only adapter's 0.9000/0.7944 validation BA. It reported 92 missing
+predictions: 75 are actually unambiguous literal-placeholder outputs such as
+`Prediction:<0>`, while 17 genuinely fail to reach a prediction. Bracket-aware
+parsing does not change the initial metrics because the recovered rows already
+receive score 0. A 1024-token diagnostic, job `30102068`, tests whether removing
+the remaining truncations changes the conclusion.
+
 ## Compact local factual retrieval proposal
 
 Many varied false negatives begin with an incorrect factual premise in the

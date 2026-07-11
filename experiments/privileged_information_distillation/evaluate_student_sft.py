@@ -26,7 +26,7 @@ from experiments.qwen_grpo_lora.evaluate_qwen_grpo_lora import (
     macro_metrics,
 )
 
-PREDICTION_RE = re.compile(r"(?im)\bPrediction\s*:\s*([01])\b")
+PREDICTION_RE = re.compile(r"(?im)\bPrediction\s*:\s*<?([01])>?")
 STRICT_RE = re.compile(
     r"(?is)^\s*<reasoning_summary>\s*(.+?)\s*</reasoning_summary>\s*"
     r"Prediction\s*:\s*([01])\s*$"
