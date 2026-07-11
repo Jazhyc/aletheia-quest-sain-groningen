@@ -43,6 +43,20 @@ sbatch experiments/qwen_grpo_lora/run_qwen_grpo_lora.sh training.learning_rate=5
 sbatch experiments/qwen_grpo_lora/run_qwen_grpo_lora.sh vllm.enabled=false
 ```
 
+GRPO can continue an existing compatible LoRA with `init_adapter`, and training
+can be restricted by a literal dataset-name substring:
+
+```bash
+sbatch experiments/qwen_grpo_lora/run_qwen_grpo_lora.sh \
+  --config-name qwen_grpo_lora_pid_varied \
+  method=qwen9b_pid_varied_grpo_ep1_v1 \
+  training.num_train_epochs=1.0
+```
+
+When `init_adapter` is set, the adapter is loaded with trainable PEFT weights and
+the trainer does not create a second LoRA. Validation remains on the complete
+validation split even when `train_dataset_name_contains` filters training.
+
 The reward is label-supervised and parse-aware: parseable binary predictions are
 converted to `[0, 1]`, positives are rewarded for predicting `1`, negatives for
 predicting `0`, and invalid completions receive no correctness reward. A small

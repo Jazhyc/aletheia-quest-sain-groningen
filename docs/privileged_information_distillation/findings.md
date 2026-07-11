@@ -220,6 +220,22 @@ positive recall. The controlled ablation therefore supports keeping the compact
 reasoning summaries: direct label SFT does not explain the student improvement.
 Training job: `30102432`; validation job: `30102520`; test job: `30102582`.
 
+### Varied-only GRPO continuation
+
+To test whether GRPO was mainly limited by weak reasoning bootstrapping, continue
+GRPO from the selected varied-only reasoning-summary adapter rather than the base
+model. Training remains restricted to varied deception and uses the established
+binary GRPO settings: rank-16/alpha-32 LoRA, Muon LR `3e-5`, AdamW-side LR
+`1e-6`, temperature 1.2, four generations, effective prompt batch 32, and the
+correctness plus format rewards. The GRPO prompt preserves the Truth Value Guard
+decision rule and asks for a concise `<reasoning>` followed by `Prediction:N`.
+
+The trainer now supports a trainable `init_adapter` and literal dataset-name
+filter. A one-step smoke, job `30102648`, successfully loaded, synchronized,
+updated, evaluated, and saved the distilled adapter. Full epoch-sweep jobs are
+`30102734` (1 epoch), `30102733` (2 epochs), and `30102735` (3 epochs), each over
+2,877 varied examples or about 90 optimizer steps per epoch.
+
 ## Counterfactual trace structure
 
 A second teacher/student contract tests whether explicit factual baselines make

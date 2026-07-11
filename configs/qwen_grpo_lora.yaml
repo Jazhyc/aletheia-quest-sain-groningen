@@ -7,12 +7,14 @@
 
 method: qwen_grpo_lora_r16_reasonfield_v1
 model: Qwen/Qwen3.5-9B
+init_adapter: null
 splits_dir: dev_splits
 output_dir: results/blackbox/${method}
 train_limit: null
 validation_limit: null
 train_global_limit: null
 validation_global_limit: null
+train_dataset_name_contains: null
 seed: 0
 
 judge:

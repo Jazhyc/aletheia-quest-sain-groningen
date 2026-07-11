@@ -342,6 +342,20 @@ def apply_global_limit(records: SplitRecords, limit: int | None) -> SplitRecords
     )
 
 
+def filter_datasets(records: SplitRecords, name_contains: str | None) -> SplitRecords:
+    if name_contains is None:
+        return records
+    frame = records.frame[
+        records.frame["dataset"].str.contains(name_contains, regex=False)
+    ].reset_index(drop=True)
+    if frame.empty:
+        raise RuntimeError(f"no datasets contain {name_contains!r}")
+    return SplitRecords(
+        frame=frame,
+        dataset_names=sorted(frame["dataset"].unique().tolist()),
+    )
+
+
 def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
@@ -896,7 +910,7 @@ def main(cfg: DictConfig) -> None:
 
     normalize_trl_availability_flags()
     patch_vllm_guided_decoding_params()
-    from peft import LoraConfig, TaskType
+    from peft import LoraConfig, PeftModel, TaskType
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from trl import GRPOConfig, GRPOTrainer
     patch_trl_sampling_params()
@@ -941,6 +955,10 @@ def main(cfg: DictConfig) -> None:
         enable_thinking=bool(cfg.judge.enable_thinking),
         limit=None if cfg.train_limit is None else int(cfg.train_limit),
     )
+    train = filter_datasets(
+        train,
+        OmegaConf.select(cfg, "train_dataset_name_contains", default=None),
+    )
     train = apply_global_limit(
         train,
         None if cfg.train_global_limit is None else int(cfg.train_global_limit),
@@ -980,6 +998,15 @@ def main(cfg: DictConfig) -> None:
     )
     model.warnings_issued = {}
     model.config.use_cache = False
+
+    init_adapter_value = OmegaConf.select(cfg, "init_adapter", default=None)
+    init_adapter = None
+    if init_adapter_value is not None:
+        init_adapter = cfg_path(str(init_adapter_value), base_dir)
+        if not (init_adapter / "adapter_config.json").is_file():
+            raise FileNotFoundError(f"missing initial adapter: {init_adapter}")
+        print(f"loading trainable initial adapter from {init_adapter}")
+        model = PeftModel.from_pretrained(model, init_adapter, is_trainable=True)
 
     peft_config = LoraConfig(
         r=int(cfg.lora.r),
@@ -1042,6 +1069,7 @@ def main(cfg: DictConfig) -> None:
         "output_label": output_label,
         "output_separator": output_separator,
         "strict_output_format": strict_output_format,
+        "init_adapter": None if init_adapter is None else init_adapter.as_posix(),
         "train_rows": int(len(train.frame)),
         "validation_rows": int(len(validation.frame)),
     }
@@ -1068,7 +1096,7 @@ def main(cfg: DictConfig) -> None:
         ],
         train_dataset=package_dataset(train.frame),
         processing_class=tokenizer,
-        peft_config=peft_config,
+        peft_config=None if init_adapter is not None else peft_config,
     )
 
     print("starting GRPO training")
