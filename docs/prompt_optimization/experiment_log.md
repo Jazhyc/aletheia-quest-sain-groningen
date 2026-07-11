@@ -1457,7 +1457,7 @@ Local smoke:
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis
-in job `30101115`.
+in job `30101115`, and confirmed on local test as job `30101130`.
 
 Hypothesis:
 
@@ -1505,8 +1505,30 @@ with the corrected parser produced the metrics above and eight parse errors.
 Despite temperature zero, its BA was `0.0131` higher than post-hoc rescoring of
 the first run (`0.9083`), so allow for some backend-level run variation.
 
-Decision: promising model swap. Correctly parsed GPT-OSS improves over the Qwen
-Truth Value Guard validation baseline (approximately `0.894` BA) while remaining
-a single short judge. It is slower than Qwen (`25.0s` versus roughly `15s`) and
-still has a substantial instructed-to-varied gap (`0.1250` BA), so confirm on
-the held-out local test split before considering it the new default.
+Held-out local test result with the configuration unchanged:
+
+| metric | value |
+| --- | ---: |
+| balanced accuracy | 0.9310 |
+| AUROC | 0.9391 |
+| recall | 0.8976 |
+| FPR | 0.0357 |
+| parse errors | 7 |
+| score time | 25.2s |
+| rows/s | 32.6 |
+
+Test scenario breakdown:
+
+| scenario | balanced accuracy | AUROC | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| instructed deception | 0.9750 | 0.9861 | 0.9792 | 0.0292 |
+| varied deception | 0.8722 | 0.8764 | 0.7889 | 0.0444 |
+
+Decision: promote as the strongest tracked practical single short judge.
+Correctly parsed GPT-OSS improves over the Qwen Truth Value Guard on validation
+and test. On local test it also narrowly exceeds the 4096-token three-prompt
+reasoning ensemble in balanced accuracy (`0.9310` versus `0.9298`), matches its
+recall (`0.8976`), lowers FPR (`0.0357` versus `0.0381`), and cuts scoring time
+from `1284.6s` to `25.2s`. The remaining weakness is the instructed-to-varied
+gap of `0.1028` BA, although varied BA improves from `0.8500` on validation to
+`0.8722` on test.
