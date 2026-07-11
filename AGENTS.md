@@ -218,6 +218,16 @@ artifacts are under `results/blackbox/qwen27b_organism_atomic_true_false_v1/`
 and runtime code is
 `experiments/blackbox/audit_qwen_organism_claim_consistency.py`.
 
+Deferred hybrid proposal from 2026-07-11: P27 in
+`docs/prompt_optimization/proposals.md` combines a tuned judge that emits
+source-grounded atomic claim quotes with organism-only forced True/False
+verification. The organism consistency score is a conservative recall boost,
+not a veto or raw `any(False)` rule. A future teacher cache should use two
+stages—blind atomic audit first, then privileged-label reconciliation without
+rewriting the audit—and preserve label/audit conflicts as uncertainty instead
+of forcing post-hoc contradictions. Do not implement this as base-versus-adapter
+model diffing.
+
 The strongest submission-compatible prompt ensemble remains the three-prompt Qwen
 reasoning ensemble (`qwen_reason_ensemble_dks_member4096_v1`): `details4096`,
 `known4096`, and `scrutiny4096`, scheduled member-major, max aggregated, with a

@@ -289,6 +289,25 @@ Training on forced decompositions without uncertainty or evidence controls risks
 teaching confident fact-checking confabulations rather than better deception
 detection.
 
+### Deferred source-grounded atomic distillation
+
+A future teacher/student format should make atomic claims an explicit interface
+between the tuned judge and an organism-only consistency checker. The judge
+would emit exact quoted spans, a `true|false|uncertain` assessment for each, a
+compact summary, and the final prediction. Exact-span validation prevents the
+extractor from silently introducing facts that were not present in the output.
+The parsed claims can then be queried against the same generating organism with
+forced `True|False` responses and conservatively ensembled with the tuned judge.
+
+Teacher generation should be two-stage. First generate and freeze a blind atomic
+audit without the privileged label. Then reveal the label and ask for the final
+summary/prediction without allowing the teacher to rewrite its factual audit.
+Audit/label conflicts should remain explicit rather than forcing a post-hoc
+contradiction. This path is deferred because it requires a new cache, structured
+student SFT, repeated organism queries, and validation of extraction recall and
+false-rejection rates. The full proposal and ensemble constraints are recorded
+as P27 in `docs/prompt_optimization/proposals.md`.
+
 ### Online self-distillation with SDPO
 
 SDPO is a complementary test of the bootstrapping hypothesis. It initializes
