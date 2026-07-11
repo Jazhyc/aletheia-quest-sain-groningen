@@ -1,0 +1,10 @@
+# @package _global_
+# Base-Qwen Truth Value Guard control using the same cached Wikipedia evidence
+# as the privileged-distillation adapter RAG diagnostic.
+
+defaults:
+  - blackbox_reasoning_nothink_truth_value_v1
+  - _self_
+
+method: qwen_reason_nothink_truth_value_wikipedia_rag_v1
+retrieval_cache: results/blackbox/privileged_information_distillation_rag/wikipedia_varied_validation.jsonl

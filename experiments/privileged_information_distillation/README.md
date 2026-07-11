@@ -116,6 +116,19 @@ generates up to 512 tokens deterministically, and parses the final explicit
 `validation/` directory. Results include macro metrics for all datasets and
 separate instructed/varied scenario aggregates.
 
+For a regular-prompt control using the exact same Wikipedia cache, run:
+
+```bash
+sbatch experiments/blackbox/run_judge.sh \
+  --config-path ../../configs/single_judges \
+  --config-name blackbox_reasoning_nothink_truth_value_wikipedia_rag_v1 \
+  judge.backend=offline
+```
+
+This evaluates base `Qwen/Qwen3.5-9B` with the short Truth Value Guard rating
+prompt, without the distilled LoRA. Rows missing cached passages retain the
+ordinary prompt unchanged.
+
 ## Generated teacher cache
 
 The reviewed Truth Value Guard-aligned prompt was run on the full train split as

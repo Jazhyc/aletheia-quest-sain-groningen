@@ -168,6 +168,19 @@ Wikipedia text is CC BY-SA and may conflict with the competition's MIT
 publication requirement; confirm licensing with organizers or prefer a compact
 CC0 Wikidata-derived factual index.
 
+The first cached-evidence run covered 302 of 360 varied-validation rows. With
+the mixed `5e-5` distilled adapter, varied recall rose slightly from 0.6722 to
+0.6778, but FPR rose from 0.0611 to 0.0833; varied balanced accuracy therefore
+fell from 0.8056 to 0.7972. This does not yet distinguish poor retrieval from an
+adapter that has not learned to consume unfamiliar evidence.
+
+A base-model control reuses the identical cache with the regular short Qwen
+Truth Value Guard prompt and rating parser. The generic black-box runner now
+accepts `retrieval_cache`; config
+`blackbox_reasoning_nothink_truth_value_wikipedia_rag_v1` isolates whether base
+Qwen benefits from the evidence without the SFT adapter. Full validation was
+launched as Slurm job `30101368`.
+
 ## Next measurements
 
 1. Evaluate empty-summary next-token logits for continuous scores.

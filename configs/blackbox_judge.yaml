@@ -10,6 +10,7 @@ splits_dir: dev_splits
 output_dir: results/blackbox
 leaderboard: ${output_dir}/leaderboard.md
 limit: null
+retrieval_cache: null
 seed: 0
 
 judge:

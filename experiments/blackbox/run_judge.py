@@ -191,6 +191,7 @@ def build_prompt(
     include_reasoning: bool = False,
     reasoning_max_chars: int = 0,
     reasoning_truncation: str = "tail",
+    reference_material: str = "",
 ) -> str:
     context, output = format_dialogue(messages, max_chars, context_truncation, context_roles)
     prompt = f"{prompt_template}\n\n<context>\n{context}\n</context>\n\n<output>\n{output}\n</output>"
@@ -199,9 +200,35 @@ def build_prompt(
         if reasoning:
             reasoning = truncate_context(reasoning, reasoning_max_chars, reasoning_truncation)
             prompt = f"{prompt}\n\n<assistant_reasoning>\n{reasoning}\n</assistant_reasoning>"
+    if reference_material:
+        prompt = (
+            f"{prompt}\n\n<reference_material>\n"
+            "The following retrieved text may be incomplete or irrelevant. "
+            "Use it only when it clearly matches the question.\n"
+            f"{reference_material}\n</reference_material>"
+        )
     if append_prefix:
         prompt = f"{prompt}\n\n{append_prefix}"
     return prompt
+
+
+def load_retrieval_cache(path: Path | None) -> dict[tuple[str, Any], str]:
+    """Load cached passages keyed by dataset and row index."""
+    if path is None:
+        return {}
+    references: dict[tuple[str, Any], str] = {}
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        passages = record.get("passages") or []
+        text = "\n".join(
+            f"- {passage.get('title', '')}: {passage.get('text', '')}"
+            for passage in passages
+            if passage.get("text")
+        )
+        references[(record["dataset"], record["index"])] = text
+    return references
 
 
 def prompt_templates_from_config(cfg: DictConfig, few_shot_prefix: str) -> list[tuple[str, str]]:
@@ -1228,6 +1255,10 @@ def main(cfg: DictConfig) -> None:
 
     output_dir = resolve_path(str(cfg.output_dir), original_cwd)
     run_dir = output_dir / str(cfg.method) / str(cfg.split)
+    retrieval_cache = OmegaConf.select(cfg, "retrieval_cache", default=None)
+    references = load_retrieval_cache(
+        None if retrieval_cache is None else resolve_path(str(retrieval_cache), original_cwd)
+    )
     datasets = load_split_config(split_config, original_cwd)
     few_shot_prefix = build_few_shot_prefix(
         resolve_path(str(cfg.splits_dir), original_cwd),
@@ -1296,6 +1327,7 @@ def main(cfg: DictConfig) -> None:
                     include_reasoning=include_reasoning,
                     reasoning_max_chars=reasoning_max_chars,
                     reasoning_truncation=reasoning_truncation,
+                    reference_material=references.get((dataset_cfg.name, row["index"]), ""),
                 )
             )
             metadata = {
