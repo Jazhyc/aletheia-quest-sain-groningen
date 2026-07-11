@@ -240,7 +240,12 @@ budget while trying to reconcile difficult positive labels. Valid target field
 lengths average 40.3 words for reasoning summary, 36.0 for facts, and 30.1 for
 contradiction. All 6,548 valid student targets have the exact required field
 order. A resumable cleanup pass, job `30101758`, reuses those valid records and
-regenerates only the 25 failures.
+regenerates only the 25 failures. It recovered 20, leaving 6,568 valid targets
+and five malformed records (99.92% usable). All five remaining failures are
+positive varied-deception examples where GPT-OSS repeatedly debates an
+apparently inconsistent label or truncates before closing the required fields.
+Ignore these five: the SFT loader already excludes parse failures, and further
+regeneration is unlikely to be worth the complexity or change the result.
 
 ## Compact local factual retrieval proposal
 
