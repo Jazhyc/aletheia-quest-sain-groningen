@@ -113,6 +113,14 @@ fell from 0.9095 validation BA to 0.8762 local-test BA. Future enrichment should
 balance deceptive knowledge denial against honest refusal/knowledge reports and
 use grouped/source-family holdouts; do not assert that opaque Notus is HP-KR
 without an official ablation.
+The same frozen evaluation fails Liars' Bench Insider Trading in the opposite
+direction: on 6,873 rows, base Qwen scored 0.5724 BA (0.9022 recall, 0.7574 FPR)
+and Phoenix v2.1 scored 0.5705 BA (0.8983 recall, 0.7574 FPR). Raw conversations
+were median 1,577 tokens and p95 1,883, but the notebook's 3,000-character
+context cap fired on every row, reducing complete judge prompts to median 1,006
+tokens; the 2,048-token cap fired on none. Treat character-level context loss as
+a plausible contributor requiring a frozen full-context ablation, not as the
+proven sole cause; the factual prompt also massively over-flags honest rows.
 
 Privileged-distillation findings from 2026-07-11: the selected one-epoch
 varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155

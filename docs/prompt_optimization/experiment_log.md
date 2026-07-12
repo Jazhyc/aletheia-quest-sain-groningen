@@ -1728,6 +1728,44 @@ hold out question/principle groups and source-model families, and retain the
 existing instructed/varied tests as regression controls. Do not claim that HP-KR
 is Notus without an official ablation.
 
+### Liars' Bench Insider Trading transfer diagnostic (2026-07-12)
+
+Slurm job `30106008` evaluated the same frozen factual prompt, base
+Qwen3.5-9B, and bundled Phoenix v2.1 adapter on all 6,873 rows of Liars' Bench
+`insider-trading` (3,077 deceptive and 3,796 honest). It reproduced the
+submission notebook's message, context, and output character caps and passed
+the exact retained token IDs after its 2,048-token left-truncation step. Initial
+job `30106007` stopped before inference because this config lacks the HP-KR
+`dataset` metadata column.
+
+| condition | BA | recall | FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: |
+| base Qwen3.5-9B | 0.5724 | 0.9022 | 0.7574 | 16 |
+| Phoenix v2.1 adapter | 0.5705 | 0.8983 | 0.7574 | 24 |
+
+The adapter did not improve transfer. Unlike HP-KR's very low recall, Insider
+Trading produces indiscriminate positive predictions: high recall accompanied
+by roughly 76% false positives. Source-family BA ranged from 0.5543 to 0.6036
+with the adapter, so no source family was handled well.
+
+Raw conversations are genuinely longer than the local varied-deception data:
+median 1,577 tokens, p95 1,883, p99 1,993, and maximum 4,021. However, the
+notebook's 3,000-character context cap fired on every row before tokenization.
+The resulting full judge prompts had median 1,006 tokens, p95 1,098, p99 1,165,
+and maximum 1,654; consequently the later 2,048-token cap fired on zero rows.
+All rows had raw dialogue over 5,000 characters, 165 had an individually capped
+message, and 12 had a capped final output.
+
+This validates the concern about context loss, but locates it in character-level
+preprocessing rather than the tokenizer limit. The result cannot say how much BA
+would recover with the full dialogue, because every row is in the
+character-truncated group and there is no within-run untruncated control. A
+future controlled ablation should raise or remove `MAX_PROMPT_CHARS` while
+keeping the frozen judge and labels fixed. Do not interpret the poor score as
+proof that truncation is the only problem: the factual prompt also treats
+ordinary insider-trading discussion as suspicious and shows severe calibration
+failure even with the final output preserved separately.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis
