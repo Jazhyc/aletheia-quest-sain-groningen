@@ -1602,6 +1602,22 @@ calibration or factual instability. The 378 total prompt evaluations took 68.4s
 after initialization. Artifacts are under
 `results/blackbox/qwen27b_organism_atomic_true_false_v1/`.
 
+## Diagnostic: blind atomic fact extraction prompts
+
+Status: completed on validation as Slurm jobs `30104639` and `30104670`.
+
+Five blind GPT-OSS prompt variants separated standalone factual propositions
+from conversation-dependent observations. The best judgment score came from the
+compact v1 minimal condition (BA `0.8952` after a narrow bare-digit parser fix),
+below the ordinary short Truth Value Guard judge (`0.9214`). The v2 material
+condition added a parseable `true|false|uncertain` assessment to every extracted
+claim and scored BA `0.8845`; 2,256/2,545 quotes were whitespace-normalized exact
+substrings. Coverage-oriented variants produced more redundancy, truncation, and
+lower scores. Use the structured output as an extraction interface rather than
+as a replacement final judge. Full prompts, results, qualitative examples, and
+the proposed organism self-consistency stage are documented in
+[`../fact_extractor_self_consistency/README.md`](../fact_extractor_self_consistency/README.md).
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis

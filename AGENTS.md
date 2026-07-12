@@ -63,6 +63,15 @@ retrieval proposal. Full Wikipedia cannot fit the 200 MB package; any retrieval
 index should be small, CPU-queryable, evaluated for varied-recall/FPR tradeoffs,
 and checked for licensing compatibility (prefer CC0 data when practical).
 
+For atomic fact extraction and organism self-consistency work, read
+`docs/fact_extractor_self_consistency/`. Blind GPT-OSS validation sweeps found
+that compact material-claim extraction is better than exhaustive coverage, but
+its best judgment score (BA 0.8952) remains below the short Truth Value Guard
+judge (0.9214). The selected engineering schema records an exact source quote,
+standalone proposition, and `true|false|uncertain` assessment; validate quote
+grounding before self-querying because GPT-OSS only grounded about 89% of parsed
+claims. Keep extraction and final judgment as separate ensemble members.
+
 Privileged-distillation findings from 2026-07-11: the selected one-epoch
 varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155
 (varied BA 0.8278). A matched prediction-only target ablation scored only 0.8631
