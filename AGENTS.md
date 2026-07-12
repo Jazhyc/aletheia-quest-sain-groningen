@@ -121,6 +121,16 @@ context cap fired on every row, reducing complete judge prompts to median 1,006
 tokens; the 2,048-token cap fired on none. Treat character-level context loss as
 a plausible contributor requiring a frozen full-context ablation, not as the
 proven sole cause; the factual prompt also massively over-flags honest rows.
+A balanced Liars' Bench category-signature diagnostic (job `30106578`) compared
+Truth, Details, Omission, and Phoenix v2.1 conditions against the official
+Notus recall/FPR vectors. A shared convex category mixture fit materially better
+than the best single category (joint RMSE 0.0434 versus 0.1170) and retained an
+advantage when each judge condition was held out (mean RMSE 0.0649 versus
+0.1148). This supports heterogeneous Notus response modes, not a literal private
+dataset mapping. Mixture weights were unstable; Insider Trading consistently
+received zero weight because its FPR was far too high, while HP-KR received a
+modest recurring weight. Do not infer exact Notus category proportions or build
+category-specific submission logic from this diagnostic.
 
 Privileged-distillation findings from 2026-07-11: the selected one-epoch
 varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155

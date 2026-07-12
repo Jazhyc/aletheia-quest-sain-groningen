@@ -1766,6 +1766,50 @@ proof that truncation is the only problem: the factual prompt also treats
 ordinary insider-trading discussion as suspicious and shows severe calibration
 failure even with the final output preserved separately.
 
+### Liars' Bench category-signature mixture diagnostic (2026-07-12)
+
+Slurm job `30106578` compared four frozen conditions—Truth Value Guard,
+Details, Context Omission Guard, and the Phoenix v2.1 distilled adapter—on a
+deterministic 400-row sample from each of eight Liars' Bench categories. Samples
+were balanced as evenly as possible across label and source-model strata. The
+honest-only `alpaca` category contributed an FPR control but was excluded from
+recall-mixture fitting. Initial job `30106562` stopped before model loading on
+the `gender-secret` parquet's missing `index` column; the loader now uses its
+stable exported row-index column.
+
+The category signatures span distinct failure modes:
+
+| category | Truth recall/FPR | Details recall/FPR | Omission recall/FPR | v2 recall/FPR |
+| --- | ---: | ---: | ---: | ---: |
+| convincing game | .595/.000 | .645/.015 | .520/.005 | .685/.065 |
+| gender secret | .000/.000 | .005/.005 | .000/.000 | .025/.015 |
+| harm-pressure choice | .623/.488 | .568/.557 | .578/.423 | .638/.428 |
+| HP-KR | .000/.035 | .000/.090 | .005/.040 | .106/.333 |
+| insider trading | .668/.682 | .820/.903 | .771/.897 | .946/.744 |
+| instructed deception | .945/.035 | .965/.030 | .940/.045 | .970/.020 |
+| soft trigger | .469/.034 | .582/.054 | .658/.103 | .872/.103 |
+
+A ridge-regularized convex fit used these four recall and four FPR values to
+approximate the official Notus signatures for Nemotron, Qwen, and Gemma. The
+shared joint mixture achieved RMSE 0.0434, compared with 0.1170 for the best
+single category (`convincing-game`). Leave-one-judge-condition-out evaluation
+also favored the mixture on every held-out condition: mean held-out RMSE 0.0649
+versus 0.1148 for the single category selected on the remaining conditions.
+This is evidence that Notus behaves more like a combination of response modes
+than like any one tested Liars' Bench category.
+
+Do not interpret the fitted proportions literally. Seven categories from four
+judge conditions remain collinear and underidentified; weights shifted notably
+across held-out conditions and source models. The stable qualitative findings
+were that Insider Trading received zero weight in every joint fit because its
+FPR is far too high, HP-KR received a recurring modest weight, and the fit needed
+a combination of low-, medium-, and high-recall archetypes. Thus Notus may
+contain alignment-mediated and other heterogeneous cases, but this diagnostic
+does not identify its private composition or justify category-specific detector
+logic. Artifacts are under
+`results/blackbox/liars_bench_frozen_judge_signatures_v1/`; runtime and fitting
+code are under `experiments/liars_bench_signature/`.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis
