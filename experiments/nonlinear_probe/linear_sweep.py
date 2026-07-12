@@ -58,14 +58,26 @@ def is_limit_cache(filename: str) -> bool:
     return ".limit" in filename
 
 
+def is_tokens_cache(filename: str) -> bool:
+    """
+    :param filename: Cache file name (not full path).
+    :return: True if the name marks it a `--tokens` per-token cache. These
+        hold `tokens_L{L}` arrays instead of `mean_L{L}`/`last_L{L}` pooled
+        arrays and would crash the pooled sweep if loaded.
+    """
+    return ".tokens" in filename
+
+
 def discover_cache_files(cache_dir: Path, include_limit: bool = False) -> list[Path]:
     """
     :param cache_dir: Directory containing `*.npz` activation caches.
     :param include_limit: If True, also include `.limit` smoke caches;
-        otherwise they are skipped (the default for a real sweep).
+        otherwise they are skipped (the default for a real sweep). `.tokens`
+        per-token caches are always skipped regardless of this flag.
     :return: Sorted list of cache file paths to load.
     """
     paths = sorted(cache_dir.glob("*.npz"))
+    paths = [path for path in paths if not is_tokens_cache(path.name)]
     if include_limit:
         return paths
     return [path for path in paths if not is_limit_cache(path.name)]

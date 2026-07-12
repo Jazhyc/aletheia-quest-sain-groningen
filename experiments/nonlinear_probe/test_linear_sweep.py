@@ -18,6 +18,7 @@ from linear_sweep import (
     enumerate_configs,
     has_both_classes,
     is_limit_cache,
+    is_tokens_cache,
     meta_model_id,
     parse_layers_arg,
     parse_scenario,
@@ -35,6 +36,15 @@ class TestIsLimitCache:
 
     def test_full_cache_is_not_limit(self) -> None:
         assert not is_limit_cache("aletheias-quest__dev-varied-deception-Qwen3.5-27B-None.npz")
+
+
+class TestIsTokensCache:
+
+    def test_flags_tokens_suffix(self) -> None:
+        assert is_tokens_cache("aletheias-quest__dev-varied-deception-Qwen3.5-27B-None.tokens.npz")
+
+    def test_pooled_cache_is_not_tokens(self) -> None:
+        assert not is_tokens_cache("aletheias-quest__dev-varied-deception-Qwen3.5-27B-None.npz")
 
 
 class TestDiscoverCacheFiles:
@@ -55,6 +65,13 @@ class TestDiscoverCacheFiles:
         (tmp_path / "full.npz").touch()
         (tmp_path / "notes.txt").touch()
         found = discover_cache_files(tmp_path)
+        assert [path.name for path in found] == ["full.npz"]
+
+    def test_skips_tokens_files_even_with_include_limit(self, tmp_path: Path) -> None:
+        (tmp_path / "full.npz").touch()
+        (tmp_path / "full.tokens.npz").touch()
+        (tmp_path / "smoke.tokens.limit32.npz").touch()
+        found = discover_cache_files(tmp_path, include_limit=True)
         assert [path.name for path in found] == ["full.npz"]
 
 

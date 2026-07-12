@@ -19,16 +19,27 @@ Usage (on Hábrók, from the repo root):
     sbatch experiments/nonlinear_probe/extract_activations.sh --dataset ... \
         --layers ::2                  # every 2nd layer (default)
 
+    sbatch experiments/nonlinear_probe/extract_activations.sh --dataset ... \
+        --tokens --layers 40,46       # per-token cache, small explicit layer list
+
 Output: <out-dir>/<dataset-with-__>.npz holding, per layer L:
     mean_L{L}  (N, D) float16   response-span mean-pooled activations
     last_L{L}  (N, D) float16   last-real-token activations
 plus `index`, `deceptive` (if the dataset has labels), `response_tokens`,
 and a JSON `meta` string (model, lora, layers, tokenization settings).
+
+With `--tokens`, writes <out-dir>/<dataset-with-__>.tokens.npz instead, holding
+every response token's activation per layer L:
+    tokens_L{L}  (total_tokens, D) float16   every response-token activation
+plus `token_offsets` (N + 1,) marking each example's token range in dataset
+order, the same `index`/`deceptive`/`response_tokens`/`meta` fields, and
+`meta["mode"] == "tokens"`.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -36,8 +47,14 @@ import time
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+import torch
+from datasets import load_dataset
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "submission"))
+
+from util import build_model, chat_preprocess, decoder_layers, load_examples  # noqa: E402
 
 # Local dev fallback: the leaderboard injects NDIF_HOST, but a local run needs
 # the competition cluster set explicitly unless the env already provides it.
@@ -110,8 +127,6 @@ def collate_batch(
         where response_mask is (B, T) float marking response tokens and
         last_token_idx is (B,) long with each row's final real token position.
     """
-    import torch
-
     width = max(len(tokens) for tokens in token_lists)
     batch_size = len(token_lists)
     input_ids = torch.tensor([tokens + [pad_id] * (width - len(tokens)) for tokens in token_lists])
@@ -153,12 +168,6 @@ def extract_pooled_activations(
     :return: One (num_layers, num_poolings, N, D) float16 CPU tensor, rows in
         batch order (all of batches[0], then batches[1], ...).
     """
-    import contextlib
-
-    import torch
-
-    from util import decoder_layers
-
     layer_modules = decoder_layers(model)
     session = model.session(remote=True) if remote else contextlib.nullcontext()
     with session:
@@ -200,6 +209,113 @@ def extract_pooled_activations(
     return all_features
 
 
+def extract_token_activations(
+        model: Any,
+        layers: list[int],
+        batches: list[list[int]],
+        token_lists: list[list[int]],
+        spans: list[tuple[int, int]],
+        pad_id: int,
+        remote: bool = False,
+) -> torch.Tensor:
+    """
+    Run every batch through the model and collect every response token's
+    activation at the chosen layers, with no pooling.
+
+    Mirrors `extract_pooled_activations`'s session/trace/tracer.stop structure
+    and remote-save discipline (only values flowing into the final `.save()`
+    survive a remote session). Inside each trace, reads the residual stream at
+    every requested layer and selects the response-span tokens in row-major
+    order, then stops the forward early after the deepest requested layer.
+
+    :param model: nnsight model handle (local GPU or NDIF-backed).
+    :param layers: Decoder layer indices to extract.
+    :param batches: Batches as lists of positions into `token_lists`.
+    :param token_lists: Token ids of every example.
+    :param spans: (start, end) response span of every example.
+    :param pad_id: Padding token id.
+    :param remote: Run on NDIF instead of a local GPU (needs a dev-access key).
+    :return: One (num_layers, total_tokens, hidden) float16 CPU tensor, tokens
+        in batch-traversal order (all of batches[0]'s rows' response tokens in
+        row order, then batches[1]'s, ...).
+    """
+    layer_modules = decoder_layers(model)
+    session = model.session(remote=True) if remote else contextlib.nullcontext()
+    with session:
+        # Same discipline as extract_pooled_activations: per-batch results are
+        # collected in a list created INSIDE the session and concatenated once
+        # at the end.
+        pieces = []
+        for batch_positions in batches:
+            input_ids, attention_mask, response_mask, _ = collate_batch(
+                [token_lists[position] for position in batch_positions],
+                [spans[position] for position in batch_positions],
+                pad_id,
+            )
+            with model.trace({"input_ids": input_ids, "attention_mask": attention_mask}) as tracer:
+                selected_per_layer = []
+                for layer in layers:
+                    # transformers 5.x decoder layers return the tensor directly;
+                    # older versions return a tuple with the hidden state first.
+                    hidden = layer_modules[layer].output
+                    if isinstance(hidden, tuple):
+                        hidden = hidden[0]
+                    mask_bool = response_mask.bool().to(hidden.device)
+                    selected = hidden[mask_bool]
+                    # Layers are sharded across GPUs on big deployments, so move
+                    # each selection to CPU before stacking across layers.
+                    selected_per_layer.append(selected.to(torch.float16).detach().cpu())
+                stacked = torch.stack(selected_per_layer, 0).save()
+                # Skip every layer past max(layers) and the LM head.
+                tracer.stop()
+            pieces.append(stacked)
+        all_features = torch.cat(pieces, dim=1)
+        if remote:
+            all_features = all_features.save()
+    return all_features
+
+
+def assemble_token_features(
+        flat_features: np.ndarray,
+        batches: list[list[int]],
+        span_lengths: list[int],
+) -> tuple[dict[int, np.ndarray], np.ndarray]:
+    """
+    Re-order per-token activations from batch-traversal order to dataset
+    order and compute each example's token offsets.
+
+    :param flat_features: (num_layers, total_tokens, hidden) array with the
+        token axis in batch-traversal order, as produced by
+        `extract_token_activations` (all of batches[0]'s rows' response
+        tokens in row order, then batches[1]'s, ...).
+    :param batches: Batches as lists of positions into the original dataset
+        order, the same batches passed to `extract_token_activations`.
+    :param span_lengths: Response-token count of every example, indexed by
+        its position in the original dataset order.
+    :return: Tuple of (per-layer dataset-ordered arrays keyed by their
+        position in `flat_features`'s layer axis, `token_offsets`), where
+        `token_offsets` is (N + 1,) int64 and example i's tokens are
+        `layer_features[token_offsets[i]:token_offsets[i + 1]]`.
+    """
+    flat_positions = [position for batch_positions in batches for position in batch_positions]
+    traversal_lengths = [span_lengths[position] for position in flat_positions]
+    traversal_offsets = np.concatenate([[0], np.cumsum(traversal_lengths)])
+    traversal_index_by_position = {position: traversal_index
+                                   for traversal_index, position in enumerate(flat_positions)}
+    token_offsets = np.concatenate([[0], np.cumsum(span_lengths)]).astype(np.int64)
+    num_layers = flat_features.shape[0]
+    dataset_order_features: dict[int, np.ndarray] = {}
+    for layer_position in range(num_layers):
+        layer_pieces = []
+        for position in range(len(span_lengths)):
+            traversal_index = traversal_index_by_position[position]
+            start = traversal_offsets[traversal_index]
+            end = traversal_offsets[traversal_index + 1]
+            layer_pieces.append(flat_features[layer_position, start:end])
+        dataset_order_features[layer_position] = np.concatenate(layer_pieces, axis=0)
+    return dataset_order_features, token_offsets
+
+
 def load_labels(dataset_name: str, examples: Any, num_rows: int) -> Any:
     """
     Fetch `deceptive` labels for a dev dataset, joined by `index`.
@@ -214,9 +330,6 @@ def load_labels(dataset_name: str, examples: Any, num_rows: int) -> Any:
     :param num_rows: Number of rows actually extracted.
     :return: (num_rows,) bool array in extraction order, or None if no labels.
     """
-    import numpy as np
-    from datasets import load_dataset
-
     if "deceptive" in examples.column_names:
         return np.asarray(examples["deceptive"][:num_rows], dtype=bool)
     try:
@@ -248,12 +361,17 @@ def main() -> None:
     parser.add_argument("--remote", action="store_true",
                         help="run on NDIF instead of a local GPU (requires a dev-access "
                              "key; the team key is submission-only)")
+    parser.add_argument("--tokens", action="store_true",
+                        help="store per-token response activations instead of pooled "
+                             "vectors (use with a small explicit --layers list, e.g. "
+                             "--layers 40,46)")
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     suffix = f".limit{args.limit}" if args.limit else ""
-    out_path = out_dir / (args.dataset.replace("/", "__") + suffix + ".npz")
+    mode_suffix = ".tokens" if args.tokens else ""
+    out_path = out_dir / (args.dataset.replace("/", "__") + mode_suffix + suffix + ".npz")
     if out_path.exists() and not args.force:
         print(f"{out_path} already exists; use --force to redo")
         return
@@ -261,11 +379,6 @@ def main() -> None:
     if args.remote and not os.environ.get("NDIF_HOST"):
         os.environ["NDIF_HOST"] = DEFAULT_NDIF_HOST
         print(f"NDIF_HOST unset; defaulting to {DEFAULT_NDIF_HOST}")
-
-    import numpy as np
-    import torch
-
-    from util import build_model, chat_preprocess, load_examples
 
     examples = load_examples(args.dataset)
     num_rows = len(examples) if args.limit is None else min(args.limit, len(examples))
@@ -294,33 +407,54 @@ def main() -> None:
           f"max batch {args.max_batch})")
 
     start_time = time.time()
-    all_features = extract_pooled_activations(model, layers, batches, token_lists, spans,
-                                              pad_id, remote=args.remote)
+    if args.tokens:
+        all_features = extract_token_activations(model, layers, batches, token_lists, spans,
+                                                  pad_id, remote=args.remote)
+    else:
+        all_features = extract_pooled_activations(model, layers, batches, token_lists, spans,
+                                                  pad_id, remote=args.remote)
     print(f"extraction done in {time.time() - start_time:.1f}s")
 
-    flat_positions = [position for batch_positions in batches for position in batch_positions]
-    sorted_features = all_features.cpu().numpy()
-    hidden_dim = sorted_features.shape[-1]
-    features = {f"{pooling}_L{layer}": np.empty((num_rows, hidden_dim), dtype=np.float16)
-                for layer in layers for pooling in POOLINGS}
-    for layer_pos, layer in enumerate(layers):
-        for pool_pos, pooling in enumerate(POOLINGS):
-            features[f"{pooling}_L{layer}"][flat_positions] = sorted_features[layer_pos, pool_pos]
-
-    cache: dict[str, np.ndarray] = dict(features)
-    cache["index"] = np.asarray(examples["index"][:num_rows])
-    cache["response_tokens"] = np.asarray(
-        [span_end - span_start for span_start, span_end in spans], dtype=np.int32)
+    span_lengths = [span_end - span_start for span_start, span_end in spans]
     labels = load_labels(args.dataset, examples, num_rows)
-    if labels is not None:
-        cache["deceptive"] = labels
-    cache["meta"] = np.asarray(json.dumps(dict(
+    meta = dict(
         dataset=args.dataset, model=model_id, lora=lora_id, layers=layers,
         poolings=list(POOLINGS), max_len=args.max_len, n=num_rows,
         token_budget=args.token_budget,
         extracted_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    )))
-    np.savez_compressed(out_path, **cache)
+    )
+
+    if args.tokens:
+        layer_features, token_offsets = assemble_token_features(
+            all_features.cpu().numpy(), batches, span_lengths)
+        cache: dict[str, np.ndarray] = {
+            f"tokens_L{layer}": layer_features[layer_position].astype(np.float16)
+            for layer_position, layer in enumerate(layers)
+        }
+        cache["token_offsets"] = token_offsets
+        cache["index"] = np.asarray(examples["index"][:num_rows])
+        cache["response_tokens"] = np.asarray(span_lengths, dtype=np.int32)
+        if labels is not None:
+            cache["deceptive"] = labels
+        cache["meta"] = np.asarray(json.dumps({**meta, "mode": "tokens"}))
+        np.savez(out_path, **cache)
+    else:
+        flat_positions = [position for batch_positions in batches for position in batch_positions]
+        sorted_features = all_features.cpu().numpy()
+        hidden_dim = sorted_features.shape[-1]
+        features = {f"{pooling}_L{layer}": np.empty((num_rows, hidden_dim), dtype=np.float16)
+                    for layer in layers for pooling in POOLINGS}
+        for layer_pos, layer in enumerate(layers):
+            for pool_pos, pooling in enumerate(POOLINGS):
+                features[f"{pooling}_L{layer}"][flat_positions] = sorted_features[layer_pos, pool_pos]
+
+        cache = dict(features)
+        cache["index"] = np.asarray(examples["index"][:num_rows])
+        cache["response_tokens"] = np.asarray(span_lengths, dtype=np.int32)
+        if labels is not None:
+            cache["deceptive"] = labels
+        cache["meta"] = np.asarray(json.dumps(meta))
+        np.savez_compressed(out_path, **cache)
 
     size_mb = out_path.stat().st_size / 1e6
     label_note = (f", {int(cache['deceptive'].sum())}/{num_rows} deceptive"
