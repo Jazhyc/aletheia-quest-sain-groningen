@@ -121,25 +121,24 @@ def decoder_layers(model):
     """The text decoder's transformer ``layers`` ModuleList, so a probe can read
     ``decoder_layers(model)[L].output`` (the residual stream at layer L).
 
-    Found by searching the module tree rather than a hardcoded path: the nesting
-    depends on what NDIF served — a plain multimodal VLM (layers under
-    ``.model.language_model.layers``) or, with a LoRA/PEFT adapter, the text-only
-    CausalLM. The vision tower also has a ``layers`` ModuleList, so we require a
-    decoder-layer class (``self_attn`` + ``mlp``, name containing ``Decoder``)."""
-    root = model.model
-    candidates = []
-    for name, child in root.named_modules():
-        if name.rsplit(".", 1)[-1] != "layers":
-            continue
-        kids = list(child.children())
-        if kids and hasattr(kids[0], "self_attn") and hasattr(kids[0], "mlp") \
-                and "Decoder" in type(kids[0]).__name__:
-            candidates.append((name, child))
-    if len(candidates) != 1:
-        # Fall back to the common nesting if the search is ambiguous.
-        inner = getattr(root, "language_model", root)
-        return inner.layers
-    return candidates[0][1]
+    The nesting depends on what NDIF served — a plain multimodal VLM (layers
+    under ``.model.language_model.layers``), a text-only CausalLM, or either
+    wrapped in a PEFT adapter (which adds another ``.model`` hop before the
+    inner model becomes visible). Walk down through ``language_model``/``model``
+    envoys until a ``layers`` ModuleList appears; envoys only expose real
+    submodules, so ``hasattr`` is a safe probe, and preferring ``language_model``
+    keeps the walk out of any vision tower."""
+    inner = model.model
+    for _ in range(5):
+        if hasattr(inner, "layers"):
+            return inner.layers
+        if hasattr(inner, "language_model"):
+            inner = inner.language_model
+        elif hasattr(inner, "model"):
+            inner = inner.model
+        else:
+            break
+    raise AttributeError("could not locate decoder layers under model.model")
 
 
 # ── batched remote session ───────────────────────────────────────────────────
