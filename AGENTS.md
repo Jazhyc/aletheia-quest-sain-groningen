@@ -102,6 +102,17 @@ ordinary factual errors in labeled-honest responses, while others attacked
 negated question claims or made pedantic/incorrect corrections. Factual
 incorrectness is not equivalent to belief-based deception. Do not deploy either
 atomic cascade or select its favorable varied-scenario behavior post hoc.
+The frozen factual judge also fails Liars' Bench HP-KR, an alignment-mediated
+knowledge-report scenario: base Qwen3.5-9B scored 0.3645 BA and the bundled
+Phoenix v2.1 adapter 0.3638, with adapter recall 0.0739 and FPR 0.3462 across
+7,068 rows. Prompts were mostly short (median 477, p95 1,064 tokens), so this is
+an epistemic-deception coverage failure rather than primarily truncation. The
+varied-only adapter did not improve any source-model family. Do not re-enable
+assistant reasoning merely from this result; the earlier reasoning-output judge
+fell from 0.9095 validation BA to 0.8762 local-test BA. Future enrichment should
+balance deceptive knowledge denial against honest refusal/knowledge reports and
+use grouped/source-family holdouts; do not assert that opaque Notus is HP-KR
+without an official ablation.
 
 Privileged-distillation findings from 2026-07-11: the selected one-epoch
 varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155
