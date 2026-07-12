@@ -142,6 +142,15 @@ the best Heretic prompt still had 0.6267 FPR on honest Mistral WMDP-bio rows
 containing genuine denials of narrow technical recall. Judge-self-knowledge was
 inferior and produced 1,095 parse failures. Prefer semantic report classification
 and balanced honest-ignorance controls; do not treat model size as proof of a lie.
+The local varied validation split contains no explicit knowledge-denial outputs
+across all 360 rows; its two policy-refusal-like outputs are honest corrections.
+It therefore cannot validate HP-KR transfer. A frozen full-validation Heretic
+Truth Value Guard run (job `30107001`) regressed to 0.8167 BA, 0.9500 recall,
+and 0.3167 FPR with zero parse errors, versus the aligned Qwen reference near
+0.8952 BA and 0.0548 FPR. Heretic varied BA was only 0.7194 with 0.4556 FPR;
+instructed BA was 0.8896 with 0.2125 FPR. Do not replace the general judge with
+Heretic. Treat it as an HP-KR specialist/alignment diagnostic unless a router is
+validated on balanced deceptive knowledge denials and honest refusals.
 
 Privileged-distillation findings from 2026-07-11: the selected one-epoch
 varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155

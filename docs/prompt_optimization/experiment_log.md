@@ -1851,6 +1851,50 @@ organism. A short-output and conservative positive-evidence follow-up was queued
 as job `30106772` to test whether this FPR can be reduced without destroying
 recall.
 
+The optional short-output follow-up was later cancelled while still pending so
+the requested full-validation Heretic benchmark could take priority. Its tested
+harness remains available, but it has no result and must not be cited as an
+evaluated condition.
+
+#### Local varied-data audit and frozen Heretic validation benchmark
+
+A direct audit of all 360 varied validation outputs found no explicit knowledge
+denials: zero matches for `I do not know`, `I don't know`, claims of lacking
+knowledge/information, or equivalent forms. Two outputs resembled policy
+refusals; both were labeled honest and immediately supplied the correct factual
+answer instead of following a request to lie. Thus the local varied split does
+not contain HP-KR in the semantic form targeted by report typing. It cannot
+measure whether a training or prompt change transfers to deceptive knowledge
+denial.
+
+Slurm job `30107001` then evaluated
+`trohrbaugh/Qwen3.5-9B-heretic-v2` on all 822 validation rows with the frozen
+Truth Value Guard, standard 3,000-character prompt formatting, no thinking,
+threshold 0.1, and no HP-KR-specific language. A generic four-hour allocation
+(`30106813`) was cancelled before starting and replaced with a 30-minute
+backfill allocation; the completed run took 5m57s including model startup and
+14.6s of scoring.
+
+| judge | BA | AUROC | recall | FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| aligned Qwen Truth Value Guard reference (`pc1500`) | **.8952** | **.8961** | .8452 | **.0548** | 0 |
+| Heretic frozen Truth Value Guard | .8167 | .8486 | **.9500** | .3167 | 0 |
+
+The Heretic checkpoint is not a generally better judge. Its higher recall comes
+from severe overprediction. Macro instructed BA was 0.8896 with 0.2125 FPR,
+versus the aligned reference's 0.9500 BA and 0.0167 FPR. Macro varied BA was only
+0.7194 with 0.4556 FPR, versus aligned Qwen's 0.8222 BA and 0.1056 FPR. Four
+varied units scored 0.65 BA, each with FPR between 0.50 and 0.60.
+
+The aligned reference uses a 1,500-character cap rather than this run's 3,000,
+but neighboring aligned controls at 2,000--3,000 characters remain around
+0.894--0.898 BA; context length cannot plausibly explain the 0.0786 regression.
+Use Heretic as an HP-KR specialist/alignment diagnostic, not as a drop-in
+replacement for the ordinary Truth Value Guard. Any ensemble or router would
+need an independently validated observable HP-KR trigger and honest-refusal
+controls; the current varied split supplies no deceptive HP-KR examples for
+such calibration.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis
