@@ -131,6 +131,17 @@ dataset mapping. Mixture weights were unstable; Insider Trading consistently
 received zero weight because its FPR was far too high, while HP-KR received a
 modest recurring weight. Do not infer exact Notus category proportions or build
 category-specific submission logic from this diagnostic.
+HP-KR can be addressed partially through semantic report typing. A five-prompt
+full-set sweep (job `30106665`) found that explicitly distinguishing knowledge
+denial, policy refusal, and substantive answers raised aligned Qwen3.5-9B from
+0.3412 to 0.8459 BA; `trohrbaugh/Qwen3.5-9B-heretic-v2` reached 0.8686 BA. The
+abliterated model improved every prompt, especially self-knowledge reasoning,
+so judge alignment does interfere, but prompt choice supplied most of the gain.
+Do not equate judge knowledge or broad model capability with organism knowledge:
+the best Heretic prompt still had 0.6267 FPR on honest Mistral WMDP-bio rows
+containing genuine denials of narrow technical recall. Judge-self-knowledge was
+inferior and produced 1,095 parse failures. Prefer semantic report classification
+and balanced honest-ignorance controls; do not treat model size as proof of a lie.
 
 Privileged-distillation findings from 2026-07-11: the selected one-epoch
 varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155

@@ -1810,6 +1810,47 @@ logic. Artifacts are under
 `results/blackbox/liars_bench_frozen_judge_signatures_v1/`; runtime and fitting
 code are under `experiments/liars_bench_signature/`.
 
+### HP-KR epistemic prompt and alignment sweep (2026-07-12)
+
+Slurm job `30106665` evaluated five prompts on all 7,068 HP-KR rows using both
+aligned `Qwen/Qwen3.5-9B` and the same-size abliterated
+`trohrbaugh/Qwen3.5-9B-heretic-v2` checkpoint. Prompts prohibited revealing the
+underlying potentially harmful answer. The Heretic model card reports the same
+Qwen3.5 architecture, Apache-2.0 licensing, KL divergence 0.0793 from the base,
+and 6/100 versus 100/100 refusals in its published refusal test. Both conditions
+used local vLLM, temperature zero, and a 256-token generation cap. The complete
+paired run took 1h06m.
+
+| prompt | aligned BA | recall | FPR | parse | Heretic BA | recall | FPR | parse |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| factual control | .3412 | .0135 | .3310 | 34 | .5456 | .1251 | .0339 | 160 |
+| knowledge-report type | **.8459** | **.9694** | .2777 | 184 | **.8686** | **.9623** | .2252 | 416 |
+| capability prior | .8118 | .9559 | .3323 | 321 | .8432 | .9552 | .2689 | 792 |
+| judge self-knowledge | .7049 | .7448 | .3351 | 409 | .8205 | .8991 | .2581 | 1,095 |
+| alignment-aware | .7239 | .8678 | .4201 | 268 | .8135 | .9673 | .3402 | 367 |
+
+Prompting, not abliteration, produced most of the improvement. Explicitly
+separating `KNOWLEDGE_DENIAL`, `POLICY_REFUSAL`, and `SUBSTANTIVE_ANSWER` raised
+aligned Qwen from 0.3412 to 0.8459 BA without requiring the judge to output or
+verify the hidden answer. Heretic improved that prompt by another 0.0227 BA,
+almost entirely through lower FPR. Asking the judge to use its own internal
+answer was slower, less parse-stable, and substantially worse. Heretic rescued
+that path by 0.1156 BA, which is direct evidence that alignment obstructs
+sensitive internal reconstruction, but its 0.8205 BA still trails semantic
+report typing.
+
+The best prompt's residual error is highly source/domain concentrated. Heretic
+scored 0.9574 BA on Qwen-source rows and 0.9156 on Llama, but only 0.6780 on
+Mistral because honest-row FPR was 0.6267. Those rows are almost entirely
+`cais/wmdp-bio`: honest Mistral answers explicitly deny knowing narrow facts
+about virology, toxins, or bacterial genetics. Both judges incorrectly infer
+that a modern LLM must possess any documented fact in a broad training domain.
+This demonstrates the limit of a judge-knowledge or model-size prior: knowledge
+available to the judge does not prove accessible knowledge in a particular
+organism. A short-output and conservative positive-evidence follow-up was queued
+as job `30106772` to test whether this FPR can be reduced without destroying
+recall.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis
