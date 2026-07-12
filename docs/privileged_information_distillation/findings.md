@@ -198,6 +198,25 @@ the best tested student on local test (0.9155 overall BA and 0.8278 varied BA).
 Do not continue Muon tuning for this SFT objective unless a later change to the
 targets or inference method creates a new reason to revisit optimizer behavior.
 
+### Heretic student-base ablation
+
+A matched student-base ablation replaced aligned `Qwen/Qwen3.5-9B` with
+`trohrbaugh/Qwen3.5-9B-heretic-v2` while holding the selected recipe fixed:
+the same 2,877 varied-deception teacher summaries, rank-16/alpha-32 LoRA,
+one epoch, AdamW `5e-5`, and effective batch size 32. Training job `30109845`
+completed in 16m53s; validation job `30109846` completed successfully.
+
+Heretic scored 0.8643 overall validation BA, 0.9646 instructed BA, and 0.7306
+varied BA, with 0.7905 overall recall, 0.0619 FPR, and 23 parse errors. Within
+varied deception, recall was only 0.5500 and FPR was 0.0889. The matched aligned
+Qwen student scored 0.9000 overall and 0.7944 varied validation BA. Abliteration
+therefore does not provide a better general reasoning-distillation base: the
+HP-KR specialist benefit does not transfer to the current varied-deception SFT
+task, and formatting reliability also worsens. Do not evaluate this adapter on
+test. Retain regular aligned Qwen as the default fine-tuning base; use Heretic
+only for explicit alignment/HP-KR diagnostics unless a future balanced routing
+evaluation supports a specialist role.
+
 ## Prediction-only SFT baseline
 
 To test whether teacher reasoning supervision is necessary, train a controlled

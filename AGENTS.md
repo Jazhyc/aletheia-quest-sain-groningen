@@ -192,6 +192,10 @@ privileged-information distillation experiments: filter with
 LoRA for one epoch with AdamW at `5e-5`, and retain effective batch size 32.
 Treat changes to the student base model (including Heretic) as matched ablations
 of this recipe unless the experiment explicitly targets another factor.
+The matched Heretic-base ablation scored only 0.8643 overall and 0.7306 varied
+validation BA, versus 0.9000 and 0.7944 for aligned Qwen, and produced 23 parse
+errors. Keep regular `Qwen/Qwen3.5-9B` as the default fine-tuning base; do not
+spend a test evaluation on the Heretic adapter.
 
 Dataset-composition warning: every varied-deception example in the local train,
 validation, and test splits is from Qwen3.5-27B or a Qwen organism. Gemma and
