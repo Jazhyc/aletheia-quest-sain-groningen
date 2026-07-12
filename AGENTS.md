@@ -101,6 +101,18 @@ supporting details accurate. Treat extra GRPO reasoning as unable to compensate
 for missing or unreliable factual knowledge, and select among the epoch sweep on
 validation before any further test evaluation.
 
+Dataset-composition warning: every varied-deception example in the local train,
+validation, and test splits is from Qwen3.5-27B or a Qwen organism. Gemma and
+Nemotron appear only in instructed deception. Qwen accounts for 7,200/8,216
+rows overall and 18/21 validation/test dataset units; within Qwen, instructed
+and varied are exactly balanced. Consequently, any `varied-deception`-only SFT,
+GRPO, SDPO, prompt selection, or calibration experiment is also implicitly a
+Qwen-only adaptation. Do not interpret its gains as general varied-deception or
+cross-family transfer without matched Gemma/Nemotron varied data. Prefer
+model-agnostic logic based on observable output properties, report performance
+by scenario and family, and retain instructed/multi-family controls when
+changing training pipelines.
+
 Online SDPO requires the external pinned environment
 `/scratch/s4626451/.venvs/aletheia-sdpo` (TRL 1.8/vLLM 0.23); the main environment
 must remain on its locked TRL 0.23/vLLM 0.24 stack. SDPO smoke job `30102832`
