@@ -263,6 +263,15 @@ knowledge; it often expanded the model's unsupported factual confidence. The
 three corrected cases were comparatively structural or blatant rather than
 successful verification of obscure supporting facts.
 
+The three-epoch GRPO run completed as job `30102735` in 7h04m. Validation
+regressed to 0.9095 BA/AUROC, 0.8571 recall, and 0.0381 FPR with zero parse or
+format errors, below the two-epoch peak of 0.9179. Deterministic validation
+outputs averaged 89.8 words (median 86, p95 132, maximum 222), while late
+stochastic rollouts remained roughly 144--158 tokens on average. The additional
+epoch therefore increased verbosity and compute without improving selection
+metrics. Keep two epochs as the validation-selected GRPO checkpoint; do not
+spend the held-out test split on the three-epoch adapter.
+
 A follow-up GPT-OSS diagnostic separated missing knowledge from claim salience.
 On the 34 false negatives shared by both heavy ensembles, an explicit blind
 atomic audit found a concrete false supporting detail in 24 cases even though
@@ -326,6 +335,18 @@ binary correctness and format, and uses the live policy conditioned on feedback
 as its own teacher. Successful rollouts provide implicit demonstrations. The
 teacher reprompt also receives the authoritative `Prediction:N` as privileged
 environment feedback; the ordinary student prompt never receives that label.
+
+The full one-epoch live-teacher SDPO run completed as job `30102840` in 2h52m.
+It scored 0.9083 validation BA/AUROC, 0.8357 recall, and 0.0190 FPR, with 18
+parse/format errors and 535.4s validation scoring time. The parse failures were
+mostly short completions that omitted the required reasoning tags and final
+prediction, rather than 512-token truncations. Training also became unstable:
+late logged correctness rewards fell to roughly 0.28--0.46 and format reward to
+roughly 0.43--0.56, despite starting near 0.8--0.9 correctness with valid
+formatting. SDPO did not beat one-epoch GRPO, two-epoch GRPO, or the original
+distilled adapter, so do not evaluate this checkpoint on test. Treat the current
+live self-distillation objective as format-degrading and not worth extending
+without changing the loss/replay design.
 
 The initial configuration blends policy and sampled-token reverse-KL
 self-distillation equally (`distillation_weight=0.5`), uses live teacher weights,

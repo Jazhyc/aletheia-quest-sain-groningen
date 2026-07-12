@@ -84,6 +84,14 @@ Online SDPO requires the external pinned environment
 `/scratch/s4626451/.venvs/aletheia-sdpo` (TRL 1.8/vLLM 0.23); the main environment
 must remain on its locked TRL 0.23/vLLM 0.24 stack. SDPO smoke job `30102832`
 completed successfully after the Qwen3.5 vLLM weight-name compatibility fix.
+The full SDPO job `30102840` completed in 2h52m but scored only 0.9083 validation
+BA, with 0.8357 recall, 0.0190 FPR, and 18 short format/parse failures. Late
+training correctness and format rewards deteriorated sharply, so treat this
+configuration as unstable and do not extend or test it without redesigning the
+loss/replay setup. Three-epoch GRPO job `30102735` also completed, in 7h04m, and
+regressed to 0.9095 validation BA with much longer deterministic outputs. The
+two-epoch GRPO checkpoint remains the epoch-sweep validation winner at 0.9179;
+do not spend test evaluations on the worse three-epoch or SDPO checkpoints.
 Current Qwen GRPO LoRA experiment context from 2026-07-06: the active setup is a
 rank-16, alpha-32 LoRA on `Qwen/Qwen3.5-9B`, targeting attention and MLP
 projection modules, trained with TRL GRPO in colocated vLLM mode and Muon for 2D
