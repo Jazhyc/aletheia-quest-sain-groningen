@@ -1626,6 +1626,16 @@ rose to `0.1333`, so it is a cheap complementary inconsistency feature rather
 than a reliable veto. Job `30104792` and the full breakdown are recorded in the
 fact-extractor documentation linked above.
 
+The all-organism NDIF extension completed all 822 validation rows with macro BA
+`0.8667`. Family results differ materially: Qwen BA `0.8722`/FPR `0.1139`, Gemma
+BA `0.8750`/FPR `0.2000`, and Nemotron BA `0.7500`/FPR `0.5000`. The heavy judges
+had no Gemma or Nemotron false negatives on this split; all 12/30 recoveries on
+false negatives shared by the Qwen and GPT-OSS heavy judges came from Qwen
+rows. This argues against a universal raw self-query veto and for family-aware
+calibration, subject to competition rules. Gemma and Nemotron required a
+single-token forced-choice NDIF fallback because their hosted generation paths
+failed or OOMed; see the linked method documentation for the controlled caveat.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis

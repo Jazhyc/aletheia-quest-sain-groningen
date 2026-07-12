@@ -75,6 +75,14 @@ The simpler Qwen whole-output organism self-query control scored 0.8722
 validation BA with zero parse errors (0.9306 instructed, 0.8139 varied). Treat
 its forced `FALSE` verdict as a calibratable consistency feature rather than a
 veto: the adversarial prompt improved recall but raised varied FPR to 0.1333.
+The all-organism NDIF extension scored 0.8667 macro validation BA: Qwen 0.8722,
+Gemma 0.8750, and Nemotron 0.7500. Gemma FPR was 0.20 and Nemotron FPR 0.50;
+neither family offered recovery against the heavy judges because those judges
+had zero false negatives on their validation rows. All 12/30 shared-heavy-judge
+false-negative recoveries were Qwen. Gemma and Nemotron used documented
+single-token TRUE/FALSE forced-choice fallbacks because hosted generation was
+incompatible/OOM-prone; consult the method docs before comparing runtimes or
+treating this as an identical generation backend.
 
 Privileged-distillation findings from 2026-07-11: the selected one-epoch
 varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155

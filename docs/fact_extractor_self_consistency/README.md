@@ -139,3 +139,51 @@ rather than treating `FALSE` as a veto.
 Artifacts are under
 `results/blackbox/qwen27b_whole_output_self_query_validation_v1/`; runtime code
 is `experiments/fact_extractor_self_consistency/run_qwen_whole_output_self_query.py`.
+
+## All-organism NDIF baseline (2026-07-12)
+
+The same whole-output audit was extended to all 822 validation rows through
+NDIF. Rows were grouped into 12 unique generating model/LoRA sessions. Qwen used
+actual deterministic `TRUE`/`FALSE` generation at batch 16. The hosted Gemma
+PEFT generator had a reproducible shape error before its first token, so Gemma
+used a mathematically equivalent next-token forced choice between its
+single-token `TRUE` and `FALSE` outputs at batch 8. Nemotron generation OOMed at
+batch 4 and its language-model wrapper used a different generation interface;
+even a batch-1 forward required a shorter prompt to fit. Nemotron therefore used
+the same next-token forced choice at batch 1 with a compact complete-truth
+prompt (36--103 input tokens rather than 97--164). These backend and prompt
+differences are recorded per row and mean the family comparison is diagnostic,
+not a perfectly controlled prompt ablation.
+
+| family | rows | BA | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| Qwen3.5-27B | 720 | **0.8722** | 0.8583 | **0.1139** |
+| Gemma-3-27B | 80 | 0.8750 | 0.9500 | 0.2000 |
+| Nemotron-3-Super-120B | 22 | 0.7500 | **1.0000** | 0.5000 |
+| macro across all datasets | 822 | 0.8667 | 0.8738 | 0.1405 |
+
+Scenario-level BA was 0.9063 on instructed deception and 0.8139 on varied
+deception. All 822 decisions parsed. Successful NDIF group time summed to
+207.7 seconds, excluding client-side dataset work, failed compatibility probes,
+and transient deployment retries.
+
+Behavior is strongly organism-dependent even within Qwen: combined
+instructed+varied BA ranges from 0.7750 (`a-mo-3`) to 0.9375 (`a-mo-5`), while
+the Qwen base reaches 0.9500. Gemma base and its `s-mo` organism both score
+0.8750, but the base has FPR 0.25 versus 0.15 for the organism. Nemotron labels
+every deceptive row false but also rejects half of its honest rows.
+
+The cross-judge complementarity result is narrower than the overall recall
+suggests. The Qwen heavy ensemble has 47 false negatives on these rows and the
+self-query recovers 21; GPT-OSS heavy has 34 and it recovers 16. It recovers
+12/30 deceptive rows missed by both. Every one of those shared misses is a Qwen
+row: both heavy judges have zero Gemma or Nemotron false negatives on this
+validation split. A raw OR with self-query reduces overall BA because it harms
+49/402 Qwen-heavy true negatives and 43/384 GPT-OSS-heavy true negatives. For
+the non-Qwen families in particular, this validation set provides no evidence
+of additional recall value, only family-specific false-positive risk.
+
+Artifacts are under
+`results/blackbox/all_organisms_ndif_whole_output_self_query_validation_v1/`;
+the resumable runner is
+`experiments/fact_extractor_self_consistency/run_ndif_whole_output_self_query.py`.
