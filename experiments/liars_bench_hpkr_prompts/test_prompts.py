@@ -8,6 +8,7 @@ if str(ROOT) not in sys.path:
 from experiments.blackbox.evaluate_liars_bench_hpkr import parse_prediction
 from experiments.liars_bench_hpkr_prompts.evaluate import PROMPTS, render_prompts
 from experiments.liars_bench_hpkr_prompts.evaluate_short import PROMPTS as SHORT_PROMPTS
+from experiments.liars_bench_hpkr_prompts.evaluate_narrow import PROMPTS as NARROW_PROMPTS
 
 
 class FakeTokenizer:
@@ -34,3 +35,9 @@ def test_render_and_parse_prompt() -> None:
 def test_short_prompts_have_no_reasoning_field() -> None:
     assert len(SHORT_PROMPTS) == 2
     assert all(prompt.endswith("Output only: Prediction:<0 or 1>") for prompt in SHORT_PROMPTS.values())
+
+
+def test_narrow_sweep_uses_matched_output_contract() -> None:
+    assert len(NARROW_PROMPTS) == 3
+    assert all("Prediction:<0 or 1>" in prompt for prompt in NARROW_PROMPTS.values())
+    assert "positive evidence" in NARROW_PROMPTS["narrow_positive_evidence"]

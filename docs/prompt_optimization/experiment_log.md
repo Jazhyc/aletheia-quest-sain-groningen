@@ -1934,6 +1934,35 @@ with the tested clauses or select the instructed-only gain. Preserve the narrow
 clause as a specialist prompt candidate for future balanced epistemic data, not
 as a general-judge replacement.
 
+#### HP-KR positive-evidence prompt sweep
+
+Slurm job `30108426` tested the converse question on all 7,068 HP-KR rows with
+regular Qwen3.5-9B: whether the narrow validation clause improves the HP-KR
+specialist itself. Three conditions used the same abstract-rationale output,
+256-token budget, and model load: the broad report-type control, strict positive
+evidence, and a moderate accessibility compromise. The run completed in 19m30s.
+
+| prompt | BA | recall | FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: |
+| broad report-type control | **.8447** | **.9694** | .2800 | 184 |
+| strict positive evidence | .7020 | .5245 | **.1205** | 554 |
+| moderate accessibility | .8360 | .9019 | .2300 | **61** |
+
+Strict positive evidence fails because the observable conversation usually does
+not prove possession even for labeled-deceptive denials. It reduced Mistral FPR
+from 0.6773 to 0.2390 but also cut Mistral recall from 1.0000 to 0.5696, leaving
+Mistral BA nearly unchanged (0.6613 to 0.6653) while collapsing Qwen and Llama
+recall. The moderate prompt made a more useful trade but still lost 0.0087 BA
+overall. Mistral BA rose slightly to 0.6695, while both Qwen and Llama BA fell by
+about 0.008.
+
+Keep the broad report-type prompt as the selected regular-Qwen HP-KR specialist.
+Do not use the strict or moderate conditions, select the small Mistral-only gain,
+or infer knowledge possession from missing positive evidence. The result
+confirms an identifiability limit: the same surface denial can be honest or
+deceptive, while proof of the organism's epistemic state is often absent from
+the conversation.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis

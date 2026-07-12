@@ -160,6 +160,14 @@ tied the frozen control at 0.8940 BA (higher recall 0.8762 but FPR 0.0881), whil
 refusal/uncertainty and full report-type prompts regressed to 0.8798 and 0.8702.
 The narrow prompt improved instructed BA but reduced varied BA; do not select
 that post hoc or modify the general judge from this result.
+An exact HP-KR follow-up on regular Qwen (job `30108426`) rejected adding a
+positive-evidence requirement to the specialist prompt. The broad report-type
+control scored 0.8447 BA (0.9694 recall, 0.2800 FPR); strict positive evidence
+fell to 0.7020 BA (0.5245 recall, 0.1205 FPR), and a moderate accessibility
+compromise reached 0.8360 BA (0.9019 recall, 0.2300 FPR). Strict evidence reduced
+Mistral FPR but equally destroyed deceptive recall because proof of possession
+is usually absent. Keep the broad report-type prompt for regular-Qwen HP-KR;
+do not select the small Mistral-only gain or use organism-specific prompt logic.
 
 Privileged-distillation findings from 2026-07-11: the selected one-epoch
 varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155
