@@ -80,12 +80,14 @@ def response_span(messages: list, tokenizer) -> tuple[list[int], int, int]:
 
 # ── model ────────────────────────────────────────────────────────────────────
 
-def build_model(model_id: str, lora_id: str | None = None):
+def build_model(model_id: str, lora_id: str | None = None, **model_kwargs):
     """Construct the right nnsight wrapper for a repo: ``VisionLanguageModel`` for
     multimodal/conditional models (e.g. Gemma-3), ``LanguageModel`` otherwise.
     ``peft=lora_id`` attaches the LoRA adapter when one is given. The config and
     tokenizer load locally; the weights live on NDIF — the returned object is just
-    a handle you trace against."""
+    a handle you trace against. Extra ``model_kwargs`` are forwarded to the wrapper
+    (e.g. ``device_map="auto", dtype=torch.bfloat16`` to run on a local GPU
+    instead of NDIF)."""
     from transformers import AutoConfig
 
     try:
@@ -104,6 +106,7 @@ def build_model(model_id: str, lora_id: str | None = None):
 
     Wrapper = VisionLanguageModel if is_vlm else LanguageModel
     kwargs = {"peft": lora_id} if lora_id else {}
+    kwargs.update(model_kwargs)
     return Wrapper(model_id, **kwargs)
 
 
