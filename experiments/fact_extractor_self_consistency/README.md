@@ -42,3 +42,15 @@ OOMs even at low batch sizes. Since both tokenizers encode uppercase `TRUE` and
 Nemotron also uses a compact prompt to fit its batch-1 forward pass. Each output
 records `decision_mode` and `prompt_variant`; do not silently mix these modes in
 backend-equivalence claims.
+
+Evaluate the cached learned correction-gate baselines with:
+
+```bash
+python experiments/fact_extractor_self_consistency/run_correction_gate.py
+```
+
+This requires no model calls. It joins the all-organism self-query cache to the
+Qwen and GPT-OSS heavy-judge validation caches, then compares judge-only, raw
+OR, a fixed conservative rule, and regularized logistic gates. It reports both
+stratified out-of-fold and leave-one-organism-out predictions; the latter is the
+primary transfer check because varied-deception is confounded with Qwen.

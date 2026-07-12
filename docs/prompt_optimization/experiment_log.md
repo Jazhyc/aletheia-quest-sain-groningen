@@ -1636,6 +1636,17 @@ calibration, subject to competition rules. Gemma and Nemotron required a
 single-token forced-choice NDIF fallback because their hosted generation paths
 failed or OOMed; see the linked method documentation for the controlled caveat.
 
+The planned cached learned-correction gate was then evaluated without additional
+model calls. A decision-only regularized logistic gate reproduced the heavy
+judge's binary decisions. Deterministic text features improved out-of-fold
+ranking but not binary performance: with the Qwen heavy judge, stratified OOF
+AUROC rose from `0.9226` to `0.9505` while BA fell from `0.9226` to `0.9155`;
+under leave-one-organism-out, BA was `0.9143`. With GPT-OSS, the corresponding
+text-gate BA values were `0.9119` and `0.9083` versus the judge's `0.9167`. The
+fixed-rule control also failed to improve BA. This gate does not satisfy the
+transfer/FPR acceptance criteria and should not be integrated or used to justify
+RLVR. Full breakdowns are in the fact-extractor documentation.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis

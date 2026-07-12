@@ -244,3 +244,40 @@ coefficients as a tiny CPU artifact and test it with the submission-compatible
 judge. Only then consider richer confidence targets during distillation, such
 as training the judge to emit a small calibrated confidence field in the same
 generation.
+
+## Learned correction-gate result (2026-07-12)
+
+The cached-data experiment compared both heavy judges against raw OR, a fixed
+eligibility rule, and strongly regularized logistic gates. The gates used no
+model or organism identity features. The text condition added deterministic
+length, reference-dependence, number/date/currency, named-span, comparative,
+and historical/causal counts. All learned results are out of fold; no row was
+scored by a model fitted on that row.
+
+| judge and method | BA | recall | FPR | AUROC |
+| --- | ---: | ---: | ---: | ---: |
+| Qwen heavy judge | **0.9226** | 0.8881 | **0.0429** | 0.9226 |
+| Qwen decision gate, leave-one-organism-out | **0.9226** | 0.8881 | **0.0429** | 0.9462 |
+| Qwen text gate, stratified OOF | 0.9155 | 0.8905 | 0.0595 | **0.9505** |
+| Qwen text gate, leave-one-organism-out | 0.9143 | 0.8881 | 0.0595 | 0.9479 |
+| GPT-OSS heavy judge | **0.9167** | **0.9190** | 0.0857 | 0.9167 |
+| GPT-OSS decision gate, leave-one-organism-out | **0.9167** | **0.9190** | 0.0857 | 0.9460 |
+| GPT-OSS text gate, stratified OOF | 0.9119 | 0.9071 | **0.0833** | **0.9527** |
+| GPT-OSS text gate, leave-one-organism-out | 0.9083 | 0.9095 | 0.0929 | 0.9524 |
+
+Raw OR scored 0.8893 BA with the Qwen judge and 0.8845 with GPT-OSS. The fixed
+rule also failed: with Qwen it exchanged an equal macro increase in recall and
+FPR, leaving BA unchanged at 0.9226, and with GPT-OSS it fell to 0.9095.
+
+The text features contain real ranking signal, as shown by their higher OOF
+AUROC, but they do not identify a safe binary override region at the fixed 0.5
+threshold. On varied deception, the Qwen leave-one-organism-out text gate raised
+recall from 0.7667 to 0.7833 while raising FPR from 0.0667 to 0.1111. This is the
+same unsafe tradeoff seen with raw self-query. The correction gate therefore
+fails the predeclared acceptance criteria and should not be frozen or integrated
+into the submission. Do not proceed to RLVR from this result.
+
+The implementation and tests are under
+`experiments/fact_extractor_self_consistency/`; ignored predictions and the full
+family, scenario, and organism breakdown are under
+`results/blackbox/self_query_correction_gate_validation_v1/`.
