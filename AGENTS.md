@@ -186,6 +186,13 @@ supporting details accurate. Treat extra GRPO reasoning as unable to compensate
 for missing or unreliable factual knowledge, and select among the epoch sweep on
 validation before any further test evaluation.
 
+Use the one-epoch varied-only reasoning-summary SFT recipe as the default for
+privileged-information distillation experiments: filter with
+`student.dataset_name_contains=varied-deception`, train the rank-16/alpha-32
+LoRA for one epoch with AdamW at `5e-5`, and retain effective batch size 32.
+Treat changes to the student base model (including Heretic) as matched ablations
+of this recipe unless the experiment explicitly targets another factor.
+
 Dataset-composition warning: every varied-deception example in the local train,
 validation, and test splits is from Qwen3.5-27B or a Qwen organism. Gemma and
 Nemotron appear only in instructed deception. Qwen accounts for 7,200/8,216

@@ -1,0 +1,20 @@
+# @package _global_
+# Matched varied-only reasoning-distillation test using Heretic as the student base.
+
+defaults:
+  - privileged_information_distillation
+  - _self_
+
+method: heretic9b_privileged_gptoss120b_summary_variedonly_adamw5e5_v1
+output_dir: results/blackbox/${method}
+
+student:
+  model: trohrbaugh/Qwen3.5-9B-heretic-v2
+  target_mode: teacher
+  dataset_name_contains: varied-deception
+  output_dir: ${output_dir}/adapter
+  training:
+    optimizer: adamw
+    optim: adamw_torch
+    num_train_epochs: 1.0
+    learning_rate: 5.0e-5
