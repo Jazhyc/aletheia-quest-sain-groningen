@@ -83,6 +83,14 @@ false-negative recoveries were Qwen. Gemma and Nemotron used documented
 single-token TRUE/FALSE forced-choice fallbacks because hosted generation was
 incompatible/OOM-prone; consult the method docs before comparing runtimes or
 treating this as an identical generation backend.
+The next planned self-consistency experiment is the learned correction gate in
+`docs/fact_extractor_self_consistency/`. The submission judge is deterministic
+binary, so do not claim to infer judge certainty from its output. Reuse cached
+judge/self-query validation decisions and compare judge-only, raw OR, a
+judge+self-query logistic gate, deterministic text-feature gating, and a fixed
+rule control. Use out-of-fold predictions plus leave-one-organism-out checks;
+reject gains that depend on random-row splits, model identity, or increased FPR.
+Start with one shared regularized shallow gate and no additional LLM parser.
 
 Privileged-distillation findings from 2026-07-11: the selected one-epoch
 varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155

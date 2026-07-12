@@ -187,3 +187,60 @@ Artifacts are under
 `results/blackbox/all_organisms_ndif_whole_output_self_query_validation_v1/`;
 the resumable runner is
 `experiments/fact_extractor_self_consistency/run_ndif_whole_output_self_query.py`.
+
+## Next step: learned correction gate
+
+The submission-compatible judge currently emits only a deterministic binary
+prediction. Its epistemic certainty cannot be recovered from that one bit: a
+borderline decision and a confident decision are observationally identical.
+Judge-logit margins are not a dependable NDIF path, while prompt ensembles and
+stochastic self-consistency add too much runtime. Do not describe a heuristic
+derived from the binary output as “judge confidence.”
+
+The next experiment should instead learn when the organism self-query corrects
+the binary judge. Start with a strongly regularized logistic regression or an
+equally shallow calibrated model. Candidate inputs are:
+
+- binary judge prediction;
+- whole-output organism `TRUE`/`FALSE` decision;
+- their disagreement indicator;
+- output token/character length and sentence count;
+- unresolved-reference indicators such as “the statement,” “that claim,” bare
+  yes/no answers, and other responses whose truth requires conversation context;
+- cheap factual-density counts: digits, years, percentages, currency, quoted
+  spans, capitalized multiword spans, comparative/superlative terms, and
+  historical or causal markers;
+- optional lexical overlap with the final user message; and
+- interactions between self-query disagreement, reference dependence, and
+  factual density.
+
+These features are gates, not fact checkers. They should identify long,
+self-contained, fact-dense outputs where the organism's contradiction has been
+useful, while suppressing overrides on short referential outputs. Implement
+them with deterministic string processing; do not add an LLM parser unless the
+cheap gate has first demonstrated insufficient ceiling.
+
+Evaluate the following nested baselines using the already cached validation
+outputs before making any new model calls:
+
+1. binary judge alone;
+2. raw OR with organism `FALSE` (known to reduce BA);
+3. logistic gate with only judge and self-query decisions;
+4. logistic gate with the deterministic text features; and
+5. fixed, human-readable eligibility rules derived without organism-specific
+   behavior, as a complexity control.
+
+Use out-of-fold predictions for all reported validation metrics. In addition to
+ordinary stratified folds, require leave-one-organism-out evaluation and report
+scenario- and family-level BA, recall, and FPR. Because all varied-deception
+examples are Qwen, random-row validation can easily reward a Qwen/scenario
+proxy. Reject a gate that improves only random folds, materially raises FPR,
+relies mainly on model identity, or fails held-out-organism transfer. Compare a
+single shared gate first; family-specific coefficients are a later parameter
+ablation, not the default detection logic.
+
+If the learned gate survives these checks, freeze its preprocessing and
+coefficients as a tiny CPU artifact and test it with the submission-compatible
+judge. Only then consider richer confidence targets during distillation, such
+as training the judge to emit a small calibrated confidence field in the same
+generation.
