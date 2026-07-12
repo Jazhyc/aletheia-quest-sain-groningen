@@ -1647,6 +1647,19 @@ fixed-rule control also failed to improve BA. This gate does not satisfy the
 transfer/FPR acceptance criteria and should not be integrated or used to justify
 RLVR. Full breakdowns are in the fact-extractor documentation.
 
+A subsequent 144-row Qwen pilot tested whether claim-level centrality and
+two-prompt organism-verification stability improve that result. GPT-OSS grounded
+847/881 extracted claims; on 275 exact quotes shared by two extractor phrasings,
+role agreement was 89.1% and materiality agreement 83.6%. The organism's two
+neutral verdicts agreed on 829/847 claims. Stable high-materiality rejection
+scored 0.8681 BA with 0.0556 FPR. On the pilot sample it raised the Qwen heavy
+judge from 0.9097 to 0.9167 and GPT-OSS from 0.8889 to 0.8958, recovering three
+false negatives while adding two false positives. Exact quote/extractor
+consensus recovered one Qwen false negative with no harm but had low standalone
+recall. Job `30105852` and the selection-bias/qualitative caveats are documented
+in the fact-extractor README. Freeze the impact-first rule before any full
+validation follow-up; do not treat the one-net-row pilot gain as established.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis

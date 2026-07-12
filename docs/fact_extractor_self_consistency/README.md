@@ -281,3 +281,52 @@ The implementation and tests are under
 `experiments/fact_extractor_self_consistency/`; ignored predictions and the full
 family, scenario, and organism breakdown are under
 `results/blackbox/self_query_correction_gate_validation_v1/`.
+
+## Claim centrality and stability pilot (2026-07-12)
+
+Slurm job `30105852` tested 144 label-balanced Qwen validation rows: eight rows
+from each of 18 organism/scenario dataset units. Two GPT-OSS prompt variants
+extracted claims with `role` and `materiality`, after which the actual generating
+Qwen organism checked every grounded proposition under two neutral phrasings.
+The extraction and verification stages used separate model loads. The complete
+job took 5m12s; teacher scoring took 71.3s and 1,694 short organism checks took
+42.6s, excluding startup.
+
+The teacher produced 881 parsed claims from 288 extractions. Quotes were grounded
+for 847 claims (96.1%). The variants shared 275 exact grounded quotes; role labels
+agreed on 89.1% and materiality labels on 83.6% of those matched quotes. Organism
+verdicts parsed for every check and agreed across the two verification phrasings
+for 829/847 claims (97.9%). There were 229 stable rejections.
+
+| row-level organism signal | BA | recall | FPR |
+| --- | ---: | ---: | ---: |
+| any stable rejection | 0.8472 | 0.8472 | 0.1528 |
+| stable high-materiality rejection, either extractor | **0.8681** | **0.7917** | 0.0556 |
+| role-first extractor only | 0.8542 | 0.7639 | 0.0556 |
+| impact-first extractor only | **0.8681** | **0.7917** | 0.0556 |
+| same high-materiality quote rejected under both extractors | 0.8125 | 0.6528 | **0.0278** |
+
+On this small sample, the Qwen heavy judge scored 0.9097 BA. OR-ing the
+impact-first high-materiality signal raised it to 0.9167 by recovering three
+false negatives while harming two true negatives. The consensus signal also
+reached 0.9167 by recovering one false negative with no harm. The GPT-OSS heavy
+judge rose from 0.8889 to 0.8958 with the impact-first signal (the same three
+recoveries and two harms), while consensus made no net improvement. These are
+one- or two-row net changes on a deliberately small pilot, not evidence of a
+reliable gain, and choosing the better prompt from this same sample would be
+selection bias.
+
+Qualitative inspection supports both sides of the result. Stable high-materiality
+rejection recovered three plausible Qwen-judge misses involving Washington,
+D.C.'s city status and the claim that the 2017 pound coin was Britain's first
+dodecagonal coin. It also rejected two labeled-honest outputs, including the true
+claim that Carly Simon sang the theme for *The Spy Who Loved Me*. Stability
+therefore suppresses prompt-framing noise but does not eliminate organism factual
+hallucination.
+
+This pilot is sufficiently encouraging for one controlled follow-up, but not for
+submission integration. Freeze the `impact_first` extractor and two-check stable
+high-materiality rule before a full-validation run; do not tune another rule on
+the pilot. Evaluate the signal alone and OR-ed with the cached judges, with
+scenario/organism breakdowns. The stricter exact-quote consensus condition is a
+low-FPR control but costs two teacher extractions and has low recall.

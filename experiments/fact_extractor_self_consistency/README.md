@@ -54,3 +54,17 @@ Qwen and GPT-OSS heavy-judge validation caches, then compares judge-only, raw
 OR, a fixed conservative rule, and regularized logistic gates. It reports both
 stratified out-of-fold and leave-one-organism-out predictions; the latter is the
 primary transfer check because varied-deception is confounded with Qwen.
+
+Run the small claim-centrality and verification-stability pilot with:
+
+```bash
+sbatch experiments/fact_extractor_self_consistency/run_claim_centrality_stability_pilot.sh
+```
+
+It samples eight label-balanced rows from each Qwen validation dataset (144 rows
+across 18 organism/scenario units). Two GPT-OSS
+prompt variants extract grounded claims with structural role and materiality;
+then each generating organism checks every grounded proposition under two
+neutral forced-choice phrasings. The stages run in separate Python processes so
+the 120B teacher releases GPU memory before Qwen loads, and each stage writes a
+cache under `results/blackbox/claim_centrality_stability_pilot_v1/`.
