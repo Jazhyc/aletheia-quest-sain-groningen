@@ -150,8 +150,8 @@ def extract_pooled_activations(
     :param spans: (start, end) response span of every example.
     :param pad_id: Padding token id.
     :param remote: Run on NDIF instead of a local GPU (needs a dev-access key).
-    :return: One saved tensor per batch, each (num_layers, num_poolings, B, D)
-        in float16 on CPU.
+    :return: One (num_layers, num_poolings, N, D) float16 CPU tensor, rows in
+        batch order (all of batches[0], then batches[1], ...).
     """
     import contextlib
 
@@ -160,9 +160,13 @@ def extract_pooled_activations(
     from util import decoder_layers
 
     layer_modules = decoder_layers(model)
-    saved: list[torch.Tensor] = []
     session = model.session(remote=True) if remote else contextlib.nullcontext()
     with session:
+        # The session body executes remotely: only values that flow into the
+        # final .save() survive it, so per-batch results are collected in a
+        # list created INSIDE the session and concatenated once at the end
+        # (the same shape as util.run_full_session).
+        pieces = []
         for batch_positions in batches:
             input_ids, attention_mask, response_mask, last_token_idx = collate_batch(
                 [token_lists[position] for position in batch_positions],
@@ -172,18 +176,56 @@ def extract_pooled_activations(
             with model.trace({"input_ids": input_ids, "attention_mask": attention_mask}) as tracer:
                 pooled_per_layer = []
                 for layer in layers:
-                    hidden = layer_modules[layer].output[0]
+                    # transformers 5.x decoder layers return the tensor directly;
+                    # older versions return a tuple with the hidden state first.
+                    hidden = layer_modules[layer].output
+                    if isinstance(hidden, tuple):
+                        hidden = hidden[0]
                     mask = response_mask.to(hidden.device).unsqueeze(-1)
                     denom = response_mask.to(hidden.device).sum(1, keepdim=True).clamp(min=1)
                     mean_pooled = (hidden * mask).sum(1) / denom
                     last_pooled = hidden[torch.arange(hidden.shape[0]),
                                          last_token_idx.to(hidden.device)]
-                    pooled_per_layer.append(torch.stack([mean_pooled, last_pooled], 0))
-                stacked = torch.stack(pooled_per_layer, 0).to(torch.float16).detach().cpu()
-                saved.append(stacked.save())
+                    # Layers are sharded across GPUs on big deployments, so move
+                    # each pooled pair to CPU before stacking across layers.
+                    pooled_per_layer.append(
+                        torch.stack([mean_pooled, last_pooled], 0).to(torch.float16).detach().cpu())
+                stacked = torch.stack(pooled_per_layer, 0).save()
                 # Skip every layer past max(layers) and the LM head.
                 tracer.stop()
-    return saved
+            pieces.append(stacked)
+        all_features = torch.cat(pieces, dim=2)
+        if remote:
+            all_features = all_features.save()
+    return all_features
+
+
+def load_labels(dataset_name: str, examples: Any, num_rows: int) -> Any:
+    """
+    Fetch `deceptive` labels for a dev dataset, joined by `index`.
+
+    Dev inputs repos don't carry the label column; it lives in the sibling
+    `<dataset>-labels` repo (the same split dry.yaml points labels_uri at).
+    Private leaderboard datasets have no labels repo, so failure to load one
+    is expected and returns None.
+
+    :param dataset_name: HF id of the inputs dataset.
+    :param examples: The loaded inputs dataset (provides the `index` order).
+    :param num_rows: Number of rows actually extracted.
+    :return: (num_rows,) bool array in extraction order, or None if no labels.
+    """
+    import numpy as np
+    from datasets import load_dataset
+
+    if "deceptive" in examples.column_names:
+        return np.asarray(examples["deceptive"][:num_rows], dtype=bool)
+    try:
+        labels_ds = load_dataset(dataset_name + "-labels", split="test")
+    except Exception as error:
+        print(f"no labels repo for {dataset_name} ({type(error).__name__}); caching unlabeled")
+        return None
+    by_index = dict(zip(labels_ds["index"], labels_ds["deceptive"]))
+    return np.asarray([by_index[i] for i in examples["index"][:num_rows]], dtype=bool)
 
 
 def main() -> None:
@@ -252,25 +294,26 @@ def main() -> None:
           f"max batch {args.max_batch})")
 
     start_time = time.time()
-    saved = extract_pooled_activations(model, layers, batches, token_lists, spans, pad_id,
-                                       remote=args.remote)
+    all_features = extract_pooled_activations(model, layers, batches, token_lists, spans,
+                                              pad_id, remote=args.remote)
     print(f"extraction done in {time.time() - start_time:.1f}s")
 
-    hidden_dim = saved[0].shape[-1]
+    flat_positions = [position for batch_positions in batches for position in batch_positions]
+    sorted_features = all_features.cpu().numpy()
+    hidden_dim = sorted_features.shape[-1]
     features = {f"{pooling}_L{layer}": np.empty((num_rows, hidden_dim), dtype=np.float16)
                 for layer in layers for pooling in POOLINGS}
-    for stacked, batch_positions in zip(saved, batches):
-        batch_features = stacked.numpy()
-        for layer_pos, layer in enumerate(layers):
-            for pool_pos, pooling in enumerate(POOLINGS):
-                features[f"{pooling}_L{layer}"][batch_positions] = batch_features[layer_pos, pool_pos]
+    for layer_pos, layer in enumerate(layers):
+        for pool_pos, pooling in enumerate(POOLINGS):
+            features[f"{pooling}_L{layer}"][flat_positions] = sorted_features[layer_pos, pool_pos]
 
     cache: dict[str, np.ndarray] = dict(features)
     cache["index"] = np.asarray(examples["index"][:num_rows])
     cache["response_tokens"] = np.asarray(
         [span_end - span_start for span_start, span_end in spans], dtype=np.int32)
-    if "deceptive" in examples.column_names:
-        cache["deceptive"] = np.asarray(examples["deceptive"][:num_rows], dtype=bool)
+    labels = load_labels(args.dataset, examples, num_rows)
+    if labels is not None:
+        cache["deceptive"] = labels
     cache["meta"] = np.asarray(json.dumps(dict(
         dataset=args.dataset, model=model_id, lora=lora_id, layers=layers,
         poolings=list(POOLINGS), max_len=args.max_len, n=num_rows,
