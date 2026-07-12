@@ -71,6 +71,10 @@ judge (0.9214). The selected engineering schema records an exact source quote,
 standalone proposition, and `true|false|uncertain` assessment; validate quote
 grounding before self-querying because GPT-OSS only grounded about 89% of parsed
 claims. Keep extraction and final judgment as separate ensemble members.
+The simpler Qwen whole-output organism self-query control scored 0.8722
+validation BA with zero parse errors (0.9306 instructed, 0.8139 varied). Treat
+its forced `FALSE` verdict as a calibratable consistency feature rather than a
+veto: the adversarial prompt improved recall but raised varied FPR to 0.1333.
 
 Privileged-distillation findings from 2026-07-11: the selected one-epoch
 varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155

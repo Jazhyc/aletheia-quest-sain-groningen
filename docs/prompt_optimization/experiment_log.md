@@ -1618,6 +1618,14 @@ as a replacement final judge. Full prompts, results, qualitative examples, and
 the proposed organism self-consistency stage are documented in
 [`../fact_extractor_self_consistency/README.md`](../fact_extractor_self_consistency/README.md).
 
+The follow-up whole-output control queried each generating Qwen organism without
+the original conversation. A forced `TRUE`/`FALSE` “find one error” prompt
+scored `0.8722` BA over 720 Qwen validation rows with zero parse errors
+(`0.9306` instructed, `0.8139` varied). Its recall was `0.8556`, but varied FPR
+rose to `0.1333`, so it is a cheap complementary inconsistency feature rather
+than a reliable veto. Job `30104792` and the full breakdown are recorded in the
+fact-extractor documentation linked above.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis

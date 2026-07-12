@@ -13,3 +13,13 @@ in an equivalent GPU allocation. Results are written beneath
 and are git-ignored. See
 [`docs/fact_extractor_self_consistency/README.md`](../../docs/fact_extractor_self_consistency/README.md)
 for the contracts and findings.
+
+Run the Qwen whole-output organism self-query control with:
+
+```bash
+sbatch experiments/fact_extractor_self_consistency/run_qwen_whole_output_self_query.sh
+```
+
+This evaluates only Qwen validation datasets and applies each row's generating
+LoRA. The wrapper sources the git-ignored `.env` when present because the
+organism adapters are gated.
