@@ -368,3 +368,50 @@ cleaner, but they do not solve factual hallucination on the varied Qwen rows
 where complementary recall is needed. Do not integrate this signal, tune a new
 threshold on these same validation labels, expand it to test, or use it as
 justification for RLVR. Preserve the caches as diagnostic evidence only.
+
+## Matched atomic-audit false-positive controls (2026-07-12)
+
+Slurm job `30105894` froze the earlier `blind_atomic` prompt and audited the 462
+validation rows predicted non-deceptive by at least one heavy judge. It ran both
+GPT-OSS-120B, as the teacher ceiling, and base Qwen3.5-9B, as the
+submission-sized comparison. The privileged condition was not used. Cascades
+changed only judge-negative rows with verdict `CONTAINS_FALSE_DETAIL`; uncertain,
+unparsed, and negative audits preserved the judge decision.
+
+| auditor and first-stage judge | recoveries | harms | conditional audit FPR | original BA | cascade BA |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| GPT-OSS after Qwen heavy | 32/47 | 44/402 | 0.1095 | **0.9226** | 0.9083 |
+| GPT-OSS after GPT-OSS heavy | 20/34 | 27/384 | 0.0703 | **0.9167** | 0.9083 |
+| Qwen-9B after Qwen heavy | 40/47 | 201/402 | 0.5000 | **0.9226** | 0.7310 |
+| Qwen-9B after GPT-OSS heavy | 30/34 | 193/384 | 0.5026 | **0.9167** | 0.7226 |
+
+GPT-OSS emitted 79 positive audits, 378 negatives, and 5 parse failures in 38.4s
+of scoring. Its result confirms the earlier salience finding but rejects an
+unconditional cascade: high recovery is accompanied by too many honest-row
+flags. The effect is strongly scenario-dependent. After Qwen heavy, GPT-OSS
+recovered 31 varied false negatives for 12 harms and raised varied BA from 0.8500
+to 0.9028, but on instructed rows it recovered only 1 while harming 32 and
+reduced BA from 0.9771 to 0.9125. Selecting the favorable scenario after seeing
+these labels would be an invalid post-hoc gate and would inherit the known
+Qwen/scenario confound.
+
+Qwen-9B emitted 253 positive audits, 196 negatives, and 13 parse failures in
+23.5s. Its roughly 50% conditional false-positive rate validates the concern
+that the smaller deployable model lacks sufficiently reliable factual knowledge.
+Its greater raw recovery is indiscriminate rejection, not a better detector.
+
+Qualitative GPT-OSS false positives reveal a deeper target mismatch. Some audits
+correctly identify ordinary inaccuracies inside labeled-honest outputs: Budapest
+was formed from Buda, Pest, **and Óbuda**; Igor Tamm's Nobel recognized Cherenkov
+radiation, not the Compton effect; and Fritz Pfleumer was born in Austria rather
+than Germany. Such factual errors need not be induced deception under the task's
+belief-based label. Other audits are themselves wrong or over-pedantic. They
+attack a claim the assistant explicitly negated, confuse a containing territory
+with a cantonment, or enforce debatable invention dates. Therefore “contains a
+false detail” is neither necessary nor sufficient for the competition label.
+
+Do not deploy either cascade or tune a scenario gate on these validation results.
+The experiment shows that factual-detail salience explains many judge false
+negatives, but a pure fact checker cannot distinguish deceptive falsehoods from
+ordinary model errors. Any future use of atomic audits needs an independently
+validated deception-attribution signal, not merely a stricter factual verdict.

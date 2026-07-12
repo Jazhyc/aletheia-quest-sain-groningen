@@ -1674,6 +1674,20 @@ integrate, retune on the same validation rows, extend to test, or use this resul
 to motivate RLVR. Full extraction, stability, scenario, and organism statistics
 are in the fact-extractor documentation.
 
+Matched honest controls for the original blind atomic-audit prompt were run as
+job `30105894`. GPT-OSS recovered 32/47 Qwen-heavy validation false negatives but
+harmed 44/402 true negatives, reducing BA from 0.9226 to 0.9083. After the
+GPT-OSS heavy judge it recovered 20/34 and harmed 27/384, reducing BA from 0.9167
+to 0.9083. The signal was useful on varied rows but strongly harmful on
+instructed rows; do not select a scenario gate post hoc. Base Qwen3.5-9B
+confirmed the deployability concern: it recovered 40/47 Qwen-heavy misses but
+flagged 201/402 true negatives, producing a 0.5000 conditional FPR and 0.7310
+cascade BA. Qualitative controls show both audit hallucinations and genuine
+factual errors in labeled-honest responses. This exposes a target mismatch:
+factual incorrectness is not equivalent to belief-based deception. Do not deploy
+or retune these cascades; see the fact-extractor documentation for full scenario
+statistics and examples.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis

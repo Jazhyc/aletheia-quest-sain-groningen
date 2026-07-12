@@ -78,3 +78,14 @@ sbatch experiments/fact_extractor_self_consistency/run_claim_centrality_stabilit
 
 It evaluates all 720 Qwen validation rows without changing the prompt, verdict
 checks, materiality threshold, or judge combination after the pilot.
+
+Run the matched blind atomic-audit control for GPT-OSS-120B and Qwen3.5-9B with:
+
+```bash
+sbatch experiments/fact_extractor_self_consistency/run_atomic_audit_controls.sh
+```
+
+This freezes the earlier shared-error `blind_atomic` prompt, audits the union of
+validation rows predicted negative by either heavy judge, and measures both
+false-negative recovery and new false-positive harm. GPT-OSS estimates the
+teacher ceiling; Qwen-9B tests whether the same cascade is submission-sized.

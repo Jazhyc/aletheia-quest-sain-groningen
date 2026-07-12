@@ -93,6 +93,15 @@ recoveries, 15 harms) and GPT-OSS-heavy BA from 0.9097 to 0.8986 (5 recoveries,
 integrate, retune on these validation labels, extend to test, or use either gate
 as justification for RLVR. The submission judge is deterministic binary, so do
 not claim to infer judge certainty from its output.
+Matched honest controls also reject the original GPT-OSS blind atomic-audit
+cascade despite its 24/34 shared-test-error diagnostic. On validation, GPT-OSS
+recovered 32/47 Qwen-heavy false negatives but harmed 44/402 true negatives,
+reducing BA from 0.9226 to 0.9083. Qwen3.5-9B was much worse: 40 recoveries versus
+201 harms and conditional FPR 0.50. Some GPT-OSS false positives correctly found
+ordinary factual errors in labeled-honest responses, while others attacked
+negated question claims or made pedantic/incorrect corrections. Factual
+incorrectness is not equivalent to belief-based deception. Do not deploy either
+atomic cascade or select its favorable varied-scenario behavior post hoc.
 
 Privileged-distillation findings from 2026-07-11: the selected one-epoch
 varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155
