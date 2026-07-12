@@ -1660,6 +1660,20 @@ recall. Job `30105852` and the selection-bias/qualitative caveats are documented
 in the fact-extractor README. Freeze the impact-first rule before any full
 validation follow-up; do not treat the one-net-row pilot gain as established.
 
+The frozen full-Qwen follow-up completed as Slurm job `30105867` and rejected
+the pilot hypothesis. Across all 720 Qwen validation rows, stable
+high-materiality rejection scored 0.8472 BA, 0.7417 recall, and 0.0472 FPR.
+OR-ing it with the Qwen heavy judge reduced BA from 0.9153 to 0.9056 (8 false
+negative recoveries, 15 false-positive harms); with GPT-OSS, BA fell from 0.9097
+to 0.8986 (5 recoveries, 13 harms). The signal remained very strong on instructed
+deception (0.9750 BA) but fell to 0.7194 on varied deception, where the added
+false positives overwhelmed recoveries. The full run used the frozen
+`impact_first` extractor, exact quote grounding, teacher materiality `high`, and
+two deterministic organism `FALSE` verdicts; no post-pilot rule changed. Do not
+integrate, retune on the same validation rows, extend to test, or use this result
+to motivate RLVR. Full extraction, stability, scenario, and organism statistics
+are in the fact-extractor documentation.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis

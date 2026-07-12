@@ -68,3 +68,13 @@ then each generating organism checks every grounded proposition under two
 neutral forced-choice phrasings. The stages run in separate Python processes so
 the 120B teacher releases GPU memory before Qwen loads, and each stage writes a
 cache under `results/blackbox/claim_centrality_stability_pilot_v1/`.
+
+The controlled full-Qwen follow-up freezes the pilot-selected `impact_first`
+extractor and stable high-materiality rule:
+
+```bash
+sbatch experiments/fact_extractor_self_consistency/run_claim_centrality_stability_full.sh
+```
+
+It evaluates all 720 Qwen validation rows without changing the prompt, verdict
+checks, materiality threshold, or judge combination after the pilot.

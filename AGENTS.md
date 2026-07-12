@@ -83,14 +83,16 @@ false-negative recoveries were Qwen. Gemma and Nemotron used documented
 single-token TRUE/FALSE forced-choice fallbacks because hosted generation was
 incompatible/OOM-prone; consult the method docs before comparing runtimes or
 treating this as an identical generation backend.
-The next planned self-consistency experiment is the learned correction gate in
-`docs/fact_extractor_self_consistency/`. The submission judge is deterministic
-binary, so do not claim to infer judge certainty from its output. Reuse cached
-judge/self-query validation decisions and compare judge-only, raw OR, a
-judge+self-query logistic gate, deterministic text-feature gating, and a fixed
-rule control. Use out-of-fold predictions plus leave-one-organism-out checks;
-reject gains that depend on random-row splits, model identity, or increased FPR.
-Start with one shared regularized shallow gate and no additional LLM parser.
+The learned whole-output correction gate failed: text features improved OOF
+ranking but reduced binary BA under both stratified and leave-one-organism-out
+evaluation. A later claim-level pilot appeared promising, but its frozen
+full-Qwen follow-up also failed. Stable high-materiality organism rejection
+scored 0.8472 BA; OR-ing it reduced Qwen-heavy BA from 0.9153 to 0.9056 (8
+recoveries, 15 harms) and GPT-OSS-heavy BA from 0.9097 to 0.8986 (5 recoveries,
+13 harms). Its instructed BA was 0.9750 but varied BA only 0.7194. Do not
+integrate, retune on these validation labels, extend to test, or use either gate
+as justification for RLVR. The submission judge is deterministic binary, so do
+not claim to infer judge certainty from its output.
 
 Privileged-distillation findings from 2026-07-11: the selected one-epoch
 varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155

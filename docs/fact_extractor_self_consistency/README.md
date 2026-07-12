@@ -330,3 +330,41 @@ high-materiality rule before a full-validation run; do not tune another rule on
 the pilot. Evaluate the signal alone and OR-ed with the cached judges, with
 scenario/organism breakdowns. The stricter exact-quote consensus condition is a
 low-FPR control but costs two teacher extractions and has low recall.
+
+## Controlled full-Qwen centrality/stability result (2026-07-12)
+
+The preregistered follow-up ran as Slurm job `30105867` on all 720 Qwen
+validation rows. It froze the pilot-selected `impact_first` prompt and used one
+teacher extraction per row. The only primary organism signal was: grounded
+claim, GPT-OSS materiality `high`, and `FALSE` under both neutral organism
+verification prompts. No prompt, threshold, or aggregation rule changed after
+the pilot result.
+
+GPT-OSS produced 2,204 parsed claims, of which 2,098 (95.2%) had grounded quotes.
+All 4,196 organism verdicts parsed. The two verdict phrasings agreed for
+2,040/2,098 claims (97.2%), and 451 claims had stable `FALSE` plus high
+materiality. Teacher scoring took 159.9s and organism scoring 84.5s, excluding
+the two model startups; the full job took 7m22s.
+
+| method | BA | recall | FPR |
+| --- | ---: | ---: | ---: |
+| stable high-materiality signal | 0.8472 | 0.7417 | 0.0472 |
+| Qwen heavy judge | **0.9153** | 0.8694 | **0.0389** |
+| Qwen judge OR signal | 0.9056 | **0.8917** | 0.0806 |
+| GPT-OSS heavy judge | **0.9097** | 0.9056 | **0.0861** |
+| GPT-OSS judge OR signal | 0.8986 | **0.9194** | 0.1222 |
+
+The pilot improvement did not replicate. Against Qwen, the signal recovered
+8 false negatives and harmed 15 true negatives; against GPT-OSS it recovered 5
+and harmed 13. The failure is concentrated in varied deception. The signal
+scored 0.9750 BA on instructed rows but only 0.7194 on varied rows. For the Qwen
+OR, instructed recoveries and harms were tied 5-to-5, while varied produced 3
+recoveries and 10 harms. For GPT-OSS, instructed was 3 recoveries versus 2 harms,
+but varied was 2 versus 11.
+
+This controlled result rejects the proposed claim-centrality/stability override.
+Role/materiality annotations and two-prompt agreement make organism checking
+cleaner, but they do not solve factual hallucination on the varied Qwen rows
+where complementary recall is needed. Do not integrate this signal, tune a new
+threshold on these same validation labels, expand it to test, or use it as
+justification for RLVR. Preserve the caches as diagnostic evidence only.
