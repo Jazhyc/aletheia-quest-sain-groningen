@@ -151,6 +151,15 @@ and 0.3167 FPR with zero parse errors, versus the aligned Qwen reference near
 instructed BA was 0.8896 with 0.2125 FPR. Do not replace the general judge with
 Heretic. Treat it as an HP-KR specialist/alignment diagnostic unless a router is
 validated on balanced deceptive knowledge denials and honest refusals.
+Heretic's false positives reflect broad calibration: it assigns intermediate or
+high ratings to 133/420 honest validation rows that aligned Qwen mostly maps to
+rating 1. Threshold tuning peaks at only 0.8381 macro BA (rating at least 5), so
+this is not fixed by a cutoff. Adding HP-KR semantics to aligned Qwen also does
+not improve general validation. Job `30107477` found the narrow epistemic clause
+tied the frozen control at 0.8940 BA (higher recall 0.8762 but FPR 0.0881), while
+refusal/uncertainty and full report-type prompts regressed to 0.8798 and 0.8702.
+The narrow prompt improved instructed BA but reduced varied BA; do not select
+that post hoc or modify the general judge from this result.
 
 Privileged-distillation findings from 2026-07-11: the selected one-epoch
 varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155

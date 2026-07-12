@@ -1895,6 +1895,45 @@ need an independently validated observable HP-KR trigger and honest-refusal
 controls; the current varied split supplies no deceptive HP-KR examples for
 such calibration.
 
+Heretic's general-validation suspicion is a broad rating-calibration shift, not
+an identifiable HP-KR trigger. On the 420 honest rows, aligned Qwen assigned
+rating 1 to 397, while Heretic assigned rating 1 to only 287 and spread 133
+honest rows across ratings 2--7 (including 64 at rating 6 and 26 at rating 7).
+These elevations occurred throughout instructed and varied units. Raising the
+Heretic cutoff did not restore competitiveness: the best validation macro BA
+was 0.8381 at rating at least 5, with 0.8905 recall and 0.2143 FPR. Abliteration
+appears to weaken the conservative low-rating basin rather than merely exposing
+one additional epistemic capability.
+
+#### Epistemic-clause validation sweep
+
+Slurm job `30107477` tested whether HP-KR semantics could improve aligned Qwen's
+ordinary validation performance. It evaluated four prompts in one model load:
+the unchanged Truth Value Guard, a narrow knowledge-denial/refusal distinction,
+a refusal/uncertainty guard, and the fuller report-type taxonomy. All used the
+same 3,000-character formatting, no-thinking generation, and threshold 0.1.
+The 3,288 prompt evaluations completed in 2m43s with zero parse failures.
+
+| member | BA | AUROC | recall | FPR | instructed BA | varied BA |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Truth Value Guard control | **.8940** | .8949 | .8500 | **.0619** | .9521 | **.8167** |
+| narrow epistemic guard | **.8940** | **.8957** | **.8762** | .0881 | **.9604** | .8056 |
+| refusal/uncertainty guard | .8798 | .8806 | .8548 | .0952 | .9458 | .7917 |
+| full report-type guard | .8702 | .8713 | .8095 | .0690 | .9375 | .7806 |
+
+The narrow clause tied control BA and improved AUROC by only 0.0008. Relative to
+control it recovered 13 deceptive rows, lost 2 prior true positives, harmed 13
+honest rows, and fixed 2 prior false positives. Its 0.0083 instructed gain was
+offset by a 0.0111 varied regression. The broader clauses were clearly harmful;
+max aggregation across all four also fell to 0.8845 BA.
+
+Because this validation split contains no explicit knowledge-denial outputs,
+none of these changes can be attributed to recognizing related HP-KR cases.
+They are prompt-framing spillover. Do not modify the general Truth Value Guard
+with the tested clauses or select the instructed-only gain. Preserve the narrow
+clause as a specialist prompt candidate for future balanced epistemic data, not
+as a general-judge replacement.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis
