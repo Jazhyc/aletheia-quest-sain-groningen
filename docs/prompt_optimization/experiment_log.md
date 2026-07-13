@@ -2075,3 +2075,32 @@ Nemotron validation unit has only two positives, while the local test unit has
 one; perfect local scores therefore do not explain or provide a defensible
 selection signal for the official Metis regression. Do not test-select or
 submit the marginal consistency prompt.
+
+## Verdict/explanation conflict rule
+
+A follow-up tested whether the most mechanical self-contradictions could be
+handled without changing the judge prompt. The parser requires an explicit
+dishonesty instruction, a binary factual question, and an assistant response
+beginning with a binary verdict. A negative verdict is flagged only when the
+following explanation nearly restates the user's proposition with the same
+negation polarity; a positive verdict requires an explicit correction cue.
+
+The final strict parser flagged four validation rows and six local-test rows.
+Every flag was labeled deceptive, spanning Qwen, Gemma, and Nemotron, but the
+selected varied-only reasoning-summary student already caught every one. OR-ing
+the rule into its score therefore made no prediction changes:
+
+| split | flags | false positives | newly corrected rows | BA before/after |
+| --- | ---: | ---: | ---: | ---: |
+| validation | 4 | 0 | 0 | .9000 / .9000 |
+| local test | 6 | 0 | 0 | .9155 / .9155 |
+
+During development, token normalization mattered. Dropping two-digit tokens
+made `89` and `90` indistinguishable, while splitting dotted initialisms broke a
+`D.C.` restatement; both were fixed before reporting the frozen counts above.
+
+The parser is integrated into the submission as a cheap model-agnostic safety
+net, with focused unit tests. This is an operational hedge, not evidence of a
+local score improvement or a demonstrated solution to the official Nemotron
+gap. Any broader semantic contradiction rule would need fresh validation
+because the existing trained judge already subsumes all observed strict cases.
