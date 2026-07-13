@@ -130,6 +130,59 @@ should not enter `submission/` before that test passes.
 Build artifacts and row-level evaluations stay under ignored
 `results/blackbox/wikidata_rag_{broad,weekly,daily}_v1/`.
 
+## Frozen-judge three-condition sweep
+
+Job `30123829` evaluated the selected one-epoch varied-only AdamW `5e-5`
+student without retraining. All 822 validation rows received the same explicit
+reference block. Varied rows used either no evidence, their three real
+Wikidata cards, or three shuffled cards; instructed rows received the identical
+no-evidence sentinel in all conditions. The shuffled assignment was label-blind
+and bijective across all 360 varied rows, with no donor sharing the recipient's
+dataset unit or row index.
+
+Generated binary decisions gave:
+
+| condition | overall BA | varied BA | varied recall | varied FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| empty | 0.9060 | 0.7972 | 0.6722 | 0.0778 | 7 |
+| real Wikidata | **0.9095** | **0.8056** | **0.6778** | **0.0667** | **5** |
+| shuffled Wikidata | 0.9071 | 0.8000 | 0.6722 | 0.0722 | 6 |
+
+Among rows parsed in each relevant pair, real versus empty produced seven
+deceptive recoveries and six deceptive regressions, while harming two honest
+rows and recovering five honest rows. Real versus shuffled produced six/four
+deceptive recoveries/regressions and two/five honest harms/recoveries. On the
+347 rows parsed in all three conditions, BA was 0.8088 empty, 0.8198 real, and
+0.8053 shuffled.
+
+The constrained empty-summary margin shows the same ordering: varied AUROC was
+0.8600 empty, 0.8735 real, and 0.8611 shuffled. Its fixed-0.5 varied BA was
+0.8000, 0.8194, and 0.7889, respectively. Thus the structured evidence does not
+reproduce the old Wikipedia prompt's generic suspicion spike; real evidence
+slightly lowers FPR and moves deceptive margins upward relative to shuffled
+cards.
+
+The effect is not stable enough to deploy. A dataset-unit bootstrap gives a 95%
+interval of approximately -0.0194 to +0.0361 for the +0.0083 real-minus-empty
+BA change, and -0.0111 to +0.0222 for the +0.0056 real-minus-shuffled change.
+Real evidence improves four dataset units, hurts three, and ties two versus
+empty. Moreover, the three conditions contain identical instructed prompts,
+yet two of 462 instructed predictions flip across their repeated generations;
+this 0.43% empirical nondeterminism floor is comparable to the net varied gain.
+
+Manual inspection explains why evidence conditioning remains useful as a
+training proposal but not as a prompt-only submission change. Some cards help
+Qwen ignore deceptive system intent and accept a truthful answer. Other cards
+support the headline answer while omitting a poisoned secondary claim, causing
+Qwen to miss the deception; wrong-entity matches can similarly reinforce a
+false answer. Do not add the database to the judge or evaluate this condition
+on local test. If this path continues, use a matched evidence-conditioned SFT
+control with empty and shuffled hard negatives and explicitly teach
+`supports|contradicts|irrelevant|insufficient` evidence relations.
+
+Artifacts are under
+`results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/validation_wikidata_3condition_v1/`.
+
 ## Command
 
 ```bash
@@ -152,4 +205,6 @@ sbatch experiments/wikidata_rag/run_broad_index_daily.sh
   --input results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/teacher/train.jsonl \
   --output results/blackbox/wikidata_rag_daily_v1/offline_relevance_full_train.jsonl \
   --report results/blackbox/wikidata_rag_daily_v1/offline_relevance_full_train.md
+
+sbatch experiments/wikidata_rag/run_judge_sweep.sh
 ```

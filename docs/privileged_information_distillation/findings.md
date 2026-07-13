@@ -619,6 +619,37 @@ justified for the active submission path. Revisit only if simpler distillation
 and prompting improvements stall and varied-deception factual errors remain the
 dominant measured bottleneck.
 
+### Broad Wikidata frozen-judge follow-up
+
+A later CC0 Wikidata experiment replaced the narrow Wikipedia cache with an
+independently selected 221,050-card SQLite index. Offline evaluation over all
+2,877 varied-training teacher summaries established a deceptive novel-fact
+recall lift of +0.0285 over shuffled evidence, versus +0.0176 on honest rows.
+The database contributes 44.77 MB compressed and does not use competition rows
+for entity selection.
+
+Job `30123829` then ran the selected one-epoch varied-only AdamW `5e-5` student
+under empty, real, and label-blind shuffled evidence conditions. Real evidence
+improved varied validation BA from 0.7972 to 0.8056 and reduced FPR from 0.0778
+to 0.0667. Shuffled evidence reached 0.8000 BA and 0.0722 FPR. On the 347 rows
+parsed in all conditions, the corresponding BAs were 0.8088, 0.8198, and
+0.8053. Empty-summary margin AUROC was 0.8600 empty, 0.8735 real, and 0.8611
+shuffled.
+
+This is directionally better than the Wikipedia run: evidence did not induce a
+large generic suspicion response, and real cards beat both controls. It remains
+too small and unstable to deploy. Dataset-unit bootstrap intervals for both
+real-minus-empty and real-minus-shuffled BA cross zero; real evidence hurts
+three of nine varied units versus empty. Two of 462 identical instructed
+prompts also flip across repeated condition batches, establishing a generation
+nondeterminism floor comparable to the net effect. Manual audit finds that
+headline-supporting cards can distract the judge from a false secondary detail,
+while wrong-entity cards can reinforce an error. Do not test-select this on the
+local test split or add the database to the submission judge. Treat it only as
+support for a future matched evidence-conditioned SFT experiment with shuffled
+hard negatives and explicit evidence-relation supervision. Implementation and
+the full audit are in `experiments/wikidata_rag/README.md`.
+
 ## Cached ensemble diagnostics
 
 Cached row-level validation predictions were blended with the selected
