@@ -251,6 +251,50 @@ student from this gate. The rule extractor is retained as a tested CPU-only
 prototype; useful continuation requires broader claim-level factual coverage,
 not looser entity matching.
 
+### Expanded structured index
+
+The v2 schema keeps the frozen 221,050-entity universe but refetches each card
+with 128 retained properties instead of relying on claims cached under the
+original narrower schema. It adds direct relations for borders, leadership,
+ownership, sports, events, screenwriters, composers, names, and causes, plus
+seven compact qualifier types such as start/end time and series ordinal. Cards
+retain at most 32 facts and 12 aliases. Referenced object labels are cached
+separately so newly added entity-valued claims do not disappear merely because
+their object is outside the selected entity universe.
+
+The refresh is resumable and versioned: it reads only QID selection, source,
+and popularity from the old card cache, and does not alter the v1 database.
+The wrapper loads `WIKIMEDIA_ACCESS_TOKEN` from `.env` when configured; the
+token improves sustained request throughput but does not raise the API's
+50-entity batch ceiling for this account.
+
+```bash
+sbatch experiments/wikidata_rag/run_expanded_index.sh
+sbatch --dependency=afterok:<build-job-id> \
+  experiments/wikidata_rag/run_expanded_gate_eval.sh
+```
+
+The dependent evaluation compares training-summary relevance and frozen
+validation coverage with the final v1 gate. A judge ablation is warranted only
+if coverage rises materially without collapsing conditional evidence precision.
+
+Build job `30134717` completed in 57m57s. The final index contains 2,169,868
+raw retained claims and 205,915 extra object labels. SQLite size is 165,294,080
+bytes and ZIP size is 62,333,290 bytes. With the current 116,512,716-byte
+submission tree, projected package size is 178,846,006 bytes, leaving about
+21.2 MB under a decimal 200 MB cap.
+
+The frozen gate test (`30134751`) did not meet the judge-ablation criterion.
+Training coverage rose from 118 to 145 of 2,880 rows (4.1% to 5.0%), but
+conditional evidence precision on 2,877 parsed teacher summaries fell from
+0.433 to 0.384. Covered rows with any novel-summary token hit rose from 29 to
+40, but this is still only 1.4% of parsed rows. Validation coverage rose from
+8/360 to 12/360. Of the four new rows, only the Malawi leadership card directly
+answers the question; the others are irrelevant event metadata, a wrong
+St. George entity, or year-mismatched Nobel winners. Do not launch a judge run,
+regenerate teacher traces, or train a student from this cache. A larger property
+schema alone does not solve claim planning and temporal/entity disambiguation.
+
 ```bash
 PYTHONPATH=. .venv/bin/python experiments/wikidata_rag/build_claim_gated_cache.py \
   --database results/blackbox/wikidata_rag_daily_v1/wikidata.sqlite \

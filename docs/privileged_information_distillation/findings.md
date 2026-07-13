@@ -715,6 +715,24 @@ traces or retrain from this gate. The implementation is retained as a cheap,
 auditable prototype, but the next retrieval attempt needs materially broader
 claim-level coverage rather than a looser relevance threshold.
 
+### Expanded Wikidata schema follow-up
+
+Job `30134717` refetched the same 221,050 entities with 128 retained properties,
+seven qualifier types, and separately resolved labels for entity-valued facts.
+It completed in 57m57s with 2,169,868 raw claims. The resulting SQLite database
+is 165,294,080 bytes (62,333,290 bytes zipped); combined with the current
+submission tree, projected package size is 178,846,006 bytes.
+
+The frozen dependent evaluation (`30134751`) increased training coverage only
+from 118 to 145/2,880 and reduced conditional evidence precision from 0.433 to
+0.384. Validation coverage rose from 8 to 12/360, but manual inspection found
+only one clearly useful new row (Malawi leadership). The other additions were
+non-answering event/sport metadata, a wrong St. George entity, or temporally
+mismatched Nobel winners. Do not spend a judge run or teacher/student training
+on this cache. Broader property retention does not repair query-relation
+specificity, temporal filtering, or entity disambiguation; those are now the
+dominant retrieval bottlenecks.
+
 ## Next measurements
 
 1. Investigate whether varied-only specialization gains persist on additional
