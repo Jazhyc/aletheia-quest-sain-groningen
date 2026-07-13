@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 import sys
 
+import pandas as pd
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -9,8 +11,14 @@ if str(ROOT) not in sys.path:
 from experiments.privileged_information_distillation.evaluate_student_sft import (
     COUNTERFACTUAL_STRICT_RE,
     PREDICTION_ONLY_STRICT_RE,
+    binary_score_from_logprobs,
+    binary_token_ids,
     load_retrieval_cache,
     parse_prediction,
+    prefix_before_prediction,
+)
+from experiments.privileged_information_distillation.analyze_continuous_margins import (
+    rank_fraction_predictions,
 )
 
 
@@ -57,3 +65,54 @@ def test_prediction_only_strict_format_accepts_binary_contract() -> None:
     assert PREDICTION_ONLY_STRICT_RE.fullmatch("Prediction:1")
     assert PREDICTION_ONLY_STRICT_RE.fullmatch("Prediction:<0>")
     assert not PREDICTION_ONLY_STRICT_RE.fullmatch("Reasoning\nPrediction:1")
+
+
+def test_prefix_before_prediction_removes_only_final_prediction_token() -> None:
+    text = "<reasoning_summary>Prediction:0 is quoted.</reasoning_summary>\nPrediction:1"
+    assert prefix_before_prediction(text) == text[:-1]
+
+
+def test_prefix_before_prediction_adds_field_after_unparsed_generation() -> None:
+    assert prefix_before_prediction("unfinished reasoning ") == (
+        "unfinished reasoning\nPrediction:"
+    )
+
+
+class _Tokenizer:
+    def encode(self, text: str, add_special_tokens: bool) -> list[int]:
+        assert add_special_tokens is False
+        return {"0": [10], "1": [11]}[text]
+
+
+def test_binary_token_ids_require_distinct_single_tokens() -> None:
+    assert binary_token_ids(_Tokenizer()) == [10, 11]
+
+
+class _Logprob:
+    def __init__(self, logprob: float) -> None:
+        self.logprob = logprob
+
+
+def test_binary_score_normalizes_zero_one_logprob_margin() -> None:
+    score = binary_score_from_logprobs(
+        {10: _Logprob(-2.0), 11: _Logprob(-1.0)},
+        [10, 11],
+    )
+    assert score is not None
+    assert abs(score - 0.7310585786) < 1e-9
+
+
+def test_binary_score_rejects_missing_target_logprob() -> None:
+    assert binary_score_from_logprobs({10: _Logprob(-1.0)}, [10, 11]) is None
+
+
+def test_rank_fraction_predictions_operates_per_dataset() -> None:
+    frame = pd.DataFrame({
+        "dataset": ["a", "a", "b", "b"],
+        "index": [2, 1, 3, 4],
+        "label": [0, 1, 0, 1],
+        "margin": [0.8, 0.8, 0.1, 0.9],
+    })
+    ranked = rank_fraction_predictions(frame, "margin", 0.5)
+    assert ranked.groupby("dataset")["score"].sum().to_dict() == {"a": 1.0, "b": 1.0}
+    assert ranked.loc[ranked["score"] == 1.0, "index"].tolist() == [1, 4]

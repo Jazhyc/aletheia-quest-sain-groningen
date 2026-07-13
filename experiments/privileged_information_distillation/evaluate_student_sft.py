@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 import re
 import sys
@@ -38,11 +39,88 @@ COUNTERFACTUAL_STRICT_RE = re.compile(
     r"Prediction\s*:\s*([01])\s*$"
 )
 PREDICTION_ONLY_STRICT_RE = re.compile(r"(?is)^\s*Prediction\s*:\s*<?([01])>?\s*$")
+EMPTY_REASONING_PREFIX = (
+    "<reasoning_summary>\n"
+    "</reasoning_summary>\n"
+    "Prediction:"
+)
 
 
 def parse_prediction(text: str) -> int | None:
     matches = PREDICTION_RE.findall(text)
     return int(matches[-1]) if matches else None
+
+
+def prefix_before_prediction(text: str) -> str:
+    """Return a completion prefix ending immediately before its final 0/1 token."""
+    matches = list(PREDICTION_RE.finditer(text))
+    if matches:
+        return text[:matches[-1].start(1)]
+    return text.rstrip() + "\nPrediction:"
+
+
+def binary_token_ids(tokenizer: Any) -> list[int]:
+    """Return the distinct single-token ids used for literal binary predictions."""
+    ids = []
+    for text in ("0", "1"):
+        encoded = tokenizer.encode(text, add_special_tokens=False)
+        if len(encoded) != 1:
+            raise ValueError(f"binary target {text!r} tokenized as {encoded}, expected one token")
+        ids.append(int(encoded[0]))
+    if len(set(ids)) != 2:
+        raise ValueError(f"binary targets must have distinct token ids, got {ids}")
+    return ids
+
+
+def logprob_value(value: Any) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if hasattr(value, "logprob"):
+        return float(value.logprob)
+    if isinstance(value, dict) and "logprob" in value:
+        return float(value["logprob"])
+    return float(value)
+
+
+def binary_score_from_logprobs(
+    first_token_logprobs: dict[Any, Any],
+    token_ids: list[int],
+) -> float | None:
+    """Normalize constrained 0/1 token probabilities into P(Prediction=1)."""
+    expanded = {
+        int(token_id): logprob_value(value)
+        for token_id, value in first_token_logprobs.items()
+    }
+    if any(token_id not in expanded for token_id in token_ids):
+        return None
+    logit_zero, logit_one = (expanded[token_id] for token_id in token_ids)
+    difference = max(-80.0, min(80.0, logit_one - logit_zero))
+    return 1.0 / (1.0 + math.exp(-difference))
+
+
+def score_binary_prefixes(
+    llm: Any,
+    prompts: list[str],
+    sampling: Any,
+    request: Any,
+    token_ids: list[int],
+) -> tuple[list[float], int, float]:
+    """Score constrained binary next-token margins for rendered prefixes."""
+    started = time.time()
+    outputs = llm.generate(prompts, sampling, lora_request=request)
+    elapsed = time.time() - started
+    scores = []
+    missing = 0
+    for output in outputs:
+        first_token_logprobs = {}
+        if output.outputs and output.outputs[0].logprobs:
+            first_token_logprobs = output.outputs[0].logprobs[0] or {}
+        score = binary_score_from_logprobs(first_token_logprobs, token_ids)
+        if score is None:
+            missing += 1
+            score = 0.5
+        scores.append(score)
+    return scores, missing, elapsed
 
 
 def scenario_metrics(frame: pd.DataFrame) -> dict[str, dict[str, float | None]]:
@@ -132,7 +210,11 @@ def evaluate_adapter(
     adapter_dir: Path,
     lora_id: int,
     strict_re: re.Pattern[str] = STRICT_RE,
-) -> tuple[pd.DataFrame, float]:
+    *,
+    margin_sampling: Any | None = None,
+    binary_ids: list[int] | None = None,
+    empty_reasoning_prefix: str = EMPTY_REASONING_PREFIX,
+) -> tuple[pd.DataFrame, dict[str, float | int]]:
     from vllm.lora.request import LoRARequest
 
     request = LoRARequest(adapter_dir.parent.name, lora_id, adapter_dir.as_posix())
@@ -147,7 +229,39 @@ def evaluate_adapter(
     evaluated["parse_error"] = [value is None for value in predictions]
     evaluated["format_valid"] = [strict_re.fullmatch(text) is not None for text in generations]
     evaluated["generation"] = generations
-    return evaluated, elapsed
+    timing: dict[str, float | int] = {"generation_seconds": elapsed}
+
+    if margin_sampling is not None:
+        if binary_ids is None:
+            raise ValueError("binary_ids are required when margin_sampling is enabled")
+        source_prompts = records["prompt"].tolist()
+        empty_prompts = [prompt + empty_reasoning_prefix for prompt in source_prompts]
+        post_reasoning_prompts = [
+            prompt + prefix_before_prediction(generation)
+            for prompt, generation in zip(source_prompts, generations, strict=True)
+        ]
+        empty_scores, empty_missing, empty_elapsed = score_binary_prefixes(
+            llm, empty_prompts, margin_sampling, request, binary_ids
+        )
+        reasoning_scores, reasoning_missing, reasoning_elapsed = score_binary_prefixes(
+            llm, post_reasoning_prompts, margin_sampling, request, binary_ids
+        )
+        evaluated["empty_margin_score"] = empty_scores
+        evaluated["reasoning_margin_score"] = reasoning_scores
+        timing.update({
+            "empty_margin_seconds": empty_elapsed,
+            "empty_margin_missing": empty_missing,
+            "reasoning_margin_seconds": reasoning_elapsed,
+            "reasoning_margin_missing": reasoning_missing,
+        })
+    return evaluated, timing
+
+
+def metrics_for_score(evaluated: pd.DataFrame, score_column: str) -> dict[str, Any]:
+    scored = evaluated[["dataset", "index", "label", score_column]].rename(
+        columns={score_column: "score"}
+    )
+    return scenario_metrics(scored)
 
 
 def main() -> None:
@@ -160,6 +274,11 @@ def main() -> None:
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9)
     parser.add_argument("--retrieval-cache", type=Path)
     parser.add_argument("--run-name")
+    parser.add_argument(
+        "--continuous-margins",
+        action="store_true",
+        help="score constrained 0/1 logits with empty and generated reasoning prefixes",
+    )
     args = parser.parse_args()
 
     adapter_dirs = [path.resolve() for path in args.adapter_dir]
@@ -199,6 +318,17 @@ def main() -> None:
         max_model_len=args.max_model_len,
     )
     sampling = SamplingParams(max_tokens=args.max_new_tokens, temperature=0.0)
+    binary_ids = None
+    margin_sampling = None
+    if args.continuous_margins:
+        binary_ids = binary_token_ids(tokenizer)
+        margin_sampling = SamplingParams(
+            max_tokens=1,
+            temperature=0.0,
+            logprobs=len(binary_ids),
+            logprob_token_ids=binary_ids,
+            allowed_token_ids=binary_ids,
+        )
     if first["student"].get("target_mode") == "prediction_only":
         strict_re = PREDICTION_ONLY_STRICT_RE
     elif first["student"].get("target_format") == "counterfactual":
@@ -207,8 +337,15 @@ def main() -> None:
         strict_re = STRICT_RE
 
     for lora_id, (adapter_dir, config) in enumerate(zip(adapter_dirs, configs, strict=True), 1):
-        evaluated, elapsed = evaluate_adapter(
-            llm, sampling, records, adapter_dir, lora_id, strict_re=strict_re
+        evaluated, timing = evaluate_adapter(
+            llm,
+            sampling,
+            records,
+            adapter_dir,
+            lora_id,
+            strict_re=strict_re,
+            margin_sampling=margin_sampling,
+            binary_ids=binary_ids,
         )
         method = config["method"]
         output_dir = adapter_dir.parent / (args.run_name or args.split)
@@ -219,17 +356,28 @@ def main() -> None:
             per_dataset[dataset] = binary_metrics(
                 group["label"].to_numpy(), group["score"].to_numpy(), 0.5
             )
+        score_metrics = {"generated_binary": metrics_for_score(evaluated, "score")}
+        if args.continuous_margins:
+            score_metrics.update({
+                "empty_margin": metrics_for_score(evaluated, "empty_margin_score"),
+                "reasoning_margin": metrics_for_score(evaluated, "reasoning_margin_score"),
+            })
+        total_elapsed = float(sum(
+            value for key, value in timing.items() if key.endswith("_seconds")
+        ))
         result = {
             "method": method,
             "split": args.split,
             "learning_rate": config["student"]["training"]["learning_rate"],
-            "metrics": scenario_metrics(evaluated),
+            "metrics": score_metrics["generated_binary"],
+            "score_metrics": score_metrics,
             "per_dataset": per_dataset,
             "parse_errors": int(evaluated["parse_error"].sum()),
             "format_valid": int(evaluated["format_valid"].sum()),
             "rows": len(evaluated),
-            "score_seconds": elapsed,
-            "rows_per_second": len(evaluated) / elapsed,
+            "score_seconds": total_elapsed,
+            "rows_per_second": len(evaluated) / total_elapsed,
+            "timing": timing,
             "max_new_tokens": args.max_new_tokens,
             "retrieval_cache": (
                 args.retrieval_cache.resolve().as_posix()
@@ -242,9 +390,11 @@ def main() -> None:
         print(
             f"{method} lr={result['learning_rate']} all={metrics['all']} "
             f"instructed={metrics.get('instructed')} varied={metrics.get('varied')} "
-            f"parse_errors={result['parse_errors']} time={elapsed:.1f}s",
+            f"parse_errors={result['parse_errors']} time={total_elapsed:.1f}s",
             flush=True,
         )
+        if args.continuous_margins:
+            print(f"continuous_margin_metrics={score_metrics}", flush=True)
 
 
 if __name__ == "__main__":

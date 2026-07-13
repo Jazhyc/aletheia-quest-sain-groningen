@@ -158,6 +158,30 @@ generates up to 512 tokens deterministically, and parses the final explicit
 `validation/` directory. Results include macro metrics for all datasets and
 separate instructed/varied scenario aggregates.
 
+To test whether a binary distilled student retains continuous ranking signal,
+request constrained next-token margins in the same evaluation:
+
+```bash
+sbatch experiments/privileged_information_distillation/evaluate_student_sft.sh \
+  --adapter-dir results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/adapter \
+  --continuous-margins --run-name validation_continuous_margin_v1
+```
+
+This preserves the ordinary generated prediction and additionally computes
+`P(Prediction=1)` from the normalized `0`/`1` token logits under two prefixes:
+an empty structured reasoning summary and the model's generated summary ending
+immediately before its final prediction token. The latter requires one extra
+scoring pass but measures the margin after the distilled reasoning rather than
+asking the model to classify out of format.
+
+Inspect fixed-half thresholds, exact per-dataset top-half classification, score
+quantiles, and a coarse diagnostic threshold sweep from the saved artifact:
+
+```bash
+python experiments/privileged_information_distillation/analyze_continuous_margins.py \
+  results/blackbox/<method>/validation_continuous_margin_v1/generations.jsonl
+```
+
 For a regular-prompt control using the exact same Wikipedia cache, run:
 
 ```bash
