@@ -373,8 +373,42 @@ after the initial sweep crashed with NaN scores.
   everything, unseen organisms at eval), not the 0.876 cross-scenario
   number — and the leaderboard gap to the black-box baseline (0.833) is
   substantial.
-- Next: per-dataset threshold calibration and the deployment notebook (Phase
-  3).
+
+## Phase 3 — deployment and threshold calibration
+
+**Deployment notebook:** `submission/whitebox_probe.ipynb`
+
+The notebook reads a hidden dataset via the competition API (`DATASET_NAME`,
+`ALETHEIA_LIMIT`), loads the correct base model (Qwen or gemma) via NNsight
+on the competition A100, extracts L46 response-token activations, runs the
+transformer token probe, and writes `submission.csv`.
+
+**Probe weights** are bundled at `submission/whitebox_probe/{qwen,gemma}_probe/`
+(~3.6 MB each), containing the trained transformer encoder, standardization
+moments (`feature_mean.pt`, `feature_std.pt`) and a `config.json`. Extraction
++ scoring runs in under 2 minutes on an A100-80GB.
+
+### Threshold calibration
+
+Per-dataset optimal thresholds estimated via 5-fold stratified CV on the
+Qwen dev data, using out-of-fold scores from the transformer token L46 probe:
+
+| dataset | BA@0.5 | BA@optimal | optimal threshold |
+|---|---|---|---|
+| instructed (10 datasets) | 0.987–1.000 | 0.990–1.000 | 0.33–0.94 |
+| varied None | 0.925 | **0.935** | 0.77 |
+| varied a-mo-1 | 0.733 | **0.740** | 0.25 |
+| varied a-mo-3 | 0.738 | **0.762** | 0.13 |
+| varied a-mo-4 | 0.808 | **0.820** | 0.26 |
+| varied a-mo-5 | 0.910 | **0.912** | 0.49 |
+| varied a-mo-6 | 0.835 | **0.842** | 0.52 |
+| varied a-mo-7 | 0.830 | **0.840** | 0.58 |
+| varied b-mo | 0.905 | **0.912** | 0.61 |
+| varied c-mo | 0.940 | **0.950** | 0.71 |
+
+Macro BA lifts from 0.922 (global threshold 0.5) to **0.929** (per-dataset
+optimal). The global optimal threshold is 0.50–0.60 (BA=0.922). Hidden
+datasets fall back to 0.5, which is near-optimal globally.
 
 ## Reproduction
 
@@ -392,6 +426,30 @@ python experiments/nonlinear_probe/nonlinear_sweep.py
 
 # Phase 2b: token-level probes (attention, cnn, transformer) — GPU needed
 python experiments/nonlinear_probe/token_sweep.py
+
+# Phase 3: train final probes on all dev data and calibrate thresholds
+python -c "
+import sys; sys.path.insert(0, 'experiments/nonlinear_probe')
+from pathlib import Path
+from token_probes import TokenProbe
+import numpy as np, torch, json
+
+device = 'cuda'
+for base_model, paths in [('qwen', sorted(Path('results/whitebox/activations').glob('*qwen*.tokens.npz'))),
+                           ('gemma', sorted(Path('results/whitebox/activations').glob('*gemma*.tokens.npz')))]:
+    fp, op, lp = [], [], 0
+    for p in paths:
+        with np.load(p, allow_pickle=True) as d:
+            t = torch.from_numpy(d['tokens_L46']).clamp(torch.finfo(torch.float16).min, torch.finfo(torch.float16).max)
+            fp.append(t); o = d['token_offsets'] + op; op = o[-1] if not op else np.concatenate([op, o[1:]]); lp.append(d['deceptive'])
+    flat, offs, labs = torch.cat(fp), np.concatenate(op) if isinstance(op, list) else op, np.concatenate(lp)
+    probe = TokenProbe('transformer', seed=0, device=device, max_epochs=60).fit(flat, offs, labs)
+    out = Path(f'submission/whitebox_probe/{base_model}_probe'); out.mkdir(parents=True, exist_ok=True)
+    torch.save(probe.model.state_dict(), out/'model.pt')
+    torch.save(probe.feature_mean, out/'feature_mean.pt'); torch.save(probe.feature_std, out/'feature_std.pt')
+    json.dump(dict(architecture='transformer', layer=46, hidden_dim=flat.shape[1], d_model=128, n_heads=4, dim_feedforward=256, n_blocks=2, dropout=0.1, batch_token_budget=8192), open(out/'config.json','w'))
+    print(f'{base_model}: {flat.shape[0]} tokens, {len(labs)} examples')
+"
 
 # regenerate the layer-curve figure (writes results/whitebox/linear_sweep/,
 # copy into experiments/nonlinear_probe/figures/ to refresh the README)

@@ -3,3 +3,6 @@
 # runs. The base already includes: datasets, numpy, pandas, scikit-learn,
 # nbclient, torch (CPU), and nnsight. Add anything else you need here.
 peft==0.19.1
+nbclient>=0.10
+nbformat>=5.0
+ipykernel>=6.0

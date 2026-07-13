@@ -27,4 +27,8 @@ venv/
 # OS
 .DS_Store
 .env
+
+# Probe weights (regenerated from activations; large binary blobs)
+*.pt
+
 results/whitebox/*
