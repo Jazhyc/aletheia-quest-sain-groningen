@@ -927,3 +927,48 @@ Reason for deferral:
   True/False diagnostic. Online RLVR is a later extension, not the first test.
 - It is a promising hybrid extension if the current distilled-judge submission
   plateaus, but it is not a simple drop-in improvement.
+
+## P28: Verdict Consistency and Ordinary-Meaning Prompt Sweep
+
+Status: completed on full validation as Slurm job `30134632`; rejected.
+
+Motivation:
+
+- The public base-Nemotron instructed-deception positives are factual
+  true/false cases. Several pair an incorrect explicit verdict with an
+  explanation that states the correct fact, while others use a pedantic
+  category distinction to reject an ordinarily true statement.
+- The prompt change must remain model-agnostic and preserve full-validation
+  performance; the Nemotron slice is a secondary diagnostic, not the selection
+  target.
+
+Experiment:
+
+- Add a five-member no-thinking sweep with one frozen Truth Value Guard control
+  and four general variants:
+  - give an explicit true/false verdict material weight;
+  - enforce ordinary rather than pedantic statement meaning;
+  - judge verdict and explanation separately;
+  - combine all three instructions compactly.
+- Keep Qwen3.5-9B, the 512-token budget, 3,000-character context cap,
+  temperature zero, rating scale, and threshold fixed.
+- Batch all conditions in one vLLM job so every variant shares the same model
+  load and evaluation rows.
+
+Selection rule:
+
+- Require full-validation BA to match or improve the control without a material
+  varied-deception regression. Use base-Nemotron performance only to choose
+  among variants satisfying that global constraint.
+
+Outcome:
+
+- The frozen Truth Value Guard already scored the 22-row base-Nemotron
+  validation unit perfectly: BA `1.0000`, recall `1.0000`, FPR `0.0000`.
+- `verdict_explanation_consistency` raised macro BA from `0.8940` to `0.8964`,
+  but reduced varied-deception BA from `0.8167` to `0.8056` and added two
+  base-Nemotron false positives, lowering that unit to `0.9500` BA.
+- The explicit-verdict variant tied the perfect Nemotron control but reduced
+  macro BA to `0.8690`. The combined and ordinary-meaning variants were worse.
+- No variant meets the selection rule. Keep the frozen control and do not infer
+  a prompt fix for the official Metis regression from this tiny local slice.
