@@ -591,6 +591,8 @@ shared-weight probes.
 
 Runtime ~6 min on an RTX 4090.
 
+![Standardized-split balanced accuracy at L46: probes compared on identical held-out test rows (80/10/10 stratified splits per dataset). Qwen has both scenarios across 18 datasets, gemma only instructed. Darker bars = more training data.](figures/standardized_sweep.png)
+
 ### Qwen3.5-27B (5120 hidden, 18 dev datasets)
 
 | probe | train_data | BA | AUROC | n_train | n_eval |

@@ -172,6 +172,15 @@ def _child_env(scratch: Path, data_env: dict, venv: Path) -> dict:
         "LANG": "C.UTF-8",
     }
     env.update(data_env)      # HF_HUB_CACHE (RO), HF_DATASETS_CACHE (scratch), offline flags
+    # DEV(LOCAL DRY-RUN): inject the project's .venv site-packages so the
+    # child venv (created from uv Python which has no --system-site-packages
+    # to inherit) can see installed packages like datasets, sklearn, etc.
+    # On the Space this path doesn't exist and is silently ignored.
+    project_pkg = str(Path(__file__).resolve().parents[4] / ".venv" / "lib"
+                      / f"python{sys.version_info.major}.{sys.version_info.minor}"
+                      / "site-packages")
+    child_pp = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{project_pkg}:{child_pp}" if child_pp else project_pkg
     return env
 
 
