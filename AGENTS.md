@@ -196,6 +196,14 @@ The matched Heretic-base ablation scored only 0.8643 overall and 0.7306 varied
 validation BA, versus 0.9000 and 0.7944 for aligned Qwen, and produced 23 parse
 errors. Keep regular `Qwen/Qwen3.5-9B` as the default fine-tuning base; do not
 spend a test evaluation on the Heretic adapter.
+An end-to-end GPT-OSS teacher-prompt sweep held that recipe fixed across nine
+target variants. Five broad variants peaked at 0.9024 validation BA versus the
+0.9000 baseline, solely through two fewer false positives and with no recall
+gain. Four strict high-coverage follow-ups (jobs `30112027`--`30112029`) all
+failed to exceed 0.9012 BA. Retain the original teacher/default adapter; do not
+continue wording-only teacher tuning or test-select the marginal polarity-guard
+tie. See `docs/privileged_information_distillation/findings.md` for the complete
+target coverage and metric tables.
 
 Dataset-composition warning: every varied-deception example in the local train,
 validation, and test splits is from Qwen3.5-27B or a Qwen organism. Gemma and

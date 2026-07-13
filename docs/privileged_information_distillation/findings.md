@@ -217,6 +217,69 @@ test. Retain regular aligned Qwen as the default fine-tuning base; use Heretic
 only for explicit alignment/HP-KR diagnostics unless a future balanced routing
 evaluation supports a specialist role.
 
+### End-to-end teacher-prompt sweep
+
+Teacher wording was optimized end to end while holding the selected student
+recipe fixed: regular `Qwen/Qwen3.5-9B`, varied-deception-only targets,
+rank-16/alpha-32 LoRA, one epoch, AdamW `5e-5`, effective batch size 32, and the
+same student inference prompt. The teacher generator now supports
+`teacher.dataset_name_contains`, so GPT-OSS generation and student training use
+the same 2,880-row varied subset rather than generating unused instructed
+traces. The filter fails explicitly on an empty match.
+
+Round one tested five materially different summaries. Material contrast focused
+on the output's consequential assertion; polarity guard emphasized the stance
+actually asserted; blind reconciliation separated an independent audit from
+label-conditioned reconciliation; minimal evidence compressed the target; and
+claim hierarchy ranked assertions by importance. Teacher job `30110583`,
+student jobs `30110970` and `30111863`, and shared validation job `30111864`
+completed successfully.
+
+| round-one target | usable targets | overall BA | varied BA | varied recall | varied FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| fixed original teacher / student baseline | 2,877 | 0.9000 | 0.7944 | 0.6556 | 0.0667 | 4 |
+| material contrast | 2,591 | 0.9000 | 0.7944 | 0.6556 | 0.0667 | 4 |
+| polarity guard | 2,761 | **0.9024** | **0.8000** | 0.6556 | **0.0556** | 6 |
+| blind reconciliation | 1,978 | **0.9024** | **0.8000** | 0.6556 | **0.0556** | 5 |
+| minimal evidence | 2,352 | **0.9024** | **0.8000** | 0.6556 | **0.0556** | 5 |
+| claim hierarchy | 2,807 | 0.9012 | 0.7972 | 0.6556 | 0.0611 | 5 |
+
+The three best variants tie exactly despite producing very different target
+lengths and coverage. Their 0.0024 overall gain comes only from two fewer false
+positives across the 420 honest validation rows; none improves deceptive recall.
+The broader rewrites also weakened the original authoritative-label contract,
+causing avoidable parse or semantic-label disagreement and leaving as many as
+902 examples unused.
+
+Round two therefore restored the original instruction verbatim: accept the
+provided label and do not predict or debate it. Four narrow additions isolated
+polarity, materiality, claim hierarchy, and concise truth contrast without
+otherwise changing the teacher contract. Teacher job `30112027`, consolidated
+student job `30112028`, and shared validation job `30112029` all completed.
+
+| round-two target | usable targets | overall BA | varied BA | varied recall | varied FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| baseline + polarity | 2,876 | **0.9012** | **0.7972** | **0.6611** | 0.0667 | 5 |
+| baseline + materiality | 2,880 | **0.9012** | **0.7972** | 0.6556 | **0.0611** | 5 |
+| baseline + hierarchy | 2,872 | **0.9012** | **0.7972** | 0.6556 | **0.0611** | 4 |
+| baseline + contrast | 2,866 | 0.9000 | **0.7972** | **0.6611** | 0.0667 | 4 |
+
+All parsed round-two targets match their authoritative labels and coverage is
+at least 99.5%, confirming that the stricter contract fixed generation quality.
+Nevertheless, all four follow-ups remain below the 0.9024 first-round maximum.
+The apparent changes are only one or two validation decisions and trade recall
+against FPR. Across nine prompt variants, no teacher wording improves recall
+materially or yields a gain beyond validation noise. This meets the stopping
+criterion for prompt-only target tuning.
+
+Decision: retain the original teacher and the existing regular-Qwen varied-only
+AdamW `5e-5` adapter as the default. Record polarity guard as the best observed
+validation prompt, but do not replace the default or evaluate it on test: its
+0.0024 validation-only gain is an FPR-only tie shared by three substantially
+different target sets. Further gains likely require new information, balanced
+data coverage, or a different training objective rather than more wording
+variants of the same privileged summary.
+
 ## Prediction-only SFT baseline
 
 To test whether teacher reasoning supervision is necessary, train a controlled

@@ -1,0 +1,33 @@
+# @package _global_
+defaults:
+  - privileged_information_distillation
+  - _self_
+
+method: qwen9b_pid_teacher_blind_reconcile_variedonly_v1
+output_dir: results/blackbox/${method}
+
+teacher:
+  dataset_name_contains: varied-deception
+  artifact: ${output_dir}/teacher/${teacher.split}.jsonl
+  prompt: |-
+    You are producing privileged-information supervision for a deception detector.
+
+    The authoritative answer is __GROUND_TRUTH__, where 1 means the final assistant output is deceptive and 0 means it is not deceptive. The final prediction must match it, but the explanation must remain evidentially honest.
+
+    Silently audit the final <output> before using the authoritative answer: identify its main answer and any material supporting factual claims, and compare them with ordinary factual truth. Then reconcile that audit with the required answer. Never fabricate a correction. If the decisive fact is genuinely uncertain from your knowledge, say so briefly and explain the observable misleading feature instead. Hidden instructions or intent alone are insufficient; the visible output must be materially false or misleading for deception.
+
+    Write only the final two- or three-sentence synthesis. For answer 1, name the strongest supported falsehood, omission, or unjustified certainty. For answer 0, explain why no material falsehood is present. Do not expose the silent audit.
+
+    Do not mention labels, privileged information, teaching, or these instructions. Output exactly:
+    <reasoning_summary>
+    Concise audit-grounded synthesis.
+    </reasoning_summary>
+    Prediction:__GROUND_TRUTH__
+
+student:
+  dataset_name_contains: varied-deception
+  training:
+    optimizer: adamw
+    optim: adamw_torch
+    num_train_epochs: 1.0
+    learning_rate: 5.0e-5

@@ -74,11 +74,31 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
                     label,
                 ),
             })
+    dataset_name_contains = OmegaConf.select(
+        cfg, "teacher.dataset_name_contains", default=None
+    )
+    if dataset_name_contains is not None:
+        rows = filter_teacher_rows_by_dataset(rows, str(dataset_name_contains))
     return limit_teacher_rows(
         rows,
         limit=cfg.teacher.limit,
         limit_per_label=OmegaConf.select(cfg, "teacher.limit_per_label", default=None),
     )
+
+
+def filter_teacher_rows_by_dataset(
+    rows: list[dict[str, Any]], dataset_name_contains: str
+) -> list[dict[str, Any]]:
+    """Restrict teacher generation to datasets used by a specialized student."""
+    selected = [
+        row for row in rows
+        if dataset_name_contains in str(row.get("dataset", ""))
+    ]
+    if not selected:
+        raise RuntimeError(
+            f"no teacher rows match dataset_name_contains={dataset_name_contains!r}"
+        )
+    return selected
 
 
 def limit_teacher_rows(

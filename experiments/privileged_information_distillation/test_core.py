@@ -1,6 +1,8 @@
 from pathlib import Path
 import sys
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -10,6 +12,7 @@ from experiments.privileged_information_distillation.core import (
     parse_counterfactual_teacher_target,
 )
 from experiments.privileged_information_distillation.generate_teacher_data import (
+    filter_teacher_rows_by_dataset,
     limit_teacher_rows,
 )
 
@@ -47,3 +50,21 @@ def test_limit_teacher_rows_selects_balanced_labels_from_ordered_rows() -> None:
     selected = limit_teacher_rows(rows, limit=None, limit_per_label=2)
 
     assert [row["label"] for row in selected] == [0, 0, 1, 1]
+
+
+def test_filter_teacher_rows_by_dataset() -> None:
+    rows = [
+        {"dataset": "dev-instructed-deception-model", "index": 1},
+        {"dataset": "dev-varied-deception-model", "index": 2},
+    ]
+
+    selected = filter_teacher_rows_by_dataset(rows, "varied-deception")
+
+    assert selected == [rows[1]]
+
+
+def test_filter_teacher_rows_by_dataset_rejects_empty_selection() -> None:
+    rows = [{"dataset": "dev-instructed-deception-model", "index": 1}]
+
+    with pytest.raises(RuntimeError, match="no teacher rows match"):
+        filter_teacher_rows_by_dataset(rows, "varied-deception")
