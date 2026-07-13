@@ -119,3 +119,71 @@ merely related fact. Keep the existing strict relation method and preserve the
 remaining package headroom. A learned retriever becomes worthwhile only with
 clean claim-to-fact supervision or substantially more diverse grouped training
 questions; teacher-summary token overlap is not sufficient supervision.
+
+## GPT-OSS-supervised compact retrieval
+
+A follow-up replaced lexical teacher-summary overlap with direct GPT-OSS-120B
+supervision. For each public varied-deception row, GPT-OSS saw at most 12 facts
+from the frozen expanded entity database and labeled each as `decisive`,
+`relevant_insufficient`, or `irrelevant`. `decisive` deliberately ignores
+support/contradiction polarity: the fact must independently settle the direct
+answer either way. Removing polarity and brittle quote extraction raised the
+64-row smoke parse rate from 49/64 to 62/64 and eliminated the teacher's
+support/contradiction label inversions.
+
+Full local job `30136046` labeled 2,404 training and 296 validation rows in
+27m36s. Of 2,700 rows, 2,618 parsed (97.0%). Repeated answer variants provide a
+useful reliability check: decisive/non-decisive agreement for overlapping facts
+was 98.9% on training and 100% on validation, although exact three-way agreement
+was only 82.4% and 85.2%. GPT-OSS found a decisive candidate on 335/2,336 valid
+training rows and 50/282 valid validation rows; 272 training and 40 validation
+rows were outside the selected rule retriever's coverage.
+
+Several negative controls matter:
+
+- A mechanically grounded 2,000-row corpus was nearly perfectly learnable in
+  domain but did not transfer to real questions.
+- Adding 1,434 GPT-OSS paraphrases of 500 grounded rows still produced only
+  0.451 grouped real-test candidate AUROC and no 80%-precision emission point.
+- A mined high-precision phrase→predicate rule table abstained everywhere.
+- Predicate-interaction and character-relation feature expansions did not beat
+  the generic 32,768-feature hashed linear model; the character model overfit.
+
+The generic model is only about 60 KB. On grouped public-training holdouts its
+candidate AUROC was 0.881 on calibration and 0.893 on internal test. A first
+validation report appeared excellent—11/11 emitted facts were teacher-labeled
+decisive—but every emission used an exact question already present in training.
+After separating exact question groups, the model still ranked very well on 51
+valid novel-question rows: candidate AUROC 0.975 and the decisive fact ranked
+first on all 8 rows that contained one. Its calibration-selected absolute-score
+threshold emitted zero novel rows, however, and a top-1/runner-up margin did not
+produce a five-row 80%-precision calibration point. Always emitting top-1 would
+have only 8/51 decisive rows, so this is not a submission-safe retriever by
+itself.
+
+Manual audit also found a systematic teacher limit. GPT-OSS called `composer:
+Pyotr Ilyich Tchaikovsky` decisive for “What Christmas ballet was written by
+Tchaikovsky?”, even though that reverse clue does not uniquely establish the
+work. Thus teacher labels are far cleaner than lexical overlap but are not a
+perfect logical entailment oracle.
+
+Artifacts are under
+`results/blackbox/wikidata_rag_gptoss_supervision_v1/`. Keep the 60 KB model as
+a ranking diagnostic, not a selected abstaining retriever. Its remaining
+plausible use is supplying one noisy top-ranked fact to an evidence-aware
+teacher or judge that can explicitly ignore irrelevant material; evaluate that
+with exact-question-group reporting before any new student training.
+
+Frozen downstream job `30136343` rejected that last use. It gave the selected
+varied-only reasoning-summary student one top-ranked fact on every validation
+row and compared empty, real, and size-matched shuffled reference conditions.
+On varied rows, binary BA fell from 0.8083 empty to 0.8056 real: recall rose
+from 0.6667 to 0.6833, but FPR rose from 0.0500 to 0.0722. Real evidence made
+four false-negative recoveries, one deceptive regression, five honest harms,
+and two honest recoveries. Shuffled evidence also scored 0.8056 BA. On the 65
+questions absent from training, real evidence scored 0.8929 BA versus 0.8871
+empty, but shuffled evidence scored 0.9013; the small change is therefore not
+evidence-specific and is affected by 1--3 parse errors per condition. Do not
+regenerate teacher traces or train another student from always-on top-1 facts.
+The remaining learned alternatives are not promising without more diverse
+question groups or a separately validated abstention target.

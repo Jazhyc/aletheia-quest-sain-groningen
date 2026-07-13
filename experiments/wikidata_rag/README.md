@@ -382,6 +382,50 @@ them. This is the strongest purely programmatic retrieval configuration so far,
 but 4.5% training coverage is still too low to justify another teacher/student
 run without first adding new high-confidence relation families.
 
+### GPT-OSS relevance supervision
+
+The supervised follow-up builds bounded full-card candidates, asks local
+GPT-OSS-120B for three-way decisiveness labels, trains compact hashed rankers,
+and evaluates exact-question-group novelty separately. Generated labels and
+models remain ignored under
+`results/blackbox/wikidata_rag_gptoss_supervision_v1/`.
+
+```bash
+python -m experiments.wikidata_rag.build_gptoss_supervision_candidates \
+  --input results/blackbox/wikidata_rag_relations_v1/train_selected_v5.jsonl \
+  --entity-database results/blackbox/wikidata_rag_expanded_v2/wikidata.sqlite \
+  --output results/blackbox/wikidata_rag_gptoss_supervision_v1/train_candidates.jsonl
+
+sbatch experiments/wikidata_rag/run_gptoss_retrieval_supervision.sh \
+  --input results/blackbox/wikidata_rag_gptoss_supervision_v1/train_candidates.jsonl \
+  --output results/blackbox/wikidata_rag_gptoss_supervision_v1/train_labels.jsonl \
+  --label-mode decisive --candidates-per-row 12
+
+python -m experiments.wikidata_rag.train_gptoss_fact_ranker \
+  --input results/blackbox/wikidata_rag_gptoss_supervision_v1/train_labels.jsonl \
+  --validation-input results/blackbox/wikidata_rag_gptoss_supervision_v1/validation_labels.jsonl \
+  --feature-mode generic --minimum-precision 0.8 \
+  --output-model results/blackbox/wikidata_rag_gptoss_supervision_v1/ranker.npz \
+  --output-report results/blackbox/wikidata_rag_gptoss_supervision_v1/ranker_report.json
+```
+
+Job `30136046` labeled 2,700 rows in 27m36s with 97.0% structural validity.
+Decisive/non-decisive agreement on repeated facts was 98.9% in training and
+100% in validation. Synthetic and GPT-paraphrased grounded data did not transfer
+to real grouped questions. The selected 60 KB generic model achieved 0.975
+candidate AUROC and 8/8 top-1 hits on validation questions absent from training,
+but its training-calibrated high-precision threshold emitted none of them.
+Do not count the 11/11 full-validation emission result as generalization: all 11
+questions occurred in training. See `docs/wikidata_rag/README.md` for the full
+audit and downstream evidence-sweep result.
+
+Frozen downstream job `30136343` used
+`build_ranked_sweep_cache.py` and the existing empty/real/shuffled judge harness.
+Always-on ranked evidence reduced varied BA from 0.8083 to 0.8056 by trading a
+small recall gain for a larger FPR increase; shuffled evidence also scored
+0.8056. The novel-question subset did not show an evidence-specific advantage.
+This closes the always-on fallback and does not justify another teacher/SFT run.
+
 
 ```bash
 PYTHONPATH=. .venv/bin/python experiments/wikidata_rag/build_claim_gated_cache.py \

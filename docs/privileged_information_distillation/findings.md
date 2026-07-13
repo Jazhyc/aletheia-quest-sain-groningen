@@ -812,6 +812,49 @@ them. This is the strongest purely programmatic retrieval configuration so far,
 but 4.5% training coverage is still too low to justify another teacher/student
 run without first adding new high-confidence relation families.
 
+### GPT-OSS relevance supervision
+
+Job `30136046` tested the deferred clean-supervision path. GPT-OSS-120B labeled
+up to 12 full-card candidates per public varied row as decisive, relevant but
+insufficient, or irrelevant. The polarity-free schema parsed 2,618/2,700 rows
+(97.0%) and decisive/non-decisive agreement on facts repeated across answer
+variants was 98.9% in training and 100% in validation. This is materially better
+supervision than teacher-summary token overlap. It exposes an oracle ceiling of
+335/2,336 valid training rows and 50/282 validation rows with a decisive fact,
+including 272 and 40 rows outside the current rule retriever's coverage.
+
+A 60 KB hashed linear ranker learned the ordering. On exact-question-grouped
+public-training holdouts it reached 0.893 candidate AUROC. On the 51 valid
+validation rows whose exact question never occurred in training, candidate
+AUROC was 0.975 and it ranked the decisive candidate first on all 8 rows that
+contained one. Confidence did not transfer: the training-selected 80%-precision
+threshold emitted zero novel-question rows, and a top-1/runner-up margin did not
+produce a usable calibration point. The apparent 11/11 full-validation emission
+result consisted entirely of questions repeated in training and must not be
+treated as held-out generalization.
+
+The teacher is also not a perfect entailment oracle. It repeatedly marked the
+fact that Tchaikovsky composed *Swan Lake* as decisive for asking which Christmas
+ballet he wrote, although that reverse clue does not uniquely identify the work.
+Mechanically grounded data, GPT paraphrases, character-relation features, and
+mined phrase rules did not fix real grouped transfer. Keep the compact model as
+a ranking diagnostic; do not replace the conservative rule retriever or claim a
+high-precision learned coverage gain. The remaining plausible ablation is to
+give an evidence-aware teacher/judge one top-ranked fact on every row and rely
+on its explicit irrelevance guard, reporting novel question groups separately.
+Full method details and artifacts are recorded in `docs/wikidata_rag/README.md`.
+
+Frozen job `30136343` ran that final ablation on the selected varied-only
+reasoning-summary student. Always-on ranked evidence reduced varied binary BA
+from 0.8083 to 0.8056: recall increased from 0.6667 to 0.6833 while FPR increased
+from 0.0500 to 0.0722. It produced four deceptive recoveries, one deceptive
+regression, five honest harms, and two honest recoveries. Size-matched shuffled
+evidence also scored 0.8056 BA. On 65 questions absent from training, real
+evidence reached 0.8929 BA versus 0.8871 empty, but shuffled reached 0.9013;
+this is not an evidence-specific gain. Do not regenerate privileged traces or
+train a student from this always-on retriever. Further progress needs diverse
+grouped supervision plus a confidence/abstention target that transfers.
+
 
 ## Next measurements
 
