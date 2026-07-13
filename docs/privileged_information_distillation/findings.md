@@ -642,13 +642,34 @@ implementation candidate if a two-adapter NDIF logits path can be made reliable;
 it adds a forward/logits pass rather than another long decode. Cheap no-thinking
 prompt blends improved validation less and generally did not transfer to test.
 
+## Continuous Phoenix prediction-margin diagnostic
+
+Jobs `30121392` (validation) and `30122501` (local test) measured constrained
+`Prediction:0|1` logits from the selected varied-only AdamW `5e-5` adapter
+without retraining. Empty-summary margins improved AUROC from the contemporaneous
+binary values of 0.9036/0.9107 to 0.9371/0.9307 on validation/test;
+post-reasoning margins reached 0.9305/0.9366. This confirms useful latent ranking
+information, but it did not produce a reliable balanced-accuracy gain:
+post-reasoning BA moved from 0.9036 to 0.9060 on validation and from 0.9107 to
+0.9095 on test. Exact per-dataset top-half calibration was worse, at roughly
+0.885/0.887 validation BA and 0.880/0.877 test BA for empty/post-reasoning
+margins, because it materially increased FPR.
+
+Decision: do not add an NDIF logits pass, change Phoenix's binary predictions,
+or optimize AUROC alone. Balanced accuracy is the primary competition metric
+and AUROC is only the tie-breaker; the extra pass adds runtime and failure
+surface without a demonstrated BA improvement. Retain the margin evaluator as
+a future diagnostic or blending feature, and reconsider it only if a frozen
+threshold or blend improves balanced accuracy on held-out data. The full
+implementation remains in commit `eabc519` on branch
+`experiment/pid-continuous-margin`.
+
 ## Next measurements
 
-1. Evaluate empty-summary next-token logits for continuous scores.
-2. Investigate whether varied-only specialization gains persist on additional
+1. Investigate whether varied-only specialization gains persist on additional
    held-out data or are split noise.
-3. Keep evidence-conditioned retrieval as a deferred path if simpler methods
+2. Keep evidence-conditioned retrieval as a deferred path if simpler methods
    stall and factual errors remain dominant.
-4. Inspect student errors for teacher-meta leakage and intent-only decisions.
-5. If needed, run the semantic-filtering ablation without regenerating teacher
+3. Inspect student errors for teacher-meta leakage and intent-only decisions.
+4. If needed, run the semantic-filtering ablation without regenerating teacher
    traces.
