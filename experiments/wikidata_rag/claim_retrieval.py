@@ -31,13 +31,22 @@ UNSUPPORTED_RELATION_RE = re.compile(
     r"independence|what year did .{0,80}\bbecome|belonged to)\b",
     re.I,
 )
+UNSUPPORTED_SLOT_RE = re.compile(
+    r"\b(?:what|which) (?:battle)?ship (?:was|were) sunk\b|"
+    r"\bwhich river forms? (?:the )?border\b|"
+    r"\b(?:olympic )?(?:bronze|silver|gold) medal in which (?:athletics )?event\b|"
+    r"\bwon .{0,80}\bfor which (?:film|movie|role|work)\b|"
+    r"\bduring the reign of which monarch\b|"
+    r"\bwhich sport was played .{0,80}\bprior to\b",
+    re.I,
+)
 
 
 RELATION_PATTERNS: tuple[tuple[str, re.Pattern[str], tuple[str, ...]], ...] = (
     (
         "location",
         re.compile(
-            r"(?:(?:^|[?.]\s*)where\b|\b(?:which|what) (?:modern day )?(?:country|county|city|town|island|state|"
+            r"(?:(?:^|[?.]\s*)where\b|\b(?:which|what) (?:modern[ -]day )?(?:country|county|city|town|island|state|"
             r"province|region|continent)|in (?:which|what) (?:country|county|city|town|island|"
             r"state|province|region|continent)|\b(?:located|location|capital|headquarters|born|"
             r"birthplace|died|death place|set in)\b)",
@@ -123,7 +132,7 @@ RELATION_PATTERNS: tuple[tuple[str, re.Pattern[str], tuple[str, ...]], ...] = (
     ),
     (
         "event",
-        re.compile(r"\b(participated|participant|competed|competition|conflict|war|battle|organizer|organised|organized|winner|won)\b", re.I),
+        re.compile(r"\b(participated|participant|competed|competition|conflict|war|battle|organizer|organised|organized|winners?|won)\b", re.I),
         ("participant", "participant in", "conflict", "organizer", "significant event", "winner"),
     ),
     (
@@ -133,8 +142,8 @@ RELATION_PATTERNS: tuple[tuple[str, re.Pattern[str], tuple[str, ...]], ...] = (
     ),
     (
         "name",
-        re.compile(r"\b(official name|native name|short name|nickname|moniker|also known as|same as|different from)\b", re.I),
-        ("official name", "name in native language", "short name", "nickname", "name", "said to be the same as", "different from"),
+        re.compile(r"\b(official name|native name|short name|nickname|moniker|also known as|same as|different from|local name|locals call)\b", re.I),
+        ("alias", "official name", "name in native language", "short name", "nickname", "name", "said to be the same as", "different from"),
     ),
     (
         "membership",
@@ -184,6 +193,11 @@ TYPE_HINTS: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
     (re.compile(r"\b(?:song|theme tune)\b", re.I), ("song", "musical work", "composition")),
 )
 
+TEMPORAL_PREDICATES = {
+    "head of government", "head of state", "organizer", "participant",
+    "participant in", "position held", "significant event", "winner",
+}
+
 
 def normalize(text: str) -> str:
     return " ".join(TOKEN_RE.findall(text.lower().replace("’", "'")))
@@ -191,6 +205,8 @@ def normalize(text: str) -> str:
 
 def normalize_name(text: str) -> str:
     normalized = normalize(text)
+    if normalized.startswith("st "):
+        normalized = "saint " + normalized[3:]
     for prefix in ("the ",):
         if normalized.startswith(prefix):
             normalized = normalized[len(prefix):]
@@ -251,9 +267,25 @@ def unique_spans(spans: Iterable[str], limit: int = 12) -> tuple[str, ...]:
     return tuple(selected)
 
 
+def augment_year_event_subjects(subjects: tuple[str, ...], question: str) -> tuple[str, ...]:
+    """Prefer edition entities when a named recurring event has an explicit year."""
+    years = YEAR_RE.findall(question)
+    if not years:
+        return subjects
+    augmented = []
+    for subject in subjects:
+        if (
+            re.search(r"\b(?:world cup|olympics?|championships?|games)\b", subject, re.I)
+            and not YEAR_RE.search(subject)
+        ):
+            augmented.append(f"{years[0]} {subject}")
+        augmented.append(subject)
+    return unique_spans(augmented)
+
+
 def refine_predicates(question: str, predicates: list[str]) -> list[str]:
     """Narrow broad location/date groups to the relation actually requested."""
-    if UNSUPPORTED_RELATION_RE.search(question):
+    if UNSUPPORTED_RELATION_RE.search(question) or UNSUPPORTED_SLOT_RE.search(question):
         return []
     location: tuple[tuple[str, tuple[str, ...]], ...] = (
         (r"\b(born|birthplace|place of birth)\b", ("place of birth",)),
@@ -262,7 +294,9 @@ def refine_predicates(question: str, predicates: list[str]) -> list[str]:
         (r"\bcapital\b", ("capital",)),
         (r"\b(country|nation)\b", ("country", "country of origin", "located in")),
         (r"\bcontinent\b", ("continent",)),
-        (r"\b(city|town|island)\b", ("located in", "location", "headquarters", "capital")),
+        (r"\b(?:on )?(?:which|what) island\b", ("located on physical feature", "located in", "location")),
+        (r"\b(city|town)\b", ("located in", "location", "headquarters")),
+        (r"\b(tomb|burial|buried)\b", ("place of burial", "located in", "country")),
         (r"\b(county|state|province|region)\b", ("located in", "location")),
         (r"\b(set|filmed|takes place)\b", ("narrative location", "filming location", "location")),
     )
@@ -286,6 +320,57 @@ def refine_predicates(question: str, predicates: list[str]) -> list[str]:
             date_all = set(RELATION_PATTERNS[1][2])
             narrowed = [value for value in narrowed if value not in date_all]
             narrowed.extend(value for values in matches for value in values)
+    event_all = set(next(values for name, _, values in RELATION_PATTERNS if name == "event"))
+    if event_all & set(narrowed):
+        event_values: tuple[str, ...]
+        if re.search(r"\b(winners?|won)\b", question, re.I):
+            event_values = ("winner",)
+        elif re.search(r"\b(participated|participant|competed)\b", question, re.I):
+            event_values = ("participant", "participant in")
+        elif re.search(r"\b(organizer|organised|organized)\b", question, re.I):
+            event_values = ("organizer",)
+        elif re.search(r"\b(conflict|war|battle)\b", question, re.I):
+            event_values = () if re.search(
+                r"(?:^|[?.]\s*)(?:where|in (?:what|which) (?:country|place|region))\b",
+                question,
+                re.I,
+            ) else ("conflict", "significant event")
+        else:
+            event_values = tuple(event_all)
+        narrowed = [value for value in narrowed if value not in event_all]
+        narrowed.extend(event_values)
+    sport_all = {"sport", "league", "position played", "country for sport"}
+    if sport_all & set(narrowed):
+        if re.search(r"\bwho\b.{0,100}\bwinners?\b", question, re.I):
+            sport_values: tuple[str, ...] = ()
+        elif re.search(r"\b(which|what) (?:sport)|injury in which sport\b", question, re.I):
+            sport_values = ("sport", "country for sport")
+        elif re.search(r"\bleague\b", question, re.I):
+            sport_values = ("league",)
+        elif re.search(r"\b(position|played as)\b", question, re.I):
+            sport_values = ("position played",)
+        else:
+            sport_values = tuple(sport_all)
+        narrowed = [value for value in narrowed if value not in sport_all]
+        narrowed.extend(sport_values)
+    if "winner" in narrowed:
+        membership_all = {"member of", "member of sports team", "political party", "has part"}
+        narrowed = [value for value in narrowed if value not in membership_all]
+        if re.search(r"\bwhich country's\b", question, re.I):
+            location_all = set(RELATION_PATTERNS[0][2])
+            narrowed = [value for value in narrowed if value not in location_all]
+    cast_all = {"cast member", "voice actor", "characters"}
+    if cast_all & set(narrowed):
+        if re.search(r"\bvoice(?:d| actor)?\b", question, re.I):
+            cast_values = ("voice actor",)
+        elif re.search(r"\bcharacter\b", question, re.I) and not re.search(
+            r"\bwho (?:played|portrayed|starred)\b", question, re.I
+        ):
+            cast_values = ("characters",)
+        else:
+            cast_values = ("cast member",)
+        narrowed = [value for value in narrowed if value not in cast_all]
+        narrowed.extend(cast_values)
     return list(dict.fromkeys(narrowed))
 
 
@@ -309,7 +394,9 @@ def extract_claim_query(conversation: str) -> ClaimQuery:
     # The subject usually lives in the question (the work, person, or place being
     # queried). Answer entities are useful fallbacks for identity questions but
     # are deliberately ranked later to avoid retrieving only the poisoned value.
-    subjects = unique_spans(question_marked + question_proper)
+    subjects = augment_year_event_subjects(
+        unique_spans(question_marked + question_proper), question
+    )
     answer_values = unique_spans(answer_marked + answer_proper, limit=6)
     qualifiers = unique_spans(
         YEAR_RE.findall(question + " " + first_answer)
@@ -347,6 +434,15 @@ def fact_predicate(fact: str) -> str:
     return fact.partition(":")[0].strip().lower()
 
 
+def temporally_compatible(fact: str, claim: ClaimQuery) -> bool:
+    """Reject explicitly dated facts that conflict with an explicitly dated query."""
+    if fact_predicate(fact) not in TEMPORAL_PREDICATES:
+        return True
+    query_years = set(YEAR_RE.findall(claim.question))
+    fact_years = set(YEAR_RE.findall(fact))
+    return not query_years or not fact_years or bool(query_years & fact_years)
+
+
 def entity_name_score(entity: dict[str, Any], claim: ClaimQuery) -> tuple[int, str | None]:
     names = [entity.get("label", ""), *(entity.get("aliases") or [])]
     normalized_names = [(name, normalize(name)) for name in names if normalize(name)]
@@ -378,9 +474,73 @@ def gate_entity(entity: dict[str, Any], claim: ClaimQuery) -> dict[str, Any] | N
         if pattern.search(claim.question) and not any(term in entity_type_text for term in expected):
             return None
     facts = split_facts(entity.get("facts", []))
+    if re.search(r"\b(?:patron )?saint\b|\bsaint'?s tomb\b", claim.question, re.I):
+        instance_text = " ".join(
+            fact.partition(":")[2]
+            for fact in facts
+            if fact_predicate(fact) in {"instance of", "subclass of"}
+        ).lower()
+        if not any(term in instance_text for term in ("human", "saint", "martyr")):
+            return None
+    if re.search(r"\bwhat island\b", claim.question, re.I):
+        instance_text = " ".join(
+            fact.partition(":")[2]
+            for fact in facts
+            if fact_predicate(fact) in {"instance of", "subclass of"}
+        ).lower()
+        if "island" not in instance_text:
+            return None
     relevant_facts = [
-        fact for fact in facts if fact_predicate(fact) in set(claim.predicates)
+        fact for fact in facts
+        if fact_predicate(fact) in set(claim.predicates)
+        and temporally_compatible(fact, claim)
     ]
+    if (
+        "alias" in claim.predicates
+        and matched_name
+        and normalize_name(matched_name) != normalize_name(entity.get("label", ""))
+    ):
+        relevant_facts.append(f"alias: {matched_name}")
+    description = str(entity.get("description", ""))
+    if (
+        re.search(r"\b(?:on )?(?:which|what) island\b", claim.question, re.I)
+        and re.search(r"\bon (?:the )?island of\b", description, re.I)
+    ):
+        relevant_facts.append(f"description: {description}")
+    if re.search(r"\bmodern[ -]day country\b", claim.question, re.I):
+        current_country = [
+            fact for fact in relevant_facts
+            if fact_predicate(fact) == "country" and "[" not in fact
+        ]
+        if current_country:
+            relevant_facts = current_country
+    if re.search(r"\b(?:which|what) country\b|\bin which country\b", claim.question, re.I):
+        direct_country = [
+            fact for fact in relevant_facts
+            if fact_predicate(fact) in {"country", "country of origin"}
+        ]
+        if direct_country:
+            query_years = set(YEAR_RE.findall(claim.question))
+            year_matched = [
+                fact for fact in direct_country
+                if set(YEAR_RE.findall(fact)) & query_years
+            ]
+            unqualified = [fact for fact in direct_country if "[" not in fact]
+            relevant_facts = year_matched or unqualified or direct_country
+    if re.search(r"\bwhat island\b", claim.question, re.I):
+        alias_facts = [fact for fact in relevant_facts if fact_predicate(fact) == "alias"]
+        if alias_facts:
+            relevant_facts = alias_facts
+    if re.search(r"\b(?:on )?(?:which|what) island\b", claim.question, re.I):
+        descriptions = [
+            fact for fact in relevant_facts if fact_predicate(fact) == "description"
+        ]
+        if descriptions:
+            relevant_facts = descriptions
+    if re.search(r"\b(tomb|burial|buried)\b", claim.question, re.I):
+        burial = [fact for fact in relevant_facts if fact_predicate(fact) == "place of burial"]
+        if burial:
+            relevant_facts = burial
     if not relevant_facts:
         return None
     return {
@@ -434,23 +594,28 @@ def query_candidate_entities(
     """
     selected: dict[str, dict[str, Any]] = {}
     for span in claim.subjects:
-        expression = fts_expression(span, phrase=True, max_tokens=10)
-        if not expression:
-            continue
-        try:
-            rows = connection.execute(sql, (expression, per_query)).fetchall()
-        except sqlite3.OperationalError:
-            continue
-        for row in rows:
-            entity = {
-                "qid": row[0], "title": row[1], "label": row[1],
-                "aliases": row[2].split("; ") if row[2] else [],
-                "description": row[3], "facts": split_facts(row[4]),
-                "popularity": row[5], "rank": row[6],
-            }
-            score, _ = entity_name_score(entity, claim)
-            if score >= 70:
-                selected.setdefault(entity["qid"], entity)
+        query_names = [span]
+        normalized = normalize_name(span)
+        if normalized != normalize(span):
+            query_names.append(normalized)
+        for query_name in query_names:
+            expression = fts_expression(query_name, phrase=True, max_tokens=10)
+            if not expression:
+                continue
+            try:
+                rows = connection.execute(sql, (expression, per_query)).fetchall()
+            except sqlite3.OperationalError:
+                continue
+            for row in rows:
+                entity = {
+                    "qid": row[0], "title": row[1], "label": row[1],
+                    "aliases": row[2].split("; ") if row[2] else [],
+                    "description": row[3], "facts": split_facts(row[4]),
+                    "popularity": row[5], "rank": row[6],
+                }
+                score, _ = entity_name_score(entity, claim)
+                if score >= 70:
+                    selected.setdefault(entity["qid"], entity)
     return list(selected.values())
 
 

@@ -4,6 +4,7 @@ from experiments.wikidata_rag.claim_retrieval import (
     extract_claim_query,
     gate_entity,
     retrieve_claim_evidence,
+    temporally_compatible,
 )
 
 
@@ -74,6 +75,121 @@ def test_extracts_new_screenwriter_relation() -> None:
 
     assert "screenwriter" in claim.relations
     assert "screenwriter" in claim.predicates
+
+
+def test_winner_question_does_not_retrieve_generic_event_metadata() -> None:
+    claim = extract_claim_query(
+        "USER: Which notable leader won the 2009 Nobel Peace Prize?\n\n"
+        "ASSISTANT: Barack Obama won it."
+    )
+
+    assert "event" in claim.relations
+    assert claim.predicates == ("winner",)
+    assert not temporally_compatible(
+        "winner: European Union [point in time: 2012]", claim
+    )
+    assert temporally_compatible(
+        "winner: Barack Obama [point in time: 2009]", claim
+    )
+
+
+def test_year_qualified_world_cup_prefers_edition_subject() -> None:
+    claim = extract_claim_query(
+        "USER: Which nation's football team won the FIFA World Cup in 2006?\n\n"
+        "ASSISTANT: France won."
+    )
+
+    assert claim.subjects[0] == "2006 FIFA World Cup"
+    assert claim.predicates == ("winner",)
+
+    possessive = extract_claim_query(
+        "USER: Which country's football team won the 1986 FIFA World Cup?\n\n"
+        "ASSISTANT: Argentina won."
+    )
+    assert possessive.subjects[0] == "1986 FIFA World Cup"
+    assert possessive.predicates == ("winner",)
+
+
+def test_non_answerable_question_slots_abstain() -> None:
+    questions = (
+        "What battleship was sunk in Havana harbor in 1898?",
+        "Which river forms the border between Zimbabwe and South Africa?",
+        "Ernest Borgnine won an Oscar for which film?",
+        "Who was prime minister during the reign of which monarch?",
+        "Which sport was played at Wimbledon prior to lawn tennis?",
+    )
+
+    for question in questions:
+        claim = extract_claim_query(f"USER: {question}\n\nASSISTANT: Example.")
+        assert claim.predicates == (), question
+
+
+def test_saint_alias_and_burial_question_select_direct_fact() -> None:
+    claim = extract_claim_query(
+        "USER: St George is England's patron saint, but in which country is his tomb?\n\n"
+        "ASSISTANT: His tomb is in Lod."
+    )
+    saint = {
+        "qid": "Q48438", "label": "Saint George", "aliases": ["St George"],
+        "description": "Christian saint and martyr",
+        "facts": ["instance of: human", "place of burial: Lod"],
+    }
+    locality = {
+        "qid": "Q2", "label": "St. George", "aliases": [],
+        "description": "community in the United States",
+        "facts": ["country: United States"],
+    }
+
+    assert gate_entity(saint, claim)["facts"] == ["place of burial: Lod"]
+    assert gate_entity(locality, claim) is None
+
+
+def test_local_name_uses_matched_alias_as_direct_evidence() -> None:
+    claim = extract_claim_query(
+        "USER: Kerkyra is the local name for what island?\n\nASSISTANT: Corfu."
+    )
+    entity = {
+        "qid": "Q205832", "label": "Corfu", "aliases": ["Kerkyra"],
+        "description": "Greek island", "facts": ["instance of: island"],
+    }
+
+    assert gate_entity(entity, claim)["facts"] == ["alias: Kerkyra"]
+    city = {
+        "qid": "Q2", "label": "Corfu", "aliases": ["Kerkyra"],
+        "description": "capital of the Greek island of Corfu",
+        "facts": ["instance of: city", "official name: Κέρκυρα"],
+    }
+    assert gate_entity(city, claim) is None
+
+
+def test_modern_country_discards_historical_scoped_values() -> None:
+    claim = extract_claim_query(
+        "USER: Carthage is in which modern-day country?\n\nASSISTANT: Tunisia."
+    )
+    entity = {
+        "qid": "Q6343", "label": "Carthage", "aliases": [],
+        "description": "ancient city", "facts": [
+            "country: Tunisia",
+            "country: Roman Empire [end time: 0395]",
+            "located in: Exarchate of Africa",
+        ],
+    }
+
+    assert gate_entity(entity, claim)["facts"] == ["country: Tunisia"]
+
+
+def test_country_slot_prefers_direct_country_over_administration() -> None:
+    claim = extract_claim_query(
+        "USER: The Galapagos Islands belong to which country?\n\nASSISTANT: Ecuador."
+    )
+    entity = {
+        "qid": "Q38095", "label": "Galapagos Islands", "aliases": [],
+        "description": "archipelago", "facts": [
+            "country: Ecuador", "located in: Galápagos Province",
+        ],
+    }
+
+    assert gate_entity(entity, claim)["facts"] == ["country: Ecuador"]
 
 
 def test_gate_rejects_topical_entity_without_requested_relation() -> None:

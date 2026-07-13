@@ -733,6 +733,31 @@ on this cache. Broader property retention does not repair query-relation
 specificity, temporal filtering, or entity disambiguation; those are now the
 dominant retrieval bottlenecks.
 
+### Deterministic query-planning follow-up
+
+A subsequent programmatic pass addressed those failure modes without a learned
+router or another database build. It adds relation-specific predicate routing,
+year-qualified recurring-event linking, conflicting-year rejection, explicit
+unsupported-slot abstention, `St`/`Saint` normalization, subject-type checks,
+and direct alias/burial/description evidence.
+
+On 2,877 parsed training summaries, the selected gate covers 132/2,880 source
+rows with conditional evidence precision 0.414 and 38 rows with a novel-summary
+token hit. This lies between the narrow gate (118 rows, 0.433 precision, 24 hits)
+and unconstrained expanded gate (145 rows, 0.384 precision, 40 hits), retaining
+14/16 incremental hits while removing 13 low-value rows. The frozen validation
+cache falls from 12 to ten evidence-bearing rows: it removes the irrelevant
+Ernest Borgnine conflict and year-mismatched Nobel facts, and replaces the wrong
+Louisiana St. George entity with Saint George's burial place in Lod. Other
+audited corrections include the 1986/2006 World Cup winners, time-scoped Menem
+and Ortega terms, Kerkyra/Corfu aliasing, and the Akrotiri/Cyprus description.
+
+This is the selected rule-based retrieval implementation, but coverage remains
+only 4.6% on training and 2.8% on varied validation. Do not launch a judge run,
+regenerate teacher traces, or train a student from it. A learned relation router
+may now be reasonable only as a matched follow-up over the same deterministic
+fact and qualifier constraints.
+
 ## Next measurements
 
 1. Investigate whether varied-only specialization gains persist on additional

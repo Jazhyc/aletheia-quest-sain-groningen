@@ -295,6 +295,35 @@ St. George entity, or year-mismatched Nobel winners. Do not launch a judge run,
 regenerate teacher traces, or train a student from this cache. A larger property
 schema alone does not solve claim planning and temporal/entity disambiguation.
 
+### Programmatic query constraints
+
+The selected follow-up keeps the expanded v2 database fixed and changes only
+the CPU query planner. It narrows winner, participant, organizer, sport, cast,
+and location wording to the requested predicate; prefixes recurring event names
+with explicit years; rejects facts with conflicting years; normalizes `St` and
+`Saint`; enforces subject types for saints and island-name questions; and uses
+direct aliases, burial facts, or tightly matched descriptions where appropriate.
+Unsupported answer slots such as “which river forms the border” or “which film
+won the actor an award” now abstain instead of returning topical metadata.
+
+On the frozen 2,877 parsed training summaries, the original narrow gate covered
+118 rows with conditional evidence precision 0.433 and 24 rows containing a
+novel-summary token hit. The unconstrained expanded gate covered 145 with 0.384
+precision and 40 hits. The selected programmatic gate covers 132 (4.6%), reaches
+0.414 precision, and retains 38 hits. It therefore keeps 14/16 of the expanded
+gate's additional hits while removing 13 low-value rows and recovering most of
+the precision loss.
+
+The frozen validation cache contains ten evidence-bearing rows instead of 12.
+It removes the irrelevant Ernest Borgnine conflict and year-mismatched Nobel
+winners, changes St George from a Louisiana locality to `place of burial: Lod`,
+and keeps the direct Malawi leadership fact. Training examples also show correct
+Italy/Argentina World Cup winners, a direct Kerkyra alias, and the Cyprus-bearing
+Akrotiri description. This is a meaningful retrieval improvement, but ten
+validation rows are still too few for a useful judge or student-training run.
+Artifacts use the `*_programmatic_v1` names under
+`results/blackbox/wikidata_rag_expanded_v2/`.
+
 ```bash
 PYTHONPATH=. .venv/bin/python experiments/wikidata_rag/build_claim_gated_cache.py \
   --database results/blackbox/wikidata_rag_daily_v1/wikidata.sqlite \
