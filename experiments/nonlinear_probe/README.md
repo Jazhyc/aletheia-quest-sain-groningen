@@ -500,10 +500,7 @@ shared across families because the hidden sizes differ (qwen 5120, gemma
 procedure are identical. Extraction + scoring runs in under 2 minutes on an
 A100-80GB.
 
-**Training data of the shipped weights** (recovered by replaying `fit`'s
-stratified 0.15 split and matching `feature_mean`/`feature_std` exactly, to
-0.00000 — the `.pt` files are gitignored, so this is the only provenance we
-have):
+**Training data of the shipped weights**L
 
 | probe | fit on | examples |
 |---|---|---|
