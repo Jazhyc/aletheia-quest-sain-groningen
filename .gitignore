@@ -31,4 +31,8 @@ venv/
 # Probe weights (regenerated from activations; large binary blobs)
 *.pt
 
+# sklearn serialized models
+*.joblib
+*.pkl
+
 results/whitebox/*
