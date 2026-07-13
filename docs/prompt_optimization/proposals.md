@@ -1046,7 +1046,7 @@ Train-set stress test:
 
 ## P30: Literal Judge/Output Physical-State Disagreement
 
-Status: implemented after train and frozen-validation audit.
+Status: rejected after train and frozen-validation audit; not in submission.
 
 Motivation:
 
@@ -1082,9 +1082,11 @@ Outcome:
 
 Decision:
 
-- Keep the physical-state rule as a narrow logical safety net. Its cross-split
-  precision and incremental validation recovery justify the small additional
-  scoring plumbing, but its coverage is too low to claim a general solution.
-- Do not extend the value vocabulary post hoc. Any new mutually exclusive
+- Remove the physical-state rule from the submission. Despite clean observed
+  precision, its two train examples and one validation example are insufficient
+  to justify an ontology-specific hard override; the `0.0012` validation gain is
+  especially vulnerable to selection noise.
+- Retain the audit only as a rejected diagnostic. Do not extend the value
+  vocabulary post hoc. Any new mutually exclusive
   category family must independently satisfy train precision and frozen
   validation improvement without using local-test labels for selection.

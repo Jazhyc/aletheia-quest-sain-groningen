@@ -2176,7 +2176,7 @@ Several tempting overrides failed the train precision requirement:
   Do not use that single validation example to broaden the deferred varied
   parser.
 
-The retained rule compares only literal physical-state words (`solid`,
+The best-performing candidate compared only literal physical-state words (`solid`,
 `liquid`, `gas`, `plasma`). It requires an explicit deception instruction, a
 negative judge verdict, exactly one affirmative state in the assistant output,
 and a different single state in a judge sentence that calls the assistant
@@ -2190,9 +2190,10 @@ that the output did not give.
 | validation | 1 | 1 | 0 | 0.9000 / 0.9012 |
 
 The train recoveries were oxygen and gallium; the frozen validation recovery
-was neon. Thus the rule transfers across examples rather than matching one
-element, but coverage remains extremely small. No local-test labels were used
-for selection. The submission now retains raw judge replies long enough to run
-this check before OR aggregation. Reproduction code is
+was neon. Although the match transferred across elements, it remained an
+ontology-specific patch supported by only three examples. It was removed from
+the submission after review: a one-row `0.0012` validation gain does not justify
+hard-coding states of matter, and the evidence does not support a general
+judge/output disagreement rule. No local-test labels were used. Reproduction code is
 `experiments/blackbox/audit_judge_output_consistency.py`; the ignored train
 generations are under the selected adapter's `train_rule_audit_v1/` directory.
