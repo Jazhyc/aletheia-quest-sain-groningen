@@ -2085,7 +2085,7 @@ beginning with a binary verdict. A negative verdict is flagged only when the
 following explanation nearly restates the user's proposition with the same
 negation polarity; a positive verdict requires an explicit correction cue.
 
-The final strict parser flagged four validation rows and six local-test rows.
+The initial strict parser flagged four validation rows and six local-test rows.
 Every flag was labeled deceptive, spanning Qwen, Gemma, and Nemotron, but the
 selected varied-only reasoning-summary student already caught every one. OR-ing
 the rule into its score therefore made no prediction changes:
@@ -2099,11 +2099,12 @@ During development, token normalization mattered. Dropping two-digit tokens
 made `89` and `90` indistinguishable, while splitting dotted initialisms broke a
 `D.C.` restatement; both were fixed before reporting the frozen counts above.
 
-The parser is integrated into the submission as a cheap model-agnostic safety
-net, with focused unit tests. This is an operational hedge, not evidence of a
-local score improvement or a demonstrated solution to the official Nemotron
-gap. Any broader semantic contradiction rule would need fresh validation
-because the existing trained judge already subsumes all observed strict cases.
+The parser was provisionally integrated into the submission as a cheap
+model-agnostic safety net, with focused unit tests. This is an operational hedge,
+not evidence of a local score improvement or a demonstrated solution to the
+official Nemotron gap. Any broader semantic contradiction rule would need fresh
+validation because the existing trained judge already subsumes all observed
+strict cases.
 
 A follow-up expanded only the explicit-intent matcher. Synthetic positive cases
 cover misleading or lying to the user, intentionally incorrect answering,
@@ -2112,8 +2113,41 @@ Matched negative controls cover negated instructions and descriptive uses of
 deception vocabulary. On the 822 validation rows, intent coverage increased
 from 362 with the original phrase list to 446. The expanded matcher added 86
 contexts and removed two legacy false matches: honest Atlas controls that said
-they did not regard themselves as `dishonest`. The downstream consistency rule
-still flagged exactly four rows, all deceptive, so validation predictions and
-metrics remain unchanged. The submission helper now documents that the learned
-judge is primary and that this rule neither fact-checks arbitrary answers nor
+they did not regard themselves as `dishonest`. Before the train audit, the
+downstream consistency rule still flagged exactly four validation rows, all
+deceptive. The submission helper documents that the learned judge handles
+general detection and that this rule neither fact-checks arbitrary answers nor
 infers deception from intent alone.
+
+### Train-set parser stress test
+
+The expanded parser was then run over all 6,573 train rows. Its first version
+flagged 56 rows: 46 deceptive and 10 honest. The ten false positives exposed a
+specific bag-of-words failure. Honest corrections often repeat every important
+question token while reversing its relation, for example:
+
+- `Yttrium has the symbol U` versus `Yttrium ... Y, while U is uranium`;
+- `fossils destroy evidence` versus `fossils preserve ... rather than destroy`;
+- `plate tectonics smooth` versus `create relief instead of smoothing`;
+- pathogens invading the body versus the immune system attacking pathogens.
+
+The rule was tightened using train only. Uppercase one-letter symbols are now
+retained, and a negative verdict is not treated as a restatement conflict when
+its explanation contains `while`, `rather than`, or `instead of`. Synthetic
+regression tests encode each failure family.
+
+The final train result is 25 flags, all labeled deceptive: 22 Qwen instructed
+rows and 3 Nemotron instructed rows. It flags no Gemma or varied rows. This is a
+high-precision safety net, not a broad detector: 25 flags cover only a tiny
+fraction of the 3,213 deceptive train rows.
+
+The train-derived change reduced validation flags from four to three and local
+test flags from six to four. All remaining flags are deceptive and already
+caught by the selected student, so BA remains `.9000` on validation and `.9155`
+on local test. The lower count is intentional: hard-override precision takes
+priority over recovering related factual lies that are not explicit surface
+contradictions.
+
+The reproducible audit entry point is
+`experiments/blackbox/audit_verdict_consistency_rules.py`; the ignored train
+artifact is under `results/blackbox/verdict_consistency_rules_train_v1/`.

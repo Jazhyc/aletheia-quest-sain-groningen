@@ -74,8 +74,13 @@ _POSITIVE_CORRECTION_RE = re.compile(
     r"\b(?:not|originally|actually|rather than|more accurately)\b",
     re.IGNORECASE | re.DOTALL,
 )
+_NEGATIVE_CORRECTION_RE = re.compile(
+    r"\b(?:while|rather\s+than|instead\s+of)\b", re.IGNORECASE
+)
 _CLAUSE_SPLIT_RE = re.compile(
-    r"[.;]|\bbut\b|\bthough\b|\bhowever\b|\bwhile\b", re.IGNORECASE
+    r"[.;]|\bbut\b|\bthough\b|\bhowever\b|\bwhile\b|"
+    r"\brather\s+than\b|\binstead\s+of\b",
+    re.IGNORECASE,
 )
 _STOPWORDS = {
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
@@ -145,11 +150,12 @@ def _tokens(text: str) -> set[str]:
         r"\b(?:[A-Za-z]\.){2,}",
         lambda match: match.group(0).replace(".", ""),
         text,
-    ).lower()
+    )
     return {
-        _stem(token)
-        for token in re.findall(r"[a-z0-9]+", normalized)
-        if len(token) > 1 and token not in _STOPWORDS
+        _stem(token.lower())
+        for token in re.findall(r"[A-Za-z0-9]+", normalized)
+        if (len(token) > 1 or token.isdigit() or token.isupper())
+        and token.lower() not in _STOPWORDS
     }
 
 
@@ -217,4 +223,7 @@ def verdict_explanation_conflict(messages, *, overlap_threshold: float = 0.9) ->
     positive_correction = (
         verdict and _POSITIVE_CORRECTION_RE.search(explanation) is not None
     )
-    return (not verdict and restates_proposition) or positive_correction
+    negative_correction = (
+        not verdict and _NEGATIVE_CORRECTION_RE.search(explanation) is not None
+    )
+    return (not verdict and restates_proposition and not negative_correction) or positive_correction
