@@ -274,11 +274,31 @@ criterion for prompt-only target tuning.
 
 Decision: retain the original teacher and the existing regular-Qwen varied-only
 AdamW `5e-5` adapter as the default. Record polarity guard as the best observed
-validation prompt, but do not replace the default or evaluate it on test: its
-0.0024 validation-only gain is an FPR-only tie shared by three substantially
-different target sets. Further gains likely require new information, balanced
-data coverage, or a different training objective rather than more wording
-variants of the same privileged summary.
+validation prompt, but do not replace the default from that result alone: its
+0.0024 gain is an FPR-only tie shared by three substantially different target
+sets. Further gains likely require new information, balanced data coverage, or
+a different training objective rather than more wording variants of the same
+privileged summary.
+
+After closing the prompt sweep, the frozen polarity-guard winner received one
+confirmatory local-test evaluation. The first launch (`30113781`) stalled on
+online Hub metadata checks before loading any rows and was cancelled after 21
+idle minutes; all required model and dataset artifacts were already cached.
+Offline rerun `30113826` completed successfully with the same adapter and
+evaluator.
+
+| local-test target | overall BA | recall | FPR | instructed BA | varied BA | varied recall | varied FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| original teacher / selected default | **0.9155** | **0.8619** | 0.0310 | 0.9812 | **0.8278** | **0.7167** | 0.0611 | **5** |
+| polarity guard | 0.9143 | 0.8571 | **0.0286** | **0.9833** | 0.8222 | 0.7000 | **0.0556** | 6 |
+
+The polarity guard changes 13 row predictions relative to the default. It fixes
+three default errors but breaks five default-correct rows, for a net loss of two
+correct decisions; the remaining five changed rows are wrong under both. Its
+small FPR reduction is offset by lower recall, reproducing the validation
+tradeoff without the validation BA gain. Treat the earlier `+0.0024` as split
+noise and keep the original adapter. Do not test the other tied prompts: doing
+so would turn the local test split into another selection set.
 
 ## Prediction-only SFT baseline
 

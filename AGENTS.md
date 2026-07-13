@@ -204,6 +204,11 @@ failed to exceed 0.9012 BA. Retain the original teacher/default adapter; do not
 continue wording-only teacher tuning or test-select the marginal polarity-guard
 tie. See `docs/privileged_information_distillation/findings.md` for the complete
 target coverage and metric tables.
+One frozen confirmatory test run (`30113826`) rejected that marginal winner:
+polarity guard scored 0.9143 overall and 0.8222 varied test BA, versus 0.9155
+and 0.8278 for the original teacher/default adapter. It fixed three baseline
+errors but broke five correct rows. Treat the validation gain as split noise;
+do not test the other tied teacher prompts or replace the default.
 
 Dataset-composition warning: every varied-deception example in the local train,
 validation, and test splits is from Qwen3.5-27B or a Qwen organism. Gemma and
