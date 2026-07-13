@@ -38,7 +38,7 @@ except ImportError:
 EXCLUDE_DIRS = {".git", ".claude", "leaderboard", "__pycache__",
                 ".ipynb_checkpoints", ".venv", "venv", "node_modules",
                 ".mypy_cache", ".pytest_cache", ".uv-cache", "results",
-                "logs", "dev_splits"}
+                "logs", "dev_splits", "wandb"}
 EXCLUDE_GLOBS = ["*.pyc", "*.pyo", ".DS_Store", ".env", "submission.csv"]
 
 MAX_ZIP_MB = 200  # guardrail; the Space may enforce its own limit.
