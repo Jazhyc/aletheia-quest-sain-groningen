@@ -59,6 +59,8 @@ def stacked_features(cache: CacheFile, pooling: str, layer_step: int) -> np.ndar
         usable labels; float16 overflows (gemma's late layers) are clipped
         back to the finite range.
     """
+    # Load every cached layer's pooled features and stack them along a new
+    # layer axis: (N, layers, hidden). Apply layer_step to thin out the stack.
     layers = sorted(cache.layers)[::layer_step]
     float16_max = np.float16(np.finfo(np.float16).max)
     with np.load(cache.path, allow_pickle=True) as data:
@@ -108,6 +110,7 @@ def run_cross_scenario(
     for base_model in sorted({cache.base_model for cache in cache_files}):
         files_for_model = [cache for cache in cache_files if cache.base_model == base_model]
         scenarios = scenarios_of(files_for_model)
+        # Base models with only one scenario cannot do cross-scenario eval.
         if len(scenarios) < 2:
             print(f"note: {base_model} has only scenario(s) {scenarios}; skipping cross-scenario")
             continue
@@ -125,6 +128,7 @@ def run_cross_scenario(
             if not has_both_classes(train_labels):
                 print(f"warning: skipping {base_model}/{train_scenario} (single-class train set)")
                 continue
+            # Fit every architecture on the same stacked features.
             for architecture in architectures:
                 probe = TorchProbe(architecture, seed=seed).fit(train_features, train_labels)
                 scores = probe.predict_proba(eval_features)[:, 1]
@@ -170,6 +174,7 @@ def run_holdout(
         if len(organisms) < 2:
             print(f"note: {base_model} has only organism(s) {organisms}; skipping holdout")
             continue
+        # Train on all organisms except one, evaluate on the held-out one.
         for held_out, architecture in product(organisms, architectures):
             train_files = [cache for cache in files_for_model
                            if parse_organism(cache.dataset, cache.model_id) != held_out]
@@ -234,6 +239,8 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Cross-scenario: train stacked-feature probes on one scenario, evaluate
+    # on the other.
     if args.mode in ("cross", "both"):
         cross_rows, cross_per_dataset = run_cross_scenario(
             cache_files, architectures, args.pooling, args.layer_step, args.seed)
@@ -243,6 +250,8 @@ def main() -> None:
             out_dir / "cross_per_dataset.csv", index=False)
         print(f"wrote {len(cross_frame)} cross-scenario rows to {out_dir}")
 
+    # Leave-one-organism-out: train on all organisms except one, evaluate
+    # on the held-out organism's datasets.
     if args.mode in ("holdout", "both"):
         holdout_rows, holdout_per_dataset = run_holdout(
             cache_files, architectures, args.pooling, args.layer_step, args.seed)

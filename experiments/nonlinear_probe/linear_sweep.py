@@ -147,6 +147,7 @@ def valid_label_mask(labels: np.ndarray) -> np.ndarray:
     :return: Boolean mask of rows with a usable 0/1 label; integer arrays
         treat negative values (e.g. -1) as missing, bool arrays are all valid.
     """
+    # Bool arrays have no missing values; int arrays use negative sentinels.
     if np.issubdtype(labels.dtype, np.bool_):
         return np.ones(labels.shape, dtype=bool)
     return labels >= 0
@@ -210,6 +211,7 @@ def pooled_features(cache: CacheFile, layer: int, pooling: str) -> np.ndarray:
         during extraction (gemma's late-layer residual streams exceed 65504)
         are clipped back to the float16 range so sklearn accepts them.
     """
+    # "concat" pooling stacks mean + last along the feature axis.
     keys = [f"mean_L{layer}", f"last_L{layer}"] if pooling == "concat" \
         else [f"{pooling}_L{layer}"]
     float16_max = float(np.finfo(np.float16).max)
@@ -345,10 +347,13 @@ def cross_validated_scores(
     features, labels, dataset_ids = concat_cache_features(cache_files, layer, pooling)
     if not has_both_classes(labels):
         return None, labels, dataset_ids
+
+    # Clamp folds to the smallest class count so every fold is stratified.
     smallest_class = min(np.bincount(labels))
     folds = min(cv_folds, smallest_class)
     if folds < 2:
         return None, labels, dataset_ids
+
     splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
     oof_scores = np.full(len(labels), np.nan)
     for train_index, test_index in splitter.split(features, labels):
@@ -379,16 +384,21 @@ def run_sweep(
     for base_model in base_models:
         files_for_model = [cache for cache in cache_files if cache.base_model == base_model]
         scenarios_present = sorted({cache.scenario for cache in files_for_model})
+
+        # Intersect layers across all caches for this model family.
         common_layers = set.intersection(*(set(cache.layers) for cache in files_for_model))
         if layers_override is not None:
             common_layers &= set(layers_override)
         layers = sorted(common_layers)
+
         for layer, pooling in product(layers, poolings):
             for train_scenario in scenarios_present:
                 train_files = [cache for cache in files_for_model if cache.scenario == train_scenario]
                 eval_scenarios = [scenario for scenario in scenarios_present if scenario != train_scenario]
                 config_fields = dict(base_model=base_model, layer=layer, pooling=pooling,
                                      train_scenario=train_scenario)
+
+                # Cross-scenario evaluation when both scenarios exist.
                 if eval_scenarios:
                     train_features, train_labels, _ = concat_cache_features(train_files, layer, pooling)
                     if not has_both_classes(train_labels):
@@ -409,6 +419,8 @@ def run_sweep(
                         per_dataset_rows.extend(per_dataset_metrics(
                             eval_labels, scores, eval_dataset_ids,
                             **config_fields, eval_scenario=eval_scenario))
+
+                # Fallback: within-scenario cross-validation when no opposite scenario exists.
                 else:
                     oof_scores, cv_labels, cv_dataset_ids = cross_validated_scores(
                         train_files, layer, pooling, regularization, cv_folds, random_state)
@@ -540,6 +552,8 @@ def main() -> None:
     run_config = {key: value for key, value in vars(args).items()
                   if not key.startswith("wandb")}
     out_dir = Path(args.out_dir)
+
+    # wandb-only mode just re-logs existing CSVs without re-running the sweep.
     if args.wandb_only:
         sweep_frame = pd.read_csv(out_dir / "sweep_results.csv")
         per_dataset_frame = pd.read_csv(out_dir / "per_dataset.csv")
@@ -547,6 +561,7 @@ def main() -> None:
                      run_config, args.wandb_project, args.wandb_entity)
         return
 
+    # Discover and load activation caches from disk.
     cache_dir = Path(args.cache_dir)
     paths = discover_cache_files(cache_dir, include_limit=args.include_limit)
     print(f"found {len(paths)} cache file(s) in {cache_dir} (include_limit={args.include_limit})")
@@ -555,11 +570,13 @@ def main() -> None:
         print("no usable cache files found; nothing to do")
         return
 
+    # Run the full (base_model, layer, pooling, scenario) sweep.
     poolings = args.poolings.split(",")
     layers_override = parse_layers_arg(args.layers)
     sweep_rows, per_dataset_rows = run_sweep(
         cache_files, layers_override, poolings, args.regularization, args.cv_folds, args.seed)
 
+    # Write results and print the top-ranking configs.
     out_dir.mkdir(parents=True, exist_ok=True)
     sweep_frame = rows_to_frame(sweep_rows, SWEEP_COLUMNS)
     per_dataset_frame = rows_to_frame(per_dataset_rows, PER_DATASET_COLUMNS)

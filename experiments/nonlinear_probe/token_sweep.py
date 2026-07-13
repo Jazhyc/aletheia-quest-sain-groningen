@@ -172,6 +172,8 @@ def concat_token_features(
     running_token_total = 0
     for cache in cache_files:
         flat_features, offsets = load_token_features(cache, layer, device)
+        # Shift each cache's offsets by the running token total, skipping
+        # the first element (which is always 0) for all but the first cache.
         shifted_offsets = offsets + running_token_total
         offset_parts.append(shifted_offsets if not offset_parts else shifted_offsets[1:])
         flat_features_parts.append(flat_features)
@@ -223,6 +225,7 @@ def run_cross_scenario(
                 print(f"warning: skipping {base_model}/L{layer}/{train_scenario} "
                       f"(single-class train set)")
                 continue
+            # Fit every token-probe architecture on the same flat features.
             for architecture in architectures:
                 probe = TokenProbe(architecture, seed=seed, device=device).fit(
                     train_features, train_offsets, train_labels)
@@ -244,6 +247,7 @@ def run_cross_scenario(
                       f"{train_scenario}->{eval_scenario}: "
                       f"BA {metrics['balanced_accuracy']:.3f} AUROC {metrics['auroc']:.3f}",
                       flush=True)
+            # Free GPU memory before the next (layer, scenario) iteration.
             del train_features, eval_features
     return cross_rows, per_dataset_rows
 
@@ -303,6 +307,7 @@ def run_holdout(
             print(f"holdout {base_model}/{architecture}/L{layer} held-out={held_out}: "
                   f"BA {metrics['balanced_accuracy']:.3f} AUROC {metrics['auroc']:.3f}",
                   flush=True)
+            # Free GPU memory before the next (layer, organism, architecture) iteration.
             del train_features, eval_features
     return holdout_rows, per_dataset_rows
 
@@ -343,6 +348,8 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Cross-scenario: train token-sequence probes on one scenario, evaluate
+    # on the other.
     if args.mode in ("cross", "both"):
         cross_rows, cross_per_dataset = run_cross_scenario(
             cache_files, architectures, layers, device, args.seed)
@@ -352,6 +359,8 @@ def main() -> None:
             out_dir / "cross_per_dataset.csv", index=False)
         print(f"wrote {len(cross_frame)} cross-scenario rows to {out_dir}")
 
+    # Leave-one-organism-out: train on all organisms except one, evaluate
+    # on the held-out organism's token sequences.
     if args.mode in ("holdout", "both"):
         holdout_rows, holdout_per_dataset = run_holdout(
             cache_files, architectures, layers, device, args.seed)

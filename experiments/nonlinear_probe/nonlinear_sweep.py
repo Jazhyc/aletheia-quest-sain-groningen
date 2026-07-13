@@ -80,6 +80,7 @@ def parse_organism(dataset_name: str, model_id: str) -> str:
         'b-mo', 'g-st-2', or 'None' for the plain base model.
     :raises ValueError: If the dataset name does not contain the model token.
     """
+    # Strip the base-model echo that some datasets append to the organism tag.
     model_token = model_id.split("/")[-1]
     match = re.search(rf"deception-{re.escape(model_token)}-(?P<organism>.+)$", dataset_name)
     if match is None:
@@ -198,6 +199,8 @@ def run_cross_scenario(
     for base_model in base_models:
         files_for_model = [cache for cache in cache_files if cache.base_model == base_model]
         scenarios = scenarios_of(files_for_model)
+        # Skip base models that only have one scenario (their CV numbers are
+        # already in linear_sweep.py and not repeated here).
         if len(scenarios) < 2:
             print(f"note: {base_model} has only scenario(s) {scenarios}; "
                   f"skipping cross-scenario (see linear_sweep.py for its CV numbers)")
@@ -211,6 +214,7 @@ def run_cross_scenario(
                 print(f"warning: skipping {base_model}/L{layer}/{pooling}/{train_scenario} "
                       f"(single-class train set)")
                 continue
+            # Fit every probe on the same train data, evaluate on the held-out scenario.
             for eval_scenario in eval_scenarios:
                 eval_files = [cache for cache in files_for_model
                               if cache.scenario == eval_scenario]
@@ -271,6 +275,8 @@ def run_holdout(
             print(f"note: {base_model} has only organism(s) {organisms}; skipping holdout")
             continue
         layers = common_layers(files_for_model, layers_override)
+        # Hold out one organism at a time; train on everything else (both
+        # scenarios pooled), evaluate on the held-out organism's datasets.
         for layer, pooling, held_out in product(layers, poolings, organisms):
             train_files = [cache for cache in files_for_model
                            if parse_organism(cache.dataset, cache.model_id) != held_out]
@@ -360,6 +366,8 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Cross-scenario: train on one scenario, evaluate on the other (both
+    # directions), comparing logistic vs MLP on the same train/eval splits.
     if args.mode in ("cross", "both"):
         cross_rows, cross_per_dataset = run_cross_scenario(
             cache_files, probes, parse_layers_arg(args.cross_layers),
@@ -371,6 +379,8 @@ def main() -> None:
             out_dir / "cross_per_dataset.csv", index=False)
         print(f"wrote {len(cross_frame)} cross-scenario rows to {out_dir}")
 
+    # Leave-one-organism-out: train on all organisms except one, evaluate on
+    # the held-out organism's datasets (both scenarios pooled for training).
     if args.mode in ("holdout", "both"):
         holdout_rows, holdout_per_dataset = run_holdout(
             cache_files, probes, parse_layers_arg(args.holdout_layers),

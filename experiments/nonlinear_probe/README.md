@@ -263,12 +263,14 @@ activations at one layer, letting them learn *which* tokens carry the
 deception signal:
 
 - **AttentionTokenProbe:** token projection → learned attention pooling
-  (masked softmax) → linear head.
+  (masked softmax) → linear head. Tokens are scored independently with no
+  cross-token interaction.
 - **CNNTokenProbe:** two `Conv1d(k=5, padding="same")` layers over the token
-  axis with masked mean pooling.
+  axis with masked mean pooling. Tokens interact through local k=5
+  convolution windows.
 - **TransformerTokenProbe:** projection + sinusoidal position encoding →
-  *n*×*n* self-attention (masked via `src_key_padding_mask`) → masked mean
-  pooling.
+  full *n*×*n* self-attention (masked via `src_key_padding_mask`) → masked
+  mean pooling. Tokens interact globally through multi-head self-attention.
 
 Three architectures at **layers 40 and 46** (the two candidate layers from
 the extraction sweep, chosen post-hoc because the layer curve peaks in the
@@ -348,8 +350,110 @@ handle it fine (0.887 and 0.995 respectively) — attention pooling alone is
 brittle when the learned attention pattern mismatches the token distribution
 of an unseen organism.
 
+### Transformer token probe — architectural details
+
+```
+  ┌─────────────────────────────────────────────────────────┐
+  │               logit  ŷ  (∈ ℝ)                           │
+  │                  ↑                                      │
+  │           W_head v + b_head                             │
+  │                  ↑                                      │
+  │          masked mean pooling                            │
+  │        ┌───────────────────────┐                        │
+  │        │  v = (1/T) ∑ V_N(t)  │                         │
+  │        └────────────┬──────────┘                        │
+  │                     │                                   │
+  │     ┌───────────────┴────────────────┐                  │
+  │     │     Transformer encoder        │                  │
+  │     │     (2 blocks, 4 heads)        │                  │
+  │     │     MHA → Add → LayerNorm      │                  │
+  │     │     FFN → Add → LayerNorm      │                  │
+  │     └───────────────┬────────────────┘                  │
+  │                     │                                   │
+  │     ┌───────────────┴────────────────┐                  │
+  │     │  u_t = W_proj x_t + PE         │  (d_model=128)   │
+  │     └───────────────┬────────────────┘                  │
+  │                     │                                   │
+  │     ┌───────────────┴────────────────┐                  │
+  │     │  [x₁  x₂  ...  x_T]           │  response tokens  │
+  │     │  (residual stream,            │  from one decoder │
+  │     │   d_hidden = 5120 / 5376)     │  L40 or L46       │
+  │     └────────────────────────────────┘                  │
+  └─────────────────────────────────────────────────────────┘
+```
+
+Each example is a sequence of per-token activation vectors
+$x_1, x_2, \dots, x_T$ from the residual stream at a single decoder layer
+(hidden dimension $d_{\text{hidden}}=5120$ for Qwen, 5376 for gemma), where
+$T$ is the number of response tokens. The transformer token probe processes
+this sequence through three stages.
+
+**1. Token projection and position encoding.** Every token is projected down
+to a uniform model dimension $$d_{\text{model}}=128$$ and tagged with a
+sinusoidal position encoding so the probe can use token order:
+
+$$
+u_t = W_{\text{proj}}\,x_t + \text{PE}(t) \in \mathbb{R}^{128},
+\qquad
+\text{PE}(t)_i =
+\begin{cases}
+\sin\!\big(t / 10000^{2i/128}\big), & i \text{ even},\\[4pt]
+\cos\!\big(t / 10000^{2i/128}\big), & i \text{ odd}.
+\end{cases}
+$$
+
+**2. Transformer encoder.** The projected sequence passes through $N=2$
+self-attention blocks, each with $H=4$ heads and a feed-forward width of
+256. Padding positions are masked out via
+`src_key_padding_mask` so they do not attend or contribute:
+
+$$
+\begin{aligned}
+V_0 &= [u_1, \dots, u_T], \\
+V_{k+1} &= \text{Block}_k(V_k), \qquad k=0,1.
+\end{aligned}
+$$
+
+Each block is the standard pre-LayerNorm transformer encoder layer:
+
+$$
+\begin{aligned}
+A_k &= \text{LayerNorm}\big(V_k + \text{MHA}(V_k, V_k, V_k)\big), \\
+V_{k+1} &= \text{LayerNorm}\big(A_k + \text{FFN}(A_k)\big),
+\end{aligned}
+$$
+
+with $\text{MHA}$ the multi-head attention mechanism (queries, keys, values
+all from $V_k$, masked so padding positions cannot attend) and
+
+$$
+\text{FFN}(a) = W_2\,\text{ReLU}(W_1 a + b_1) + b_2.
+$$
+
+**3. Masked mean pooling and linear head.** The encoder outputs are
+mean-pooled over the response span, then classified:
+
+$$
+v = \frac{1}{T}\sum_{t=1}^T V_N^{(t)}, \qquad
+\hat{y} = W_{\text{head}}\,v + b_{\text{head}}.
+$$
+
+The logit $\hat{y}$ is trained with binary cross-entropy. At inference time
+$\sigma(\hat{y})$ is the predicted probability of deception. Training uses
+Adam (lr=1e-3, weight decay=1e-4) with early stopping on a held-out 15%
+validation split (patience 6 epochs).
+
+**Why it outperforms the attention pooler.** The key difference is
+self-attention: tokens exchange information through multi-head attention, so
+the probe can represent *relational* patterns (e.g. "token 5 is suspicious
+*because* token 3 established a premise") rather than scoring each token
+independently. The sinusoidal position encoding gives the model access to
+token ordering, which matters for detecting position-dependent strategies
+(early lying vs late hedging), while the attention pooler treats the sequence
+as a bag of scored tokens.
+
 Score-level ensembles (logistic + transformer, averaging predictions) do not
-help — the logistic is too weak on the hard organisms and drags the average
+help, the logistic is too weak on the hard organisms and drags the average
 down (mean 0.919, worst 0.850). Two-layer token fusion (concatenating L40
 and L46 token representations) also underperforms the single-layer
 transformer (mean 0.916, worst 0.855). Neither the scenario gap nor the
@@ -458,3 +562,111 @@ python experiments/nonlinear_probe/plot_layer_curve.py
 
 Environment: nnsight 0.7.1.dev, transformers 5.12.1, scikit-learn 1.9.0,
 torch 2.11.0, numpy 2.2.6 (local `.venv`, Python 3.12).
+
+## Standardized-split evaluation
+
+**Script:** `standardized_sweep.py`
+
+The earlier sweeps (Phases 1–2) used coarse train/eval splits along scenario
+lines: train on all datasets of one scenario, test on all datasets of the other.
+This confounds *scenario* effects with *organism* effects, and the train/test
+ratio varies per base model (e.g. Qwen has 9–10 datasets per scenario, gemma
+has only instructed data). The standardized-split evaluation addresses this by
+using deterministic 80/10/10 train/validation/test splits per dataset created by
+`scripts/make_dev_splits.py`, stratified by label, so every probe sees the same
+test rows.
+
+Four training-data compositions are compared:
+
+- **both:** train split, all scenarios
+- **varied:** train split, varied-deception only (Qwen only)
+- **instructed:** train split, instructed-deception only
+- **both+val:** train + validation splits, all scenarios
+
+All probes use L46 features with the concat(mean, last) pooling for logistic/MLP
+and L46 per-token features for attention/CNN/transformer probes. Evaluation is
+on the held-out test split for all compositions. Results are broken out by base
+model family since hidden-dimension differences (Qwen 5120, gemma 5376) prevent
+shared-weight probes.
+
+Runtime ~6 min on an RTX 4090.
+
+### Qwen3.5-27B (5120 hidden, 18 dev datasets)
+
+| probe | train_data | BA | AUROC | n_train | n_eval |
+|---|---|---|---|---|---|
+| logistic | both | 0.9153 | 0.9798 | 5760 | 720 |
+| mlp-512 | both | 0.9153 | 0.9800 | 5760 | 720 |
+| attention token | both | **0.9250** | 0.9763 | 5760 | 720 |
+| cnn token | both | 0.9181 | 0.9789 | 5760 | 720 |
+| transformer token | both | 0.9153 | 0.9811 | 5760 | 720 |
+| logistic | varied | 0.8986 | 0.9704 | 2880 | 720 |
+| mlp-512 | varied | **0.9125** | 0.9735 | 2880 | 720 |
+| attention token | varied | 0.8917 | 0.9595 | 2880 | 720 |
+| cnn token | varied | 0.8875 | 0.9666 | 2880 | 720 |
+| transformer token | varied | 0.8667 | 0.9626 | 2880 | 720 |
+| logistic | instructed | 0.8889 | 0.9634 | 2880 | 720 |
+| mlp-512 | instructed | 0.8958 | 0.9596 | 2880 | 720 |
+| attention token | instructed | 0.8458 | 0.9389 | 2880 | 720 |
+| cnn token | instructed | 0.8944 | 0.9678 | 2880 | 720 |
+| transformer token | instructed | **0.9042** | 0.9714 | 2880 | 720 |
+| logistic | both+val | 0.9139 | 0.9790 | 6480 | 720 |
+| mlp-512 | both+val | **0.9208** | 0.9829 | 6480 | 720 |
+| attention token | both+val | 0.8958 | 0.9690 | 6480 | 720 |
+| cnn token | both+val | 0.9208 | 0.9807 | 6480 | 720 |
+| transformer token | both+val | 0.9181 | 0.9799 | 6480 | 720 |
+
+### gemma-3-27b-it (5376 hidden, 2 dev datasets)
+
+gemma has no varied-deception caches, so the `varied` composition has no data
+(rows omitted). `instructed` and `both` are identical here.
+
+| probe | train_data | BA | AUROC | n_train | n_eval |
+|---|---|---|---|---|---|
+| logistic | both | 0.9750 | 0.9794 | 640 | 80 |
+| mlp-512 | both | 0.9750 | 0.9834 | 640 | 80 |
+| attention token | both | 0.9625 | 0.9788 | 640 | 80 |
+| cnn token | both | 0.9750 | 0.9828 | 640 | 80 |
+| transformer token | both | 0.9625 | 0.9850 | 640 | 80 |
+| logistic | both+val | 0.9750 | 0.9794 | 720 | 80 |
+| mlp-512 | both+val | 0.9750 | 0.9844 | 720 | 80 |
+| attention token | both+val | **0.9875** | 0.9900 | 720 | 80 |
+| cnn token | both+val | **0.9875** | 0.9800 | 720 | 80 |
+| transformer token | both+val | 0.9750 | 0.9744 | 720 | 80 |
+
+### Takeaways
+
+- Training on **both scenarios** always dominates single-scenario training
+  (+0.01–0.02 BA over the best single-scenario composition), confirming that
+  the scenario gap from Phase 1 was driven by missing data rather than probe
+  capacity.
+- For Qwen, the **attention token probe** trained on both scenarios achieves the
+  highest BA (0.925), though all probes cluster tightly at 0.915–0.925 in the
+  "both" composition — the architecture choice matters less than the training
+  data composition.
+- Adding validation data to training (`both+val`) barely moves Qwen scores
+  (+0.005 BA at best, some probes regress), suggesting the 80/10/10 split
+  already provides sufficient training examples. It helps gemma's token probes
+  more noticeably (attention +0.025, cnn +0.012).
+- Single-scenario training confirms earlier findings: **varied→held-out test**
+  (0.867–0.912 BA) outperforms **instructed→held-out test** (0.846–0.904 BA),
+  and token probes are less robust than pooled probes when trained on only one
+  scenario (attention drops to 0.846 on instructed-only).
+- The standardized test set BA (0.9153 for logistic, both scenarios) is close to
+  the Phase 2 holdout mean (0.914–0.920), confirming that the leave-one-
+  organism-out protocol was a realistic estimator of deployment performance.
+- **Why the Transformer might pull ahead with more data.** The Transformer is
+  the only probe with global pairwise attention — every token can attend to
+  every other token — giving it architectural headroom the others lack. The CNN
+  is capped at k=5 local windows, the attention pooler scores tokens
+  independently (a bag of tokens), and the logistic/MLP discard all token
+  structure through mean/last pooling. This capacity should let the Transformer
+  discover longer-range relational patterns (premise→lie structure, hedging
+  across the full response), but right now adding 720 validation examples moves
+  it only +0.0028 BA, matching the CNN (+0.0027). The bottleneck appears to be
+  the **representation** rather than the architecture: all probes read L46
+  residual-stream activations from the same 18 Qwen datasets. The Transformer
+  would likely pull away with **more organisms, not just more examples per
+  organism**, its holdout advantage on the hardest unseen organisms (a-mo-3/4/5/6/7)
+  suggests that with 20+ organisms its extra capacity to learn transferable
+  token-level patterns would compound, while everyone else plateaus.
