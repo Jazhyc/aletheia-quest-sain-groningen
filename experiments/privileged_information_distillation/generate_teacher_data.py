@@ -18,12 +18,16 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from experiments.privileged_information_distillation.core import (
+    append_reference_material,
     build_student_prompt,
     build_teacher_prompt,
     extract_harmony_final,
     format_student_target,
     parse_counterfactual_teacher_target,
     parse_teacher_target,
+)
+from experiments.privileged_information_distillation.evaluate_student_sft import (
+    load_retrieval_cache,
 )
 from experiments.qwen_grpo_lora.run_qwen_grpo_lora import (
     load_labels,
@@ -44,8 +48,23 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
 
     split_path = root / str(cfg.splits_dir) / f"dry.{cfg.teacher.split}.yaml"
     datasets = load_split_config(split_path, root)
+    dataset_name_contains = OmegaConf.select(
+        cfg, "teacher.dataset_name_contains", default=None
+    )
+    retrieval_cache = OmegaConf.select(cfg, "teacher.retrieval_cache", default=None)
+    references: dict[tuple[str, Any], str] = {}
+    if retrieval_cache is not None:
+        retrieval_path = Path(str(retrieval_cache))
+        if not retrieval_path.is_absolute():
+            retrieval_path = root / retrieval_path
+        references = load_retrieval_cache(retrieval_path)
     rows: list[dict[str, Any]] = []
     for dataset_cfg in datasets:
+        if (
+            dataset_name_contains is not None
+            and str(dataset_name_contains) not in dataset_cfg.name
+        ):
+            continue
         labels = load_labels(dataset_cfg)
         label_by_index = dict(zip(labels["index"], labels["label"], strict=True))
         wanted = set(label_by_index)
@@ -63,6 +82,16 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
                 int(cfg.student.max_prompt_chars),
                 str(cfg.student.context_truncation),
             )
+            if retrieval_cache is not None:
+                key = (dataset_cfg.name, index)
+                if key not in references:
+                    raise RuntimeError(
+                        f"retrieval cache is missing dataset={dataset_cfg.name!r} "
+                        f"index={index!r}"
+                    )
+                student_prompt = append_reference_material(
+                    student_prompt, references[key]
+                )
             rows.append({
                 "dataset": dataset_cfg.name,
                 "index": index,
@@ -74,9 +103,6 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
                     label,
                 ),
             })
-    dataset_name_contains = OmegaConf.select(
-        cfg, "teacher.dataset_name_contains", default=None
-    )
     if dataset_name_contains is not None:
         rows = filter_teacher_rows_by_dataset(rows, str(dataset_name_contains))
     return limit_teacher_rows(

@@ -8,6 +8,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from experiments.privileged_information_distillation.core import (
+    append_reference_material,
     format_student_target,
     parse_counterfactual_teacher_target,
 )
@@ -68,3 +69,12 @@ def test_filter_teacher_rows_by_dataset_rejects_empty_selection() -> None:
 
     with pytest.raises(RuntimeError, match="no teacher rows match"):
         filter_teacher_rows_by_dataset(rows, "varied-deception")
+
+
+def test_append_reference_material_marks_retrieval_as_untrusted() -> None:
+    prompt = append_reference_material("PROMPT", "- Entity: fact")
+
+    assert prompt.startswith("PROMPT\n\n<reference_material>")
+    assert "incomplete, ambiguous, or irrelevant" in prompt
+    assert "- Entity: fact" in prompt
+    assert prompt.endswith("</reference_material>")

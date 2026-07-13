@@ -10,6 +10,7 @@ from experiments.wikidata_rag.evaluate_judge_sweep import (
     load_condition_references,
     paired_changes,
 )
+from experiments.wikidata_rag.build_teacher_cache import convert_record
 
 
 def test_entity_passages_caps_facts() -> None:
@@ -73,3 +74,38 @@ def test_paired_changes_counts_recoveries_and_harms() -> None:
 
     assert changes["deceptive_recoveries_fn_to_tp"] == 1
     assert changes["honest_harms_tn_to_fp"] == 1
+
+
+def test_convert_record_preserves_keys_and_formats_entities() -> None:
+    converted = convert_record({
+        "dataset": "varied",
+        "index": 9,
+        "entities": [{
+            "qid": "Q1",
+            "label": "Entity",
+            "description": "description",
+            "facts": ["country: Example"],
+        }],
+    })
+
+    assert converted["dataset"] == "varied"
+    assert converted["index"] == 9
+    assert converted["qids"] == ["Q1"]
+    assert converted["passages"] == [{
+        "title": "Entity (Q1)",
+        "text": "description; country: Example",
+    }]
+
+
+def test_convert_record_accepts_preformatted_real_passages() -> None:
+    passages = [{"title": "Entity (Q1)", "text": "fact"}]
+
+    converted = convert_record({
+        "dataset": "varied",
+        "index": 10,
+        "real_passages": passages,
+        "qids": ["Q1"],
+    })
+
+    assert converted["passages"] == passages
+    assert converted["qids"] == ["Q1"]

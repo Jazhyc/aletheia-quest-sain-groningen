@@ -183,6 +183,42 @@ control with empty and shuffled hard negatives and explicitly teach
 Artifacts are under
 `results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/validation_wikidata_3condition_v1/`.
 
+## Evidence-aware privileged distillation
+
+The next frozen experiment incorporates each row's real retrieved cards into
+the privileged GPT-OSS teacher trace and the student's input. It deliberately
+uses no shuffled, corrupted, duplicated, or counterfactual augmentation. The
+teacher silently decides whether each card concerns the same entity and settles
+a material output claim. It incorporates a directly relevant fact, but ignores
+wrong-entity, merely topical, ambiguous, or insufficient cards completely. The
+ordinary `reasoning_summary` plus `Prediction:0|1` target schema is unchanged.
+
+The cache is rebuilt directly from all 2,880 labeled varied-training rows rather
+than from the old parsed teacher artifact, so the three examples whose original
+teacher traces were malformed are not silently omitted. It contains exactly
+three cards per row and is balanced 1,440/1,440 by label. Apart from the shared
+reference block and evidence-aware teacher/student wording, training retains the
+selected standard recipe: regular `Qwen/Qwen3.5-9B`, varied-only data, rank-16
+alpha-32 LoRA, one epoch, AdamW `5e-5`, and effective batch size 32. Configuration:
+`configs/pid_teacher_wikidata_evidence_v1.yaml`.
+
+```bash
+.venv/bin/python experiments/wikidata_rag/build_validation_cache.py \
+  --database results/blackbox/wikidata_rag_daily_v1/wikidata.sqlite \
+  --output results/blackbox/wikidata_rag_daily_v1/train_retrieval_raw.jsonl \
+  --split train --no-shuffle
+
+.venv/bin/python experiments/wikidata_rag/build_teacher_cache.py \
+  --input results/blackbox/wikidata_rag_daily_v1/train_retrieval_raw.jsonl \
+  --output results/blackbox/wikidata_rag_daily_v1/train_teacher_cache.jsonl
+
+sbatch experiments/privileged_information_distillation/run_teacher.sh \
+  --config-name pid_teacher_wikidata_evidence_v1
+
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  --config-name pid_teacher_wikidata_evidence_v1
+```
+
 ## Command
 
 ```bash

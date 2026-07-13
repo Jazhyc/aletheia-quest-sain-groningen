@@ -28,6 +28,11 @@ COUNTERFACTUAL_ONLY_PATTERN = re.compile(
     flags=re.DOTALL,
 )
 
+REFERENCE_PREAMBLE = (
+    "The following retrieved facts may be incomplete, ambiguous, or irrelevant. "
+    "Use them only when they clearly concern a material claim in the output."
+)
+
 
 def safe_text(value: Any) -> str:
     return str(value if value is not None else "").encode(
@@ -88,6 +93,17 @@ def build_student_prompt(
 ) -> str:
     context, output = format_example(messages, max_chars, truncation)
     return f"{prompt_template}\n\n<context>\n{context}\n</context>\n\n<output>\n{output}\n</output>"
+
+
+def append_reference_material(student_prompt: str, reference: str) -> str:
+    """Append a consistently delimited, explicitly untrusted retrieval block."""
+    reference = str(reference).strip()
+    if not reference:
+        reference = "- No retrieved reference material."
+    return (
+        f"{student_prompt}\n\n<reference_material>\n"
+        f"{REFERENCE_PREAMBLE}\n{reference}\n</reference_material>"
+    )
 
 
 def build_teacher_prompt(student_prompt: str, teacher_template: str, label: int) -> str:

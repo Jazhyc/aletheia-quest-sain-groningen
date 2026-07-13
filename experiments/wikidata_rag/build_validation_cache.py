@@ -125,11 +125,19 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--split", default="validation", choices=["validation", "test"])
+    parser.add_argument(
+        "--split", default="validation", choices=["train", "validation", "test"]
+    )
     parser.add_argument("--splits-dir", type=Path, default=ROOT / "dev_splits")
     parser.add_argument("--scenario", default="varied-deception")
     parser.add_argument("--limit-results", type=int, default=3)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--shuffle",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="attach a label-blind cross-dataset shuffled evidence condition",
+    )
     args = parser.parse_args()
 
     connection = sqlite3.connect(f"file:{args.database.resolve()}?mode=ro", uri=True)
@@ -158,7 +166,7 @@ def main() -> None:
                 "qids": [entity["qid"] for entity in entities],
             })
     connection.close()
-    rotations = add_shuffled_passages(records, args.seed)
+    rotations = add_shuffled_passages(records, args.seed) if args.shuffle else []
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         "\n".join(json.dumps(record) for record in records) + "\n"

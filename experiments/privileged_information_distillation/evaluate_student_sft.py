@@ -19,7 +19,10 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from experiments.privileged_information_distillation.core import build_student_prompt
+from experiments.privileged_information_distillation.core import (
+    append_reference_material,
+    build_student_prompt,
+)
 from experiments.qwen_grpo_lora.evaluate_qwen_grpo_lora import (
     binary_metrics,
     load_split_config,
@@ -179,12 +182,7 @@ def load_records(
             )
             reference = (references or {}).get((dataset_cfg.name, index), "")
             if reference:
-                raw_prompt += (
-                    "\n\n<reference_material>\n"
-                    "The following retrieved text may be incomplete or irrelevant. "
-                    "Use it only when it clearly matches the question.\n"
-                    f"{reference}\n</reference_material>"
-                )
+                raw_prompt = append_reference_material(raw_prompt, reference)
             prompt = tokenizer.apply_chat_template(
                 [{"role": "user", "content": raw_prompt}],
                 tokenize=False,
