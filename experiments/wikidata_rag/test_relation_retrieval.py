@@ -2,10 +2,13 @@ import sqlite3
 
 from experiments.wikidata_rag.build_relation_index import PREDICATE_IDS
 from experiments.wikidata_rag.relation_retrieval import (
+    answer_contains_card_value,
+    card_value,
     query_facts,
     render_fact,
     retrieve_office_overlap,
 )
+from experiments.wikidata_rag.claim_retrieval import extract_claim_query
 
 
 def relation_database() -> sqlite3.Connection:
@@ -53,3 +56,22 @@ def test_constrained_two_hop_finds_overlapping_monarch() -> None:
     assert result is not None
     assert result["status"] == "support"
     assert "George VI" in result["facts"][1]
+
+
+def test_card_answer_match_ignores_subject_repeated_in_explanation() -> None:
+    claim = extract_claim_query(
+        "USER: Where did Thomas Cook organise his first package holiday to go to?\n\n"
+        "ASSISTANT: Thomas Cook organized it from Leicester to **Loughborough**."
+    )
+
+    assert card_value("place of death: Leicester [point in time: 1892]") == "Leicester"
+    assert not answer_contains_card_value(claim, "place of death: Leicester")
+
+
+def test_card_answer_match_understands_decade() -> None:
+    claim = extract_claim_query(
+        "USER: In which decade was National University founded?\n\n"
+        "ASSISTANT: It was founded in the **1970s**."
+    )
+
+    assert answer_contains_card_value(claim, "inception: 1971-01-01")

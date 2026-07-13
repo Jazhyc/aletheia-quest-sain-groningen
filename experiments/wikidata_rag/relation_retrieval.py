@@ -13,10 +13,13 @@ from experiments.wikidata_rag.claim_retrieval import (
     ClaimQuery,
     TYPE_HINTS,
     YEAR_RE,
+    fact_predicate,
     entity_context_score,
     extract_claim_query,
     normalize_name,
     query_candidate_entities,
+    split_facts,
+    temporally_compatible,
     unique_spans,
 )
 
@@ -34,6 +37,52 @@ FUNCTIONAL_PREDICATES = {
     "capital", "country", "country for sport", "country of origin", "creator", "director",
     "head of government", "head of state", "league", "location", "organizer",
     "performer", "place of burial", "sport", "winner",
+}
+
+# A conflicting card value is safe enough to expose only for slots that are
+# normally single-valued for the entity and time implied by the question.
+# Multi-valued/category relations can still provide exact support, but a
+# different value is not evidence that the proposed value is false.
+CARD_FUNCTIONAL_PREDICATES = {
+    "capital", "country", "country for sport", "country of origin", "creator",
+    "date of birth", "date of death", "director", "dissolved or abolished",
+    "headquarters", "inception", "location of formation", "manner of death",
+    "native language", "official language", "original language", "performer",
+    "place of birth", "place of death", "publication date", "screenwriter",
+}
+
+CARD_COUNTER_PATTERNS: dict[str, re.Pattern[str]] = {
+    "capital": re.compile(r"\bcapital\b", re.I),
+    "country": re.compile(r"\b(?:which|what|modern[ -]day) country\b|\bin which country\b", re.I),
+    "country of origin": re.compile(r"\bcountry of origin\b|\boriginat(?:e|ed|es)\b", re.I),
+    "date of birth": re.compile(r"\b(?:when|what year|which year)\b.{0,80}\bborn\b|\bborn\b.{0,80}\b(?:when|what year|which year)\b", re.I),
+    "date of death": re.compile(r"\b(?:when|what year|which year)\b.{0,80}\bdie(?:d)?\b|\bdie(?:d)?\b.{0,80}\b(?:when|what year|which year)\b", re.I),
+    "director": re.compile(r"\b(?:who directed|director|directed by)\b", re.I),
+    "headquarters": re.compile(r"\bheadquarters?\b", re.I),
+    "inception": re.compile(r"(?:^|[?.]\s*)when\b.{0,100}\b(?:founded|formed|established|opened)\b|\b(?:what|which) (?:year|decade)\b.{0,100}\b(?:founded|formed|established|opened)\b|\b(?:founded|formed|established|opened)\b.{0,100}\b(?:what|which) (?:year|decade)\b", re.I),
+    "location of formation": re.compile(r"\b(?:formed|founded|established)\b.{0,80}\b(?:where|city|country)\b|\b(?:where|city|country)\b.{0,80}\b(?:formed|founded|established)\b", re.I),
+    "native language": re.compile(r"\bnative language\b", re.I),
+    "official language": re.compile(r"\bofficial language\b", re.I),
+    "original language": re.compile(r"\boriginal language\b", re.I),
+    "performer": re.compile(r"\b(?:who sang|who performed|performed by|recorded by)\b", re.I),
+    "place of birth": re.compile(r"\b(?:where|which|what)\b.{0,80}\b(?:born|birth ?place)\b|\b(?:born|birth ?place)\b.{0,80}\b(?:where|which|what)\b", re.I),
+    "place of death": re.compile(r"\b(?:where|which|what)\b.{0,80}\b(?:died|death place)\b|\b(?:died|death place)\b.{0,80}\b(?:where|which|what)\b", re.I),
+    "publication date": re.compile(r"\b(?:published|released)\b.{0,80}\b(?:when|what year|which year)\b|\b(?:when|what year|which year)\b.{0,80}\b(?:published|released)\b", re.I),
+    "screenwriter": re.compile(r"\b(?:screenwriter|screenplay|script by|wrote the (?:screenplay|script))\b", re.I),
+}
+
+CARD_SUPPORT_PATTERNS: dict[str, re.Pattern[str]] = {
+    **CARD_COUNTER_PATTERNS,
+    "different from": re.compile(r"\b(?:also known as|called|local(?:s)? call|local name)\b", re.I),
+    "genre": re.compile(r"\b(?:type|kind|genre) of (?:book|film|music|work)|\bfamous for writing\b", re.I),
+    "instance of": re.compile(r"\b(?:what|which) (?:is|are|was|were|type|kind)\b|\btype of\b|\bkind of\b", re.I),
+    "located in": re.compile(r"\b(?:where|which|what) (?:city|town|county|state|country|region|province)\b|\bin (?:which|what) (?:city|town|county|state|country|region|province)\b", re.I),
+    "narrative location": re.compile(r"\b(?:set|takes place)\b.{0,80}\b(?:where|city|town|country|location)\b|\b(?:where|city|town|country|location)\b.{0,80}\b(?:set|takes place)\b", re.I),
+    "nickname": re.compile(r"\bnickname|nicknamed\b", re.I),
+    "position held": re.compile(r"\b(?:became|served as|position held|president|prime minister|first minister)\b", re.I),
+    "said to be the same as": re.compile(r"\b(?:also known as|called|local(?:s)? call|local name)\b", re.I),
+    "short name": re.compile(r"\b(?:short name|also known as|called)\b", re.I),
+    "subclass of": re.compile(r"\b(?:what|which) (?:is|are|was|were|type|kind)\b|\btype of\b|\bkind of\b", re.I),
 }
 
 
@@ -92,6 +141,134 @@ def linked_subject_qids(entity_connection: sqlite3.Connection, claim: ClaimQuery
         for candidate in candidates:
             selected.setdefault(candidate["qid"], candidate)
     return list(selected)
+
+
+def trusted_subject_qids(
+    entity_connection: sqlite3.Connection,
+    claim: ClaimQuery,
+    subject_qids: list[str],
+) -> list[str]:
+    """Restrict counterfacts to the grammatical subject, not incidental names."""
+    first = set(linked_qids(entity_connection, claim.subjects[:1]))
+    trusted = [qid for qid in subject_qids if qid in first]
+    coordinated = len(claim.subjects) > 1 and bool(re.search(r"\band\b", claim.question, re.I))
+    typed_focus = any(pattern.search(claim.question) for pattern, _ in TYPE_HINTS)
+    if not trusted and subject_qids and (coordinated or typed_focus):
+        trusted = [subject_qids[0]]
+    return trusted
+
+
+def card_value(fact: str) -> str:
+    """Return a rendered card value without its predicate or qualifiers."""
+    return fact.partition(":")[2].partition(" [")[0].strip()
+
+
+def answer_contains_card_value(claim: ClaimQuery, fact: str) -> bool:
+    """Require a complete value or explicit year match in the assistant answer."""
+    value = card_value(fact)
+    if not value:
+        return False
+    predicate = fact_predicate(fact)
+    answer_years = set(YEAR_RE.findall(claim.answer))
+    value_years = set(YEAR_RE.findall(value))
+    counter_pattern = CARD_COUNTER_PATTERNS.get(predicate)
+    if (
+        answer_years and value_years and answer_years & value_years
+        and counter_pattern and counter_pattern.search(claim.question)
+    ):
+        return True
+    answer_decades = {int(match) * 10 for match in re.findall(r"\b(1\d{2}|20\d)0s\b", claim.answer)}
+    if (
+        answer_decades and value_years
+        and any((int(year) // 10) * 10 in answer_decades for year in value_years)
+        and counter_pattern and counter_pattern.search(claim.question)
+    ):
+        return True
+    normalized_value = normalize_name(value)
+    if len(normalized_value) < 3:
+        return False
+    subject_values = {normalize_name(item) for item in claim.subjects}
+    normalized_question = normalize_name(claim.question)
+    primary_values = [
+        normalize_name(item) for item in claim.answer_values
+        if normalize_name(item) not in subject_values
+        and normalize_name(item) not in normalized_question
+    ]
+    if primary_values and normalized_value == primary_values[0]:
+        return True
+    # Lowercase concepts such as "detective fiction" are not named-entity
+    # spans. Accept a complete multiword phrase only when it adds information
+    # not already repeated from the question.
+    if (
+        len(normalized_value.split()) < 2 or value[:1].isupper()
+        or not value[:1].isalpha()
+    ):
+        return False
+    normalized_answer = normalize_name(claim.answer)
+    return (
+        normalized_value not in normalized_question
+        and bool(re.search(rf"(?:^|\s){re.escape(normalized_value)}(?:$|\s)", normalized_answer))
+    )
+
+
+def retrieve_card_verdict(
+    entity_connection: sqlite3.Connection,
+    claim: ClaimQuery,
+    subject_qids: list[str],
+    *,
+    limit: int = 6,
+) -> dict[str, Any] | None:
+    """Classify strictly routed facts already stored in the entity-linker DB."""
+    trusted = trusted_subject_qids(entity_connection, claim, subject_qids)
+    if not trusted or not claim.predicates:
+        return None
+    placeholders = ",".join("?" for _ in trusted)
+    rows = entity_connection.execute(
+        f"SELECT qid,label,facts FROM entity WHERE qid IN ({placeholders})", trusted
+    ).fetchall()
+    allowed = set(claim.predicates)
+    candidates: list[dict[str, str]] = []
+    for qid, label, raw_facts in rows:
+        for fact in split_facts(raw_facts):
+            predicate = fact_predicate(fact)
+            if predicate in allowed and temporally_compatible(fact, claim):
+                candidates.append({
+                    "qid": str(qid), "subject_label": str(label),
+                    "predicate": predicate, "fact": fact,
+                })
+    if not candidates:
+        return None
+    matches = [
+        row for row in candidates
+        if row["predicate"] in CARD_SUPPORT_PATTERNS
+        and CARD_SUPPORT_PATTERNS[row["predicate"]].search(claim.question)
+        and answer_contains_card_value(claim, row["fact"])
+    ]
+    if matches:
+        selected = matches
+        status = "support"
+    else:
+        functional = [
+            row for row in candidates
+            if row["predicate"] in CARD_FUNCTIONAL_PREDICATES
+            and row["predicate"] in CARD_COUNTER_PATTERNS
+            and CARD_COUNTER_PATTERNS[row["predicate"]].search(claim.question)
+            and not (
+                row["predicate"] in {
+                    "date of birth", "date of death", "inception", "publication date",
+                }
+                and YEAR_RE.search(card_value(row["fact"]))
+                and int(YEAR_RE.search(card_value(row["fact"])).group()) < 1000
+            )
+        ]
+        # Multiple conflicting values (especially dates and locations) usually
+        # signal a historical/ambiguous slot, so abstain rather than cherry-pick.
+        distinct = {(row["predicate"], normalize_name(card_value(row["fact"]))) for row in functional}
+        if len(functional) != 1 or len(distinct) != 1:
+            return None
+        selected = functional
+        status = "counterevidence"
+    return {"status": status, "facts": selected[:limit]}
 
 
 def node_ids(relation_connection: sqlite3.Connection, qids: Iterable[str]) -> dict[str, int]:
@@ -250,14 +427,12 @@ def retrieve_relation_evidence(
     relation_connection.row_factory = sqlite3.Row
     claim = extract_claim_query(conversation)
     subject_qids = linked_subject_qids(entity_connection, claim)
-    first_subject_qids = linked_qids(entity_connection, claim.subjects[:1])
     answer_qids = linked_qids(entity_connection, claim.answer_values)
     ids = node_ids(relation_connection, [*subject_qids, *answer_qids])
-    trusted_qids = [qid for qid in first_subject_qids if qid in ids]
-    coordinated = len(claim.subjects) > 1 and bool(re.search(r"\band\b", claim.question, re.I))
-    typed_focus = any(pattern.search(claim.question) for pattern, _ in TYPE_HINTS)
-    if not trusted_qids and subject_qids and (coordinated or typed_focus):
-        trusted_qids = [subject_qids[0]]
+    trusted_qids = [
+        qid for qid in trusted_subject_qids(entity_connection, claim, subject_qids)
+        if qid in ids
+    ]
     trusted_subject_ids = {ids[qid] for qid in trusted_qids if qid in ids}
     years = {int(value) for value in YEAR_RE.findall(claim.question)}
     predicates = [name for name in claim.predicates if name in PREDICATE_IDS]

@@ -86,3 +86,36 @@ The retrieval quality is the strongest programmatic result so far, but coverage
 remains only 4.5% of varied training. Do not launch another teacher/student run
 until another high-confidence relation family adds material coverage without
 undoing the precision gain.
+
+## Remaining-space retrieval ablations
+
+The projected package has only about 4.0 MB of headroom, so two learned
+fallbacks were tested against grouped question holdouts. Oracle labels score
+only fact-value payloads; entity and predicate titles are excluded because they
+otherwise manufacture relevance on identity questions.
+
+The full entity cards contain a teacher-summary lexical hit on 694/2,877 rows,
+versus 141 for current structured candidates. This is an optimistic oracle
+ceiling, not achievable retrieval: manual audit found many topical or
+hierarchically related values that do not answer the requested slot.
+
+- A 60,084-byte hashed question/answer/fact ranker found no positive grouped
+  test retrieval at its calibration-selected operating point.
+- A 422,192-byte hashed question-to-predicate router reached only 4.1% top-1
+  and 19.3% top-3 accuracy on its grouped test partition. On 133 uncovered
+  oracle rows its top three predicates contained the oracle predicate 24 times,
+  versus 12 for the deterministic rules. This is too imprecise to expose facts
+  to the teacher, especially because the oracle itself is optimistic.
+- A strict full-card fallback reusing the shipped entity database added 13
+  semantically plausible training rows after audit, but zero rows beyond the
+  selected method's 15/360 validation rows. Most train additions were repeated
+  question templates, so the apparent gain did not generalize.
+
+The optional `--card-fallback` cache-builder flag is retained for reproducible
+ablation only and is not selected. These results show that package size is not
+the current bottleneck: a sub-megabyte model fits easily, but available labels
+do not reliably distinguish a fact that settles the requested claim from a
+merely related fact. Keep the existing strict relation method and preserve the
+remaining package headroom. A learned retriever becomes worthwhile only with
+clean claim-to-fact supervision or substantially more diverse grouped training
+questions; teacher-summary token overlap is not sufficient supervision.

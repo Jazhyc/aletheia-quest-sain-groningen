@@ -8,7 +8,11 @@ import json
 from pathlib import Path
 import sqlite3
 
-from experiments.wikidata_rag.relation_retrieval import retrieve_relation_evidence
+from experiments.wikidata_rag.claim_retrieval import extract_claim_query
+from experiments.wikidata_rag.relation_retrieval import (
+    retrieve_card_verdict,
+    retrieve_relation_evidence,
+)
 
 
 def main() -> None:
@@ -22,6 +26,10 @@ def main() -> None:
         "--require-verdict", action="store_true",
         help="Emit only support/counterevidence facts; abstain on uncertain relations.",
     )
+    parser.add_argument(
+        "--card-fallback", action="store_true",
+        help="When structured retrieval abstains, use strict facts from the entity cards.",
+    )
     args = parser.parse_args()
     entity = sqlite3.connect(f"file:{args.entity_database.resolve()}?mode=ro", uri=True)
     relation = sqlite3.connect(f"file:{args.relation_database.resolve()}?mode=ro", uri=True)
@@ -31,6 +39,17 @@ def main() -> None:
         result = retrieve_relation_evidence(
             entity, relation, record["conversation"], allow_inverse=not args.direct_only
         )
+        used_card_fallback = False
+        if args.card_fallback and result["status"] == "uncertain":
+            fallback = retrieve_card_verdict(
+                entity, extract_claim_query(record["conversation"]), result["subject_qids"]
+            )
+            if fallback:
+                result["status"] = fallback["status"]
+                result["facts"] = [row["fact"] for row in fallback["facts"]]
+                result["fact_rows"] = fallback["facts"]
+                result["abstain_reason"] = None
+                used_card_fallback = True
         passages = []
         if result["facts"] and not (
             args.require_verdict and result["status"] == "uncertain"
@@ -52,6 +71,7 @@ def main() -> None:
             "answer_qids": result["answer_qids"],
             "used_inverse": result["used_inverse"],
             "used_two_hop": result.get("used_two_hop", False),
+            "used_card_fallback": used_card_fallback,
             "relation_fact_rows": result["fact_rows"],
             "abstain_reason": (
                 "uncertain_relation" if result["facts"] and not passages
