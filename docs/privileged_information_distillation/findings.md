@@ -758,6 +758,61 @@ regenerate teacher traces, or train a student from it. A learned relation router
 may now be reasonable only as a matched follow-up over the same deterministic
 fact and qualifier constraints.
 
+### Compact bidirectional relation index
+
+The next programmatic sweep tested six CPU-only extensions independently: a
+compact forward/reverse relation table, answer-first inverse lookup, uncapped
+histories with qualifiers, training-summary-only predicate mapping search,
+mechanically generated routing cases, and a constrained office/jurisdiction
+two-hop. No class labels were used for query mapping or routing selection.
+
+The selected relation database contains 512,162 facts over 233,239 labeled
+nodes and 33 predicates. It preserves 55,210 start years, 40,072 end years,
+37,249 point years, and 334 `for work` qualifiers. SQLite size is 39,448,576
+bytes and ZIP size is 17,118,369 bytes. Shipping it alongside the expanded v2
+entity linker projects to 195,964,375 bytes with the current submission tree,
+leaving about 4.0 MB below the decimal 200 MB limit. This is viable but leaves
+little room for another model or large cache.
+
+The isolated direct relation lookup covered 87 training rows with 26 novel
+teacher-summary hits. Enabling bidirectional answer lookup covered 91 and
+raised hits to 29, a small positive result. Mechanically generated queries
+initially exposed seven missing routes (voice actors, characters, participant
+history, significant events, held positions, awards, and lyricists); the
+selected rules pass all 32 generated relation cases. The split-half mapping
+search recovered high-precision expected mappings such as author→author and
+director→director, but proposed no reliable new cross-relation mapping;
+low-precision coincidences were rejected.
+
+Targeted history/qualifier enrichment is valuable for specific slots. It turns
+the Ernest Borgnine/Oscar question into direct qualified evidence for *Marty*.
+A constrained person→office→jurisdiction→monarch query resolves Neville
+Chamberlain's 1937–1940 premiership against George VI's 1936–1952 reign and
+rejects George V; it produces the correct verdict on all three repeated
+training variants. Broad unconstrained multi-entity lookup was rejected after
+validation audits exposed incidental-place errors. The selected emitter
+requires a support/counterevidence relation and trusts later question spans
+only for typed works or explicit coordination.
+
+On 2,877 parsed varied-training summaries, the selected cache covers 130/2,880
+source rows, reaches 0.538 conditional evidence precision, and has 48 rows with
+a novel teacher-summary token hit. This improves both precision and hits over
+the previous selected programmatic gate (132 rows, 0.414 precision, 38 hits),
+at nearly identical coverage. On varied validation it covers 15/360 rather
+than 10/360. The five additions are manually relevant: Milan for Derby della
+Madonnina, *Marty* for Borgnine's award, Laos for Vientiane, Portugal for
+Benfica/Porto, and Boston for the three-landmark question; none of the prior
+ten rows is lost.
+
+Artifacts are under `results/blackbox/wikidata_rag_relations_v1/`. The
+selected database is `relations_selected.sqlite`, the frozen caches are
+`train_selected_v5.jsonl` and `validation_selected_v5.jsonl`, and the
+relevance, mapping-search, routing, build, and validation reports remain beside
+them. This is the strongest purely programmatic retrieval configuration so far,
+but 4.5% training coverage is still too low to justify another teacher/student
+run without first adding new high-confidence relation families.
+
+
 ## Next measurements
 
 1. Investigate whether varied-only specialization gains persist on additional

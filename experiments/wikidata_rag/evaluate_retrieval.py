@@ -63,6 +63,7 @@ PROPERTY_LABELS = {
     "P749": "parent organization", "P793": "significant event", "P800": "notable work",
     "P828": "has cause", "P840": "narrative location", "P915": "filming location",
     "P921": "main subject", "P937": "work location", "P1029": "crew member",
+    "P1001": "applies to jurisdiction",
     "P1037": "director or manager", "P1196": "manner of death",
     "P1344": "participant in", "P1346": "winner", "P1365": "replaces",
     "P1366": "replaced by", "P1412": "languages spoken", "P1441": "present in work",
@@ -80,6 +81,7 @@ QUALIFIER_LABELS = {
     "P459": "determination method", "P518": "applies to part", "P580": "start time",
     "P582": "end time", "P585": "point in time", "P642": "of",
     "P1545": "series ordinal",
+    "P1686": "for work",
 }
 
 STOPWORDS = {

@@ -114,7 +114,6 @@ def test_non_answerable_question_slots_abstain() -> None:
     questions = (
         "What battleship was sunk in Havana harbor in 1898?",
         "Which river forms the border between Zimbabwe and South Africa?",
-        "Ernest Borgnine won an Oscar for which film?",
         "Who was prime minister during the reign of which monarch?",
         "Which sport was played at Wimbledon prior to lawn tennis?",
     )
@@ -122,6 +121,15 @@ def test_non_answerable_question_slots_abstain() -> None:
     for question in questions:
         claim = extract_claim_query(f"USER: {question}\n\nASSISTANT: Example.")
         assert claim.predicates == (), question
+
+
+def test_award_work_slot_routes_to_qualified_award_fact() -> None:
+    claim = extract_claim_query(
+        "USER: Ernest Borgnine won one Best Actor Oscar, in 1955 for which film?\n\n"
+        "ASSISTANT: He won for *Marty*."
+    )
+    assert "award received" in claim.predicates
+    assert "Marty" in claim.answer_values
 
 
 def test_saint_alias_and_burial_question_select_direct_fact() -> None:

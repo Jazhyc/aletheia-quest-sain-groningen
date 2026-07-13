@@ -21,7 +21,8 @@ MARKED_RE = re.compile(
     r"(?<!\w)'([^'\n]{3,120})'(?!\w)"
 )
 PROPER_RE = re.compile(
-    r"\b(?:[A-Z][\w’'-]*)(?:\s+(?:of|the|de|del|van|von|and|[A-Z][\w’'-]*)){0,6}"
+    r"\b(?:[A-Z][\w’'-]*)(?:\s+(?:[A-Z][\w’'-]*|"
+    r"(?:(?:of|in|the|de|del|della|van|von|and)\s+)+[A-Z][\w’'-]*)){0,6}"
 )
 YEAR_RE = re.compile(r"\b(?:1[0-9]{3}|20[0-9]{2})\b")
 UNSUPPORTED_RELATION_RE = re.compile(
@@ -35,7 +36,6 @@ UNSUPPORTED_SLOT_RE = re.compile(
     r"\b(?:what|which) (?:battle)?ship (?:was|were) sunk\b|"
     r"\bwhich river forms? (?:the )?border\b|"
     r"\b(?:olympic )?(?:bronze|silver|gold) medal in which (?:athletics )?event\b|"
-    r"\bwon .{0,80}\bfor which (?:film|movie|role|work)\b|"
     r"\bduring the reign of which monarch\b|"
     r"\bwhich sport was played .{0,80}\bprior to\b",
     re.I,
@@ -87,7 +87,7 @@ RELATION_PATTERNS: tuple[tuple[str, re.Pattern[str], tuple[str, ...]], ...] = (
     ),
     (
         "composer",
-        re.compile(r"\b(who composed|composer|composed by|music by|lyrics? by|lyricist)\b", re.I),
+        re.compile(r"\b(who composed|composer|composed by|music by|lyrics? by|lyricist|wrote the lyrics)\b", re.I),
         ("composer", "lyrics by"),
     ),
     (
@@ -107,7 +107,7 @@ RELATION_PATTERNS: tuple[tuple[str, re.Pattern[str], tuple[str, ...]], ...] = (
     ),
     (
         "cast",
-        re.compile(r"\b(who (?:starred|played|portrayed)|cast|actor|actress|starring)\b", re.I),
+        re.compile(r"\b(who (?:starred|played|portrayed|voiced)|cast|actor|actress|starring|character appears)\b", re.I),
         ("cast member", "voice actor", "characters"),
     ),
     (
@@ -122,7 +122,7 @@ RELATION_PATTERNS: tuple[tuple[str, re.Pattern[str], tuple[str, ...]], ...] = (
     ),
     (
         "leadership",
-        re.compile(r"\b(head of (?:state|government)|president|prime minister|military rank|position held)\b", re.I),
+        re.compile(r"\b(head of (?:state|government)|president|prime minister|military rank|position held|which position did .{0,80}\bhold)\b", re.I),
         ("head of state", "head of government", "position held", "military rank"),
     ),
     (
@@ -132,8 +132,17 @@ RELATION_PATTERNS: tuple[tuple[str, re.Pattern[str], tuple[str, ...]], ...] = (
     ),
     (
         "event",
-        re.compile(r"\b(participated|participant|competed|competition|conflict|war|battle|organizer|organised|organized|winners?|won)\b", re.I),
+        re.compile(r"\b(participat(?:e|ed|es|ing|ion)|participant|competed|competition|conflict|war|battle|organizer|organised|organized|winners?|won|major event|event involved)\b", re.I),
         ("participant", "participant in", "conflict", "organizer", "significant event", "winner"),
+    ),
+    (
+        "award",
+        re.compile(
+            r"\b(?:which|what) awards? did .{0,100}\b(?:win|receive)|\baward received\b|"
+            r"\bwon .{0,100}\b(?:oscar|award).{0,100}\bfor which (?:film|movie|role|work)",
+            re.I,
+        ),
+        ("award received",),
     ),
     (
         "cause",
@@ -189,7 +198,7 @@ TYPE_HINTS: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
     (re.compile(r"\b(?:television|tv) series\b", re.I), ("television series", "tv series")),
     (re.compile(r"\bfilm\b", re.I), ("film",)),
     (re.compile(r"\bnovel\b", re.I), ("novel", "literary work")),
-    (re.compile(r"\bplay\b", re.I), ("play", "theatrical work")),
+    (re.compile(r"\b(?:play|playwright)\b", re.I), ("play", "theatrical work")),
     (re.compile(r"\b(?:song|theme tune)\b", re.I), ("song", "musical work", "composition")),
 )
 
@@ -385,11 +394,16 @@ def extract_claim_query(conversation: str) -> ClaimQuery:
             predicates.extend(matched_predicates)
     predicates = refine_predicates(question, predicates)
 
-    first_answer = re.split(r"(?<=[.!?])\s+", answer, maxsplit=1)[0]
+    answer_sentences = re.split(r"(?<=[.!?])\s+", answer)
+    first_answer = answer_sentences[0]
+    # Polished/spokesperson responses often spend the first sentence on a
+    # preamble. Scan a short bounded prefix for the actual proposed value while
+    # retaining the first sentence as the compact claim text.
+    answer_scan = " ".join(answer_sentences[:3])[:600]
     question_marked = marked_spans(question)
-    answer_marked = marked_spans(first_answer)
+    answer_marked = marked_spans(answer_scan)
     question_proper = proper_spans(question)
-    answer_proper = proper_spans(first_answer)
+    answer_proper = proper_spans(answer_scan)
 
     # The subject usually lives in the question (the work, person, or place being
     # queried). Answer entities are useful fallbacks for identity questions but
@@ -399,11 +413,11 @@ def extract_claim_query(conversation: str) -> ClaimQuery:
     )
     answer_values = unique_spans(answer_marked + answer_proper, limit=6)
     qualifiers = unique_spans(
-        YEAR_RE.findall(question + " " + first_answer)
+        YEAR_RE.findall(question + " " + answer_scan)
         + re.findall(
             r"\b(first|last|only|without|before|after|between|longest|shortest|highest|lowest|"
             r"largest|smallest|most|least|never|not)\b",
-            question + " " + first_answer,
+            question + " " + answer_scan,
             flags=re.I,
         ),
         limit=8,
@@ -599,23 +613,28 @@ def query_candidate_entities(
         if normalized != normalize(span):
             query_names.append(normalized)
         for query_name in query_names:
-            expression = fts_expression(query_name, phrase=True, max_tokens=10)
-            if not expression:
-                continue
-            try:
-                rows = connection.execute(sql, (expression, per_query)).fetchall()
-            except sqlite3.OperationalError:
-                continue
-            for row in rows:
-                entity = {
-                    "qid": row[0], "title": row[1], "label": row[1],
-                    "aliases": row[2].split("; ") if row[2] else [],
-                    "description": row[3], "facts": split_facts(row[4]),
-                    "popularity": row[5], "rank": row[6],
-                }
-                score, _ = entity_name_score(entity, claim)
-                if score >= 70:
-                    selected.setdefault(entity["qid"], entity)
+            expressions = [
+                fts_expression(query_name, phrase=True, max_tokens=10),
+                fts_expression(query_name, phrase=False, max_tokens=10),
+            ]
+            selected_before = len(selected)
+            for expression in dict.fromkeys(value for value in expressions if value):
+                try:
+                    rows = connection.execute(sql, (expression, per_query)).fetchall()
+                except sqlite3.OperationalError:
+                    continue
+                for row in rows:
+                    entity = {
+                        "qid": row[0], "title": row[1], "label": row[1],
+                        "aliases": row[2].split("; ") if row[2] else [],
+                        "description": row[3], "facts": split_facts(row[4]),
+                        "popularity": row[5], "rank": row[6],
+                    }
+                    score, _ = entity_name_score(entity, claim)
+                    if score >= 70:
+                        selected.setdefault(entity["qid"], entity)
+                if len(selected) > selected_before:
+                    break
     return list(selected.values())
 
 
