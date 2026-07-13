@@ -79,6 +79,57 @@ training, then measure on validation without adding missed entities. Report:
 Only proceed to a judge/adaptor experiment if the compact frozen index retains
 a clear deceptive-row relevance lift without a comparable honest-row increase.
 
+## Broad frozen-index results
+
+The builder uses no competition examples to select entities. It aggregates
+generally popular English Wikipedia titles across 2021--2024, maps them to
+Wikidata, and adds referenced one-hop entities. The shipped content is limited
+to Wikidata labels, aliases, descriptions, and selected statements. Three
+increasingly broad builds establish the size/coverage curve:
+
+| snapshots | cards | raw SQLite | ZIP contribution |
+| --- | ---: | ---: | ---: |
+| 48 monthly | 29,920 | 16.86 MB | 6.49 MB |
+| 209 weekly | 99,600 | 53.70 MB | 20.52 MB |
+| 1,461 daily | 221,050 | 116.94 MB | 44.77 MB |
+
+The daily build exhausts the distinct popular-page seeds available under this
+sampling scheme before its requested 300,000-card ceiling. The current repository
+packages to 109.45 MB without the database, so adding the daily database projects
+to about 154.22 MB under the same ZIP compression, leaving about 45.78 MB below
+the 200 MB guardrail.
+
+On the original balanced 100-row pilot, offline retrieval from the daily frozen
+index produced the following novel-target-recall results:
+
+| group | real | shuffled | lift |
+| --- | ---: | ---: | ---: |
+| all | 0.0366 | 0.0084 | +0.0282 |
+| honest | 0.0301 | 0.0113 | +0.0187 |
+| deceptive | 0.0432 | 0.0056 | +0.0376 |
+
+The decisive full-cache evaluation covers all 2,877 successfully parsed
+varied-deception training examples (1,440 honest and 1,437 deceptive):
+
+| group | real | shuffled | lift | bootstrap 95% interval | rows with nonzero recall |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| all | 0.032 | 0.009 | +0.0230 | +0.0207 to +0.0253 | 877/2,877 (30.5%) |
+| honest | 0.026 | 0.009 | +0.0176 | +0.0146 to +0.0207 | 333/1,440 (23.1%) |
+| deceptive | 0.039 | 0.010 | +0.0285 | +0.0249 to +0.0320 | 544/1,437 (37.9%) |
+
+The deceptive lift exceeds the honest lift by +0.0109 (row-bootstrap 95%
+interval +0.0064 to +0.0156). This supports a frozen downstream judge ablation:
+the independent compact corpus retrieves genuinely relevant missing facts and
+does so more often on deceptive rows. It does **not** establish that evidence
+improves classification. Honest evidence also has a clear positive relevance
+lift, and the earlier prose-RAG judge lost balanced accuracy by raising FPR.
+The next experiment must therefore compare the exact same frozen judge with and
+without evidence and report recall, FPR, and balanced accuracy; the database
+should not enter `submission/` before that test passes.
+
+Build artifacts and row-level evaluations stay under ignored
+`results/blackbox/wikidata_rag_{broad,weekly,daily}_v1/`.
+
 ## Command
 
 ```bash
@@ -90,3 +141,15 @@ set -a && source .env && set +a
 ```
 
 The access token is optional and is never written to artifacts.
+
+Build and evaluate the selected daily index with:
+
+```bash
+sbatch experiments/wikidata_rag/run_broad_index_daily.sh
+
+.venv/bin/python experiments/wikidata_rag/evaluate_offline_index.py \
+  --database results/blackbox/wikidata_rag_daily_v1/wikidata.sqlite \
+  --input results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/teacher/train.jsonl \
+  --output results/blackbox/wikidata_rag_daily_v1/offline_relevance_full_train.jsonl \
+  --report results/blackbox/wikidata_rag_daily_v1/offline_relevance_full_train.md
+```

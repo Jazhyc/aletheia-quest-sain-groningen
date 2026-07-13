@@ -1,10 +1,37 @@
 from experiments.wikidata_rag.evaluate_retrieval import (
     datavalue,
     extract_conversation,
+    fetch_entities,
     score_record,
     search_queries,
     tokens,
 )
+import requests
+
+
+class FakeResponse:
+    status_code = 200
+    headers = {}
+
+    def __init__(self, payload):
+        self.payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self.payload
+
+
+class FakeSession:
+    def __init__(self, payloads):
+        self.payloads = iter(payloads)
+
+    def get(self, *args, **kwargs):
+        payload = next(self.payloads)
+        if isinstance(payload, Exception):
+            raise payload
+        return FakeResponse(payload)
 
 
 def test_extract_conversation() -> None:
@@ -39,3 +66,21 @@ def test_search_queries_separate_final_user_and_assistant() -> None:
         "The British Foreign Legion was founded in 1831.",
     ]
     assert "USER:" not in " ".join(queries)
+
+
+def test_fetch_entities_retries_structured_maxlag(monkeypatch) -> None:
+    monkeypatch.setattr("experiments.wikidata_rag.evaluate_retrieval.time.sleep", lambda _: None)
+    session = FakeSession([
+        {"error": {"code": "maxlag", "info": "lagged"}},
+        {"entities": {"Q42": {"id": "Q42"}}},
+    ])
+    assert fetch_entities(session, ["Q42"], 0) == {"Q42": {"id": "Q42"}}
+
+
+def test_fetch_entities_retries_connection_error(monkeypatch) -> None:
+    monkeypatch.setattr("experiments.wikidata_rag.evaluate_retrieval.time.sleep", lambda _: None)
+    session = FakeSession([
+        requests.ConnectionError("temporary DNS failure"),
+        {"entities": {"Q42": {"id": "Q42"}}},
+    ])
+    assert fetch_entities(session, ["Q42"], 0) == {"Q42": {"id": "Q42"}}

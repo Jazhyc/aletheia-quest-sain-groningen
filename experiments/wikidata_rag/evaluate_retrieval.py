@@ -14,6 +14,7 @@ import re
 import statistics
 import time
 from typing import Any, Iterable
+import requests
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -104,17 +105,31 @@ def search_queries(conversation: str, max_chars: int = 500) -> list[str]:
 
 
 def request_json(session: Any, url: str, params: dict[str, Any], delay: float) -> dict[str, Any]:
-    for attempt in range(7):
-        response = session.get(url, params=params, timeout=45)
+    for attempt in range(10):
+        try:
+            response = session.get(url, params=params, timeout=45)
+        except requests.RequestException:
+            if attempt == 9:
+                raise
+            time.sleep(min(60.0, 2.0**attempt))
+            continue
         if response.status_code not in {429, 502, 503, 504}:
             response.raise_for_status()
+            data = response.json()
+            error = data.get("error", {})
+            if error.get("code") in {"maxlag", "ratelimited"}:
+                retry = response.headers.get("Retry-After")
+                time.sleep(float(retry) if retry else min(60.0, 2.0**attempt))
+                continue
+            if error:
+                raise RuntimeError(f"API error: {error}")
             if delay:
                 time.sleep(delay)
-            return response.json()
+            return data
         retry = response.headers.get("Retry-After")
         time.sleep(float(retry) if retry else min(60.0, 2.0**attempt))
     response.raise_for_status()
-    raise AssertionError("unreachable")
+    raise RuntimeError("Wikimedia API remained throttled after 10 retries")
 
 
 def search_qids(session: Any, query: str, limit: int, delay: float) -> list[dict[str, str]]:
@@ -139,7 +154,7 @@ def fetch_entities(session: Any, qids: Iterable[str], delay: float) -> dict[str,
     data = request_json(session, ENTITY_URL, {
         "action": "wbgetentities", "ids": "|".join(qids), "languages": "en",
         "languagefallback": 1, "props": "labels|aliases|descriptions|claims",
-        "format": "json", "formatversion": 2, "maxlag": 5,
+        "format": "json", "formatversion": 2,
     }, delay)
     return data.get("entities", {})
 
