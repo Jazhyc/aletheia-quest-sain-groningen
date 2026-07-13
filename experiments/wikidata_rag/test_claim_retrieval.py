@@ -58,6 +58,24 @@ def test_unsupported_directional_relation_abstains() -> None:
     assert claim.predicates == ()
 
 
+def test_extracts_new_border_relation() -> None:
+    claim = extract_claim_query(
+        "USER: Which countries border Tunisia?\n\nASSISTANT: Algeria and Libya border Tunisia."
+    )
+
+    assert "border" in claim.relations
+    assert claim.predicates == ("shares border with",)
+
+
+def test_extracts_new_screenwriter_relation() -> None:
+    claim = extract_claim_query(
+        "USER: Who wrote the screenplay for Chinatown?\n\nASSISTANT: Robert Towne wrote it."
+    )
+
+    assert "screenwriter" in claim.relations
+    assert "screenwriter" in claim.predicates
+
+
 def test_gate_rejects_topical_entity_without_requested_relation() -> None:
     claim = extract_claim_query(
         "USER: In which county is Padstow?\n\nASSISTANT: Padstow is in Devon."

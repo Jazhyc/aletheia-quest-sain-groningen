@@ -25,8 +25,8 @@ PROPER_RE = re.compile(
 )
 YEAR_RE = re.compile(r"\b(?:1[0-9]{3}|20[0-9]{2})\b")
 UNSUPPORTED_RELATION_RE = re.compile(
-    r"\b(border(?:s|ed|ing)?|flows? (?:into|through)|mouth of|near(?:est)?|distance|"
-    r"nickname|moniker|catchphrase|without a safety line|untethered|immediately (?:to the )?"
+    r"\b(flows? (?:into|through)|mouth of|near(?:est)?|distance|"
+    r"catchphrase|without a safety line|untethered|immediately (?:to the )?"
     r"(?:north|south|east|west)|built to house|destination|air disaster|gained (?:its )?"
     r"independence|what year did .{0,80}\bbecome|belonged to)\b",
     re.I,
@@ -72,6 +72,16 @@ RELATION_PATTERNS: tuple[tuple[str, re.Pattern[str], tuple[str, ...]], ...] = (
         ("director",),
     ),
     (
+        "screenwriter",
+        re.compile(r"\b(who (?:wrote the (?:screenplay|script)|scripted)|screenwriter|screenplay|script by)\b", re.I),
+        ("screenwriter",),
+    ),
+    (
+        "composer",
+        re.compile(r"\b(who composed|composer|composed by|music by|lyrics? by|lyricist)\b", re.I),
+        ("composer", "lyrics by"),
+    ),
+    (
         "creator",
         re.compile(r"\b(who (?:created|invented|discovered|developed)|creator|inventor|discoverer)\b", re.I),
         ("creator", "discoverer or inventor", "developer"),
@@ -89,7 +99,42 @@ RELATION_PATTERNS: tuple[tuple[str, re.Pattern[str], tuple[str, ...]], ...] = (
     (
         "cast",
         re.compile(r"\b(who (?:starred|played|portrayed)|cast|actor|actress|starring)\b", re.I),
-        ("cast member",),
+        ("cast member", "voice actor", "characters"),
+    ),
+    (
+        "border",
+        re.compile(r"\b(border(?:s|ed|ing)?|shares? (?:a )?border|neighbou?rs?)\b", re.I),
+        ("shares border with",),
+    ),
+    (
+        "ownership",
+        re.compile(r"\b(who (?:owns|owned|operates)|owned by|owner|operator|parent (?:company|organization)|subsidiar(?:y|ies)|chief executive|\bceo\b|chairperson)\b", re.I),
+        ("owned by", "operator", "parent organization", "subsidiary", "chief executive officer", "chairperson"),
+    ),
+    (
+        "leadership",
+        re.compile(r"\b(head of (?:state|government)|president|prime minister|military rank|position held)\b", re.I),
+        ("head of state", "head of government", "position held", "military rank"),
+    ),
+    (
+        "sport",
+        re.compile(r"\b(which|what) (?:sport|league|position)|\b(sport|league|position played|played as)\b", re.I),
+        ("sport", "league", "position played", "country for sport"),
+    ),
+    (
+        "event",
+        re.compile(r"\b(participated|participant|competed|competition|conflict|war|battle|organizer|organised|organized|winner|won)\b", re.I),
+        ("participant", "participant in", "conflict", "organizer", "significant event", "winner"),
+    ),
+    (
+        "cause",
+        re.compile(r"\b(cause[sd]? (?:of|by)|caused by|cause of death|manner of death|how did .{0,60}\bdie)\b", re.I),
+        ("has cause", "cause of death", "manner of death"),
+    ),
+    (
+        "name",
+        re.compile(r"\b(official name|native name|short name|nickname|moniker|also known as|same as|different from)\b", re.I),
+        ("official name", "name in native language", "short name", "nickname", "name", "said to be the same as", "different from"),
     ),
     (
         "membership",
@@ -99,7 +144,7 @@ RELATION_PATTERNS: tuple[tuple[str, re.Pattern[str], tuple[str, ...]], ...] = (
     (
         "language",
         re.compile(r"\b(language|spoken|translation|english name)\b", re.I),
-        ("official language", "original language"),
+        ("official language", "original language", "native language", "language of work", "languages spoken"),
     ),
     (
         "category",

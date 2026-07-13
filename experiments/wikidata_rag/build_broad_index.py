@@ -296,6 +296,9 @@ def referenced_qids(cards: Iterable[dict[str, Any]]) -> Counter[str]:
         for claim in card.get("claims", []):
             if claim["kind"] == "entity":
                 refs[claim["value"]] += 1
+            for qualifier in claim.get("qualifiers", []):
+                if qualifier["kind"] == "entity":
+                    refs[qualifier["value"]] += 1
     return refs
 
 
@@ -307,19 +310,33 @@ def format_facts(card: dict[str, Any], labels: dict[str, str]) -> str:
             value = labels.get(value, "")
             if not value:
                 continue
-        fact = f"{claim['property']}: {value}"
+        qualifiers = []
+        for qualifier in claim.get("qualifiers", []):
+            qualifier_value = qualifier["value"]
+            if qualifier["kind"] == "entity":
+                qualifier_value = labels.get(qualifier_value, "")
+                if not qualifier_value:
+                    continue
+            qualifiers.append(f"{qualifier['property']}: {qualifier_value}")
+        suffix = f" [{', '.join(qualifiers)}]" if qualifiers else ""
+        fact = f"{claim['property']}: {value}{suffix}"
         if fact not in facts:
             facts.append(fact)
-        if len(facts) == 24:
+        if len(facts) == 32:
             break
     return "; ".join(facts)
 
 
-def build_sqlite(path: Path, cards: dict[str, dict[str, Any]]) -> None:
+def build_sqlite(
+    path: Path,
+    cards: dict[str, dict[str, Any]],
+    extra_labels: dict[str, str] | None = None,
+) -> None:
     if path.exists():
         path.unlink()
     path.parent.mkdir(parents=True, exist_ok=True)
     labels = {qid: card["label"] for qid, card in cards.items()}
+    labels.update(extra_labels or {})
     connection = sqlite3.connect(path)
     connection.executescript("""
         PRAGMA journal_mode=OFF;

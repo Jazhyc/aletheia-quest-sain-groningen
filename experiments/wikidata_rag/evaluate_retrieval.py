@@ -26,29 +26,60 @@ TOKEN_RE = re.compile(r"[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)?")
 # Compact, generally useful properties. Keeping this explicit approximates the
 # eventual submission-sized index better than retaining every Wikidata claim.
 PROPERTY_LABELS = {
-    "P17": "country", "P19": "place of birth", "P20": "place of death",
+    "P6": "head of government", "P17": "country", "P19": "place of birth",
+    "P20": "place of death", "P22": "father", "P25": "mother", "P26": "spouse",
     "P27": "country of citizenship", "P30": "continent", "P31": "instance of",
-    "P36": "capital", "P37": "official language", "P39": "position held",
-    "P40": "child", "P50": "author", "P54": "member of sports team",
-    "P57": "director", "P61": "discoverer or inventor", "P69": "educated at",
+    "P35": "head of state", "P36": "capital", "P37": "official language",
+    "P39": "position held", "P40": "child", "P47": "shares border with",
+    "P50": "author", "P54": "member of sports team", "P57": "director",
+    "P58": "screenwriter", "P61": "discoverer or inventor", "P69": "educated at",
+    "P86": "composer",
     "P101": "field of work", "P102": "political party", "P106": "occupation",
-    "P108": "employer", "P112": "founded by", "P119": "place of burial",
-    "P131": "located in", "P136": "genre", "P138": "named after",
+    "P103": "native language", "P108": "employer", "P112": "founded by",
+    "P118": "league", "P119": "place of burial", "P127": "owned by",
+    "P131": "located in", "P136": "genre", "P137": "operator",
+    "P138": "named after", "P140": "religion", "P162": "producer",
     "P155": "follows", "P156": "followed by", "P159": "headquarters",
-    "P161": "cast member", "P166": "award received", "P170": "creator",
-    "P175": "performer", "P176": "manufacturer", "P178": "developer",
-    "P179": "part of series", "P264": "record label", "P272": "producer",
+    "P161": "cast member", "P166": "award received", "P169": "chief executive officer",
+    "P170": "creator", "P172": "ethnic group", "P175": "performer",
+    "P176": "manufacturer", "P178": "developer", "P179": "part of series",
+    "P180": "depicts", "P190": "twinned administrative body",
+    "P206": "located on physical feature", "P241": "military branch",
+    "P264": "record label", "P272": "production company", "P275": "copyright license",
     "P276": "location", "P279": "subclass of", "P286": "head coach",
-    "P361": "part of", "P364": "original language", "P400": "platform",
-    "P449": "original broadcaster", "P463": "member of", "P495": "country of origin",
-    "P527": "has part", "P551": "residence", "P569": "date of birth",
+    "P287": "designer", "P291": "place of publication", "P306": "operating system",
+    "P344": "director of photography", "P355": "subsidiary", "P361": "part of",
+    "P364": "original language", "P400": "platform", "P407": "language of work",
+    "P410": "military rank", "P413": "position played", "P421": "time zone",
+    "P449": "original broadcaster", "P460": "said to be the same as",
+    "P463": "member of", "P488": "chairperson", "P495": "country of origin",
+    "P509": "cause of death", "P527": "has part", "P551": "residence",
+    "P569": "date of birth",
     "P570": "date of death", "P571": "inception", "P576": "dissolved or abolished",
     "P577": "publication date", "P580": "start time", "P582": "end time",
-    "P585": "point in time", "P740": "location of formation", "P800": "notable work",
-    "P840": "narrative location", "P915": "filming location", "P937": "work location",
+    "P585": "point in time", "P607": "conflict", "P641": "sport",
+    "P664": "organizer", "P674": "characters", "P676": "lyrics by",
+    "P710": "participant", "P725": "voice actor", "P740": "location of formation",
+    "P749": "parent organization", "P793": "significant event", "P800": "notable work",
+    "P828": "has cause", "P840": "narrative location", "P915": "filming location",
+    "P921": "main subject", "P937": "work location", "P1029": "crew member",
+    "P1037": "director or manager", "P1196": "manner of death",
+    "P1344": "participant in", "P1346": "winner", "P1365": "replaces",
+    "P1366": "replaced by", "P1412": "languages spoken", "P1441": "present in work",
+    "P1448": "official name", "P1449": "nickname", "P1532": "country for sport",
+    "P1559": "name in native language", "P1813": "short name",
+    "P1889": "different from", "P2561": "name",
     "P1082": "population", "P1120": "number of deaths", "P2044": "elevation",
     "P2046": "area", "P2047": "duration", "P2120": "radius",
     "P2130": "cost", "P2142": "box office",
+}
+
+# Qualifiers supply the scope that is often essential for checking a statement,
+# but keeping this list small avoids turning cards into indiscriminate claim dumps.
+QUALIFIER_LABELS = {
+    "P459": "determination method", "P518": "applies to part", "P580": "start time",
+    "P582": "end time", "P585": "point in time", "P642": "of",
+    "P1545": "series ordinal",
 }
 
 STOPWORDS = {
@@ -180,7 +211,7 @@ def entity_stub(entity: dict[str, Any]) -> dict[str, Any]:
     label = entity.get("labels", {}).get("en", {}).get("value", "")
     aliases = [row.get("value", "") for row in entity.get("aliases", {}).get("en", [])]
     description = entity.get("descriptions", {}).get("en", {}).get("value", "")
-    claims: list[dict[str, str]] = []
+    claims: list[dict[str, Any]] = []
     for pid, statements in entity.get("claims", {}).items():
         if pid not in PROPERTY_LABELS:
             continue
@@ -190,8 +221,24 @@ def entity_stub(entity: dict[str, Any]) -> dict[str, Any]:
             parsed = datavalue(statement.get("mainsnak", {}))
             if parsed:
                 kind, value = parsed
-                claims.append({"property": PROPERTY_LABELS[pid], "kind": kind, "value": value})
-    return {"label": label, "aliases": aliases[:8], "description": description, "claims": claims}
+                qualifiers = []
+                for qualifier_pid, snaks in statement.get("qualifiers", {}).items():
+                    if qualifier_pid not in QUALIFIER_LABELS:
+                        continue
+                    for snak in snaks[:2]:
+                        qualifier = datavalue(snak)
+                        if qualifier:
+                            qualifier_kind, qualifier_value = qualifier
+                            qualifiers.append({
+                                "property": QUALIFIER_LABELS[qualifier_pid],
+                                "kind": qualifier_kind,
+                                "value": qualifier_value,
+                            })
+                claims.append({
+                    "property": PROPERTY_LABELS[pid], "kind": kind, "value": value,
+                    "qualifiers": qualifiers,
+                })
+    return {"label": label, "aliases": aliases[:12], "description": description, "claims": claims}
 
 
 def resolve_records(session: Any, linked: list[dict[str, str]], delay: float) -> list[dict[str, Any]]:
@@ -201,6 +248,13 @@ def resolve_records(session: Any, linked: list[dict[str, str]], delay: float) ->
         claim["value"] for stub in stubs.values() for claim in stub["claims"]
         if claim["kind"] == "entity"
     }
+    object_ids.update(
+        qualifier["value"]
+        for stub in stubs.values()
+        for claim in stub["claims"]
+        for qualifier in claim.get("qualifiers", [])
+        if qualifier["kind"] == "entity"
+    )
     objects = fetch_entities(session, sorted(object_ids), delay)
     object_labels = {
         qid: entity.get("labels", {}).get("en", {}).get("value", qid)
@@ -211,12 +265,18 @@ def resolve_records(session: Any, linked: list[dict[str, str]], delay: float) ->
         stub = stubs.get(link["qid"])
         if not stub:
             continue
-        facts = [
-            f"{claim['property']}: {object_labels.get(claim['value'], claim['value'])}"
-            if claim["kind"] == "entity" else f"{claim['property']}: {claim['value']}"
-            for claim in stub.pop("claims")
-        ]
-        records.append({**link, **stub, "facts": facts[:24]})
+        facts = []
+        for claim in stub.pop("claims"):
+            value = object_labels.get(claim["value"], claim["value"]) \
+                if claim["kind"] == "entity" else claim["value"]
+            qualifiers = []
+            for qualifier in claim.get("qualifiers", []):
+                qualifier_value = object_labels.get(qualifier["value"], qualifier["value"]) \
+                    if qualifier["kind"] == "entity" else qualifier["value"]
+                qualifiers.append(f"{qualifier['property']}: {qualifier_value}")
+            suffix = f" [{', '.join(qualifiers)}]" if qualifiers else ""
+            facts.append(f"{claim['property']}: {value}{suffix}")
+        records.append({**link, **stub, "facts": facts[:32]})
     return records
 
 
