@@ -1,5 +1,9 @@
 # Compact Wikidata RAG
 
+The canonical method decisions and frozen result summary are documented in
+`docs/wikidata_rag/README.md`; this directory contains executable experiment
+code, tests, and command examples.
+
 This experiment tests whether a submission-sized, CC0 Wikidata fact index can
 supply missing factual evidence to the black-box deception judge. It supersedes
 the earlier Wikipedia-snippet pilot only at the retrieval layer; the earlier
