@@ -8,7 +8,6 @@
   "n_blocks": 2,
   "dropout": 0.1,
   "batch_token_budget": 8192,
-  "threshold": 0.0672,
   "extract_token_budget": 512,
   "extract_max_batch": 1
 }

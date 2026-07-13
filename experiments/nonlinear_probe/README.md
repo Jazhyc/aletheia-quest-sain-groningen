@@ -478,41 +478,64 @@ after the initial sweep crashed with NaN scores.
   number — and the leaderboard gap to the black-box baseline (0.833) is
   substantial.
 
-## Phase 3 — deployment and threshold calibration
+## Phase 3 — deployment and thresholding
 
-**Deployment notebook:** `submission/whitebox_probe.ipynb`
+**Deployment notebook:** `submission/sonic_v1.ipynb`
 
 The notebook reads a hidden dataset via the competition API (`DATASET_NAME`,
-`ALETHEIA_LIMIT`), loads the correct base model (Qwen or gemma) via NNsight
-on the competition A100, extracts L46 response-token activations, runs the
-transformer token probe, and writes `submission.csv`.
+`ALETHEIA_LIMIT`), picks the probe matching the dataset's base model (qwen,
+gemma or nemotron), loads that model via NNsight on the competition A100,
+extracts L46 response-token activations, runs the transformer token probe,
+and writes `submission.csv`. The LoRA organisms reuse their base model's
+probe — the adapter is applied before tracing, so the activations are the
+organism's, but the method and weights are shared across a family. This is
+required: the competition mandates a single method across all models.
 
-**Probe weights** are bundled at `submission/whitebox_probe/{qwen,gemma}_probe/`
-(~3.6 MB each), containing the trained transformer encoder, standardization
-moments (`feature_mean.pt`, `feature_std.pt`) and a `config.json`. Extraction
-+ scoring runs in under 2 minutes on an A100-80GB.
+**Probe weights** are bundled at
+`submission/whitebox_probe/{qwen,gemma,nemotron}_probe/` (~3.6 MB each),
+containing the trained transformer encoder, standardization moments
+(`feature_mean.pt`, `feature_std.pt`) and a `config.json`. Weights cannot be
+shared across families because the hidden sizes differ (qwen 5120, gemma
+5376, nemotron 4096); the method, features, architecture and training
+procedure are identical. Extraction + scoring runs in under 2 minutes on an
+A100-80GB.
 
-### Threshold calibration
+**Training data of the shipped weights** (recovered by replaying `fit`'s
+stratified 0.15 split and matching `feature_mean`/`feature_std` exactly, to
+0.00000 — the `.pt` files are gitignored, so this is the only provenance we
+have):
 
-Per-dataset optimal thresholds estimated via 5-fold stratified CV on the
-Qwen dev data, using out-of-fold scores from the transformer token L46 probe:
+| probe | fit on | examples |
+|---|---|---|
+| qwen | all 19 Qwen dev sets (instructed + varied, incl. both `-None`) | 7600 |
+| gemma | all 3 gemma dev sets | 1200 |
+| nemotron | the single nemotron cache | 216 |
 
-| dataset | BA@0.5 | BA@optimal | optimal threshold |
-|---|---|---|---|
-| instructed (10 datasets) | 0.987–1.000 | 0.990–1.000 | 0.33–0.94 |
-| varied None | 0.925 | **0.935** | 0.77 |
-| varied a-mo-1 | 0.733 | **0.740** | 0.25 |
-| varied a-mo-3 | 0.738 | **0.762** | 0.13 |
-| varied a-mo-4 | 0.808 | **0.820** | 0.26 |
-| varied a-mo-5 | 0.910 | **0.912** | 0.49 |
-| varied a-mo-6 | 0.835 | **0.842** | 0.52 |
-| varied a-mo-7 | 0.830 | **0.840** | 0.58 |
-| varied b-mo | 0.905 | **0.912** | 0.61 |
-| varied c-mo | 0.940 | **0.950** | 0.71 |
+### Select on splits, ship on everything
 
-Macro BA lifts from 0.922 (global threshold 0.5) to **0.929** (per-dataset
-optimal). The global optimal threshold is 0.50–0.60 (BA=0.922). Hidden
-datasets fall back to 0.5, which is near-optimal globally.
+The sweeps and the shipped probes deliberately use the data differently:
+
+| | data used | purpose |
+|---|---|---|
+| **Phases 1–2 (sweeps)** | held-out splits: cross-scenario (fit `varied` → score `instructed`, and the reverse), 5-fold CV for gemma | *estimate* generalization → choose layer, pooling and architecture |
+| **Phase 3 (shipped)** | all dev data for that model family | *maximise* probe quality once nothing is left to choose |
+
+This is the intended order, not an oversight. Splits exist to pick the
+configuration; once L46 + transformer token probe is settled, refitting on
+every available row makes the best probe, and there is no longer a selection
+decision that a holdout would protect.
+
+It does not leak into the leaderboard: the graded datasets (Metis, Eunomia,
+Notus, Iris) are hidden and disjoint from the `dev-*` collections, which are
+exactly the data we are permitted to train on.
+
+What it does cost is the ability to re-estimate accuracy from the shipped
+artefacts. Every dev dataset is training data for its probe, and while `fit`
+holds out 15%, those rows drive early stopping and best-weight selection, so
+no untouched holdout survives. Scoring a shipped probe on a dev set is
+therefore in-sample — it reads ≈0.96–0.99 BA and is only a smoke test
+(weights load, threshold sits sensibly). **For the expected score, use the
+split-based numbers: 0.876 cross-scenario, ≈0.92 deployment-realistic.**
 
 ## Reproduction
 
@@ -531,7 +554,9 @@ python experiments/nonlinear_probe/nonlinear_sweep.py
 # Phase 2b: token-level probes (attention, cnn, transformer) — GPU needed
 python experiments/nonlinear_probe/token_sweep.py
 
-# Phase 3: train final probes on all dev data and calibrate thresholds
+# Phase 3: train the final qwen/gemma probes on all dev data (thresholded at
+# 0.5 — see "Thresholding: use 0.5, do not tune" above; the table this block
+# once calibrated is kept there as the argument against tuning)
 python -c "
 import sys; sys.path.insert(0, 'experiments/nonlinear_probe')
 from pathlib import Path
@@ -539,7 +564,11 @@ from token_probes import TokenProbe
 import numpy as np, torch, json
 
 device = 'cuda'
-for base_model, paths in [('qwen', sorted(Path('results/whitebox/activations').glob('*qwen*.tokens.npz'))),
+# NB: glob 'Qwen' with a capital Q. The dataset ids spell the base model
+# 'Qwen3.5-27B'; only the LoRA suffixes carry a lowercase 'qwen', so a
+# '*qwen*' glob silently drops both -None base datasets (17 files, not 19)
+# and does NOT reproduce the shipped probe (verified against its moments).
+for base_model, paths in [('qwen', sorted(Path('results/whitebox/activations').glob('*Qwen*.tokens.npz'))),
                            ('gemma', sorted(Path('results/whitebox/activations').glob('*gemma*.tokens.npz')))]:
     fp, op, lp = [], [], 0
     for p in paths:
