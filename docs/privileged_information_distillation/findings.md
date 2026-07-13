@@ -695,6 +695,26 @@ threshold or blend improves balanced accuracy on held-out data. The full
 implementation remains in commit `eabc519` on branch
 `experiment/pid-continuous-margin`.
 
+## Rule-based claim-gated Wikidata follow-up
+
+A CPU-only extractor mapped explicit question forms to retained Wikidata
+predicates, linked only the primary question subject, and abstained on
+unsupported, ambiguous, or wrong-type entities. Iteration used extraction and
+training-summary retrieval audits rather than validation labels. It passed
+118/2,880 training rows (4.1%); on covered parsed rows, evidence precision rose
+from 0.089 for broad three-card retrieval to 0.433, while conditional novel
+target recall fell from 0.042 to 0.026.
+
+The frozen validation gate passed only 8/360 varied rows. Job `30134337` scored
+0.8000 varied BA, but none of those eight rows changed prediction relative to
+the original adapter run. All nine prediction changes occurred on abstained
+rows and therefore reflect replay variation. The focused facts were cited in
+reasoning but merely reinforced existing decisions; they did not recover the
+remaining false supporting details. Do not regenerate evidence-aware teacher
+traces or retrain from this gate. The implementation is retained as a cheap,
+auditable prototype, but the next retrieval attempt needs materially broader
+claim-level coverage rather than a looser relevance threshold.
+
 ## Next measurements
 
 1. Investigate whether varied-only specialization gains persist on additional

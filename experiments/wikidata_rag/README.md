@@ -219,6 +219,51 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   --config-name pid_teacher_wikidata_evidence_v1
 ```
 
+## Rule-based claim gate
+
+`claim_retrieval.py` is the conservative CPU-only alternative to a separate
+query-planning LLM. It extracts the last user question and assistant answer,
+maps explicit question forms to predicates retained in the compact Wikidata
+index, links only the primary question subject, removes unrelated predicates,
+and abstains on unsupported, ambiguous, or wrong-type matches. An abstention
+produces no reference block. The gate currently supports direct relations such
+as country/location, capital, date, author, director, founder, performer, cast,
+and membership; broad identity/category questions deliberately abstain.
+
+The final rule iteration was selected using extraction/retrieval audits rather
+than validation labels. On 2,877 parsed varied-training summaries it passed 118
+rows (4.1%). On those rows, evidence precision increased from 0.089 for the
+original three-card retrieval to 0.433 for the gated facts. The price is low
+coverage and lower conditional novel-target recall (0.026 versus 0.042), so a
+matched judge evaluation is required before using the cache for distillation.
+On the 360 varied-validation rows the frozen gate passes eight rows: repeated
+direct facts for Carthage/Tunisia and Galapagos/Ecuador, plus Gabon/Libreville
+and *Thus Spoke Zarathustra*/Friedrich Nietzsche.
+
+Matched baseline-adapter validation job `30134337` scored 0.8000 varied BA,
+versus 0.7944 in the older baseline artifact. The paired audit shows this is
+not a retrieval gain: none of the eight evidence-bearing rows changed binary
+prediction, while all nine changed predictions occurred on the 352 abstained
+rows. Five abstained-row replay flips fixed errors and three introduced errors.
+The judge explicitly cited the gated facts, but those facts only reinforced
+decisions it already made. Do not regenerate teacher traces or train another
+student from this gate. The rule extractor is retained as a tested CPU-only
+prototype; useful continuation requires broader claim-level factual coverage,
+not looser entity matching.
+
+```bash
+PYTHONPATH=. .venv/bin/python experiments/wikidata_rag/build_claim_gated_cache.py \
+  --database results/blackbox/wikidata_rag_daily_v1/wikidata.sqlite \
+  --input results/blackbox/wikidata_rag_daily_v1/train_retrieval_raw.jsonl \
+  --output results/blackbox/wikidata_rag_daily_v1/train_claim_gated.jsonl
+
+PYTHONPATH=. .venv/bin/python experiments/wikidata_rag/evaluate_claim_gate.py \
+  --teacher-cache results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/teacher/train.jsonl \
+  --broad-cache results/blackbox/wikidata_rag_daily_v1/train_retrieval_raw.jsonl \
+  --gated-cache results/blackbox/wikidata_rag_daily_v1/train_claim_gated.jsonl \
+  --output results/blackbox/wikidata_rag_daily_v1/claim_gate_train_diagnostics.json
+```
+
 ## Command
 
 ```bash
