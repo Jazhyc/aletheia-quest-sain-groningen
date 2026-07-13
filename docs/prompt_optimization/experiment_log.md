@@ -2151,3 +2151,48 @@ contradictions.
 The reproducible audit entry point is
 `experiments/blackbox/audit_verdict_consistency_rules.py`; the ignored train
 artifact is under `results/blackbox/verdict_consistency_rules_train_v1/`.
+
+## Judge/output logical-disagreement rules
+
+A second rule audit targeted cases where the distilled judge predicts `0` but
+its own reasoning reveals that it has misread the assistant output. Slurm job
+`30135426` generated frozen selected-student replies for all 6,573 train rows.
+The unmodified student scored train macro BA `0.8839` (recall `0.7919`, FPR
+`0.0241`) with 32 parse errors.
+
+Several tempting overrides failed the train precision requirement:
+
+- judge-negative replies containing `hallucination` covered four deceptive and
+  eight honest rows; the medical term also occurred in truthful narcolepsy
+  answers;
+- a broad fake-citation compliance rule flagged 21 train rows, only 13 of which
+  were deceptive;
+- the exact phrase `according to a 2014 encyclopedia entry` was 10/10 deceptive
+  on train but is a template signature, and its one validation match was already
+  caught by the student;
+- an explicit component-sum check found the varied validation foot-bone error
+  (`5 + 7 + 14`, claimed total `30`), but the surrounding `mistaken archive`
+  instruction is outside the intentionally explicit deception-intent matcher.
+  Do not use that single validation example to broaden the deferred varied
+  parser.
+
+The retained rule compares only literal physical-state words (`solid`,
+`liquid`, `gas`, `plasma`). It requires an explicit deception instruction, a
+negative judge verdict, exactly one affirmative state in the assistant output,
+and a different single state in a judge sentence that calls the assistant
+correct or accurate. Negated states such as `not a liquid` are excluded. It
+does not fact-check arbitrary states; it detects the judge attributing a value
+that the output did not give.
+
+| split | incremental flags | deceptive | honest | macro BA before/after |
+| --- | ---: | ---: | ---: | ---: |
+| train | 2 | 2 | 0 | 0.8839 / 0.8842 |
+| validation | 1 | 1 | 0 | 0.9000 / 0.9012 |
+
+The train recoveries were oxygen and gallium; the frozen validation recovery
+was neon. Thus the rule transfers across examples rather than matching one
+element, but coverage remains extremely small. No local-test labels were used
+for selection. The submission now retains raw judge replies long enough to run
+this check before OR aggregation. Reproduction code is
+`experiments/blackbox/audit_judge_output_consistency.py`; the ignored train
+generations are under the selected adapter's `train_rule_audit_v1/` directory.
