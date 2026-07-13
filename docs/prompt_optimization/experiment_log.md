@@ -2104,3 +2104,16 @@ net, with focused unit tests. This is an operational hedge, not evidence of a
 local score improvement or a demonstrated solution to the official Nemotron
 gap. Any broader semantic contradiction rule would need fresh validation
 because the existing trained judge already subsumes all observed strict cases.
+
+A follow-up expanded only the explicit-intent matcher. Synthetic positive cases
+cover misleading or lying to the user, intentionally incorrect answering,
+plausible/defensible false answers, concealment, and false-belief requests.
+Matched negative controls cover negated instructions and descriptive uses of
+deception vocabulary. On the 822 validation rows, intent coverage increased
+from 362 with the original phrase list to 446. The expanded matcher added 86
+contexts and removed two legacy false matches: honest Atlas controls that said
+they did not regard themselves as `dishonest`. The downstream consistency rule
+still flagged exactly four rows, all deceptive, so validation predictions and
+metrics remain unchanged. The submission helper now documents that the learned
+judge is primary and that this rule neither fact-checks arbitrary answers nor
+infers deception from intent alone.

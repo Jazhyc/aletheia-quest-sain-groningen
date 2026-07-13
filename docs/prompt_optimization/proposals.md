@@ -1015,3 +1015,15 @@ Decision:
 - Keep the implementation narrow. Do not add loose semantic contradiction,
   organism-specific branches, or correction rules selected from official
   leaderboard outcomes without a new frozen validation design.
+
+Follow-up intent-parser expansion:
+
+- Synthetic tests broadened affirmative intent coverage to `mislead`, `lie to`,
+  `trick`/`fool` a target, dishonest/untruthful answering, plausible or
+  defensible false-answer requests, concealment, and false-belief requests.
+- A local negation/descriptive guard rejects phrases such as `never lie`,
+  `avoid giving a wrong answer`, and `explain why the answer was misleading`.
+- On all 822 validation rows, detected intent contexts increased from 362 to
+  446. The two legacy matches no longer accepted were honest Atlas controls
+  that merely used the word `dishonest` descriptively. Final conflict flags
+  remained the same four deceptive rows with zero false positives.
