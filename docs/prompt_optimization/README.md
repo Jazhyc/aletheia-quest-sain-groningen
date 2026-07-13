@@ -45,10 +45,12 @@ Submission mapping:
   with the cached `text_probe_ngram_v1` model. The submission threshold is
   `0.566666666667`, selected on validation for the per-dataset rank ensemble.
   On the local test split this scored 0.8655 balanced accuracy and 0.9068 AUROC.
-- `submission/phoenix_wright_v1_3.ipynb` is the current single-judge generated
-  NDIF submission candidate. It uses Qwen/Qwen3.5-9B through nnsight
-  `model.generate`, asks the reasoning-output consistency prompt once per row,
-  parses `Rating: 1..7`, and thresholds the normalized rating at 0.5.
+- `submission/phoenix_wright_v2_2.ipynb` is the current single-judge generated
+  NDIF submission. It uses the bundled Phoenix v2.1 varied-only
+  privileged-information-distillation adapter through NNsight `model.generate`,
+  parses `Prediction:0|1`, and applies the train-refined verdict/explanation
+  contradiction override under an explicit instruction to deceive. The v2.2
+  label describes submission logic; the trained adapter remains v2.1.
 - `submission/phoenix_wright_v1.ipynb` was the previous accuracy-first generated
   reasoning notebook for `qwen_reason_ensemble_dks_member4096_v1`; it was removed
   from `submission/` because the official runs were timing out before producing

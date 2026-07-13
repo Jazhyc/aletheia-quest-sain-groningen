@@ -2197,3 +2197,18 @@ hard-coding states of matter, and the evidence does not support a general
 judge/output disagreement rule. No local-test labels were used. Reproduction code is
 `experiments/blackbox/audit_judge_output_consistency.py`; the ignored train
 generations are under the selected adapter's `train_rule_audit_v1/` directory.
+
+## Phoenix Wright v2.2 official submission
+
+The submission notebook was versioned from v2.1 to
+`submission/phoenix_wright_v2_2.ipynb`. The bundled trained adapter remains
+Phoenix v2.1; v2.2 identifies the submission-time logic added afterward:
+
+- the explicit-deception intent matcher expanded and stress-tested on all 6,573
+  train rows;
+- the train-refined verdict/explanation contradiction rule remains a
+  hard-positive override;
+- the ontology-specific physical-state experiment is not included.
+
+The rename preserves the single-notebook contract. Python parser tests and
+notebook JSON/code-cell validation passed before the official run.
