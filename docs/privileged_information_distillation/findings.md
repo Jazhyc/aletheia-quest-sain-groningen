@@ -920,6 +920,37 @@ a jointly evidence-trained reader. If retrieval is revisited, train that consume
 with balanced useful, empty, shuffled, and misleading evidence rather than
 scaling the gate again.
 
+The transfer-focused MiniLM follow-up (jobs `30139829`, `30140074`, and
+`30140075`) held model capacity fixed while screening seven supervision targets,
+three ranking losses, three abstention-score policies, reader-score query
+representations, bottom-layer freezing, and learning rate. Selection used the
+minimum BA delta across calibration and grouped internal test before their mean;
+frozen validation never entered the ordering. A zero-candidate hard-listwise
+edge case found by the GPU smoke was fixed and regression-tested.
+
+The best utility refinement uses controlled continuous utility, pairwise loss,
+a coarse reader-confidence bucket, no frozen layers, `3e-5`, and epoch one. It
+improves calibration/internal BA by +0.0037/+0.0053 and frozen BA/AUROC by
++0.0028/+0.0024, but novel BA is unchanged. Its controlled-positive precision
+falls from 0.605 calibration to 0.478 internal and 0.471 frozen. The semantic
+decisiveness branch reaches 0.9907 novel candidate AUROC but emits no novel facts
+at its training-calibrated threshold. This separates ranking from calibration:
+MiniLM can recognize relation-level relevance, but neither semantic supervision
+nor listwise abstention yet converts that into useful held-out reader decisions.
+Do not lower the semantic threshold from frozen labels or infer that high
+candidate AUROC is sufficient for RAG deployment.
+
+Final MiniLM checks do not change that decision. The predeclared three-seed
+refit/weight soup (job `30140655`) scores +0.0045 calibration BA, +0.0028 frozen
+BA, +0.0031 frozen AUROC, and 0 novel BA/AUROC change. Seeds 43 and 44 calibrate
+to complete abstention, while seed 42 has no frozen BA change; averaging all
+three retains only the same one-net-decision frozen gain seen before refit.
+Semantic-checkpoint initialization followed by controlled-utility tuning (job
+`30140661`) selects complete abstention on every split and raises novel utility-
+candidate AUROC only to 0.5774. This exhausts the programmatic MiniLM variants
+worth testing on the current cache. Do not spend a generated-reader evaluation,
+quantization/package work, or test-set evaluation on this gate.
+
 
 ## Next measurements
 

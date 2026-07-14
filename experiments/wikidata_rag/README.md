@@ -504,6 +504,59 @@ the code as a reproducible capacity diagnostic; do not package either model.
 See `docs/wikidata_rag/README.md` for checkpoint-selection cautions and the
 evidence-consumer interpretation.
 
+The transfer-focused MiniLM follow-up broadens the objective rather than the
+network. It compares continuous and binary reader utility, label-free reader
+score movement, and masked GPT-OSS `decisive`/`relevant` supervision. Pairwise
+regression is compared with hard and soft listwise ranking against an explicit
+no-evidence action. Exact question groups remain disjoint, each configuration
+uses the same initialization/shuffle/dropout seed, and selection maximizes the
+worst BA change across the calibration and grouped internal-test folds before
+using their mean as a tie-break. The frozen validation and novel-question rows
+are reported but never enter checkpoint selection.
+
+```bash
+sbatch experiments/wikidata_rag/run_cross_encoder_utility.sh \
+  --input results/blackbox/wikidata_rag_counterfactual_utility_v1/train.jsonl \
+  --validation-input results/blackbox/wikidata_rag_counterfactual_utility_v1/validation.jsonl \
+  --model-name cross-encoder/ms-marco-MiniLM-L6-v2 \
+  --output-dir results/blackbox/wikidata_rag_cross_encoder_minilm_v2_screen \
+  --targets controlled_utility utility binary_utility controlled_binary_utility \
+            score_delta semantic_decisive semantic_relevant \
+  --loss-modes pairwise hard_listwise soft_listwise \
+  --learning-rates 3e-5 --epochs 2 --selection-mode robust
+
+sbatch experiments/wikidata_rag/run_refit_cross_encoder_utility.sh \
+  --input results/blackbox/wikidata_rag_counterfactual_utility_v1/train.jsonl \
+  --validation-input results/blackbox/wikidata_rag_counterfactual_utility_v1/validation.jsonl \
+  --sweep-report results/blackbox/wikidata_rag_cross_encoder_minilm_v2_refine_utility/report.json \
+  --output-dir results/blackbox/wikidata_rag_cross_encoder_minilm_v2_refit
+```
+
+The refinement stage also ablates the raw decimal reader score against a coarse
+confidence bucket and no reader score, plus bottom-layer freezing and learning
+rate. Every checkpoint additionally compares the raw fact-versus-no-evidence
+margin with candidate-count-adjusted and listwise-softmax confidence; these
+preserve within-row ranking while correcting the fact-count bias in a global
+abstention threshold and require no additional forward passes. The final refit
+uses the selected epoch count, combines the original train
+and grouped internal-test folds, retains calibration untouched, trains three
+predeclared seeds, and averages all three state dictionaries rather than
+choosing a seed post hoc.
+
+Jobs `30139829`, `30140074`, and `30140075` completed the screen and refinements.
+The grouped-fold utility winner uses controlled utility, pairwise loss, a coarse
+reader-confidence bucket, no frozen layers, `3e-5`, and epoch one. It improves
+calibration/internal BA by +0.0037/+0.0053 and frozen BA/AUROC by
++0.0028/+0.0024, with unchanged novel BA. The semantic winner reaches 0.9907
+novel decisive-candidate AUROC but emits no novel rows at its training-calibrated
+threshold.
+
+Three-seed refit/soup job `30140655` finishes at +0.0028 frozen BA and +0.0031
+frozen AUROC, again with no novel decision change. Semantic-then-utility job
+`30140661` calibrates to complete abstention. These results are too small for a
+full-generation or packaging follow-up; see `docs/wikidata_rag/README.md` for
+the complete selection and split metrics.
+
 
 ```bash
 PYTHONPATH=. .venv/bin/python experiments/wikidata_rag/build_claim_gated_cache.py \

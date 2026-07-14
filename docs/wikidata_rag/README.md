@@ -296,3 +296,64 @@ selecting facts for the current evidence-naive distilled reader, not for a
 reader trained to use evidence. A future revisit should change the consumer and
 training distribution together, using balanced useful, empty, shuffled, and
 misleading evidence with explicit use/ignore/contradict supervision.
+
+### Transfer-focused MiniLM follow-up
+
+The requested MiniLM follow-up changes the supervision, loss, calibration, and
+input representation while holding the 22.7M-parameter network fixed. Job
+`30139829` screened continuous raw/controlled utility, binary rescue/harm,
+label-free reader-score movement, and masked GPT-OSS semantic decisiveness and
+relevance. Pairwise, hard-listwise, and soft-listwise losses all rank facts
+against an explicit no-evidence action. Every checkpoint also compares raw
+fact/no-evidence margin, candidate-count adjustment, and listwise-softmax
+confidence without another forward pass. Configuration selection maximizes the
+worst BA delta across calibration and grouped internal test, then their mean;
+frozen validation is reporting-only.
+
+The first GPU smoke exposed rows with no retrieved candidates. Hard-listwise
+training now treats these as zero-loss no-evidence rows, with a regression test.
+The corrected screen completed 126 policy evaluations. Jobs `30140074` and
+`30140075` then refined the strongest utility and semantic branches over query
+score representation, bottom-layer freezing, learning rate, and three epochs.
+
+| grouped-fold-selected checkpoint | calibration BA delta | internal BA delta | frozen BA delta | novel BA delta | novel candidate AUROC |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| broad screen: controlled binary, pairwise, epoch 1 | +0.0050 | +0.0032 | 0.0000 | 0.0000 | 0.4595 |
+| utility refinement: controlled utility, score bucket, `3e-5`, epoch 1 | +0.0037 | **+0.0053** | +0.0028 | 0.0000 | 0.5470 |
+| semantic refinement: decisive, hard listwise, `3e-5`, epoch 2 | +0.0017 | +0.0014 | +0.0028 | 0.0000 | **0.9907** |
+
+The utility winner emits 38/555 calibration, 46/619 grouped internal, and
+17/360 frozen rows. Controlled-positive precision declines from 0.605 to 0.478
+and 0.471 respectively, yet the selected evidence magnitudes still yield small
+positive BA and AUROC changes. Only one novel-question row is emitted and its
+reader utility is negative without changing the binary decision. The coarse
+reader-confidence bucket is better than a raw decimal or omitting reader state;
+freezing lower layers is not selected.
+
+The semantic model cleanly learns relation decisiveness on novel questions but
+cannot transport its abstention scale: its training-calibrated threshold emits
+zero of 65 novel rows despite 0.9907 candidate AUROC and 0.7572 average
+precision there. Do not lower this threshold from frozen labels.
+
+Job `30140655` refit the utility winner on 80% of question groups with seeds 42,
+43, and 44, retained the other 20% for calibration, and averaged all three state
+dictionaries without seed selection. Seeds 43 and 44 calibrate to complete
+abstention; seed 42 emits 9/360 frozen rows but does not change frozen BA. The
+predeclared soup emits 43/555 calibration, 22/360 frozen, and 2/65 novel rows.
+It scores +0.0045 calibration BA, +0.0028 frozen BA, +0.0031 frozen AUROC, and
+unchanged novel BA/AUROC. Thus refitting and averaging preserve the one-net-
+decision frozen improvement but do not strengthen it.
+
+Job `30140661` initialized from the selected semantic checkpoint and then tuned
+controlled utility at `1e-5` and `3e-5` for two epochs. Its grouped-fold-selected
+checkpoint abstains on every calibration, internal, frozen, and novel row. The
+semantic initialization raises novel utility-candidate AUROC only to 0.5774 and
+does not solve cross-objective calibration.
+
+This closes the MiniLM optimization pass. Relative to the first MiniLM result,
+the selected soup raises frozen BA delta from 0 to +0.0028 and AUROC delta from
++0.0022 to +0.0031, but novel decisions remain unchanged and the effect is only
+one net frozen correction. Do not package the 91.6 MB FP32 model, reclaim space
+for quantization, or launch another generated-reader sweep from this result.
+Further progress needs new independent question groups and an evidence-trained
+consumer, not more tuning of this evidence-naive reader's utility gate.

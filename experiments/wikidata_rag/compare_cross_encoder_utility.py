@@ -15,7 +15,9 @@ def selected_checkpoint(report: dict[str, Any]) -> dict[str, Any]:
         if checkpoint.get("stage") != "fine_tuned":
             continue
         if all(checkpoint.get(key) == selected.get(key) for key in (
-            "target", "learning_rate", "epoch",
+            "target", "loss_mode", "query_mode", "score_mode",
+            "frozen_bottom_layers",
+            "learning_rate", "epoch",
         )):
             return checkpoint
     raise ValueError("Selected checkpoint is absent from report")
