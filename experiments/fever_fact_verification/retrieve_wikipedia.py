@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import random
 import sys
@@ -42,9 +43,15 @@ def request_json(
     timeout: float = 30.0,
 ) -> dict[str, Any]:
     url = f"{API_URL}?{urlencode(params)}"
+    headers = {"User-Agent": USER_AGENT}
+    access_token = os.environ.get("WIKIMEDIA_ACCESS_TOKEN") or os.environ.get(
+        "WIKIPEDIA_ACCESS_TOKEN"
+    )
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
     for attempt in range(retries):
         try:
-            request = Request(url, headers={"User-Agent": USER_AGENT})
+            request = Request(url, headers=headers)
             with urlopen(request, timeout=timeout) as response:
                 return json.loads(response.read())
         except HTTPError as exc:

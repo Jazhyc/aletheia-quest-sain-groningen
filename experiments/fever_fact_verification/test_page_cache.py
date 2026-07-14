@@ -5,7 +5,10 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from experiments.fever_fact_verification.build_from_page_cache import select_claim_passages
+from experiments.fever_fact_verification.build_from_page_cache import (
+    parse_window_sizes,
+    select_claim_passages,
+)
 from experiments.fever_fact_verification.fetch_page_cache import resolve_requested_pages
 
 
@@ -74,3 +77,39 @@ def test_select_claim_passages_ignores_unrequested_page_ranks() -> None:
         claim, cache, sentences_per_page=3, max_page_rank=0
     )
     assert not errors
+
+
+def test_select_claim_passages_can_mix_sentences_and_adjacent_windows() -> None:
+    claim = {
+        "proposition": "Ada won the prize in 1974.",
+        "passages": [{"title": "Example", "page_rank": 0}],
+    }
+    cache = {
+        "Example": {
+            "canonical_title": "Example",
+            "url": "",
+            "extract": (
+                "Ada was a noted researcher in physics. "
+                "She won the international prize in 1974. "
+                "Her later career focused on education."
+            ),
+            "error": None,
+        }
+    }
+    passages, errors = select_claim_passages(
+        claim,
+        cache,
+        sentences_per_page=4,
+        window_sizes=(1, 2),
+    )
+    assert not errors
+    assert {passage["window_size"] for passage in passages} == {1, 2}
+    assert any(
+        passage["window_size"] == 2 and "researcher" in passage["text"]
+        and "prize" in passage["text"]
+        for passage in passages
+    )
+
+
+def test_parse_window_sizes_deduplicates_and_bounds_values() -> None:
+    assert parse_window_sizes("2,1,2") == (1, 2)

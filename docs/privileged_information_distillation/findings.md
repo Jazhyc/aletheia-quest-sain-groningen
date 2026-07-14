@@ -1033,6 +1033,35 @@ small validation signal. Proceed to a train-scale evidence-aware teacher/SFT
 ablation; keep test, packaging, and deployment selection blocked until that
 student improves frozen validation.
 
+The programmatic candidate-expansion follow-up separates missing context from
+missing pages. Adjacent two-sentence windows add 117 decisive claims at 93.04%
+directional agreement, while raw cached top-12 candidates add 101 at 90.72%.
+A strict ranks-6--12 tail falls to 83.33% and is rejected. Targeted full-page
+search for all 204 claims with zero initial candidates adds 42 decisions at
+95.24%; MiniLM finds 13 more after those, but that incremental tail is only
+76.92% and is also rejected.
+
+A broadened entity-OR query can retrieve five Wikipedia leads in one request.
+It supplies candidates for all 204 formerly empty claims with zero request
+failures, versus 167/204 for the single-full-page query. On the first 80
+completed rows, GPT-OSS accepts 24 at 91.67% directional agreement; ten are new
+beyond full-page retrieval and nine of those ten agree. Treat this as a
+promising retrieval pilot only until its complete audit and matched reader
+control finish.
+
+Matched reader job `30146678` gives the best overall expansion result: the broad
+cached lexical cache scores 0.8167 varied BA versus 0.7972 empty and 0.7944
+shuffled, fixing 14 and breaking seven rows versus shuffled. However, its
+exact-novel-question BA is 0.8537 versus 0.8572 empty. The preferred
+generalization checkpoint is the window+lexical union in job `30146708`: 0.8111
+varied BA versus 0.8000 for both controls, 14 fixes/eight breaks versus shuffled,
+and 0.8902 novel-question BA versus 0.8816 empty and 0.8694 shuffled. A larger
+455-passage web cache remains evidence-specific overall but its newly activated
+rows have one fix and two breaks, and novel BA does not beat empty. Freeze the
+417-passage window+lexical union for the train-scale teacher/SFT experiment;
+retain the broad lexical and web caches only as ablations. This selection is
+still validation-only and does not authorize test evaluation or packaging.
+
 
 ## Next measurements
 

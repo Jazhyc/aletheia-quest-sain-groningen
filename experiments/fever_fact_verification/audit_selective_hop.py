@@ -51,6 +51,7 @@ def main() -> None:
     parser.add_argument("--model", default="openai/gpt-oss-120b")
     parser.add_argument("--max-candidates", type=int, default=5)
     parser.add_argument("--max-candidate-chars", type=int, default=1200)
+    parser.add_argument("--candidate-offset", type=int, default=0)
     parser.add_argument("--max-tokens", type=int, default=2048)
     parser.add_argument("--limit", type=int)
     args = parser.parse_args()
@@ -81,6 +82,7 @@ def main() -> None:
             source_field=source_field,
             limit=args.max_candidates,
             max_chars=args.max_candidate_chars,
+            offset=args.candidate_offset,
         )
         raw_prompt = build_audit_prompt(str(row["proposition"]), candidates)
         prompts.append(tokenizer.apply_chat_template(

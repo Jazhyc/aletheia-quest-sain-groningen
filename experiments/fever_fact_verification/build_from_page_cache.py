@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 import sys
 from typing import Any
@@ -15,6 +16,7 @@ if str(ROOT) not in sys.path:
 
 from experiments.fever_fact_verification.core import (
     deduplicate_passages,
+    lexical_relevance,
     select_document_sentences,
     split_sentences,
 )
@@ -24,6 +26,87 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
+def parse_window_sizes(value: str) -> tuple[int, ...]:
+    sizes = tuple(sorted({int(item.strip()) for item in value.split(",") if item.strip()}))
+    if not sizes or any(size < 1 or size > 3 for size in sizes):
+        raise argparse.ArgumentTypeError(
+            "window sizes must be comma-separated integers in [1, 3]"
+        )
+    return sizes
+
+
+def select_document_spans(
+    query: str,
+    sentences: list[str],
+    *,
+    limit: int,
+    window_sizes: tuple[int, ...],
+) -> list[dict[str, Any]]:
+    """Select a quota-balanced mixture of sentences and adjacent windows."""
+    if window_sizes == (1,):
+        return [
+            {
+                "sentence_index": index,
+                "sentence_end_index": index,
+                "window_size": 1,
+                "text": sentence,
+                "lexical_score": score,
+            }
+            for index, sentence, score in select_document_sentences(
+                query, sentences, limit=limit
+            )
+        ]
+    candidates: dict[int, list[dict[str, Any]]] = {}
+    for size in window_sizes:
+        items = []
+        for start in range(max(0, len(sentences) - size + 1)):
+            text = " ".join(sentences[start : start + size])
+            items.append({
+                "sentence_index": start,
+                "sentence_end_index": start + size - 1,
+                "window_size": size,
+                "text": text,
+                "lexical_score": lexical_relevance(query, text),
+            })
+        candidates[size] = items
+    selected: dict[tuple[int, int], dict[str, Any]] = {}
+    quota = math.ceil(limit / len(window_sizes))
+    for size in window_sizes:
+        ranked = sorted(
+            candidates[size],
+            key=lambda item: (
+                float(item["lexical_score"]),
+                -int(item["sentence_index"]),
+            ),
+            reverse=True,
+        )
+        if size == 1:
+            # Preserve lead context even when its lexical overlap is low.
+            lead = candidates[size][: min(2, quota)]
+            ranked = lead + [item for item in ranked if item not in lead]
+        for item in ranked[:quota]:
+            selected[(int(item["sentence_index"]), int(item["window_size"]))] = item
+    if len(selected) < limit:
+        remaining = [
+            item
+            for items in candidates.values()
+            for item in items
+            if (int(item["sentence_index"]), int(item["window_size"])) not in selected
+        ]
+        remaining.sort(
+            key=lambda item: (
+                float(item["lexical_score"]) - 0.02 * (int(item["window_size"]) - 1),
+                -int(item["sentence_index"]),
+            ),
+            reverse=True,
+        )
+        for item in remaining:
+            selected[(int(item["sentence_index"]), int(item["window_size"]))] = item
+            if len(selected) >= limit:
+                break
+    return list(selected.values())[:limit]
+
+
 def select_claim_passages(
     claim: dict[str, Any],
     page_cache: dict[str, dict[str, Any]],
@@ -31,6 +114,7 @@ def select_claim_passages(
     sentences_per_page: int,
     max_page_rank: int | None = None,
     query_source: str = "question_titles_full_page",
+    window_sizes: tuple[int, ...] = (1,),
 ) -> tuple[list[dict[str, Any]], list[str]]:
     passages = []
     errors = []
@@ -53,21 +137,24 @@ def select_claim_passages(
             errors.append(f"{requested_title}: {cached['error']}")
             continue
         sentences = split_sentences(str(cached.get("extract") or ""))
-        selected = select_document_sentences(
+        selected = select_document_spans(
             str(claim["proposition"]),
             sentences,
             limit=sentences_per_page,
+            window_sizes=window_sizes,
         )
-        for sentence_index, sentence, lexical_score in selected:
+        for span in selected:
             passages.append({
                 "title": str(cached.get("canonical_title") or requested_title),
-                "text": sentence,
+                "text": str(span["text"]),
                 "url": str(cached.get("url") or ""),
                 "page_rank": int(original.get("page_rank", 0)),
-                "sentence_index": sentence_index,
+                "sentence_index": int(span["sentence_index"]),
+                "sentence_end_index": int(span["sentence_end_index"]),
+                "window_size": int(span["window_size"]),
                 "hop": 0,
                 "links": [],
-                "lexical_score": lexical_score,
+                "lexical_score": float(span["lexical_score"]),
                 "query_source": query_source,
             })
     passages = deduplicate_passages(passages)
@@ -89,6 +176,7 @@ def main() -> None:
     parser.add_argument("--sentences-per-page", type=int, default=24)
     parser.add_argument("--max-page-rank", type=int)
     parser.add_argument("--query-source", default="question_titles_full_page")
+    parser.add_argument("--window-sizes", type=parse_window_sizes, default=(1,))
     args = parser.parse_args()
 
     claims = read_jsonl(args.retrieval)
@@ -102,6 +190,7 @@ def main() -> None:
             sentences_per_page=args.sentences_per_page,
             max_page_rank=args.max_page_rank,
             query_source=args.query_source,
+            window_sizes=args.window_sizes,
         )
         output.append({
             **{field: claim[field] for field in (
@@ -115,6 +204,7 @@ def main() -> None:
                 "source": args.query_source,
                 "sentences_per_page": args.sentences_per_page,
                 "max_page_rank": args.max_page_rank,
+                "window_sizes": args.window_sizes,
             },
         })
     args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -31,11 +31,16 @@ def claim_key(row: dict[str, Any]) -> tuple[str, Any, int]:
 
 
 def bounded_candidates(
-    row: dict[str, Any], *, source_field: str, limit: int, max_chars: int
+    row: dict[str, Any],
+    *,
+    source_field: str,
+    limit: int,
+    max_chars: int,
+    offset: int = 0,
 ) -> list[dict[str, Any]]:
     """Return bounded, non-empty candidates without changing their rank."""
     output = []
-    for candidate in row.get(source_field) or []:
+    for candidate in (row.get(source_field) or [])[offset:]:
         text = " ".join(str(candidate.get("text") or "").split())
         if not text:
             continue

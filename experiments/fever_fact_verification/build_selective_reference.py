@@ -48,7 +48,18 @@ def build_cache(
     *,
     max_reference_chars: int,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    second_by_key = {claim_key(row): row for row in second}
+    second_by_key: dict[tuple[str, Any, int], dict[str, Any]] = {}
+    for row in second:
+        key = claim_key(row)
+        current = second_by_key.get(key)
+        if current is None or (
+            current.get("decision") not in DECISIVE
+            and row.get("decision") in DECISIVE
+        ):
+            # Follow-up files are ordered from cheapest to most expensive. Keep
+            # the first decisive result and consult later stages only after an
+            # abstention.
+            second_by_key[key] = row
     grouped: dict[tuple[str, Any], list[dict[str, Any]]] = defaultdict(list)
     stages = Counter()
     decisions = Counter()
@@ -104,14 +115,18 @@ def build_cache(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--initial-audit", type=Path, required=True)
-    parser.add_argument("--second-audit", type=Path, required=True)
+    parser.add_argument("--second-audit", type=Path, action="append", required=True)
     parser.add_argument("--row-universe", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--max-reference-chars", type=int, default=5000)
     args = parser.parse_args()
     output, summary = build_cache(
         read_jsonl(args.initial_audit),
-        read_jsonl(args.second_audit),
+        [
+            {**row, "stage": path.stem}
+            for path in args.second_audit
+            for row in read_jsonl(path)
+        ],
         read_jsonl(args.row_universe),
         max_reference_chars=args.max_reference_chars,
     )

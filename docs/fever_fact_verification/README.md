@@ -313,6 +313,69 @@ evidence-aware teacher/student ablation. It is not sufficient for test
 evaluation, packaging, or deployment selection, particularly because only 105
 of 926 initial abstentions received the second hop.
 
+## Candidate expansion and reranking follow-up (2026-07-14)
+
+The initial audit left two distinct recall failures. Of 1,183 claims, 204
+(17.24%) had no candidate at all, spanning 57 varied-validation rows. The other
+977 claims had up to 12 cached candidates, but only the first five had been
+shown to GPT-OSS. Accepted initial evidence was not concentrated at rank one,
+so both candidate breadth and within-document context had measurable headroom.
+
+The expansion stayed label-blind. It added adjacent two-sentence windows,
+MiniLM reranking over the cached top 12, a strict ranks-6--12 tail, and targeted
+Wikipedia search only for the 204 zero-candidate claims:
+
+| follow-up audit | decisive | claims | directional agreement | parse errors |
+| --- | ---: | ---: | ---: | ---: |
+| raw cached top 12 | 101 | 926 | 90.72% | 3 |
+| MiniLM adjacent windows | 117 | 926 | **93.04%** | 0 |
+| strict cached ranks 6--12 | 36 | 926 | 83.33% | 0 |
+| zero-candidate full-page search | 42 | 204 | **95.24%** | 0 |
+| MiniLM full-page search | 52 | 204 | 88.46% | 0 |
+| multi-page lead pilot prefix | 24 | 80 | 91.67% | 0 |
+
+The MiniLM full-page condition is not selected: after accepting the 42 raw
+decisions, its 13 additional decisions have only 76.92% directional agreement.
+Likewise, the strict ranks-6--12 tail is too weak to enter a default cache. The
+adjacent-window result is the cleanest scalable gain: 115/117 selected source
+spans were absent from the original candidate lists.
+
+The entity-OR multi-page mode removes the remaining search-level coverage hole:
+all 204 formerly empty claims receive candidates (3,663 passages, zero request
+failures), versus 167/204 for the single-full-page query. Its first 80 completed
+rows are a rate-limited prefix rather than a random sample. The audit accepts
+24/80; ten are new beyond the full-page audit and nine of those ten agree with
+the noisy extraction direction. This is promising retrieval evidence, but the
+complete audit and a downstream reader control are required before it can enter
+the frozen cache.
+
+Three matched reader jobs compare the useful cache frontiers. Metrics fluctuate
+slightly because independently launched vLLM runs regenerate the empty rows, so
+the paired fixed/broken counts and within-run controls are the primary evidence:
+
+| cache / job | active rows | passages | empty varied BA | real varied BA | shuffled varied BA | fixes/breaks vs shuffled |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| broad cached lexical / `30146678` | 203 | 375 | 0.7972 | **0.8167** | 0.7944 | 14 / 7 |
+| window + lexical union / `30146708` | 214 | 417 | 0.8000 | 0.8111 | 0.8000 | **14 / 8** |
+| high-precision window / `30146707` | 208 | 391 | 0.7944 | 0.8028 | 0.8028 | 10 / 9 |
+| union + zero-candidate web / `30146824` | 240 | 455 | 0.8000 | 0.8083 | 0.7861 | 16 / 9 |
+
+The broad lexical cache is the best overall validation row. The window+lexical
+union is the better generalization checkpoint: on the 65 exact questions absent
+from varied training it scores 0.8902 BA, versus 0.8816 empty and 0.8694
+shuffled. The broad lexical cache scores 0.8537 on that slice versus 0.8572
+empty, while the web extension scores 0.8780 versus 0.8816 empty. Within the web
+extension run, the 29 rows receiving the newly accepted full-page stage produce
+one fix and two breaks against either control. Thus high directional evidence
+precision is necessary but not sufficient for reader utility.
+
+Use `varied_validation_selective_expanded_window_union_reference_v1.jsonl` as
+the frozen train-scale design checkpoint. Keep the broad lexical cache as an
+overall-BA ablation and the web-expanded cache as a coverage ablation. Do not
+add the weak MiniLM tail, tune stage order from validation labels, or evaluate
+these reader caches on test. None of the retrieval artifacts enter the
+submission package; only a later distilled adapter may ship.
+
 ## Deployment decision
 
 The path being pursued is **offline document-level FEVER/AVeriTeC supervision,

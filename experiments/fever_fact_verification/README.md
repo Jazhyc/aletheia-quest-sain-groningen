@@ -59,7 +59,8 @@ then select evidence for every atomic claim locally:
   --retrieval results/blackbox/fever_fact_verification_v1/varied_validation_question_retrieval.jsonl \
   --page-cache results/blackbox/fever_fact_verification_v1/varied_validation_top1_full_pages.jsonl \
   --output results/blackbox/fever_fact_verification_v1/varied_validation_top1_full_retrieval.jsonl \
-  --max-page-rank 0
+  --max-page-rank 0 \
+  --window-sizes 1,2
 ```
 
 MediaWiki permits only one whole-article extract per API request. The page-cache
@@ -134,7 +135,14 @@ sbatch experiments/fever_fact_verification/run_selective_audit.sh \
 `search_selective_hop.py` appends and resumes successful claim keys. Anonymous
 MediaWiki access can still return sustained HTTP 429 responses, so use
 `--sample-abstentions` for a predeclared pilot and do not interpret a
-rate-limited prefix as a complete random sample.
+rate-limited prefix as a complete random sample. Set `WIKIMEDIA_ACCESS_TOKEN`
+(or the legacy local alias `WIKIPEDIA_ACCESS_TOKEN`) to send bearer
+authentication. Use `--candidate-state empty` to target claims with no initial
+candidates. `--multi-page-leads --page-limit 5` makes one broadened entity-OR
+query and retrieves several page introductions in one request; this avoids the
+one-full-article-per-request limit and is useful when the top result is the
+wrong entity. A non-blocking file lock prevents concurrent processes from
+interleaving JSONL records.
 
 Build the decisive-only cache after both audits. Initial decisive evidence has
 precedence; second-hop evidence is eligible only after an initial abstention.
@@ -145,6 +153,10 @@ relation or rationale:
 .venv/bin/python experiments/fever_fact_verification/build_selective_reference.py \
   --initial-audit results/blackbox/fever_fact_verification_v1/varied_validation_selective_initial_audit.jsonl \
   --second-audit results/blackbox/fever_fact_verification_v1/varied_validation_selective_second_audit.jsonl \
+  --second-audit results/blackbox/fever_fact_verification_v1/varied_validation_selective_later_audit.jsonl \
   --row-universe results/blackbox/qwen9b_pid_wikidata_matched_reader_v1/validation_fever_question_evidence_v1/empty/generations.jsonl \
   --output results/blackbox/fever_fact_verification_v1/varied_validation_selective_teacher_reference.jsonl
 ```
+
+`--second-audit` is repeatable and ordered. The first decisive follow-up for a
+claim wins; later files are consulted only while earlier stages abstain.
