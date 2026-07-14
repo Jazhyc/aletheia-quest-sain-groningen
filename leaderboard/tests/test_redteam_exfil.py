@@ -94,6 +94,21 @@ def test_low_level_child_env_helper_is_token_free(tmp_path):
     assert not any("token" in k.lower() or "key" in k.lower() for k in env)
 
 
+def test_dry_child_env_can_inherit_parent_site_packages(tmp_path):
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    parent_site = "/project/.venv/lib/python3.12/site-packages"
+
+    env = runner._child_env(
+        scratch,
+        data_env={"HF_DATASETS_OFFLINE": "1"},
+        venv=scratch / "venv",
+        parent_site_packages=parent_site,
+    )
+
+    assert env["PYTHONPATH"] == parent_site
+
+
 def test_dataset_config_env_exposes_only_the_inputs_name():
     """DatasetConfig.env() is the only dataset info the notebook gets — it must
     carry the inputs name and nothing about where labels live."""
