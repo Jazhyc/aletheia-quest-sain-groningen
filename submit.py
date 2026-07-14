@@ -37,8 +37,9 @@ except ImportError:
 # Files/dirs we never ship to the runner ("leaderboard" is the runner's own code).
 EXCLUDE_DIRS = {".git", ".claude", "leaderboard", "__pycache__",
                 ".ipynb_checkpoints", ".venv", "venv", "node_modules",
-                ".mypy_cache", ".pytest_cache"}
-EXCLUDE_GLOBS = ["*.pyc", "*.pyo", ".DS_Store", "submission.csv"]
+                ".mypy_cache", ".pytest_cache", ".uv-cache", "results",
+                "logs", "dev_splits"}
+EXCLUDE_GLOBS = ["*.pyc", "*.pyo", ".DS_Store", ".env", "submission.csv"]
 
 MAX_ZIP_MB = 200  # guardrail; the Space may enforce its own limit.
 
@@ -147,14 +148,20 @@ def build_zip(root: Path) -> bytes:
     buf = io.BytesIO()
     n = 0
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(root.rglob("*")):
-            if not path.is_file():
-                continue
-            rel = path.relative_to(root)
-            if _excluded(rel):
-                continue
-            zf.write(path, rel.as_posix())
-            n += 1
+        for dirpath, dirnames, filenames in os.walk(root):
+            current = Path(dirpath)
+            rel_dir = current.relative_to(root)
+            dirnames[:] = sorted(
+                name for name in dirnames
+                if not _excluded(rel_dir / name)
+            )
+            for name in sorted(filenames):
+                path = current / name
+                rel = path.relative_to(root)
+                if _excluded(rel):
+                    continue
+                zf.write(path, rel.as_posix())
+                n += 1
     data = buf.getvalue()
     size_mb = len(data) / 1e6
     if size_mb > MAX_ZIP_MB:
