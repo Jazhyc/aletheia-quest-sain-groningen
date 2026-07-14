@@ -951,13 +951,37 @@ candidate AUROC only to 0.5774. This exhausts the programmatic MiniLM variants
 worth testing on the current cache. Do not spend a generated-reader evaluation,
 quantization/package work, or test-set evaluation on this gate.
 
+### Matched evidence-reader follow-up
+
+Jobs `30142214`--`30142335` tested the deferred evidence-trained consumer and
+one alternating retriever update. The standard varied-only one-epoch AdamW
+`5e-5` recipe was trained on 12,122 targets covering real, empty, shuffled,
+reader-harmful, and reader-helpful evidence conditions. Always-on real evidence
+still lacks net paired benefit: it fixes 13 and breaks 15 rows versus empty.
+However, the matched reader raises the constrained candidate oracle from 0.7861
+to 0.8444 BA with 21 rescues and zero harms, versus 0.7944 to 0.8333 and 16/2
+for the old reader. This confirms that consumer training can increase usable
+factual headroom.
+
+The alternating MiniLM refit does not transport that headroom to novel
+questions. Its grouped-fold-selected hard-listwise model emits 15/360 frozen
+rows, none novel. Full generation scores varied BA 0.7972 empty, 0.8028 gated
+real, and 0.8000 gated shuffled: two fixes and no harms versus empty, but only
+one real-specific fix versus shuffled. Both corrected question groups occurred
+in training, and the real-only uxoricide card is relevant but insufficient.
+Treat this as a mechanistic proof, not a submission candidate. Do not test,
+package, quantize, or threshold-tune the 91.6 MB MiniLM from frozen outcomes.
+Further reader/retriever iteration needs new independent questions rather than
+more passes over the repeated current groups.
+
 
 ## Next measurements
 
 1. Investigate whether varied-only specialization gains persist on additional
    held-out data or are split noise.
-2. Keep evidence-conditioned retrieval as a deferred path if simpler methods
-   stall and factual errors remain dominant.
+2. Revisit evidence-conditioned retrieval only with new independent questions
+   or stronger mechanically decisive facts; do not iterate on the current
+   repeated-group cache.
 3. Inspect student errors for teacher-meta leakage and intent-only decisions.
 4. If needed, run the semantic-filtering ablation without regenerating teacher
    traces.

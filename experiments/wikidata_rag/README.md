@@ -557,6 +557,57 @@ frozen AUROC, again with no novel decision change. Semantic-then-utility job
 full-generation or packaging follow-up; see `docs/wikidata_rag/README.md` for
 the complete selection and split metrics.
 
+### Matched evidence reader and alternating MiniLM
+
+The evidence-consumer follow-up trains the standard varied-only rank-16 Qwen
+LoRA for one epoch with AdamW at `5e-5`, but changes its training distribution.
+`build_matched_reader_cache.py` combines the audited ordinary and evidence-aware
+teacher caches into 12,122 records from 2,870 source rows: 2,870 each with real,
+explicit-empty, and cross-dataset shuffled evidence, plus 1,828 harmful and
+1,684 reader-helpful candidate conditions. Real evidence retains the
+evidence-aware GPT-OSS target; empty, shuffled, and misleading evidence retain
+the ordinary target so the reader learns to ignore unsupported cards.
+
+```bash
+python experiments/wikidata_rag/build_matched_reader_cache.py \
+  --baseline-teacher results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/teacher/train.jsonl \
+  --evidence-teacher results/blackbox/qwen9b_pid_wikidata_evidence_variedonly_v1/teacher/train.jsonl \
+  --retrieval-cache results/blackbox/wikidata_rag_daily_v1/train_teacher_cache.jsonl \
+  --utility-cache results/blackbox/wikidata_rag_counterfactual_utility_v1/train.jsonl \
+  --output results/blackbox/qwen9b_pid_wikidata_matched_reader_v1/teacher/train.jsonl
+
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  --config-name pid_teacher_wikidata_matched_reader_v1
+```
+
+Job `30142214` completed training in 1h21m. Paired full-generation job
+`30142250` found only a small evidence-specific effect. Matched-reader varied BA
+was 0.7972 empty, 0.8000 real, and 0.7944 shuffled. Real evidence changed 31
+predictions relative to empty, fixing 13 and breaking 15; versus shuffled it
+fixed 13 and broke 14. This is one fewer harm than the earlier evidence-only
+reader, not a reliable always-on evidence policy.
+
+Jobs `30142251`--`30142253` then performed one alternating update: rescore all
+candidate utilities with the matched reader, select a compact grouped-fold
+MiniLM configuration, and refit a three-seed weight soup. The matched reader's
+constrained-margin oracle grows from 0.7861 to 0.8444 BA (21 rescues, zero harms),
+versus 0.7944 to 0.8333 for the old reader (16 rescues, two harms). The headroom
+is real, but MiniLM still cannot transport the selection policy. The selected
+hard-listwise controlled-utility checkpoint improves calibration/internal BA by
++0.0026/+0.0044; the refit emits 15/360 frozen rows for +0.0028 BA and +0.0014
+AUROC, with 0.333 controlled-positive precision and zero novel-question
+emissions.
+
+Final full-generation job `30142335` scores 0.7972 empty, 0.8028 gated real,
+and 0.8000 gated shuffled varied BA. The 15 selected facts produce two fixes
+and no harms versus empty, but only one fix versus shuffled. Both fixes are
+exact question groups seen in training. The Buddy Holly correction is also
+caused by shuffled evidence; the real-only uxoricide recovery uses an
+insufficient `killing of a spouse` card. Treat this as a narrow proof that
+reader training increases oracle headroom, not as held-out retrieval transfer.
+Do not package the 91.6 MB MiniLM, evaluate on test, or lower its threshold from
+these validation outcomes.
+
 
 ```bash
 PYTHONPATH=. .venv/bin/python experiments/wikidata_rag/build_claim_gated_cache.py \

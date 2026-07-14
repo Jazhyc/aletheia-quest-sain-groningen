@@ -135,7 +135,10 @@ def scenario_metrics(frame: pd.DataFrame) -> dict[str, dict[str, float | None]]:
     return result
 
 
-def load_retrieval_cache(path: Path | None) -> dict[tuple[str, Any], str]:
+def load_retrieval_cache(
+    path: Path | None,
+    passage_field: str = "passages",
+) -> dict[tuple[str, Any], str]:
     if path is None:
         return {}
     references = {}
@@ -143,7 +146,7 @@ def load_retrieval_cache(path: Path | None) -> dict[tuple[str, Any], str]:
         if not line.strip():
             continue
         record = json.loads(line)
-        passages = record.get("passages") or []
+        passages = record.get(passage_field) or []
         text = "\n".join(
             f"- {passage.get('title', '')}: {passage.get('text', '')}"
             for passage in passages
@@ -159,6 +162,8 @@ def load_records(
     config: dict[str, Any],
     tokenizer: Any,
     references: dict[tuple[str, Any], str] | None = None,
+    *,
+    append_empty_reference: bool = False,
 ) -> pd.DataFrame:
     from datasets import load_dataset
 
@@ -181,7 +186,7 @@ def load_records(
                 config["student"]["context_truncation"],
             )
             reference = (references or {}).get((dataset_cfg.name, index), "")
-            if reference:
+            if reference or append_empty_reference:
                 raw_prompt = append_reference_material(raw_prompt, reference)
             prompt = tokenizer.apply_chat_template(
                 [{"role": "user", "content": raw_prompt}],

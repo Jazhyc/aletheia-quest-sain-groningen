@@ -357,3 +357,77 @@ one net frozen correction. Do not package the 91.6 MB FP32 model, reclaim space
 for quantization, or launch another generated-reader sweep from this result.
 Further progress needs new independent question groups and an evidence-trained
 consumer, not more tuning of this evidence-naive reader's utility gate.
+
+### Matched evidence consumer and one alternating update
+
+The follow-up changes the consumer before retraining MiniLM. It reuses audited
+teacher targets rather than generating another GPT-OSS cache: the existing
+evidence-aware target is paired with frozen real retrieval, while the ordinary
+target is paired with explicit-empty, cross-dataset shuffled, and reader-harmful
+evidence. A reader-helpful condition preserves the correct ordinary target.
+This produces 12,122 training records from 2,870 varied source rows:
+
+| condition | rows |
+| --- | ---: |
+| frozen real retrieval | 2,870 |
+| explicit no evidence | 2,870 |
+| cross-dataset shuffled evidence | 2,870 |
+| old-reader harmful candidate | 1,828 |
+| old-reader helpful candidate | 1,684 |
+
+The training recipe remains the selected privileged-distillation default:
+regular `Qwen/Qwen3.5-9B`, rank 16/alpha 32, one epoch, AdamW `5e-5`, effective
+batch size 32, and varied-only filtering. Smoke job `30142205` completed one
+step; full job `30142214` completed 379 steps in 1h21m.
+
+Job `30142250` evaluates exact empty/real/shuffled prompts and reuses empty
+generations whenever a condition has no evidence, avoiding batch-order noise.
+
+| reader | empty varied BA | real varied BA | shuffled varied BA | real vs empty fixes/harms | real vs shuffled fixes/harms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| matched consumer | 0.7972 | 0.8000 | 0.7944 | 13 / 15 | 13 / 14 |
+| prior evidence-only consumer | 0.8000 | 0.8000 | 0.7972 | 13 / 16 | 13 / 15 |
+
+Matched training removes one harm in each comparison, but does not produce a
+net-correct always-on evidence policy. Its larger effect is on selectable
+counterfactual headroom. Job `30142251` rescored 33,706 training and 4,202
+validation candidates against the matched consumer:
+
+| constrained reader | empty BA | row oracle BA | rescues | harms |
+| --- | ---: | ---: | ---: | ---: |
+| prior evidence-naive | 0.7944 | 0.8333 | 16 | 2 |
+| matched evidence consumer | 0.7861 | 0.8444 | 21 | 0 |
+
+Thus evidence training makes the best available fact more actionable even
+though the empty baseline is weaker. Jobs `30142252` and `30142253` tested one
+alternating retriever update. Grouped-fold selection chooses controlled utility,
+hard-listwise loss, a coarse reader-score bucket, raw fact/no-evidence margin,
+no frozen layers, `3e-5`, and epoch one. The selected checkpoint gains +0.0026
+calibration and +0.0044 grouped-internal BA but zero frozen BA. The three-seed
+refit/soup emits 15/360 frozen rows and gains +0.0028 BA/+0.0014 AUROC; its
+controlled-positive precision is 0.333 and it emits no novel-question row.
+
+Job `30142335` is the required full-generation check. It reuses empty outputs on
+345 inactive rows and generates only the 15 selected real and shuffled prompts:
+
+| condition | varied BA | recall | FPR | paired outcome vs empty |
+| --- | ---: | ---: | ---: | ---: |
+| empty | 0.7972 | 0.6611 | 0.0667 | — |
+| gated real | 0.8028 | 0.6667 | 0.0611 | 2 fixes, 0 harms |
+| gated shuffled | 0.8000 | 0.6611 | 0.0611 | 1 fix, 0 harms |
+
+Only one correction is evidence-specific. Both corrected questions occurred in
+training. The honest Buddy Holly row flips under both real and shuffled
+evidence; the deceptive uxoricide row flips only for real evidence, but its
+card merely says `subclass of: killing of a spouse` and was labeled relevant
+but insufficient, not decisive. Several of the other 15 selected cards are
+irrelevant, although they do not cross the final binary boundary.
+
+Decision: this alternating update is a useful mechanistic result, not a
+submission candidate. It shows that matched consumer training raises oracle
+headroom and that selective retrieval can avoid the harms of always-on evidence.
+It does not show novel-question emission or a robust fact-specific gain. Do not
+package the 91.6 MB FP32 MiniLM, quantize it, evaluate it on test, or lower the
+threshold using frozen labels. A future continuation needs new independent
+questions or stronger mechanically grounded relevance supervision; another
+iteration on these repeated groups would mostly reinforce memorization.

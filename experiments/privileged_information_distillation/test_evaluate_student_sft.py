@@ -48,6 +48,20 @@ def test_load_retrieval_cache_formats_passages(tmp_path) -> None:
     }
 
 
+def test_load_retrieval_cache_selects_named_passage_field(tmp_path) -> None:
+    path = tmp_path / "rag.jsonl"
+    path.write_text(json.dumps({
+        "dataset": "dataset",
+        "index": 7,
+        "real_passages": [{"title": "Real", "text": "Relevant."}],
+        "shuffled_passages": [{"title": "Donor", "text": "Irrelevant."}],
+    }) + "\n")
+
+    assert load_retrieval_cache(path, passage_field="shuffled_passages") == {
+        ("dataset", 7): "- Donor: Irrelevant."
+    }
+
+
 def test_counterfactual_strict_format_requires_ordered_fields() -> None:
     valid = (
         "<reasoning_summary>Summary.</reasoning_summary>\n"

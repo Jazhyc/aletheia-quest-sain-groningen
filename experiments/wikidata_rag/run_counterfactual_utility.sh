@@ -26,13 +26,14 @@ exec >"${LOG_DIR}/counterfactual-utility-${SLURM_JOB_ID}.out" 2>&1
 rm -f "logs/slurm/${SLURM_JOB_NAME}-${SLURM_JOB_ID}.bootstrap.out"
 
 ROOT="${OUTPUT_ROOT:-results/blackbox/wikidata_rag_counterfactual_utility_v1}"
+ADAPTER="${ADAPTER_DIR:-results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/adapter}"
 LIMIT_ARGS=()
 if [[ -n "${LIMIT_ROWS:-}" ]]; then
   LIMIT_ARGS=(--limit-rows "${LIMIT_ROWS}")
 fi
 
 python experiments/wikidata_rag/score_counterfactual_utility.py \
-  --adapter-dir results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/adapter \
+  --adapter-dir "${ADAPTER}" \
   --input results/blackbox/wikidata_rag_gptoss_supervision_v1/train_candidates.jsonl \
   --supervision-input results/blackbox/wikidata_rag_gptoss_supervision_v1/train_labels_decisive_full_v1.jsonl \
   --output "${ROOT}/train.jsonl" \
