@@ -974,14 +974,55 @@ package, quantize, or threshold-tune the 91.6 MB MiniLM from frozen outcomes.
 Further reader/retriever iteration needs new independent questions rather than
 more passes over the repeated current groups.
 
+### Document-level FEVER/AVeriTeC path (active)
+
+The next retrieval attempt is tracked separately in
+[`docs/fever_fact_verification/README.md`](../fever_fact_verification/README.md).
+It replaces compact entity cards with exact-quote grounded atomic claims,
+full-page Wikipedia evidence, number-aware lexical selection, neural reranking,
+and a three-way FEVER score used only as an auxiliary signal. Expensive
+long-context verification remains in the privileged teacher; the document
+store is not intended to ship.
+
+The first regular-scale short-lead control covers 1,183 claims but is negative:
+the matched reader scores 0.9000 BA with empty evidence, 0.8952 with real
+evidence, and 0.9060 with shuffled evidence (varied: 0.7972, 0.7861, and
+0.8111). High-confidence NLI relations are
+often merely topical, so they are hidden from teacher-visible references by
+default. A FEVER-specific hard relevance threshold is much cleaner but emits on
+only 1.18% of real claims and never refutes one. Full-document retrieval and
+matched real/shuffled evaluation are the
+active frozen follow-up. Do not train a student unless real full-document
+evidence beats both controls on question-group holdouts.
+
+The top-1 full-document reader sweep ties empty at 0.9000 overall BA and 0.7972
+varied BA, while shuffled scores 0.8988/0.7944. Real evidence fixes 13 and breaks
+14 rows versus empty and fixes 15/breaks 15 versus shuffled. This is a material
+improvement over short leads, but still no net paired gain. Keep student
+training blocked pending the frozen top-3 result.
+
+The frozen top-3 verifier raises real-versus-shuffled polar coverage to
+73.46%/64.75% and noisy teacher-assessment agreement to 52.41%/47.25%, but its
+conditional polar precision is 73.63%/74.24%. The extra documents are
+retrieval-specific without making the FEVER relation reliable; keep that
+relation hidden and use only the cited sentence in the final reader control.
+
+The bounded top-3 matched reader completes at 0.8988 overall/0.7889 varied BA
+for both empty and real evidence, versus 0.8964/0.7833 for shuffled. Real fixes
+13 and breaks 12 varied rows versus empty, and fixes 14/breaks 13 versus
+shuffled. The one-row paired gains are too small to pass the frozen gate because
+real does not beat empty on BA. Do not generate student traces or run test from
+this cache. Keep the document-level path active through a label-blind
+abstention-triggered query-reformulation/second-hop experiment, following FIRE
+and the efficient AVeriTeC systems, before repeating the same controls.
+
 
 ## Next measurements
 
 1. Investigate whether varied-only specialization gains persist on additional
    held-out data or are split noise.
-2. Revisit evidence-conditioned retrieval only with new independent questions
-   or stronger mechanically decisive facts; do not iterate on the current
-   repeated-group cache.
+2. Add a label-blind, abstention-triggered query-reformulation/second-hop stage
+   to the full-document path, then repeat empty/real/shuffled reader controls.
 3. Inspect student errors for teacher-meta leakage and intent-only decisions.
 4. If needed, run the semantic-filtering ablation without regenerating teacher
    traces.
