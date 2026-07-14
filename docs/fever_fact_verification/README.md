@@ -248,6 +248,71 @@ paired net of one row and 0.0056 varied-BA edge over shuffled are weak positive
 retrieval-specific signals, but real still ties empty. This does not meet the
 predeclared student-training gate.
 
+## Label-blind selective audit checkpoint (2026-07-14)
+
+The FIRE-style follow-up replaces the static NLI decision with a conservative
+GPT-OSS audit over at most five bounded candidates. The audit prompt contains
+the atomic proposition and source sentences, but no deception label, teacher
+assessment, or answer-level verdict. It separately classifies every candidate,
+selects at most one decisive sentence, and otherwise emits a neutral search
+query. Parser disagreement between the selected ID and relation becomes an
+abstention. Only the proposition and selected source sentence enter the reader
+cache; the audit relation and rationale remain diagnostics.
+
+On all 1,183 grounded varied-validation claims, the 2,048-token audit completed
+in 2m23s of generation with zero parse failures:
+
+| initial audit decision | claims |
+| --- | ---: |
+| decisive support | 178 |
+| decisive contradiction | 79 |
+| abstain | 926 |
+
+This is 21.72% selective coverage. Among decisive claims with a binary noisy
+GPT-OSS extraction assessment, 92.13% point in the same direction. That number
+is a diagnostic rather than precision: spot checks show several cases where
+the Wikipedia sentence is correct and the extraction assessment is arguably
+wrong, as well as some scope-sensitive auditor errors. Compared with the NLI
+path, the auditor is much less support-biased: it contradicts 67/278
+teacher-`false` claims, versus 15/278 for the frozen top-3 NLI verifier.
+
+Anonymous MediaWiki throttling prevented a complete second hop in the same
+session. A deterministic seed-42 sample of 200 abstentions was sorted by claim
+key for resumability; the first 105 successfully fetched claims form the
+rate-limited pilot and are not presented as a random 105-row sample. One API
+request retrieves the top search result and full article, after which 24
+proposition-relevant sentences are selected locally. The second audit accepts
+20/105 claims (17 support, three contradiction), or 19.05%, with zero parse
+failures and 90% directional agreement on the assessable accepted subset.
+Combining both stages yields 277 cited passages across 171/822 validation rows:
+257 first-hop passages and 20 second-hop passages.
+
+The frozen matched-reader job `30146507` is the first document-retrieval run to
+beat both matched controls:
+
+| selective reader condition | overall BA | varied BA | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| empty | 0.9012 | 0.7972 | 0.8333 | 0.0310 |
+| decisive real evidence | **0.9048** | **0.8056** | **0.8405** | 0.0310 |
+| decisive shuffled evidence | 0.9000 | 0.7944 | 0.8238 | **0.0238** |
+
+On the 360 varied rows, real evidence changes 19 predictions versus empty,
+fixing 11 and breaking six; versus shuffled it changes 22, fixing 13 and
+breaking seven. The net gains remain positive when rows involving a parse error
+are excluded (+5 versus empty and +2 versus shuffled), so this is not only a
+format effect. The 19 rows receiving accepted second-hop evidence contribute
+two fixes and no break versus either control.
+
+The exact-question novelty control is directionally positive but small. Among
+65 questions absent from varied training, 27 receive real evidence and real BA
+is 0.8780 versus 0.8572 for both empty and shuffled. Only three predictions
+change against either control (two fixes, one break), so this one-net-row result
+is not a statistically strong generalization claim. Overall, the selective
+audit crosses the predeclared mechanistic gate and justifies a train-scale
+evidence-aware teacher/student ablation. It is not sufficient for test
+evaluation, packaging, or deployment selection, particularly because only 105
+of 926 initial abstentions received the second hop.
+
 ## Deployment decision
 
 The path being pursued is **offline document-level FEVER/AVeriTeC supervision,
@@ -261,11 +326,14 @@ then privileged distillation**, not an inference-time RAG database:
 5. the standard one-epoch varied-only reasoning-summary Qwen SFT recipe only
    after real evidence beats both controls.
 
-The next active retrieval improvement is the label-blind, FIRE-style selective
-hop: only abstaining claims receive a teacher-generated neutral query and one
-bounded document expansion. Document summarization or answer reformulation can
-then compress that evidence before the same matched reader test. Do not train
-the student or run test evaluation from the present top-3 cache.
+The label-blind FIRE-style hop now supplies the first positive matched-reader
+signal. The next experiment is to build the same selective cache on the public
+training split, let the privileged teacher explicitly use or ignore its cited
+sentences, and run the standard one-epoch varied-only reasoning-summary SFT
+recipe. Keep test evaluation and submission packaging blocked until that new
+student beats its no-evidence baseline on frozen validation. Complete more of
+the abstention-only second hop only if API throttling can be handled without
+changing the predeclared claim sample.
 
 This is close to the feasible 2025 open-system recipe while respecting the
 submission budget: only the distilled adapter is intended to ship. Wikipedia

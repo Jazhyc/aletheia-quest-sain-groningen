@@ -30,6 +30,7 @@ def select_claim_passages(
     *,
     sentences_per_page: int,
     max_page_rank: int | None = None,
+    query_source: str = "question_titles_full_page",
 ) -> tuple[list[dict[str, Any]], list[str]]:
     passages = []
     errors = []
@@ -67,7 +68,7 @@ def select_claim_passages(
                 "hop": 0,
                 "links": [],
                 "lexical_score": lexical_score,
-                "query_source": "question_titles_full_page",
+                "query_source": query_source,
             })
     passages = deduplicate_passages(passages)
     passages.sort(
@@ -87,6 +88,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--sentences-per-page", type=int, default=24)
     parser.add_argument("--max-page-rank", type=int)
+    parser.add_argument("--query-source", default="question_titles_full_page")
     args = parser.parse_args()
 
     claims = read_jsonl(args.retrieval)
@@ -99,6 +101,7 @@ def main() -> None:
             page_cache,
             sentences_per_page=args.sentences_per_page,
             max_page_rank=args.max_page_rank,
+            query_source=args.query_source,
         )
         output.append({
             **{field: claim[field] for field in (
@@ -109,7 +112,7 @@ def main() -> None:
             "retrieval_seconds": 0.0,
             "error": "; ".join(errors) or None,
             "retrieval_config": {
-                "source": "question_titles_full_page",
+                "source": args.query_source,
                 "sentences_per_page": args.sentences_per_page,
                 "max_page_rank": args.max_page_rank,
             },

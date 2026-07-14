@@ -106,3 +106,45 @@ retaining whole claim/source records; both limits are configurable.
 The resulting file is directly accepted through the existing
 `teacher.retrieval_cache=...` Hydra override in
 `experiments/privileged_information_distillation/run_teacher.sh`.
+
+For the selective follow-up, GPT-OSS audits at most five bounded candidates
+without seeing deception labels or the cached teacher assessment. A decisive
+selection must agree with its per-candidate relation; malformed or inconsistent
+outputs become abstentions. Only abstentions receive a neutral query and one
+bounded Wikipedia expansion:
+
+```bash
+sbatch experiments/fever_fact_verification/run_selective_audit.sh \
+  --input results/blackbox/fever_fact_verification_v1/varied_validation_top3_full_verification.jsonl \
+  --input-kind verification \
+  --output results/blackbox/fever_fact_verification_v1/varied_validation_selective_initial_audit.jsonl
+
+.venv/bin/python experiments/fever_fact_verification/search_selective_hop.py \
+  --audit results/blackbox/fever_fact_verification_v1/varied_validation_selective_initial_audit.jsonl \
+  --output results/blackbox/fever_fact_verification_v1/varied_validation_selective_second_fullpage.jsonl \
+  --full-pages --max-sentences 24 --delay 1
+
+sbatch experiments/fever_fact_verification/run_selective_audit.sh \
+  --input results/blackbox/fever_fact_verification_v1/varied_validation_selective_second_fullpage.jsonl \
+  --input-kind retrieval \
+  --previous-audit results/blackbox/fever_fact_verification_v1/varied_validation_selective_initial_audit.jsonl \
+  --output results/blackbox/fever_fact_verification_v1/varied_validation_selective_second_audit.jsonl
+```
+
+`search_selective_hop.py` appends and resumes successful claim keys. Anonymous
+MediaWiki access can still return sustained HTTP 429 responses, so use
+`--sample-abstentions` for a predeclared pilot and do not interpret a
+rate-limited prefix as a complete random sample.
+
+Build the decisive-only cache after both audits. Initial decisive evidence has
+precedence; second-hop evidence is eligible only after an initial abstention.
+The reader sees the proposition and cited source sentence, not the auditor's
+relation or rationale:
+
+```bash
+.venv/bin/python experiments/fever_fact_verification/build_selective_reference.py \
+  --initial-audit results/blackbox/fever_fact_verification_v1/varied_validation_selective_initial_audit.jsonl \
+  --second-audit results/blackbox/fever_fact_verification_v1/varied_validation_selective_second_audit.jsonl \
+  --row-universe results/blackbox/qwen9b_pid_wikidata_matched_reader_v1/validation_fever_question_evidence_v1/empty/generations.jsonl \
+  --output results/blackbox/fever_fact_verification_v1/varied_validation_selective_teacher_reference.jsonl
+```

@@ -1016,13 +1016,31 @@ this cache. Keep the document-level path active through a label-blind
 abstention-triggered query-reformulation/second-hop experiment, following FIRE
 and the efficient AVeriTeC systems, before repeating the same controls.
 
+The label-blind GPT-OSS audit now covers all 1,183 initial claims. It accepts
+257 decisive sentences (21.72%) with zero parse errors and finds 67
+contradictions among 278 claims assessed false by the noisy extraction teacher,
+versus 15 for the top-3 NLI verifier. A rate-limited 105-claim prefix of the
+predeclared seed-42 200-abstention second-hop pilot adds 20 decisive sentences
+with zero parse errors. The combined cache contains 277 passages on 171/822
+rows. Frozen matched-reader job `30146507` scores 0.9048 overall/0.8056 varied
+BA with real evidence, versus 0.9012/0.7972 empty and 0.9000/0.7944 shuffled.
+Real fixes 11 and breaks six varied rows versus empty and fixes 13/breaks seven
+versus shuffled. The 19 second-hop-active rows contribute two fixes and no
+breaks against either control. On 65 questions absent from varied training,
+real reaches 0.8780 BA versus 0.8572 for both controls, but this is only two
+fixes and one break. This crosses the mechanistic reader gate but remains a
+small validation signal. Proceed to a train-scale evidence-aware teacher/SFT
+ablation; keep test, packaging, and deployment selection blocked until that
+student improves frozen validation.
+
 
 ## Next measurements
 
 1. Investigate whether varied-only specialization gains persist on additional
    held-out data or are split noise.
-2. Add a label-blind, abstention-triggered query-reformulation/second-hop stage
-   to the full-document path, then repeat empty/real/shuffled reader controls.
+2. Build train-scale selective evidence and run the standard evidence-aware
+   teacher plus varied-only one-epoch SFT ablation; preserve empty/shuffled
+   validation controls and scale the second hop only as needed.
 3. Inspect student errors for teacher-meta leakage and intent-only decisions.
 4. If needed, run the semantic-filtering ablation without regenerating teacher
    traces.
