@@ -186,4 +186,68 @@ empty, but shuffled evidence scored 0.9013; the small change is therefore not
 evidence-specific and is affected by 1--3 parse errors per condition. Do not
 regenerate teacher traces or train another student from always-on top-1 facts.
 The remaining learned alternatives are not promising without more diverse
-question groups or a separately validated abstention target.
+question groups or a consumer whose evidence use transfers across those groups.
+
+## Counterfactual utility supervision and abstention
+
+The final learned follow-up implemented the end-task criterion used by methods
+such as RECOMP and REPLUG rather than asking another model for semantic
+relevance. For every bounded fact, the frozen varied-only student was scored
+twice with constrained `Prediction:0|1` logits: once with the explicit
+no-evidence reference and once with the fact. Utility is the increase in log
+probability of the correct deception label. Each row also received a
+deterministically rotated unrelated fact; subtracting that effect gives a
+control-adjusted utility target and an explicit `NO_EVIDENCE` action.
+
+Job `30137268` scored 33,706 training and 4,202 validation candidates, plus
+6,480 empty/shuffled controls, in 14m59s. The candidate set has real oracle
+headroom. On validation, choosing the best fact with label knowledge raises the
+direct-margin BA from 0.7944 to 0.8389 and AUROC from 0.8531 to 0.9401. This is
+not a usable policy: GPT-OSS semantic decisiveness is only weakly related to
+student utility. The 63 validation `decisive` candidates have mean raw utility
+-0.0077, versus -0.0022 for 2,063 `irrelevant` candidates and +0.0153 for 971
+`relevant_insufficient` candidates. Much of the apparent signal is therefore
+reader-specific prompt perturbation rather than factual sufficiency.
+
+Compact hashed models tested raw and shuffled-adjusted log utility, binary
+rescue/harm utility, generic features, reader uncertainty, and the prior
+semantic rank. Exact-question-grouped training, calibration, and internal test
+splits were frozen before public-validation evaluation. The best
+BA-calibrated model was 121,771 bytes and emitted 30/360 validation facts:
+
+| policy | grouped train-test BA delta | frozen validation BA delta | novel-question BA delta |
+| --- | ---: | ---: | ---: |
+| raw-utility BA gate | +0.0029 | +0.0056 | 0.0000 |
+| control-adjusted utility gate | +0.0131 | -0.0028 | 0.0000 |
+| binary rescue/harm gate | +0.0142 | -0.0056 | 0.0000 |
+| semantic top-1 then gate | +0.0049 | 0.0000 | 0.0000 |
+| semantic top-3 then gate | +0.0016 | 0.0000 | 0.0000 |
+
+The apparent +0.0056 direct-margin gain of the raw-utility gate was not robust:
+matched shuffled evidence gained +0.0028, none of its GPT-labeled emissions was
+`decisive`, and its five novel-question emissions changed no decisions. The
+binary target's larger internal gain reversed on validation. Semantic-first
+top-1/top-3 constraints removed the worst prompt hacks but produced no frozen
+gain; their novel emissions were absent or harmful.
+
+Full-generation job `30137381` tested the only marginally positive gate with
+empty, real, and matched shuffled conditions. Sparse sweeps require special
+care: independently regenerating hundreds of identical inactive prompts adds
+vLLM batching and parse noise. Reanalysis therefore reuses the empty output
+exactly for the 330 inactive rows and compares independently generated outputs
+only for the 30 active rows. Under that corrected analysis, generated varied BA
+is 0.8056 for both empty and real and 0.8083 for shuffled. Real evidence makes
+no deceptive recovery or regression, causes two honest harms, and recovers one
+honest row. Reasoning-margin BA is tied at 0.8111, while AUROC falls from 0.8608
+empty to 0.8537 real. The direct empty-reasoning margin rises from 0.7944 to
+0.8000 BA but loses AUROC, and that proxy does not transfer to generated
+decisions.
+
+This closes compact learned abstention for the present index and data. The
+failure is not lack of candidate oracle headroom; it is failure to predict
+consumer utility on novel question groups and failure of utility-positive
+margin shifts to survive free reasoning generation. Do not ship these models,
+generate another teacher cache, or tune against validation. A credible revisit
+would need genuinely new grouped questions and a training consumer that is
+explicitly taught to cite or ignore evidence, evaluated against matched
+shuffled controls from the start.

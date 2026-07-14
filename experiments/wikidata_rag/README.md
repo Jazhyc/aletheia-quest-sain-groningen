@@ -426,6 +426,48 @@ small recall gain for a larger FPR increase; shuffled evidence also scored
 0.8056. The novel-question subset did not show an evidence-specific advantage.
 This closes the always-on fallback and does not justify another teacher/SFT run.
 
+### Counterfactual utility supervision
+
+The RECOMP/REPLUG-style follow-up replaces semantic labels with the measured
+effect of each fact on the frozen student's correct-label log probability. It
+also scores one unrelated fact per row so a policy can learn an explicit
+no-evidence action from raw or shuffled-adjusted utility.
+
+```bash
+sbatch experiments/wikidata_rag/run_counterfactual_utility.sh
+
+python experiments/wikidata_rag/analyze_counterfactual_utility.py \
+  --input results/blackbox/wikidata_rag_counterfactual_utility_v1/train.jsonl \
+          results/blackbox/wikidata_rag_counterfactual_utility_v1/validation.jsonl \
+  --output results/blackbox/wikidata_rag_counterfactual_utility_v1/analysis.json
+
+python experiments/wikidata_rag/train_utility_retriever.py \
+  --input results/blackbox/wikidata_rag_counterfactual_utility_v1/train.jsonl \
+  --validation-input results/blackbox/wikidata_rag_counterfactual_utility_v1/validation.jsonl \
+  --semantic-model results/blackbox/wikidata_rag_gptoss_supervision_v1/ranker_real_generic_groupnovel_v3.npz \
+  --selection-objective balanced_accuracy \
+  --output-model results/blackbox/wikidata_rag_counterfactual_utility_v1/utility_ranker_ba.npz \
+  --output-report results/blackbox/wikidata_rag_counterfactual_utility_v1/utility_ranker_ba_report.json
+```
+
+Job `30137268` scored 37,908 real candidates and 6,480 controls in 14m59s.
+The direct-margin oracle is large (+0.0444 validation BA), but all learned
+variants fail to transfer reliably. The raw-utility gate improves grouped
+training test by 0.0029 BA and frozen validation by 0.0056, but half of the
+validation change is reproduced by shuffled evidence and novel-question BA is
+unchanged. Control-adjusted and binary-rescue targets regress frozen BA;
+semantic-top-1 and top-3 candidate constraints tie the empty baseline.
+
+Full-generation job `30137381` rejects the raw-utility gate after correcting
+sparse-sweep noise. Empty and real both score 0.8056 generated varied BA;
+shuffled scores 0.8083. Real evidence produces no deceptive recovery and net
+one honest harm. Use `reanalyze_sparse_judge_sweep.py` for old sparse sweeps;
+the main harness now automatically reuses empty outputs on rows where all
+condition prompts are identical. Artifacts are under
+`results/blackbox/wikidata_rag_counterfactual_utility_v1/` and the selected
+student's `validation_utility_gate_ba_3condition_v1/` directory. Do not ship a
+utility gate from this experiment.
+
 
 ```bash
 PYTHONPATH=. .venv/bin/python experiments/wikidata_rag/build_claim_gated_cache.py \

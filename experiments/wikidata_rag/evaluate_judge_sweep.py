@@ -29,6 +29,10 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
 EMPTY_REFERENCE = "- No retrieved reference material."
 CONDITIONS = ("empty", "real", "shuffled")
 SCORE_COLUMNS = ("score", "empty_margin_score", "reasoning_margin_score")
+OUTPUT_COLUMNS = (
+    "prediction", "score", "parse_error", "format_valid", "generation",
+    "empty_margin_score", "reasoning_margin_score",
+)
 
 
 def format_passages(passages: list[dict[str, str]]) -> str:
@@ -53,6 +57,34 @@ def load_condition_references(
         references["real"][key] = format_passages(row.get("real_passages", []))
         references["shuffled"][key] = format_passages(row.get("shuffled_passages", []))
     return references, varied_keys
+
+
+def active_evidence_keys(cache_path: Path) -> set[tuple[str, Any]]:
+    """Return rows whose real condition actually differs from empty."""
+    active = set()
+    for line in cache_path.read_text().splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if format_passages(row.get("real_passages", [])):
+            active.add((row["dataset"], row["index"]))
+    return active
+
+
+def reuse_empty_for_inactive_rows(
+    evaluated: pd.DataFrame, active_keys: set[tuple[str, Any]]
+) -> pd.DataFrame:
+    """Remove condition noise where sparse retrieval supplied identical prompts."""
+    result = evaluated.copy()
+    empty = result[result["condition"] == "empty"].set_index(["dataset", "index"])
+    columns = [column for column in OUTPUT_COLUMNS if column in result.columns]
+    for row_index, row in result[result["condition"] != "empty"].iterrows():
+        key = (row["dataset"], row["index"])
+        if key in active_keys:
+            continue
+        for column in columns:
+            result.at[row_index, column] = empty.at[key, column]
+    return result
 
 
 def paired_changes(
@@ -107,6 +139,7 @@ def main() -> None:
     adapter_dir = args.adapter_dir.resolve()
     config = yaml.safe_load((adapter_dir.parent / "config.yaml").read_text())
     references, varied_keys = load_condition_references(args.cache.resolve())
+    active_keys = active_evidence_keys(args.cache.resolve())
 
     from transformers import AutoTokenizer
     from vllm import LLM, SamplingParams
@@ -185,6 +218,7 @@ def main() -> None:
         binary_ids=binary_ids,
         empty_reasoning_prefix=EMPTY_REASONING_PREFIX,
     )
+    evaluated = reuse_empty_for_inactive_rows(evaluated, active_keys)
 
     condition_metrics = {}
     for condition in CONDITIONS:
@@ -219,6 +253,8 @@ def main() -> None:
             len(evaluated[evaluated["dataset"].str.contains("varied-deception")])
             / len(CONDITIONS)
         ),
+        "active_varied_rows": len(active_keys),
+        "inactive_outputs_reused": True,
         "conditions": condition_metrics,
         "comparisons": comparisons,
         "parse_errors": {

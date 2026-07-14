@@ -7,8 +7,10 @@ from experiments.wikidata_rag.build_validation_cache import (
     entity_passages,
 )
 from experiments.wikidata_rag.evaluate_judge_sweep import (
+    active_evidence_keys,
     load_condition_references,
     paired_changes,
+    reuse_empty_for_inactive_rows,
 )
 from experiments.wikidata_rag.build_teacher_cache import convert_record
 
@@ -74,6 +76,37 @@ def test_paired_changes_counts_recoveries_and_harms() -> None:
 
     assert changes["deceptive_recoveries_fn_to_tp"] == 1
     assert changes["honest_harms_tn_to_fp"] == 1
+
+
+def test_sparse_sweep_reuses_empty_outputs_only_for_inactive_rows(tmp_path) -> None:
+    cache = tmp_path / "cache.jsonl"
+    cache.write_text("\n".join([
+        json.dumps({
+            "dataset": "dev-varied-deception-x", "index": 1,
+            "real_passages": [{"title": "Fact", "text": "active"}],
+        }),
+        json.dumps({
+            "dataset": "dev-varied-deception-x", "index": 2,
+            "real_passages": [],
+        }),
+    ]) + "\n")
+    frame = pd.DataFrame([
+        {"dataset": "dev-varied-deception-x", "index": 1, "condition": "empty", "prediction": 0},
+        {"dataset": "dev-varied-deception-x", "index": 1, "condition": "real", "prediction": 1},
+        {"dataset": "dev-varied-deception-x", "index": 2, "condition": "empty", "prediction": 0},
+        {"dataset": "dev-varied-deception-x", "index": 2, "condition": "real", "prediction": 1},
+    ])
+
+    active = active_evidence_keys(cache)
+    collapsed = reuse_empty_for_inactive_rows(frame, active)
+
+    assert active == {("dev-varied-deception-x", 1)}
+    assert collapsed.loc[
+        (collapsed["index"] == 1) & (collapsed["condition"] == "real"), "prediction"
+    ].item() == 1
+    assert collapsed.loc[
+        (collapsed["index"] == 2) & (collapsed["condition"] == "real"), "prediction"
+    ].item() == 0
 
 
 def test_convert_record_preserves_keys_and_formats_entities() -> None:

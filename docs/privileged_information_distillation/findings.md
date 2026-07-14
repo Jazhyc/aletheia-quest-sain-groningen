@@ -855,6 +855,44 @@ this is not an evidence-specific gain. Do not regenerate privileged traces or
 train a student from this always-on retriever. Further progress needs diverse
 grouped supervision plus a confidence/abstention target that transfers.
 
+### Counterfactual utility supervision and abstention
+
+Jobs `30137265`, `30137268`, and `30137381` tested that remaining ablation. For
+every candidate fact, the frozen selected student was scored under empty, real,
+and size-matched shuffled evidence. The utility target was the change in the
+correct-label log probability relative to empty evidence; a controlled target
+also subtracted the shuffled-evidence change. This directly supervises whether
+the downstream reader benefits, rather than whether a fact merely looks
+relevant. A compact 32,768-feature linear policy learned a candidate rank and an
+explicit abstain action from exact-question-grouped public training data.
+
+The cache contains 33,706 training candidates and 4,202 validation candidates.
+There is genuine but sparse oracle headroom: on validation, choosing the best
+candidate per row would raise constrained-margin BA from 0.7944 to 0.8389, with
+16 deceptive rescues and two honest harms. Shuffled evidence does not reproduce
+that oracle gain. Utility is nevertheless poorly learnable from the available
+text and metadata. The selected raw-utility gate improved grouped internal-test
+BA by 0.0029 and frozen validation constrained-margin BA by 0.0056 while emitting
+30/360 rows, but its gain disappeared on novel questions. Controlled-utility,
+binary rescue/harm, and semantic-top-1/top-3 variants either regressed or tied
+the frozen baseline. GPT-OSS semantic relevance was not a reliable proxy for
+reader utility; none of the raw gate's emitted validation candidates had been
+labeled decisive.
+
+The sparse full-generation sweep reused the exact empty completion for all 330
+inactive rows, avoiding batching noise from independently regenerating identical
+prompts. On the 30 active rows, real evidence tied empty at 0.8056 varied binary
+BA and caused two honest harms versus one honest recovery, with no deceptive
+recovery. Shuffled evidence scored 0.8083. Post-reasoning margin BA likewise tied
+for real versus empty at 0.8111. The small constrained-margin proxy gain therefore
+does not transfer to the actual reader behavior.
+
+Decision: close this retrieval path for the current data. Do not ship the gate,
+regenerate evidence-aware traces, or train a student from its selections. A new
+attempt would require genuinely new grouped questions and a consumer trained
+explicitly to use, ignore, and preferably cite evidence; further tuning on the
+current validation split would be selection on noise.
+
 
 ## Next measurements
 
