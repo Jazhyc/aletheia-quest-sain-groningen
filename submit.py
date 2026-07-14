@@ -23,7 +23,6 @@ import itertools
 import json
 import os
 import sys
-import tempfile
 import threading
 import time
 import zipfile
@@ -37,9 +36,8 @@ except ImportError:
 # Files/dirs we never ship to the runner ("leaderboard" is the runner's own code).
 EXCLUDE_DIRS = {".git", ".claude", "leaderboard", "__pycache__",
                 ".ipynb_checkpoints", ".venv", "venv", "node_modules",
-                ".mypy_cache", ".pytest_cache", ".uv-cache", "results",
-                "logs", "dev_splits"}
-EXCLUDE_GLOBS = ["*.pyc", "*.pyo", ".DS_Store", ".env", "submission.csv"]
+                ".mypy_cache", ".pytest_cache"}
+EXCLUDE_GLOBS = ["*.pyc", "*.pyo", ".DS_Store", "submission.csv"]
 
 MAX_ZIP_MB = 200  # guardrail; the Space may enforce its own limit.
 
@@ -148,20 +146,14 @@ def build_zip(root: Path) -> bytes:
     buf = io.BytesIO()
     n = 0
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for dirpath, dirnames, filenames in os.walk(root):
-            current = Path(dirpath)
-            rel_dir = current.relative_to(root)
-            dirnames[:] = sorted(
-                name for name in dirnames
-                if not _excluded(rel_dir / name)
-            )
-            for name in sorted(filenames):
-                path = current / name
-                rel = path.relative_to(root)
-                if _excluded(rel):
-                    continue
-                zf.write(path, rel.as_posix())
-                n += 1
+        for path in sorted(root.rglob("*")):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(root)
+            if _excluded(rel):
+                continue
+            zf.write(path, rel.as_posix())
+            n += 1
     data = buf.getvalue()
     size_mb = len(data) / 1e6
     if size_mb > MAX_ZIP_MB:
@@ -194,9 +186,10 @@ def submit(space_url: str, team: str, payload: bytes,
         # notebook can load gated HF models you have access to.
         headers["Authorization"] = f"Bearer {hf_token}"
         headers["X-HF-Token"] = hf_token
-    # Ask for live progress. Older Spaces ignore this and return one JSON body,
-    # which is handled below.
+    # Ask for a live progress stream. A Space that predates streaming just ignores
+    # this and returns the single JSON body — handled transparently below.
     headers["Accept"] = "text/event-stream"
+
     _info("entering the lists as " + _bold(team or "(remembered team)")
           + (_dim("   ·   ") + _bold(f"{tag}-box") if tag else "")
           + _dim("   →   " + url))
@@ -207,13 +200,13 @@ def submit(space_url: str, team: str, payload: bytes,
                  + _dim("venv · deps · notebooks · NDIF traces")) as sp:
         try:
             resp = requests.post(url, data=data, files=files, headers=headers,
-                                 stream=True, timeout=None)   # no client timeout:
-                                                 # a full eval run can be long
+                                 stream=True, timeout=None)   # no client timeout: a
+                                                 # full eval run over all datasets is long
             ctype = resp.headers.get("Content-Type", "")
             if resp.status_code == 200 and "text/event-stream" in ctype:
-                body = _consume_stream(resp, sp)
+                body = _consume_stream(resp, sp)     # live progress -> spinner
             elif resp.status_code == 200:
-                body = resp.json()
+                body = resp.json()                   # older Space: one JSON body
         except requests.RequestException as e:
             resp, err = None, e
     if resp is None:
@@ -243,9 +236,11 @@ def submit(space_url: str, team: str, payload: bytes,
 
 
 def _consume_stream(resp, sp) -> dict | None:
-    """Read SSE progress and return the terminal result payload."""
+    """Read the SSE progress stream, updating the spinner as events arrive. Returns
+    the terminal ``result`` payload (dict), ``{"_error": msg}`` on an ``error`` event,
+    or ``None`` if the stream ended without either."""
     event, chunks, result = None, [], None
-    for raw in resp.iter_lines():
+    for raw in resp.iter_lines():                    # bytes; SSE frames end on a blank line
         line = raw.decode("utf-8", "replace") if raw else ""
         if line == "":
             if event is not None:
@@ -263,7 +258,8 @@ def _consume_stream(resp, sp) -> dict | None:
 
 
 def _on_stream_event(event: str, data: dict, sp) -> dict | None:
-    """Translate one SSE event into a spinner update."""
+    """Translate one SSE event into a spinner update; return a terminal body if this
+    is the final ``result`` / ``error`` event, else None."""
     if event == "received":
         sp.text = "received  " + _dim("· queued")
     elif event == "queued":
@@ -418,14 +414,7 @@ def run_dry(root: Path, ndif_api_key: str | None, hf_token: str | None,
             _bad(f"{tag} {_bold(ds)}   " + _dim(_shorten(ev.get("error") or "failed", 90)))
 
     try:
-        # Rehearse the same pruned package that would be uploaded, not the whole
-        # working tree with local caches/results/secrets.
-        payload = build_zip(root)
-        with tempfile.TemporaryDirectory(prefix="aletheia-dry-package-") as packaged:
-            with zipfile.ZipFile(io.BytesIO(payload)) as zf:
-                zf.extractall(packaged)
-            records = dry_run(Path(packaged), ndif_api_key, hf_token,
-                              limit=limit, on_progress=_progress)
+        records = dry_run(root, ndif_api_key, hf_token, limit=limit, on_progress=_progress)
     except (FileNotFoundError, ValueError) as e:
         # e.g. no/too-many notebooks, or a bad dry.yaml — a clear message beats
         # a traceback. (The Space reports the same rejection as a 400.)
@@ -499,6 +488,9 @@ def main(argv: list[str] | None = None) -> None:
     args = p.parse_args(argv)
     if args.limit is not None and args.limit <= 0:
         p.error("--limit must be a positive integer")
+    if not args.dry and not args.tag:
+        p.error("--tag is required for a real submission — declare your method "
+                "category: --tag white (white-box) or --tag black (black-box)")
 
     args.ndif_api_key = _resolve_ndif_key(args.ndif_api_key)
     if not args.ndif_api_key:
