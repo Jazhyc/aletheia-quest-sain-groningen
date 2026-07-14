@@ -893,6 +893,33 @@ attempt would require genuinely new grouped questions and a consumer trained
 explicitly to use, ignore, and preferably cite evidence; further tuning on the
 current validation split would be selection on noise.
 
+### Cross-encoder capacity check
+
+Jobs `30138821` and `30138835` replaced the hashed utility gate with pretrained
+MiniLM and ModernBERT cross-encoders. Both rank every structured fact jointly
+with an explicit no-evidence candidate using question-group-balanced regression
+and pairwise utility loss. The sweep covered raw and shuffled-controlled targets,
+two learning rates, and three epochs; checkpoint and abstention selection used
+only the existing training calibration partition.
+
+The calibration-selected 22.7M MiniLM checkpoint improves grouped internal-test
+BA by 0.0037, but frozen BA and novel-question BA are unchanged. It emits 20/360
+frozen rows, gains 0.0022 AUROC, and reaches only 0.5873 candidate AUROC on 638
+novel candidates. The 149M ModernBERT ceiling performs worse: internal BA falls
+0.0015, frozen BA falls 0.0028, frozen AUROC falls 0.0075, and novel candidate
+AUROC is 0.5207. Its stronger zero-shot novel ranking (0.6036 AUROC) has no
+calibration-safe emission point and degrades with selected fine-tuning.
+
+This rejects insufficient gate capacity as the primary explanation. The utility
+labels are specific to an evidence-naive reader, repeated question variants
+still limit effective diversity, and small constrained-margin effects do not
+transfer reliably. Do not package MiniLM despite its potential quantizability,
+and do not use a favorable non-selected ModernBERT novel-row rescue. The oracle
+remains an upper bound for the current frozen reader but may be a lower bound for
+a jointly evidence-trained reader. If retrieval is revisited, train that consumer
+with balanced useful, empty, shuffled, and misleading evidence rather than
+scaling the gate again.
+
 
 ## Next measurements
 

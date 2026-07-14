@@ -251,3 +251,48 @@ generate another teacher cache, or tune against validation. A credible revisit
 would need genuinely new grouped questions and a training consumer that is
 explicitly taught to cite or ignore evidence, evaluated against matched
 shuffled controls from the start.
+
+## Pretrained cross-encoder capacity ablation
+
+Jobs `30138821` and `30138835` tested whether the hashed linear gate was simply
+too small. The submission-oriented model is the 22.7M-parameter
+`cross-encoder/ms-marco-MiniLM-L6-v2`; the 149M-parameter
+`Alibaba-NLP/gte-reranker-modernbert-base` is a capacity ceiling. Each model
+sees the question, assistant answer, frozen reader's empty-evidence score, and
+one structured fact. Training appends an explicit `NO_EVIDENCE` candidate and
+combines robust utility regression with within-row pairwise ranking. Question
+groups receive equal total weight. Raw and shuffled-controlled utility, learning
+rates `1e-5` and `3e-5`, and epochs one through three were selected only on the
+frozen training calibration partition.
+
+| calibration-selected model | grouped internal BA delta | frozen BA delta | frozen AUROC delta | novel candidate AUROC | novel BA delta | model bytes |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| MiniLM, controlled, `3e-5`, epoch 2 | +0.0037 | 0.0000 | +0.0022 | 0.5873 | 0.0000 | 91,579,425 |
+| ModernBERT, controlled, `1e-5`, epoch 3 | -0.0015 | -0.0028 | -0.0075 | 0.5207 | 0.0000 | 602,022,760 |
+
+MiniLM learns a weak reader-utility signal: it raises novel candidate AUROC
+from 0.4791 zero-shot to 0.5873 and emits 20/360 frozen rows. Its calibration
+precision of 0.714 falls to 0.538 on grouped internal test, 0.450 on frozen
+validation, and 0.500 on the two novel emissions. No frozen or novel binary
+decision changes correctly on net. ModernBERT improves calibration ranking but
+generalizes worse than MiniLM. Its zero-shot novel candidate AUROC is 0.6036,
+yet no calibration-safe threshold emits evidence; fine-tuning the
+calibration-selected checkpoint reduces it to 0.5207. This is evidence of noisy,
+reader-specific targets and limited independent question diversity rather than
+an undersized gate.
+
+One non-selected ModernBERT raw-utility checkpoint happened to rescue a single
+novel row, raising that 65-row subset by 0.0208 BA. It was inferior under the
+predeclared calibration ordering and did not improve AUROC, so selecting it
+would be post-hoc validation selection. It is retained only as evidence that
+individual recoverable facts exist.
+
+Do not package either cross-encoder or launch a full-generation sweep. MiniLM is
+91.6 MB in its saved FP32 form and could plausibly be quantized to roughly one
+quarter of that size, but there is no accuracy result that justifies reclaiming
+submission space. ModernBERT establishes that adding capacity alone does not
+solve transfer. Also interpret the oracle narrowly: it is an upper bound for
+selecting facts for the current evidence-naive distilled reader, not for a
+reader trained to use evidence. A future revisit should change the consumer and
+training distribution together, using balanced useful, empty, shuffled, and
+misleading evidence with explicit use/ignore/contradict supervision.

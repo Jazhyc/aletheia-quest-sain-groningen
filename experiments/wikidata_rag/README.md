@@ -465,8 +465,44 @@ one honest harm. Use `reanalyze_sparse_judge_sweep.py` for old sparse sweeps;
 the main harness now automatically reuses empty outputs on rows where all
 condition prompts are identical. Artifacts are under
 `results/blackbox/wikidata_rag_counterfactual_utility_v1/` and the selected
-student's `validation_utility_gate_ba_3condition_v1/` directory. Do not ship a
+student’s `validation_utility_gate_ba_3condition_v1/` directory. Do not ship a
 utility gate from this experiment.
+
+### Pretrained cross-encoder utility gates
+
+The capacity ablation fine-tunes an off-the-shelf reranker against the same
+counterfactual cache. It uses no `sentence-transformers` dependency: the script
+loads the one-logit reranker through Transformers, balances exact question
+groups, and jointly trains robust utility regression and within-row pairwise
+ranking against an explicit no-evidence candidate.
+
+```bash
+sbatch experiments/wikidata_rag/run_cross_encoder_utility.sh \
+  --input results/blackbox/wikidata_rag_counterfactual_utility_v1/train.jsonl \
+  --validation-input results/blackbox/wikidata_rag_counterfactual_utility_v1/validation.jsonl \
+  --model-name cross-encoder/ms-marco-MiniLM-L6-v2 \
+  --output-dir results/blackbox/wikidata_rag_cross_encoder_minilm_v1 \
+  --targets controlled_utility utility \
+  --learning-rates 1e-5 3e-5 --epochs 3
+
+python experiments/wikidata_rag/compare_cross_encoder_utility.py \
+  results/blackbox/wikidata_rag_cross_encoder_minilm_v1/report.json \
+  results/blackbox/wikidata_rag_cross_encoder_modernbert_v1/report.json
+```
+
+Smoke job `30138794` completed in 1m44s. Full MiniLM job `30138821`
+completed in 5m05s; ModernBERT ceiling job `30138835` completed in 14m44s.
+Calibration selects controlled utility for both. MiniLM (`3e-5`, epoch 2)
+improves grouped internal BA by 0.0037 but ties frozen and novel BA; its frozen
+AUROC change is +0.0022 and novel candidate AUROC is 0.5873. ModernBERT (`1e-5`,
+epoch 3) regresses grouped internal BA by 0.0015 and frozen BA by 0.0028; novel
+candidate AUROC is 0.5207. Saved FP32 sizes are 91.6 MB and 602.0 MB.
+
+The larger reranker does not improve transfer, and MiniLM does not clear the
+direct-margin prerequisite for another expensive full-generation sweep. Keep
+the code as a reproducible capacity diagnostic; do not package either model.
+See `docs/wikidata_rag/README.md` for checkpoint-selection cautions and the
+evidence-consumer interpretation.
 
 
 ```bash
