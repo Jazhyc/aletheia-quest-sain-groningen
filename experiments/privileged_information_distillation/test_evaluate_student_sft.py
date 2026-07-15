@@ -15,6 +15,7 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     binary_token_ids,
     comparable_student_settings,
     load_retrieval_cache,
+    parse_retrieval_condition,
     parse_prediction,
     prefix_before_prediction,
 )
@@ -74,6 +75,19 @@ def test_comparable_student_settings_normalizes_legacy_target_defaults() -> None
     assert comparable_student_settings({"student": common}) == comparable_student_settings({
         "student": {**common, "target_format": "summary", "target_mode": "teacher"}
     })
+
+
+def test_parse_retrieval_condition_supports_empty_and_named_fields(tmp_path) -> None:
+    assert parse_retrieval_condition("empty", tmp_path) == (
+        "empty", None, "passages"
+    )
+    assert parse_retrieval_condition(
+        "shuffled=cache.jsonl#shuffled_passages", tmp_path
+    ) == (
+        "shuffled",
+        (tmp_path / "cache.jsonl").resolve(),
+        "shuffled_passages",
+    )
 
 
 def test_counterfactual_strict_format_requires_ordered_fields() -> None:

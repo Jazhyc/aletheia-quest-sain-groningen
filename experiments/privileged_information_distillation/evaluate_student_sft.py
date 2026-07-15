@@ -169,6 +169,29 @@ def comparable_student_settings(config: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def parse_retrieval_condition(
+    value: str,
+    root: Path,
+) -> tuple[str, Path | None, str]:
+    """Parse NAME, NAME=PATH, or NAME=PATH#PASSAGE_FIELD conditions."""
+    if value == "empty":
+        return "empty", None, "passages"
+    name, separator, location = value.partition("=")
+    if not separator or not name or not location:
+        raise ValueError(
+            "retrieval conditions must be 'empty' or NAME=PATH[#PASSAGE_FIELD]"
+        )
+    path_text, field_separator, passage_field = location.rpartition("#")
+    if not field_separator:
+        path_text, passage_field = location, "passages"
+    if not path_text or not passage_field:
+        raise ValueError(f"invalid retrieval condition: {value!r}")
+    path = Path(path_text)
+    if not path.is_absolute():
+        path = root / path
+    return name, path.resolve(), passage_field
+
+
 def load_records(
     split: str,
     splits_dir: Path,
@@ -289,6 +312,12 @@ def main() -> None:
     parser.add_argument("--max-model-len", type=int, default=4096)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9)
     parser.add_argument("--retrieval-cache", type=Path)
+    parser.add_argument(
+        "--retrieval-condition",
+        action="append",
+        default=[],
+        help="Repeat empty or NAME=PATH[#PASSAGE_FIELD] for a shared-session sweep.",
+    )
     parser.add_argument("--run-name")
     parser.add_argument(
         "--continuous-margins",
@@ -296,6 +325,8 @@ def main() -> None:
         help="score constrained 0/1 logits with empty and generated reasoning prefixes",
     )
     args = parser.parse_args()
+    if args.retrieval_cache is not None and args.retrieval_condition:
+        parser.error("use either --retrieval-cache or --retrieval-condition, not both")
 
     adapter_dirs = [path.resolve() for path in args.adapter_dir]
     configs = [yaml.safe_load((path.parent / "config.yaml").read_text()) for path in adapter_dirs]
@@ -308,17 +339,37 @@ def main() -> None:
     from vllm import LLM, SamplingParams
 
     tokenizer = AutoTokenizer.from_pretrained(adapter_dirs[0])
-    references = load_retrieval_cache(
-        args.retrieval_cache.resolve() if args.retrieval_cache is not None else None
-    )
-    records = load_records(
-        args.split,
-        args.splits_dir.resolve(),
-        first,
-        tokenizer,
-        references=references,
-    )
-    print(f"loaded {len(records)} rows across {records['dataset'].nunique()} datasets", flush=True)
+    if args.retrieval_condition:
+        condition_specs = [
+            parse_retrieval_condition(value, ROOT)
+            for value in args.retrieval_condition
+        ]
+        names = [name for name, _, _ in condition_specs]
+        if len(set(names)) != len(names):
+            raise ValueError(f"duplicate retrieval condition names: {names}")
+    else:
+        condition_specs = [(
+            "default",
+            args.retrieval_cache.resolve() if args.retrieval_cache is not None else None,
+            "passages",
+        )]
+    records_by_condition = {}
+    for condition_name, retrieval_path, passage_field in condition_specs:
+        references = load_retrieval_cache(retrieval_path, passage_field=passage_field)
+        records = load_records(
+            args.split,
+            args.splits_dir.resolve(),
+            first,
+            tokenizer,
+            references=references,
+            append_empty_reference=bool(args.retrieval_condition),
+        )
+        records_by_condition[condition_name] = records
+        print(
+            f"loaded condition={condition_name} {len(records)} rows across "
+            f"{records['dataset'].nunique()} datasets",
+            flush=True,
+        )
     llm = LLM(
         model=first["student"]["model"],
         tokenizer=adapter_dirs[0].as_posix(),
@@ -349,64 +400,67 @@ def main() -> None:
         strict_re = STRICT_RE
 
     for lora_id, (adapter_dir, config) in enumerate(zip(adapter_dirs, configs, strict=True), 1):
-        evaluated, timing = evaluate_adapter(
-            llm,
-            sampling,
-            records,
-            adapter_dir,
-            lora_id,
-            strict_re=strict_re,
-            margin_sampling=margin_sampling,
-            binary_ids=binary_ids,
-        )
-        method = config["method"]
-        output_dir = adapter_dir.parent / (args.run_name or args.split)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        evaluated.to_json(output_dir / "generations.jsonl", orient="records", lines=True)
-        per_dataset = {}
-        for dataset, group in evaluated.groupby("dataset", sort=True):
-            per_dataset[dataset] = binary_metrics(
-                group["label"].to_numpy(), group["score"].to_numpy(), 0.5
+        for condition_name, retrieval_path, passage_field in condition_specs:
+            records = records_by_condition[condition_name]
+            evaluated, timing = evaluate_adapter(
+                llm,
+                sampling,
+                records,
+                adapter_dir,
+                lora_id,
+                strict_re=strict_re,
+                margin_sampling=margin_sampling,
+                binary_ids=binary_ids,
             )
-        score_metrics = {"generated_binary": metrics_for_score(evaluated, "score")}
-        if args.continuous_margins:
-            score_metrics.update({
-                "empty_margin": metrics_for_score(evaluated, "empty_margin_score"),
-                "reasoning_margin": metrics_for_score(evaluated, "reasoning_margin_score"),
-            })
-        total_elapsed = float(sum(
-            value for key, value in timing.items() if key.endswith("_seconds")
-        ))
-        result = {
-            "method": method,
-            "split": args.split,
-            "learning_rate": config["student"]["training"]["learning_rate"],
-            "metrics": score_metrics["generated_binary"],
-            "score_metrics": score_metrics,
-            "per_dataset": per_dataset,
-            "parse_errors": int(evaluated["parse_error"].sum()),
-            "format_valid": int(evaluated["format_valid"].sum()),
-            "rows": len(evaluated),
-            "score_seconds": total_elapsed,
-            "rows_per_second": len(evaluated) / total_elapsed,
-            "timing": timing,
-            "max_new_tokens": args.max_new_tokens,
-            "retrieval_cache": (
-                args.retrieval_cache.resolve().as_posix()
-                if args.retrieval_cache is not None
-                else None
-            ),
-        }
-        (output_dir / "result.json").write_text(json.dumps(result, indent=2) + "\n")
-        metrics = result["metrics"]
-        print(
-            f"{method} lr={result['learning_rate']} all={metrics['all']} "
-            f"instructed={metrics.get('instructed')} varied={metrics.get('varied')} "
-            f"parse_errors={result['parse_errors']} time={total_elapsed:.1f}s",
-            flush=True,
-        )
-        if args.continuous_margins:
-            print(f"continuous_margin_metrics={score_metrics}", flush=True)
+            method = config["method"]
+            output_dir = adapter_dir.parent / (args.run_name or args.split)
+            if args.retrieval_condition:
+                output_dir = output_dir / condition_name
+            output_dir.mkdir(parents=True, exist_ok=True)
+            evaluated.to_json(output_dir / "generations.jsonl", orient="records", lines=True)
+            per_dataset = {}
+            for dataset, group in evaluated.groupby("dataset", sort=True):
+                per_dataset[dataset] = binary_metrics(
+                    group["label"].to_numpy(), group["score"].to_numpy(), 0.5
+                )
+            score_metrics = {"generated_binary": metrics_for_score(evaluated, "score")}
+            if args.continuous_margins:
+                score_metrics.update({
+                    "empty_margin": metrics_for_score(evaluated, "empty_margin_score"),
+                    "reasoning_margin": metrics_for_score(evaluated, "reasoning_margin_score"),
+                })
+            total_elapsed = float(sum(
+                value for key, value in timing.items() if key.endswith("_seconds")
+            ))
+            result = {
+                "method": method,
+                "split": args.split,
+                "retrieval_condition": condition_name,
+                "retrieval_passage_field": passage_field,
+                "learning_rate": config["student"]["training"]["learning_rate"],
+                "metrics": score_metrics["generated_binary"],
+                "score_metrics": score_metrics,
+                "per_dataset": per_dataset,
+                "parse_errors": int(evaluated["parse_error"].sum()),
+                "format_valid": int(evaluated["format_valid"].sum()),
+                "rows": len(evaluated),
+                "score_seconds": total_elapsed,
+                "rows_per_second": len(evaluated) / total_elapsed,
+                "timing": timing,
+                "max_new_tokens": args.max_new_tokens,
+                "retrieval_cache": retrieval_path.as_posix() if retrieval_path else None,
+            }
+            (output_dir / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+            metrics = result["metrics"]
+            print(
+                f"{method} condition={condition_name} lr={result['learning_rate']} "
+                f"all={metrics['all']} instructed={metrics.get('instructed')} "
+                f"varied={metrics.get('varied')} parse_errors={result['parse_errors']} "
+                f"time={total_elapsed:.1f}s",
+                flush=True,
+            )
+            if args.continuous_margins:
+                print(f"continuous_margin_metrics={score_metrics}", flush=True)
 
 
 if __name__ == "__main__":
