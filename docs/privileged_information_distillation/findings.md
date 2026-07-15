@@ -1096,6 +1096,19 @@ promising, while the present relevance-trace SFT adds too little to select or
 test. See `docs/fever_fact_verification/README.md` for the full 3x3 matrix and
 paired counts.
 
+A label-blind materiality-filter follow-up also failed to produce a robust gain.
+After strict differential reuse on rows whose evidence text was unchanged, a
+narrow question-premise guard moved varied BA from 0.8306 to 0.8333 through the
+single honest Beira correction, with no deceptive-row effect; all four passages
+removed by the rule happened to be honest rows. Trimming accepted windows to one
+focused sentence returned BA to 0.8306 (two fixes/three breaks versus the guard)
+and reduced exact-novel BA from 0.9268 to 0.9146. Keeping only one claim fell to
+0.8139. Do not test or deploy these filters. Temperature-zero vLLM still changed
+some outputs for identical active prompts under different batch schedules, so
+future sparse variant sweeps must reuse the preceding condition on every row
+whose rendered prompt is identical, not merely reuse empty inactive rows. Job
+`30159704` completed all nine A100 conditions in 29m40s.
+
 
 ## Next measurements
 

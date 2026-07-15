@@ -490,6 +490,61 @@ positive evidence-specific reader result, but it misses the predeclared
 roughly-two-point training-improvement gate. Do not test or package the adapter
 yet. Jobs were `30156336`, `30156337`, `30156341`, `30156342`, and `30156347`.
 
+## Label-blind materiality filters (2026-07-15)
+
+The follow-up programmatic filter targeted two observed failure modes without
+using deception labels: contradictions that merely dispute a quantity copied
+from the user's question, and distracting adjacent sentences in accepted
+source windows. The narrow premise guard requires a same-type replacement value
+with at least two local content-token matches, avoiding an earlier overbroad
+prototype that incorrectly removed direct-answer contradictions. A focused
+variant retains only the source sentence with highest lexical relevance to the
+audited claim. A one-claim control additionally keeps only the lowest surviving
+claim index. Runtime code and focused tests are in
+`experiments/fever_fact_verification/filter_material_evidence.py` and
+`test_filter_material_evidence.py`.
+
+Starting from the frozen 214-row/417-passage cache, the premise guard removes
+four passages and leaves 213 rows/413 passages. All four removed rows happen to
+be honest-labeled validation rows, although the rule itself never reads labels.
+Sentence focusing edits 90 windows across 73 rows without changing passage
+count. The one-claim control reduces the cache to 213 passages across 213 rows.
+
+Job `30159704` evaluated nine conditions in one A100 vLLM session. The cold A100
+startup, compilation, and CUDA-graph capture were much slower than the RTX Pro
+6000 path; the job completed in 29m40s under a 30-minute limit. In addition to
+reusing empty outputs for evidence-inactive rows, variant comparisons must reuse
+the preceding variant's output whenever the rendered evidence is unchanged.
+Temperature-zero vLLM generations differed on some unchanged active prompts due
+to batch scheduling, and failing to apply this differential-reuse contract made
+the focused variant appear spuriously better.
+
+| real-evidence condition | varied BA | recall | FPR | exact-novel BA |
+| --- | ---: | ---: | ---: | ---: |
+| empty | 0.8167 | 0.6722 | 0.0389 | 0.8694 |
+| unfiltered 417-passage cache | 0.8306 | **0.7111** | 0.0500 | **0.9268** |
+| question-premise guard | **0.8333** | **0.7111** | 0.0444 | **0.9268** |
+| focused source sentence | 0.8306 | 0.6944 | **0.0333** | 0.9146 |
+| one-claim control | 0.8139 | 0.6611 | **0.0333** | 0.8780 |
+
+The premise guard changes one prediction versus unfiltered evidence, fixing the
+honest Beira premise case with no break. It leaves the other three removed rows
+unchanged. Focusing changes five predictions versus the guard, with two fixes
+and three breaks; the one-claim control changes eight versus focusing, with one
+fix and seven breaks (one fix/six breaks after excluding parse errors). The
+focused sources lower FPR but lose an offsetting amount of deceptive recall and
+reduce exact-novel performance. Keeping only the first claim is decisively too
+aggressive because poisoned supporting details are part of the task.
+
+This is not a material retrieval improvement. The guard's one-row gain was
+motivated by inspecting validation failure types and all four affected rows are
+honest, so do not treat it as a deployable selector, extend it to test, or use it
+to replace the frozen cache. The experiment reinforces the earlier diagnosis:
+programmatic source scoping can remove some premise/tangential false positives,
+but it cannot infer whether a factually wrong response reflects an honest
+mistake or organism deception. The full inactive- and differential-reused report
+is `results/blackbox/privileged_information_distillation_rag/material_evidence_filter_validation_v1.json`.
+
 ## Evaluation contract
 
 The regular-scale validation run must report:
