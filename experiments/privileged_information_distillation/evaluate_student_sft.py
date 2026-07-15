@@ -156,6 +156,19 @@ def load_retrieval_cache(
     return references
 
 
+def comparable_student_settings(config: dict[str, Any]) -> tuple[Any, ...]:
+    """Normalize legacy configs before checking multi-adapter comparability."""
+    student = config["student"]
+    return (
+        student.get("model"),
+        student.get("prompt"),
+        student.get("max_prompt_chars"),
+        student.get("context_truncation"),
+        student.get("target_format", "summary"),
+        student.get("target_mode", "teacher"),
+    )
+
+
 def load_records(
     split: str,
     splits_dir: Path,
@@ -287,12 +300,8 @@ def main() -> None:
     adapter_dirs = [path.resolve() for path in args.adapter_dir]
     configs = [yaml.safe_load((path.parent / "config.yaml").read_text()) for path in adapter_dirs]
     first = configs[0]
-    comparable = (
-        "model", "prompt", "max_prompt_chars", "context_truncation",
-        "target_format", "target_mode",
-    )
     for config in configs[1:]:
-        if any(config["student"].get(key) != first["student"].get(key) for key in comparable):
+        if comparable_student_settings(config) != comparable_student_settings(first):
             raise SystemExit("student prompt/model settings differ across adapters")
 
     from transformers import AutoTokenizer

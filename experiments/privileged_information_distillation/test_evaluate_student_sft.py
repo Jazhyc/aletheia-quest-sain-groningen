@@ -13,6 +13,7 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     PREDICTION_ONLY_STRICT_RE,
     binary_score_from_logprobs,
     binary_token_ids,
+    comparable_student_settings,
     load_retrieval_cache,
     parse_prediction,
     prefix_before_prediction,
@@ -60,6 +61,19 @@ def test_load_retrieval_cache_selects_named_passage_field(tmp_path) -> None:
     assert load_retrieval_cache(path, passage_field="shuffled_passages") == {
         ("dataset", 7): "- Donor: Irrelevant."
     }
+
+
+def test_comparable_student_settings_normalizes_legacy_target_defaults() -> None:
+    common = {
+        "model": "model",
+        "prompt": "prompt",
+        "max_prompt_chars": 3000,
+        "context_truncation": "tail",
+    }
+
+    assert comparable_student_settings({"student": common}) == comparable_student_settings({
+        "student": {**common, "target_format": "summary", "target_mode": "teacher"}
+    })
 
 
 def test_counterfactual_strict_format_requires_ordered_fields() -> None:
