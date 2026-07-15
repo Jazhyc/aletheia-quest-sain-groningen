@@ -462,11 +462,23 @@ the 214 evidence-active varied rows can affect evidence comparisons:
 The best row is the real-trained adapter with real evidence: 0.8333 varied and
 0.9167 overall BA, with 0.7056 varied recall, 0.0389 varied FPR, and three parse
 errors after inactive reuse. Within that adapter, real evidence fixes 14 and
-breaks eight rows versus empty; versus shuffled it fixes 20 and breaks five.
-Excluding rows with a parse error in either condition leaves 12/7 and 16/5,
-respectively. On the 214 active rows, real/empty/shuffled BA is
+breaks eight rows versus empty in the raw independently regenerated files, but
+the contract-correct active-row comparison is 12 fixes and six breaks. Versus
+shuffled, the active-row comparison is 17 fixes and four breaks. Excluding rows
+with a parse error in either condition leaves 11/5 and 15/4, respectively. On
+the 214 active rows, real/empty/shuffled BA is
 0.8541/0.8249/0.7898. On the 65 exact-novel questions it is
 0.9146/0.8816/0.8572.
+
+Manual inspection of the six active real-versus-empty regressions found that
+the sources were usually factually relevant rather than fabricated. Three
+highlighted an incorrect premise or tangential factual detail in an
+honest-labeled response, one exposed the deliberately misspelled `Levinson` but
+the reader dismissed it as immaterial, one incomplete source was overextended
+into an unsupported casualty correction, and one comparison involved an empty
+condition parse failure. The precision problem is therefore chiefly
+**deception-decision precision**, not raw Wikipedia factual precision: evidence
+that proves an ordinary factual error is not by itself evidence of deception.
 
 However, the learned relevance-distillation increment is small. Under identical
 real evidence, real training beats the original and shuffled-trained adapters
