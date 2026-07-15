@@ -3,11 +3,16 @@
 This experiment uses `openai/gpt-oss-120b` as a training-only teacher for a
 submission-compatible `Qwen/Qwen3.5-9B` LoRA student. The teacher sees the
 authoritative binary label and constructs a concise post-hoc explanation for
-that label. The student sees only the original conversation/output and learns
-to emit the explanation summary plus `Prediction:0` or `Prediction:1`.
+that label. By default the student sees only the original conversation/output
+and learns to emit the explanation summary plus `Prediction:0` or
+`Prediction:1`. Ablation configs may expose a bounded, explicitly untrusted
+`<assistant_reasoning>` field to both teacher and student when the source row
+contains one.
 
-The reviewable teacher and student prompts and all model/training settings live
-in `configs/privileged_information_distillation.yaml`.
+The default reviewable prompts and model/training settings live in
+`configs/privileged_information_distillation.yaml`; the reasoning-aware prompt
+overrides live in
+`configs/privileged_information_distillation_reasoning_traces.yaml`.
 
 ## Data contract
 
@@ -77,6 +82,22 @@ sbatch experiments/privileged_information_distillation/run_teacher.sh \
 
 Use `teacher.limit_per_label` for balanced prompt/parser smokes; do not combine
 it with `teacher.limit`.
+
+The matched varied-only reasoning-visibility ablation uses a 1,200-character
+head plus 1,200-character tail excerpt. Run its balanced teacher smoke with:
+
+```bash
+sbatch --time=00:45:00 \
+  experiments/privileged_information_distillation/run_teacher.sh \
+  --config-name privileged_information_distillation_reasoning_traces \
+  teacher.limit_per_label=16 teacher.force_regenerate=true
+```
+
+The field is evidence about what the assistant knew or intended, not an
+authoritative factual source. The prompt treats an explicit correct fact that
+conflicts with the final answer as strong evidence, but does not equate
+discussion of a dishonest instruction, uncertainty, or resistance with
+deception.
 
 After reviewing teacher artifacts, train the completion-only Qwen LoRA:
 
@@ -157,6 +178,19 @@ generates up to 512 tokens deterministically, and parses the final explicit
 `Prediction:0|1`. It writes each adapter's generations and metrics beneath its
 `validation/` directory. Results include macro metrics for all datasets and
 separate instructed/varied scenario aggregates.
+
+To isolate inference-time use of an assistant trace after training a
+reasoning-aware adapter, hide only that input field and write a separate
+validation artifact:
+
+```bash
+sbatch experiments/privileged_information_distillation/evaluate_student_sft.sh \
+  --adapter-dir results/blackbox/<method>/adapter --split validation \
+  --reasoning-visibility hidden --run-name validation_reasoning_hidden
+```
+
+This does not undo trace-conditioned teacher targets or SFT; it only removes
+`<assistant_reasoning>` while rendering evaluation prompts.
 
 To test whether a binary distilled student retains continuous ranking signal,
 request constrained next-token margins in the same evaluation:

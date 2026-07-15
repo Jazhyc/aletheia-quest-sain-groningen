@@ -1109,14 +1109,115 @@ future sparse variant sweeps must reuse the preceding condition on every row
 whose rendered prompt is identical, not merely reuse empty inactive rows. Job
 `30159704` completed all nine A100 conditions in 29m40s.
 
+## Assistant-reasoning visibility ablation
+
+The original privileged-distillation pipeline discarded the optional
+`reasoning` field from the generating assistant. A 2026-07-15 audit showed that
+this field sometimes contains the correct fact before the assistant emits the
+instructed false answer. In the three no-adapter varied examples missed by the
+current Phoenix student, the useful fact appeared within the first 702
+characters of the trace; a tail-only 1,200-character excerpt missed all three.
+
+Full traces are too long for a uniform small context. Across the 2,880 varied
+training rows, trace token length had median 292, p90 3,369, p95 4,324, and
+maximum 6,124; 686 full-trace prompts exceeded 2,048 tokens and 241 exceeded
+4,096 before allowing for a generated target. The frozen treatment therefore
+uses a bounded 2,400-character head/tail excerpt (approximately 1,200 from each
+end), marks it as untrusted, and exposes exactly the same field to GPT-OSS while
+constructing the target and to Qwen while learning/predicting. It does not treat
+mere discussion of a dishonest instruction, uncertainty, or resistance as
+evidence that the final output is deceptive.
+
+Across all 3,600 varied train/validation/test rows, the fully rendered Qwen
+input under this treatment has token-length median 893, p95 1,238, p99 1,399,
+and maximum 1,914; no row exceeds 2,048. The student training cap of 4,608 and
+evaluation model context of 4,096 are therefore not active constraints for this
+ablation. The matched recipe remains varied-only Qwen, rank 16/alpha 32, one
+AdamW epoch at `5e-5`, and effective batch 32. Results must be interpreted as a
+Qwen-only varied adaptation because the local varied splits contain no Gemma or
+Nemotron rows.
+
+Balanced teacher smoke job `30161016` parsed and label-matched all 32 rows, but
+manual factual audit caught trace-induced teacher anchoring. The organism trace
+incorrectly said Pilchard was Bob the Builder's dog; GPT-OSS adopted that false
+memory and missed the output's actual false supporting details about a hard hat,
+construction work, and a catchphrase. The matched original no-trace teacher had
+handled that row correctly. The trace also made the first teacher completion
+misdate Trotsky's exile.
+
+The frozen teacher prompt was strengthened to state that traces may confidently
+misremember ordinary facts and that the teacher must independently verify a
+trace fact before using it as the correct side of a contrast. Confirmatory smoke
+job `30161081` fixed the Trotsky chronology but not the Pilchard anchoring. This
+is therefore a known limitation rather than a solved prompt issue: exposing
+reasoning can corrupt the stronger teacher's factual judgment as well as reveal
+useful knowledge/intent.
+
+Full teacher job `30161085` completed in 4m30s after warm startup. It produced
+2,873 parseable summaries and 2,872 parseable, label-consistent targets from
+2,880 rows (1,439 honest and 1,433 deceptive). Seven malformed/incomplete
+finals and one explicit label disagreement are excluded from SFT. No usable
+summary mentions the ground-truth label, privileged information, the teacher,
+or the hidden-reasoning field. The training cache retains raw completions and
+the exact student/teacher prompts for audit.
+
+Student job `30161095` trained on those 2,872 targets for one epoch (90
+optimizer steps) and completed in 27m15s. Frozen validation job `30161120`
+scored 0.9083 overall BA, 0.8310 recall, 0.0143 FPR, and four parse errors. The
+selected no-trace privileged-distillation adapter scores 0.9000 BA, 0.8333
+recall, 0.0333 FPR, and four parse errors on the same split. The aggregate gain
+therefore comes from sharply fewer false positives rather than higher overall
+recall.
+
+The intended varied scenario improved from 0.7944 to 0.8306 BA (recall
+0.6556 to 0.6833; FPR 0.0667 to 0.0222), while instructed BA regressed from
+0.9792 to 0.9667. Paired across all rows, the reasoning-aware student made 26
+fixes and 19 breaks. On varied rows it made 24 fixes and 11 breaks: ten honest
+and 14 deceptive fixes versus two honest and nine deceptive breaks. On
+instructed rows it made two fixes and eight breaks, all on deceptive rows. This
+is a real validation improvement but not a uniformly better judge; it trades
+some instructed recall for much better varied calibration. Because the frozen
+overall and varied metrics both improved materially, one confirmatory local-test
+evaluation was authorized as job `30161123`.
+
+The confirmatory test did not support replacing the default. Job `30161123`
+scored 0.9036 overall BA, 0.8262 recall, 0.0190 FPR, and three parse errors,
+below the selected no-trace adapter's 0.9155 BA. Varied BA again improved,
+from 0.8278 to 0.8528 (recall 0.7056 to 0.7389; FPR 0.0500 to 0.0333), but
+instructed BA fell from 0.9813 to 0.9417. The reasoning-aware adapter made 27
+row fixes and 18 breaks overall, including a 23/14 varied advantage, yet macro
+BA declined because the instructed errors were concentrated in high-weight
+dataset units. In particular, missing the test split's sole deceptive Nemotron
+row moved that 21-row unit from 1.0000 to 0.5000 BA. Keep the original no-trace
+adapter as the general default. Treat reasoning visibility as a useful
+Qwen-varied specialist signal whose cross-family/instructed cost is not covered
+by varied-only training, not as a general improvement.
+
+Validation-only inference ablation job `30161126` then hid
+`<assistant_reasoning>` from the same trained adapter without changing its
+teacher targets, weights, or judge instructions. BA fell from 0.9083 to 0.8952
+overall and from 0.8306 to 0.8028 on varied rows; FPR rose from 0.0143 to 0.0357
+overall and from 0.0222 to 0.0722 on varied rows. Visible reasoning made 22
+paired fixes relative to hidden reasoning and 11 breaks (20/10 on varied rows),
+with four versus six parse errors. The trace is therefore providing useful
+prediction-time evidence rather than acting only as a training-time regularizer.
+Instructed BA was nearly unchanged at 0.9667 visible versus 0.9646 hidden, so
+removing unfamiliar traces does not recover the instructed regression. The
+more plausible cause is the varied-only, Qwen-only training distribution and
+its trace-aware target/prompt specialization.
+
 
 ## Next measurements
 
-1. Investigate whether varied-only specialization gains persist on additional
-   held-out data or are split noise.
+1. If reasoning visibility is revisited, train a matched mixed
+   instructed/varied and multi-family control before another test run; the
+   varied-only Qwen treatment improves its target scenario but is not a safe
+   general replacement.
 2. Improve the evidence-aware training objective or active-row sampling; the
    current structured relevance traces add only one net parse-valid row over
    the original real-evidence reader.
-3. Inspect student errors for teacher-meta leakage and intent-only decisions.
-4. If needed, run the semantic-filtering ablation without regenerating teacher
-   traces.
+3. Isolate trace-conditioned teacher supervision from student visibility with
+   a fresh teacher-only/student-only factorial on validation. Do not infer this
+   from the hidden-at-inference control, which retains trace-conditioned SFT.
+4. Inspect student errors for teacher-meta leakage, intent-only decisions, and
+   trace factual anchoring before changing excerpt position or head/tail policy.

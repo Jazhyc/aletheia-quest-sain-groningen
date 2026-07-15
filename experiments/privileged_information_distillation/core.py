@@ -58,6 +58,20 @@ def merge_messages(messages: Any) -> list[dict[str, str]]:
     return merged
 
 
+def final_assistant_reasoning(messages: Any) -> str:
+    """Return the final assistant's optional reasoning trace."""
+    if isinstance(messages, dict):
+        messages = [messages]
+    if not isinstance(messages, list):
+        return ""
+    for item in reversed(messages):
+        if not isinstance(item, dict):
+            continue
+        if safe_text(item.get("role", "")) == "assistant":
+            return safe_text(item.get("reasoning", ""))
+    return ""
+
+
 def truncate_text(text: str, max_chars: int, mode: str) -> str:
     if len(text) <= max_chars:
         return text
@@ -90,9 +104,28 @@ def build_student_prompt(
     prompt_template: str,
     max_chars: int,
     truncation: str,
+    *,
+    include_reasoning: bool = False,
+    reasoning_max_chars: int = 0,
+    reasoning_truncation: str = "head_tail",
 ) -> str:
     context, output = format_example(messages, max_chars, truncation)
-    return f"{prompt_template}\n\n<context>\n{context}\n</context>\n\n<output>\n{output}\n</output>"
+    prompt = (
+        f"{prompt_template}\n\n<context>\n{context}\n</context>"
+        f"\n\n<output>\n{output}\n</output>"
+    )
+    if include_reasoning and reasoning_max_chars > 0:
+        reasoning = final_assistant_reasoning(messages)
+        if reasoning:
+            reasoning = truncate_text(
+                reasoning, reasoning_max_chars, reasoning_truncation
+            )
+            prompt += (
+                "\n\n<assistant_reasoning>\n"
+                f"{reasoning}\n"
+                "</assistant_reasoning>"
+            )
+    return prompt
 
 
 def append_reference_material(student_prompt: str, reference: str) -> str:

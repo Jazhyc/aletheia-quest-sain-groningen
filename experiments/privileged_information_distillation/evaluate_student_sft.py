@@ -164,9 +164,22 @@ def comparable_student_settings(config: dict[str, Any]) -> tuple[Any, ...]:
         student.get("prompt"),
         student.get("max_prompt_chars"),
         student.get("context_truncation"),
+        student.get("include_reasoning", False),
+        student.get("reasoning_max_chars", 0),
+        student.get("reasoning_truncation", "head_tail"),
         student.get("target_format", "summary"),
         student.get("target_mode", "teacher"),
     )
+
+
+def set_reasoning_visibility(config: dict[str, Any], visibility: str) -> None:
+    """Apply an inference-only reasoning-visibility ablation in place."""
+    if visibility == "configured":
+        return
+    if visibility == "hidden":
+        config["student"]["include_reasoning"] = False
+        return
+    raise ValueError(f"unsupported reasoning visibility: {visibility}")
 
 
 def parse_retrieval_condition(
@@ -220,6 +233,15 @@ def load_records(
                 config["student"]["prompt"],
                 int(config["student"]["max_prompt_chars"]),
                 config["student"]["context_truncation"],
+                include_reasoning=bool(
+                    config["student"].get("include_reasoning", False)
+                ),
+                reasoning_max_chars=int(
+                    config["student"].get("reasoning_max_chars", 0)
+                ),
+                reasoning_truncation=str(
+                    config["student"].get("reasoning_truncation", "head_tail")
+                ),
             )
             reference = (references or {}).get((dataset_cfg.name, index), "")
             if reference or append_empty_reference:
@@ -320,6 +342,12 @@ def main() -> None:
     )
     parser.add_argument("--run-name")
     parser.add_argument(
+        "--reasoning-visibility",
+        default="configured",
+        choices=["configured", "hidden"],
+        help="optionally hide configured assistant reasoning at inference time",
+    )
+    parser.add_argument(
         "--continuous-margins",
         action="store_true",
         help="score constrained 0/1 logits with empty and generated reasoning prefixes",
@@ -330,6 +358,8 @@ def main() -> None:
 
     adapter_dirs = [path.resolve() for path in args.adapter_dir]
     configs = [yaml.safe_load((path.parent / "config.yaml").read_text()) for path in adapter_dirs]
+    for config in configs:
+        set_reasoning_visibility(config, args.reasoning_visibility)
     first = configs[0]
     for config in configs[1:]:
         if comparable_student_settings(config) != comparable_student_settings(first):
@@ -449,6 +479,7 @@ def main() -> None:
                 "timing": timing,
                 "max_new_tokens": args.max_new_tokens,
                 "retrieval_cache": retrieval_path.as_posix() if retrieval_path else None,
+                "reasoning_visibility": args.reasoning_visibility,
             }
             (output_dir / "result.json").write_text(json.dumps(result, indent=2) + "\n")
             metrics = result["metrics"]

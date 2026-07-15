@@ -88,6 +88,15 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
                 str(cfg.student.prompt),
                 int(cfg.student.max_prompt_chars),
                 str(cfg.student.context_truncation),
+                include_reasoning=bool(OmegaConf.select(
+                    cfg, "student.include_reasoning", default=False
+                )),
+                reasoning_max_chars=int(OmegaConf.select(
+                    cfg, "student.reasoning_max_chars", default=0
+                )),
+                reasoning_truncation=str(OmegaConf.select(
+                    cfg, "student.reasoning_truncation", default="head_tail"
+                )),
             )
             if retrieval_cache is not None:
                 key = (dataset_cfg.name, index)

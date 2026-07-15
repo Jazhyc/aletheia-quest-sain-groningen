@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
 
 from experiments.privileged_information_distillation.core import (
     append_reference_material,
+    build_student_prompt,
     format_student_target,
     parse_counterfactual_teacher_target,
     route_reference_material,
@@ -17,6 +18,57 @@ from experiments.privileged_information_distillation.generate_teacher_data impor
     filter_teacher_rows_by_dataset,
     limit_teacher_rows,
 )
+
+
+def test_build_student_prompt_includes_head_tail_reasoning_when_requested() -> None:
+    messages = [
+        {"role": "user", "content": "Question"},
+        {
+            "role": "assistant",
+            "content": "Answer",
+            "reasoning": "start-" + ("0123456789" * 10) + "-end",
+        },
+    ]
+
+    prompt = build_student_prompt(
+        messages,
+        "JUDGE",
+        100,
+        "tail",
+        include_reasoning=True,
+        reasoning_max_chars=50,
+        reasoning_truncation="head_tail",
+    )
+
+    assert "<assistant_reasoning>" in prompt
+    assert "start-" in prompt
+    assert "-end" in prompt
+    assert "[... middle truncated ...]" in prompt
+
+
+def test_build_student_prompt_omits_missing_or_disabled_reasoning() -> None:
+    messages = [
+        {"role": "user", "content": "Question"},
+        {"role": "assistant", "content": "Answer"},
+    ]
+
+    missing = build_student_prompt(
+        messages,
+        "JUDGE",
+        100,
+        "tail",
+        include_reasoning=True,
+        reasoning_max_chars=1200,
+    )
+    disabled = build_student_prompt(
+        [*messages[:-1], {**messages[-1], "reasoning": "private"}],
+        "JUDGE",
+        100,
+        "tail",
+    )
+
+    assert "<assistant_reasoning>" not in missing
+    assert "<assistant_reasoning>" not in disabled
 
 
 def test_parse_counterfactual_target_with_privileged_prediction_fallback() -> None:

@@ -2212,3 +2212,38 @@ Phoenix v2.1; v2.2 identifies the submission-time logic added afterward:
 
 The rename preserves the single-notebook contract. Python parser tests and
 notebook JSON/code-cell validation passed before the official run.
+
+## Qwen3.5-9B NDIF generation capacity
+
+On 2026-07-15, the Phoenix v2.2 generation path was measured against the hot
+NDIF `Qwen/Qwen3.5-9B` base deployment. Every trial used the language-model
+wrapper, deterministic generation, 512 maximum new tokens, fixed-length left
+padding, and the public 400-row no-adapter varied-deception development dataset.
+The service enforced a 28.01 GiB per-request CUDA allocation even though the
+host GPU had additional free memory.
+
+| prompt tokens | largest passing batch | first failing batch |
+| ---: | ---: | ---: |
+| 1,024 | 39 | 40 |
+| 2,048 | 23 | 24 |
+| 3,072 | 11 | 12 |
+| 4,096 | 11 | 12 |
+
+The non-smooth 3,072/4,096 boundary is an observed property of this Qwen3.5
+generation implementation, which uses chunked linear attention; do not infer a
+simple batch-times-context memory law. The Phoenix defaults are now the updated
+`LanguageModel` wrapper, 4,096 prompt tokens, and batch 8. The language wrapper
+matches the hot Qwen deployment and avoids creating the distinct cold
+vision-language deployment used by the older notebook. The batch choice
+preserves roughly the same 30% headroom as the old 2,048/batch-16 setting while
+allowing optional assistant-reasoning fields.
+The dialogue character cap remains 3,000, so ordinary no-reasoning prompts do
+not consume additional source text merely because the padded model context is
+larger.
+
+These are base-model boundaries, not adapter-certified maxima. The Phoenix LoRA
+deployment was cold and the competition API key could not hot-swap it during
+the sweep, under either the old vision-language path or the new language path.
+Batch 8 is therefore the production setting; do not raise it to the measured
+batch-11 edge until the exact pinned language-model adapter deployment passes a
+rehearsal.

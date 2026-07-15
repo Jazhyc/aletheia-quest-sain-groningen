@@ -38,6 +38,9 @@ student:
   dataset_name_contains: null
   max_prompt_chars: 3000
   context_truncation: tail
+  include_reasoning: false
+  reasoning_max_chars: 0
+  reasoning_truncation: head_tail
   max_length: 4608
   output_dir: ${output_dir}/adapter
   prompt: |-

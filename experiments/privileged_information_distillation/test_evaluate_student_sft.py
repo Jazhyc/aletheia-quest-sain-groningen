@@ -18,6 +18,7 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     parse_retrieval_condition,
     parse_prediction,
     prefix_before_prediction,
+    set_reasoning_visibility,
 )
 from experiments.privileged_information_distillation.analyze_continuous_margins import (
     rank_fraction_predictions,
@@ -75,6 +76,43 @@ def test_comparable_student_settings_normalizes_legacy_target_defaults() -> None
     assert comparable_student_settings({"student": common}) == comparable_student_settings({
         "student": {**common, "target_format": "summary", "target_mode": "teacher"}
     })
+
+
+def test_comparable_student_settings_distinguishes_reasoning_visibility() -> None:
+    common = {
+        "model": "model",
+        "prompt": "prompt",
+        "max_prompt_chars": 3000,
+        "context_truncation": "tail",
+    }
+    without_reasoning = comparable_student_settings({"student": common})
+    with_reasoning = comparable_student_settings({
+        "student": {
+            **common,
+            "include_reasoning": True,
+            "reasoning_max_chars": 2400,
+            "reasoning_truncation": "head_tail",
+        }
+    })
+
+    assert without_reasoning != with_reasoning
+
+
+def test_set_reasoning_visibility_can_hide_configured_trace() -> None:
+    config = {"student": {"include_reasoning": True, "reasoning_max_chars": 2400}}
+
+    set_reasoning_visibility(config, "hidden")
+
+    assert config["student"]["include_reasoning"] is False
+    assert config["student"]["reasoning_max_chars"] == 2400
+
+
+def test_set_reasoning_visibility_preserves_configured_trace() -> None:
+    config = {"student": {"include_reasoning": True}}
+
+    set_reasoning_visibility(config, "configured")
+
+    assert config["student"]["include_reasoning"] is True
 
 
 def test_parse_retrieval_condition_supports_empty_and_named_fields(tmp_path) -> None:
