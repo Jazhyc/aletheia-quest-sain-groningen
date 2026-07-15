@@ -11,6 +11,7 @@ from experiments.privileged_information_distillation.core import (
     append_reference_material,
     format_student_target,
     parse_counterfactual_teacher_target,
+    route_reference_material,
 )
 from experiments.privileged_information_distillation.generate_teacher_data import (
     filter_teacher_rows_by_dataset,
@@ -78,3 +79,25 @@ def test_append_reference_material_marks_retrieval_as_untrusted() -> None:
     assert "incomplete, ambiguous, or irrelevant" in prompt
     assert "- Entity: fact" in prompt
     assert prompt.endswith("</reference_material>")
+
+
+def test_route_reference_material_can_keep_evidence_teacher_only() -> None:
+    student, teacher = route_reference_material("PROMPT", "- Fact", "teacher_only")
+
+    assert student == "PROMPT"
+    assert "<reference_material>" in teacher
+    assert "- Fact" in teacher
+
+
+def test_route_reference_material_preserves_legacy_shared_visibility() -> None:
+    student, teacher = route_reference_material(
+        "PROMPT", "- Fact", "teacher_and_student"
+    )
+
+    assert student == teacher
+    assert "<reference_material>" in student
+
+
+def test_route_reference_material_rejects_unknown_visibility() -> None:
+    with pytest.raises(ValueError, match="reference_visibility"):
+        route_reference_material("PROMPT", "- Fact", "unknown")

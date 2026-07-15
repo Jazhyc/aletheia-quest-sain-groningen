@@ -251,11 +251,17 @@ def parse_completion(raw: str, output: str) -> dict[str, Any]:
     }
 
 
-def load_records(split: str) -> list[dict[str, Any]]:
+def load_records(
+    split: str,
+    dataset_name_contains: str | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
     from datasets import load_dataset
 
     records = []
     for cfg in load_split_config(ROOT / "dev_splits" / f"dry.{split}.yaml", ROOT):
+        if dataset_name_contains and dataset_name_contains not in cfg.name:
+            continue
         labels = load_labels(cfg)
         label_by_index = dict(zip(labels["index"], labels["label"], strict=True))
         dataset = load_dataset(cfg.name, split="test")
@@ -271,6 +277,8 @@ def load_records(split: str) -> list[dict[str, Any]]:
                 "messages": row["messages"],
                 "output": final_message(row["messages"], "assistant"),
             })
+            if limit is not None and len(records) >= limit:
+                return records
     return records
 
 
@@ -280,12 +288,30 @@ def main() -> None:
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--iteration", choices=("v1", "v2"), default="v2")
+    parser.add_argument("--split", choices=("train", "validation", "test"), default="validation")
+    parser.add_argument("--variant", action="append", default=None)
+    parser.add_argument("--dataset-name-contains", default=None)
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--max-tokens", type=int, default=1536)
+    parser.add_argument("--output-dir", type=Path, default=None)
     args = parser.parse_args()
     variants = VARIANTS if args.iteration == "v1" else V2_VARIANTS
+    if args.variant:
+        wanted_variants = set(args.variant)
+        variants = tuple(variant for variant in variants if variant.name in wanted_variants)
+        missing = wanted_variants - {variant.name for variant in variants}
+        if missing:
+            raise ValueError(f"unknown {args.iteration} variants: {sorted(missing)}")
     output_contract = OUTPUT_CONTRACT if args.iteration == "v1" else V2_OUTPUT_CONTRACT
     method = f"gpt_oss_120b_atomic_claim_prompt_sweep_{args.iteration}"
 
-    records = load_records("validation")
+    records = load_records(
+        args.split,
+        dataset_name_contains=args.dataset_name_contains,
+        limit=args.limit,
+    )
+    if not records:
+        raise RuntimeError("no labeled records matched the requested split and dataset filter")
     tokenizer = AutoTokenizer.from_pretrained(MODEL)
     prompt_rows = []
     prompts = []
@@ -308,10 +334,14 @@ def main() -> None:
         max_num_seqs=256,
     )
     started = time.time()
-    outputs = llm.generate(prompts, SamplingParams(max_tokens=1536, temperature=0.0))
+    outputs = llm.generate(
+        prompts, SamplingParams(max_tokens=args.max_tokens, temperature=0.0)
+    )
     elapsed = time.time() - started
 
-    output_dir = ROOT / "results" / "blackbox" / method / "validation"
+    output_dir = args.output_dir or ROOT / "results" / "blackbox" / method / args.split
+    if not output_dir.is_absolute():
+        output_dir = ROOT / output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     generations = []
     for (variant, row, raw_prompt), generated in zip(prompt_rows, outputs, strict=True):
@@ -359,7 +389,8 @@ def main() -> None:
         results.append(result)
     summary = {
         "method": method,
-        "split": "validation",
+        "split": args.split,
+        "dataset_name_contains": args.dataset_name_contains,
         "submitted_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "model": MODEL,
         "variants": [variant.name for variant in variants],

@@ -19,8 +19,14 @@ source .venv/bin/activate
 METHOD="fact_extractor_self_consistency"
 LOG_DIR="logs/slurm/${METHOD}"
 mkdir -p "${LOG_DIR}"
+RUN_SPLIT="validation"
+for arg in "$@"; do
+  if [[ "${arg}" == --split=* ]]; then
+    RUN_SPLIT="${arg#--split=}"
+  fi
+done
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-  exec >"${LOG_DIR}/validation-${SLURM_JOB_ID}.out" 2>&1
+  exec >"${LOG_DIR}/${RUN_SPLIT}-${SLURM_JOB_ID}.out" 2>&1
   rm -f "logs/slurm/${SLURM_JOB_NAME:-aq-fact-extract}-${SLURM_JOB_ID}.bootstrap.out"
   echo "job_id=${SLURM_JOB_ID}"
 fi
@@ -30,4 +36,4 @@ export HF_HOME="${HF_HOME:-${SCRATCH:-/scratch/${USER}}/.huggingface}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
 export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"
 
-python experiments/fact_extractor_self_consistency/run_prompt_sweep.py --iteration v2
+python experiments/fact_extractor_self_consistency/run_prompt_sweep.py --iteration v2 "$@"

@@ -5,7 +5,10 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from experiments.fact_extractor_self_consistency.run_prompt_sweep import parse_completion
+from experiments.fact_extractor_self_consistency.run_prompt_sweep import (
+    load_records,
+    parse_completion,
+)
 
 
 def test_parse_completion_extracts_grounded_claims_and_prediction() -> None:
@@ -54,3 +57,9 @@ def test_parse_completion_accepts_bare_digit_after_summary() -> None:
     parsed = parse_completion(raw, "Hello.")
     assert parsed["prediction"] == 0
     assert parsed["structure_valid"]
+
+
+def test_load_records_signature_supports_filtered_train_smokes() -> None:
+    # Dataset loading is integration-tested by the experiment; this guards the
+    # public train-scale selection parameters without touching the network.
+    assert load_records.__defaults__ == (None, None)

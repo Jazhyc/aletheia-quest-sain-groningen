@@ -25,6 +25,7 @@ from experiments.privileged_information_distillation.core import (
     format_student_target,
     parse_counterfactual_teacher_target,
     parse_teacher_target,
+    route_reference_material,
 )
 from experiments.privileged_information_distillation.evaluate_student_sft import (
     load_retrieval_cache,
@@ -57,7 +58,13 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
         retrieval_path = Path(str(retrieval_cache))
         if not retrieval_path.is_absolute():
             retrieval_path = root / retrieval_path
-        references = load_retrieval_cache(retrieval_path)
+        passage_field = str(OmegaConf.select(
+            cfg, "teacher.retrieval_passage_field", default="passages"
+        ))
+        references = load_retrieval_cache(retrieval_path, passage_field=passage_field)
+    reference_visibility = str(OmegaConf.select(
+        cfg, "teacher.reference_visibility", default="teacher_and_student"
+    ))
     rows: list[dict[str, Any]] = []
     for dataset_cfg in datasets:
         if (
@@ -89,16 +96,23 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
                         f"retrieval cache is missing dataset={dataset_cfg.name!r} "
                         f"index={index!r}"
                     )
-                student_prompt = append_reference_material(
-                    student_prompt, references[key]
+                student_prompt, teacher_input_prompt = route_reference_material(
+                    student_prompt,
+                    references[key],
+                    reference_visibility,
                 )
+            else:
+                teacher_input_prompt = student_prompt
             rows.append({
                 "dataset": dataset_cfg.name,
                 "index": index,
                 "label": label,
                 "student_prompt": student_prompt,
+                "reference_visibility": (
+                    reference_visibility if retrieval_cache is not None else None
+                ),
                 "teacher_prompt": build_teacher_prompt(
-                    student_prompt,
+                    teacher_input_prompt,
                     str(cfg.teacher.prompt),
                     label,
                 ),

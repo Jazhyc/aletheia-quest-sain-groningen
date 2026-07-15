@@ -106,6 +106,23 @@ def append_reference_material(student_prompt: str, reference: str) -> str:
     )
 
 
+def route_reference_material(
+    student_prompt: str,
+    reference: str,
+    visibility: str,
+) -> tuple[str, str]:
+    """Return the deployable student prompt and the evidence-aware teacher prompt."""
+    teacher_prompt = append_reference_material(student_prompt, reference)
+    if visibility == "teacher_only":
+        return student_prompt, teacher_prompt
+    if visibility == "teacher_and_student":
+        return teacher_prompt, teacher_prompt
+    raise ValueError(
+        "teacher.reference_visibility must be 'teacher_only' or "
+        f"'teacher_and_student', got {visibility!r}"
+    )
+
+
 def build_teacher_prompt(student_prompt: str, teacher_template: str, label: int) -> str:
     privileged = teacher_template.replace("__GROUND_TRUTH__", str(int(label)))
     _, separator, evidence = student_prompt.partition("<context>")
