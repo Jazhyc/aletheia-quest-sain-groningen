@@ -406,6 +406,38 @@ without a separate licensing review. The gold-FEVER `pepa/deberta-v3-base-fever`
 checkpoint was useful as an experimental ceiling but has no clear model-card
 license and is not selected for deployment.
 
+## Teacher-only train-scale distillation result (2026-07-15)
+
+The frozen window-plus-lexical design was expanded to all 2,880 varied-training
+rows. GPT-OSS extracted 9,302 grounded claims; the selective audits retained
+3,270 passages across 1,565 active rows. Evidence was visible only to the
+privileged teacher. The deployable student prompt contained no retrieval block.
+The real and shuffled conditions otherwise used the standard one-epoch,
+varied-only AdamW `5e-5` recipe.
+
+Teacher generation produced 2,875 usable real-evidence traces and 2,853 usable
+shuffled-evidence traces. A programmatic trace audit found zero student-prompt
+leaks. On active rows, real evidence introduced a source-specific term absent
+from the original teacher summary in 1,243 cases, versus 566 for shuffled
+evidence, confirming that GPT-OSS reacted differentially to relevant sources.
+
+The frozen shared-session validation comparison did not improve over the
+existing student:
+
+| teacher condition | overall BA | varied BA | recall | FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| original / no evidence | 0.9012 | 0.7972 | 0.8333 | 0.0310 | 4 |
+| real selective evidence | 0.9012 | 0.7972 | 0.8333 | 0.0310 | 5 |
+| shuffled selective evidence | 0.9000 | 0.7944 | 0.8333 | 0.0333 | 4 |
+
+Real evidence changed eight varied predictions relative to the original
+student, with four fixes and four breaks. Relative to shuffled evidence it
+changed nine predictions, with five fixes and four breaks. Thus retrieval has a
+small causal effect on the distilled reader, but no net gain over the selected
+no-evidence baseline at this scale. Do not evaluate this adapter on test or put
+it in the submission package. Jobs were `30148435`, `30148444`,
+`30148445`--`30148448`, and replacement validation job `30151976`.
+
 ## Evaluation contract
 
 The regular-scale validation run must report:

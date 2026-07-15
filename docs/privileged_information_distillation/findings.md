@@ -1062,14 +1062,29 @@ rows have one fix and two breaks, and novel BA does not beat empty. Freeze the
 retain the broad lexical and web caches only as ablations. This selection is
 still validation-only and does not authorize test evaluation or packaging.
 
+The train-scale teacher-only follow-up completed on 2026-07-15. The frozen
+cache covered 1,565/2,880 varied-training rows with 3,270 audited passages from
+9,302 grounded claims. Retrieval was visible to GPT-OSS but absent from every
+student prompt. Real and shuffled evidence produced 2,875 and 2,853 usable
+teacher targets, respectively.
+
+Under the standard one-epoch varied-only AdamW `5e-5` recipe, the real-evidence
+student tied the original teacher student at 0.9012 overall and 0.7972 varied
+validation BA. It made four fixes and four breaks across eight varied rows. The
+shuffled-evidence student scored 0.9000 overall and 0.7944 varied BA; real
+evidence was five fixes versus four breaks relative to this control. This is a
+small causal signal but not a usable improvement. Retain the original adapter,
+do not spend a test evaluation on either evidence adapter, and do not add these
+retrieval artifacts to the submission package. Full retrieval details and job
+provenance are recorded in `docs/fever_fact_verification/README.md`.
+
 
 ## Next measurements
 
 1. Investigate whether varied-only specialization gains persist on additional
    held-out data or are split noise.
-2. Build train-scale selective evidence and run the standard evidence-aware
-   teacher plus varied-only one-epoch SFT ablation; preserve empty/shuffled
-   validation controls and scale the second hop only as needed.
+2. Diagnose why source-specific teacher changes cancel at the student decision
+   boundary before attempting another evidence-distillation run.
 3. Inspect student errors for teacher-meta leakage and intent-only decisions.
 4. If needed, run the semantic-filtering ablation without regenerating teacher
    traces.
