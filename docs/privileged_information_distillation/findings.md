@@ -1078,13 +1078,32 @@ do not spend a test evaluation on either evidence adapter, and do not add these
 retrieval artifacts to the submission package. Full retrieval details and job
 provenance are recorded in `docs/fever_fact_verification/README.md`.
 
+The corrected evidence-visible run then taught an explicit
+relevance/support/contradiction assessment while keeping the source block in the
+student prompt. In the inactive-reused shared-session matrix, the real-trained
+student scored 0.8333 varied BA with real evidence, versus 0.8167 empty and
+0.7972 shuffled. On evidence-active rows the three scores were
+0.8541/0.8249/0.7898, and on 65 exact-novel questions they were
+0.9146/0.8816/0.8572. Real evidence therefore carries useful, generalizing
+signal when directly available.
+
+The added distillation benefit is only one net parse-valid row: with the same
+real evidence, the original and shuffled-trained readers both score 0.8306
+varied BA, only 0.0028 below real training. Do not describe the full 0.0222 gain
+over the original evidence-free row as a training gain; most comes from
+inference-time evidence. The correct conclusion is that evidence-visible RAG is
+promising, while the present relevance-trace SFT adds too little to select or
+test. See `docs/fever_fact_verification/README.md` for the full 3x3 matrix and
+paired counts.
+
 
 ## Next measurements
 
 1. Investigate whether varied-only specialization gains persist on additional
    held-out data or are split noise.
-2. Diagnose why source-specific teacher changes cancel at the student decision
-   boundary before attempting another evidence-distillation run.
+2. Improve the evidence-aware training objective or active-row sampling; the
+   current structured relevance traces add only one net parse-valid row over
+   the original real-evidence reader.
 3. Inspect student errors for teacher-meta leakage and intent-only decisions.
 4. If needed, run the semantic-filtering ablation without regenerating teacher
    traces.

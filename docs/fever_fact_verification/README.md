@@ -438,6 +438,46 @@ no-evidence baseline at this scale. Do not evaluate this adapter on test or put
 it in the submission package. Jobs were `30148435`, `30148444`,
 `30148445`--`30148448`, and replacement validation job `30151976`.
 
+## Evidence-visible relevance distillation (2026-07-15)
+
+The teacher-only run above answered the wrong deployment question: it asked the
+adapter to internalize source facts. A corrected run exposed the same reference
+block to both GPT-OSS and Qwen. Teacher summaries explicitly began with an
+evidence relevance/support/contradiction assessment, followed by the deception
+decision. Real- and shuffled-evidence teachers each produced 2,878/2,880 usable
+targets. Their matched students used the standard one-epoch varied-only AdamW
+`5e-5` recipe.
+
+The frozen validation sweep evaluated the original, real-trained, and
+shuffled-trained adapters under empty, real, and shuffled evidence in one vLLM
+session. Inactive rows are reused from each adapter's empty condition so only
+the 214 evidence-active varied rows can affect evidence comparisons:
+
+| training evidence | empty varied BA | real varied BA | shuffled varied BA |
+| --- | ---: | ---: | ---: |
+| original / no evidence | 0.8111 | 0.8306 | 0.7889 |
+| real with relevance traces | **0.8167** | **0.8333** | **0.7972** |
+| shuffled with relevance traces | 0.8028 | 0.8306 | 0.7889 |
+
+The best row is the real-trained adapter with real evidence: 0.8333 varied and
+0.9167 overall BA, with 0.7056 varied recall, 0.0389 varied FPR, and three parse
+errors after inactive reuse. Within that adapter, real evidence fixes 14 and
+breaks eight rows versus empty; versus shuffled it fixes 20 and breaks five.
+Excluding rows with a parse error in either condition leaves 12/7 and 16/5,
+respectively. On the 214 active rows, real/empty/shuffled BA is
+0.8541/0.8249/0.7898. On the 65 exact-novel questions it is
+0.9146/0.8816/0.8572.
+
+However, the learned relevance-distillation increment is small. Under identical
+real evidence, real training beats the original and shuffled-trained adapters
+by only 0.0028 varied BA. It changes seven predictions versus the original
+real-evidence reader (five fixes/two breaks), but after excluding parse-error
+rows this is three fixes/two breaks. Most of the gain comes from making real
+evidence available at inference, not from the new teacher targets. This is a
+positive evidence-specific reader result, but it misses the predeclared
+roughly-two-point training-improvement gate. Do not test or package the adapter
+yet. Jobs were `30156336`, `30156337`, `30156341`, `30156342`, and `30156347`.
+
 ## Evaluation contract
 
 The regular-scale validation run must report:
