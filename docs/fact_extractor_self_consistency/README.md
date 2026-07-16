@@ -140,6 +140,45 @@ Artifacts are under
 `results/blackbox/qwen27b_whole_output_self_query_validation_v1/`; runtime code
 is `experiments/fact_extractor_self_consistency/run_qwen_whole_output_self_query.py`.
 
+## Continuous whole-output margins (2026-07-16)
+
+A frozen follow-up replaced each hard organism verdict with the normalized
+next-token probability of `FALSE` under the same two neutral prompts. It queried
+the actual Qwen organism on all 720 Qwen validation rows, omitted the original
+conversation and label, and did not compare base and adapter outputs. Non-Qwen
+rows received a neutral 0.5 value only when the margins were evaluated as stack
+features.
+
+| Qwen-only margin | BA | AUROC | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| complete truth | 0.8625 | **0.9331** | 0.8306 | **0.1056** |
+| find one error | **0.8681** | 0.9302 | **0.8639** | 0.1278 |
+
+The acceptance rule required at least +0.0025 macro BA under both
+leave-one-dataset-unit-out and leave-one-organism-out evaluation when the two
+margins were added to the already frozen ten-member continuous stack. It also
+forbade more than a 0.005 BA loss on varied or Qwen rows.
+
+| grouped OOF comparison | baseline BA | margin BA | BA delta | baseline AUROC | margin AUROC | AUROC delta |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| leave one dataset unit out | 0.9310 | 0.9286 | -0.0024 | 0.9580 | 0.9685 | +0.0105 |
+| leave one organism out | 0.9298 | 0.9274 | -0.0024 | 0.9581 | 0.9681 | +0.0100 |
+
+Varied and Qwen BA each fell by 0.0028. The margins therefore fail the frozen
+primary criterion despite a real ranking gain. Do not add them to binary
+submission decisions or run this feature on test. They are evidence that
+neutral organism contradictions contain complementary soft information, not
+that the organism is a reliable truth oracle.
+
+Job `30164535` scored 1,440 prompts in 140.3 seconds and completed in 9m32s on
+two A100s. This BF16 TP2 setup used 27.05 GiB per GPU rank and peaked near 64
+GiB of host RAM while cycling eight rank-128 LoRAs; a 32 GB attempt was killed
+at 33.5 GB RSS. The cost is not justified by an AUROC-only validation gain.
+Artifacts are under
+`results/blackbox/qwen27b_whole_output_self_query_margin_validation_v1/`, and
+the stack comparison is under
+`results/blackbox/continuous_hybrid_validation_v1/`.
+
 ## All-organism NDIF baseline (2026-07-12)
 
 The same whole-output audit was extended to all 822 validation rows through

@@ -75,6 +75,23 @@ The organism-margin cache covers Qwen rows only. Non-Qwen rows receive a neutral
 transfer. Test remains locked until a frozen validation comparison passes the
 criteria above.
 
+The frozen comparison rejected the organism extension. The two standalone
+Qwen-only margins were useful rankers: `complete_truth` scored 0.8625 BA and
+0.9331 AUROC, while `find_one_error` scored 0.8681 BA and 0.9302 AUROC. Adding
+both to the compact stack raised leave-one-dataset-unit-out AUROC from 0.9580 to
+0.9685 and leave-one-organism-out AUROC from 0.9581 to 0.9681. However, BA fell
+by 0.0024 under both groupings, to 0.9286 and 0.9274 respectively. Varied and
+Qwen BA each fell by 0.0028. This fails the required positive BA delta, so the
+organism margins are not authorized for a binary submission change and no test
+run will be made.
+
+Job `30164535` completed the 1,440 one-token evaluations in 140.3 scoring
+seconds and 9m32s wall time on two A100s. The TP2 process peaked at about 64 GiB
+host RAM; the preceding 32 GB attempt was killed after 33.5 GB RSS. Model load
+used 27.05 GiB per GPU rank. These measurements apply only to this BF16,
+2,048-token, rank-128-LoRA inference shape. Given the high startup and memory
+cost, the AUROC-only gain is not a practical submission feature.
+
 ## Commands
 
 ```bash
