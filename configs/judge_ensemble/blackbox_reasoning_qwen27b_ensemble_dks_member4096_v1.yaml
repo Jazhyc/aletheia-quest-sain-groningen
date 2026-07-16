@@ -1,0 +1,11 @@
+defaults:
+  - blackbox_reasoning_ensemble_dks_member4096
+  - _self_
+
+method: qwen27b_reason_ensemble_dks_member4096_v1
+
+judge:
+  model: Qwen/Qwen3.5-27B
+  served_model: qwen27b-judge
+  max_model_len: 8192
+  tensor_parallel_size: 1

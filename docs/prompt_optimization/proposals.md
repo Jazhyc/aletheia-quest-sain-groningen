@@ -1154,3 +1154,36 @@ Decision:
   continued, detail-hard, blended, or RAG variants tested here.
 - Treat the result as Qwen-varied specialization, not cross-family evidence:
   the local varied split has no Gemma or Nemotron examples.
+
+## P32: Qwen3.5-27B Judge Model-Swap Control
+
+Status: validation run frozen on 2026-07-17.
+
+Motivation:
+
+- The strongest submission-compatible heavy ensemble uses Qwen3.5-9B, while
+  Qwen3.5-27B has only been tested as a generating organism/self-checker.
+- The matched GPT-OSS-120B model swap improved test BA by only `0.0047`, showing
+  that scale is not the dominant bottleneck, but it did establish a small
+  capacity signal. A submission-compatible intermediate model is therefore a
+  clean remaining control.
+
+Experiment:
+
+- Replace only `Qwen/Qwen3.5-9B` with `Qwen/Qwen3.5-27B` in the frozen
+  `details4096`/`known4096`/`scrutiny4096` member-major max ensemble.
+- Keep prompts, 4,096-token generation budgets, aggregation, threshold, split,
+  and greedy vLLM backend unchanged. Use one RTX Pro 6000 and an 8,192-token
+  model context; no organism adapter or source-model metadata is exposed.
+- Compare against the matched 9B validation row (`0.9226` BA, `0.8881` recall,
+  `0.0429` FPR). Retain the larger judge as a capacity candidate only if it
+  reaches at least the same BA without losing more than `0.02` in either
+  instructed or varied scenario BA. Do not run local test merely for a marginal
+  validation tie; first assess runtime and error complementarity with the
+  existing student ensemble.
+
+Rationale:
+
+- This is a model-capacity ablation, not model-specific routing. It can reveal
+  whether the supporting-detail ceiling reflects 9B factual knowledge or a
+  scale-insensitive decision/salience failure.
