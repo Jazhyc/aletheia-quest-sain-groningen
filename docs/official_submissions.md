@@ -138,6 +138,7 @@ remote NDIF session shape and packaging were hardened.
 
 | date range (UTC) | notebooks | failed dataset | rough pattern |
 | --- | --- | --- | --- |
+| 2026-07-16 | `phoenix_wright_v2_4.ipynb` | Dataset Eunomia | per-dataset timeout after 2559.0s total: Metis used about 759s, then Eunomia exhausted the 1800s sandbox budget; consistent with an NDIF/session stall rather than an import or packaging failure |
 | 2026-07-03 to 2026-07-04 | `phoenix_wright_v0.ipynb`, `phoenix_wright_v1.ipynb`, `phoenix_wright_v1_1.ipynb`, `phoenix_wright_v1_2.ipynb` | Dataset Metis | sandbox failures during early Phoenix Wright submission bring-up |
 | 2026-07-06 to 2026-07-07 | `phoenix_wright_v1_3.ipynb` | Dataset Metis / Dataset Eunomia | remote NDIF/session reliability failures before one-session `VisionLanguageModel` hardening and batch-size stabilization |
 
