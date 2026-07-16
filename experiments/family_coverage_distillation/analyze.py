@@ -60,6 +60,7 @@ def analyze(
     baseline_rows: dict[tuple[str, str], dict[str, Any]],
     candidate_rows: dict[tuple[str, str], dict[str, Any]],
     *,
+    step_control_rows: dict[tuple[str, str], dict[str, Any]] | None = None,
     max_overall_loss: float = 0.0025,
     max_qwen_varied_loss: float = 0.005,
 ) -> dict[str, Any]:
@@ -85,7 +86,7 @@ def analyze(
         and deltas["Nemotron"] >= 0.0
         and deltas["Qwen_varied"] >= -max_qwen_varied_loss
     )
-    return {
+    result = {
         "criteria": {
             "max_overall_loss": max_overall_loss,
             "max_qwen_varied_loss": max_qwen_varied_loss,
@@ -101,15 +102,35 @@ def analyze(
         "accepted": accepted,
         "test_evaluation_authorized": accepted,
     }
+    if step_control_rows is not None:
+        if baseline_rows.keys() != step_control_rows.keys():
+            raise ValueError("baseline and step-control rows differ")
+        step_control = [parsed_prediction(step_control_rows[key]) for key in keys]
+        step_control_ba = group_ba(rows, step_control)
+        result["step_control_ba"] = step_control_ba
+        result["candidate_deltas_vs_step_control"] = {
+            name: candidate_ba[name] - value for name, value in step_control_ba.items()
+        }
+        result["family_attribution_supported"] = (
+            candidate_ba["all"] >= step_control_ba["all"]
+            and candidate_ba["Gemma"] >= step_control_ba["Gemma"]
+            and candidate_ba["Nemotron"] >= step_control_ba["Nemotron"]
+        )
+    return result
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--candidate", type=Path, required=True)
+    parser.add_argument("--step-control", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    result = analyze(load_rows(args.baseline), load_rows(args.candidate))
+    result = analyze(
+        load_rows(args.baseline),
+        load_rows(args.candidate),
+        step_control_rows=(load_rows(args.step_control) if args.step_control else None),
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))

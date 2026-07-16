@@ -39,3 +39,16 @@ def test_acceptance_requires_nonregressing_non_qwen_families() -> None:
     assert result["deltas"]["Gemma"] == 0.5
     assert result["fixes"] == 1
     assert result["breaks"] == 0
+
+
+def test_step_control_separates_family_attribution() -> None:
+    baseline = make_rows(0)
+    control = make_rows(0)
+    candidate = make_rows(0)
+    control[("dev-varied-deception-Qwen-model", "1")]["prediction"] = 1
+    candidate[("dev-instructed-deception-gemma-model", "1")]["prediction"] = 1
+
+    result = analyze(baseline, candidate, step_control_rows=control)
+
+    assert result["candidate_ba"]["all"] == result["step_control_ba"]["all"]
+    assert result["family_attribution_supported"] is True
