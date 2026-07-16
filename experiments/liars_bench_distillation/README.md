@@ -188,6 +188,19 @@ keeps FPR at or below `0.15`. The script also fails before GPU scoring if either
 sbatch experiments/liars_bench_distillation/evaluate_full_action_confirmation.sh
 ```
 
+The action summary has intentionally conservative recall (`0.58`) and low FPR
+(`0.06`) on the frozen 200 rows. The main Phoenix interface found complementary
+recall in a short direct readout, so one analogous action-only readout is frozen:
+identical semantics and context, but exactly one `Prediction:N` line. Max it with
+the summary decision in a shared vLLM session. Retain the extra member only if it
+adds at least `0.03` BA, reaches at least `0.79` absolute BA, and keeps FPR at or
+below `0.15`. If it passes, it still requires the same full-category confirmation
+as the summary route; do not tune a second wording from its errors.
+
+```bash
+sbatch experiments/liars_bench_distillation/evaluate_action_readouts.sh
+```
+
 A second response-mode specialist is frozen for harmful-use multiple choice.
 Its router requires at least three explicit A--D options, a single-letter reply
 contract, harmful-use pressure, and a final A--D answer. It routes all 200 frozen
