@@ -37,6 +37,19 @@ def test_audit_accepts_balanced_clean_cache() -> None:
     assert validate_audit(audit, min_coverage=0.9, max_leak_fraction=0.05) == []
 
 
+def test_audit_allows_one_parse_failure_in_a_balanced_category() -> None:
+    records = [
+        *(make_record(f"n-{index}", 0, "Clean negative summary.") for index in range(32)),
+        *(make_record(f"p-{index}", 1, "Clean positive summary.") for index in range(32)),
+    ]
+    records[-1] = {**records[-1], "parse_error": True, "student_target": None}
+
+    audit = audit_records(records)
+
+    assert audit["coverage"] == 63 / 64
+    assert validate_audit(audit, min_coverage=0.9, max_leak_fraction=0.05) == []
+
+
 def test_audit_rejects_leak_and_usable_label_imbalance() -> None:
     records = [
         make_record("a", 0, "The privileged evidence proves the response is wrong."),
@@ -53,4 +66,4 @@ def test_audit_rejects_leak_and_usable_label_imbalance() -> None:
     assert audit["leak_pattern_counts"] == {"privileged_evidence": 1}
     assert any("coverage" in failure for failure in failures)
     assert any("leak fraction" in failure for failure in failures)
-    assert any("imbalanced" in failure for failure in failures)
+    assert any("imbalance" in failure for failure in failures)

@@ -90,7 +90,11 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def validate_audit(
-    audit: dict[str, Any], *, min_coverage: float, max_leak_fraction: float
+    audit: dict[str, Any],
+    *,
+    min_coverage: float,
+    max_leak_fraction: float,
+    max_label_imbalance_fraction: float = 0.05,
 ) -> list[str]:
     """Return human-readable quality-gate failures."""
     failures: list[str] = []
@@ -103,12 +107,16 @@ def validate_audit(
             "privileged-language leak fraction "
             f"{audit['leak_fraction']:.3f} exceeds allowed {max_leak_fraction:.3f}"
         )
-    label_counts = audit["label_counts"]
-    if label_counts.get("0", 0) != label_counts.get("1", 0):
-        failures.append(f"usable labels are imbalanced: {label_counts}")
     for dataset, counts in audit["dataset_label_counts"].items():
-        if counts.get("0", 0) != counts.get("1", 0):
-            failures.append(f"usable labels are imbalanced for {dataset}: {counts}")
+        negative = counts.get("0", 0)
+        positive = counts.get("1", 0)
+        denominator = negative + positive
+        imbalance = abs(negative - positive) / denominator if denominator else 1.0
+        if imbalance > max_label_imbalance_fraction:
+            failures.append(
+                f"usable label imbalance {imbalance:.3f} for {dataset} exceeds "
+                f"allowed {max_label_imbalance_fraction:.3f}: {counts}"
+            )
     return failures
 
 
@@ -118,6 +126,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--min-coverage", type=float, default=0.90)
     parser.add_argument("--max-leak-fraction", type=float, default=0.05)
+    parser.add_argument("--max-label-imbalance-fraction", type=float, default=0.05)
     args = parser.parse_args()
 
     audit = audit_records(load_jsonl(args.artifact))
@@ -131,6 +140,7 @@ def main() -> None:
         audit,
         min_coverage=args.min_coverage,
         max_leak_fraction=args.max_leak_fraction,
+        max_label_imbalance_fraction=args.max_label_imbalance_fraction,
     )
     if failures:
         raise SystemExit("teacher-cache audit failed: " + "; ".join(failures))
