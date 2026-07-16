@@ -73,3 +73,29 @@ sbatch experiments/privileged_information_distillation/evaluate_student_sft.sh \
   --prompt-condition binary=configs/privileged_information_distillation_reasoning_binary4000.yaml \
   --aggregate-max
 ```
+
+## Results
+
+The family-coverage adapter passed the frozen validation gate. Against the 10%
+Qwen-only baseline, overall BA rose from `0.9000` to `0.9024` and Qwen-varied BA
+from `0.7944` to `0.8000`; Gemma remained `0.9750` and Nemotron `1.0000`. It
+made two fixes and no breaks. The matched 13%-Qwen-only, 12-step control scored
+only `0.8976` overall and `0.7917` varied, so the small validation gain is
+attributable to the family-balanced examples rather than merely three extra
+optimizer steps.
+
+The authorized locked test did not support replacing the baseline. The
+Qwen-only adapter scored `0.9131` overall and `0.8194` varied BA, while family
+coverage scored `0.9095` and `0.8139`. FPR was identical (`0.0310` overall),
+but candidate recall fell from `0.8571` to `0.8500`. The candidate produced 11
+summary parse failures versus four for the baseline; the three additional
+failures on deceptive rows account exactly for the three-row recall loss.
+
+This is useful but insufficient evidence: balanced multi-family supervision has
+a repeatable validation effect beyond update count, yet the resulting adapter is
+less format-stable and lost on the locked split. Retain the data-composition
+hypothesis for future varied Gemma/Nemotron data, but reject this adapter as the
+current deployment replacement. The frozen validation-only v2.4-interface
+diagnostic above tests whether the pre-existing direct-binary safety member
+removes the format failure; it cannot retroactively change the locked-test
+decision.
