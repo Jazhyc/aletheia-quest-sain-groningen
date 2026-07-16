@@ -46,6 +46,50 @@ def paired_changes(baseline_path: Path, candidate_path: Path) -> dict[str, int]:
     return {"changes": changes, "fixes": fixes, "breaks": breaks}
 
 
+def paired_changes_grouped(
+    baseline_path: Path, candidate_path: Path
+) -> dict[str, Any]:
+    """Count paired external changes overall and by observable grouping."""
+    baseline = {
+        (row["dataset"], str(row["index"])): row
+        for row in map(json.loads, baseline_path.read_text().splitlines())
+    }
+    candidate = {
+        (row["dataset"], str(row["index"])): row
+        for row in map(json.loads, candidate_path.read_text().splitlines())
+    }
+    if baseline.keys() != candidate.keys():
+        raise ValueError("external generation keys differ")
+    result: dict[str, Any] = {
+        "all": {"changes": 0, "fixes": 0, "breaks": 0},
+        "by_category": {},
+        "by_source_model": {},
+    }
+    for key, old_row in baseline.items():
+        new_row = candidate[key]
+        old = 0 if old_row.get("prediction") is None else int(old_row["prediction"])
+        new = 0 if new_row.get("prediction") is None else int(new_row["prediction"])
+        if old == new:
+            continue
+        label = int(old_row["label"])
+        for bucket in (
+            result["all"],
+            result["by_category"].setdefault(
+                str(old_row["category"]), {"changes": 0, "fixes": 0, "breaks": 0}
+            ),
+            result["by_source_model"].setdefault(
+                str(old_row["source_model"]),
+                {"changes": 0, "fixes": 0, "breaks": 0},
+            ),
+        ):
+            bucket["changes"] += 1
+            bucket["fixes"] += int(new == label)
+            bucket["breaks"] += int(old == label)
+    result["by_category"] = dict(sorted(result["by_category"].items()))
+    result["by_source_model"] = dict(sorted(result["by_source_model"].items()))
+    return result
+
+
 def metric_delta(
     candidate: dict[str, Any], baseline: dict[str, Any]
 ) -> dict[str, Any]:
@@ -126,6 +170,7 @@ def analyze(
     baseline_name: str,
     max_competition_loss: float,
     min_external_gain: float,
+    external_generation_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Build a report without choosing thresholds after seeing outcomes."""
     competition = {
@@ -170,6 +215,14 @@ def analyze(
             "external_action_routed": action_routed,
             "external_content_routed": content_routed,
             "paired_competition": paired,
+            "paired_external": (
+                paired_changes_grouped(
+                    external_generation_dir / f"{baseline_name}.jsonl",
+                    external_generation_dir / f"{name}.jsonl",
+                )
+                if external_generation_dir is not None
+                else None
+            ),
             "accept_general": (
                 comp["balanced_accuracy_delta"] >= -max_competition_loss
                 and ext["macro_delta"] >= min_external_gain
@@ -207,6 +260,7 @@ def main() -> None:
         baseline_name=args.baseline,
         max_competition_loss=args.max_competition_loss,
         min_external_gain=args.min_external_gain,
+        external_generation_dir=args.external_result.parent,
     )
     rendered = json.dumps(report, indent=2)
     print(rendered)
