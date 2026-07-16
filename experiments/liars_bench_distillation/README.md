@@ -205,3 +205,25 @@ candidate must independently preserve competition validation as above.
 ```bash
 sbatch experiments/liars_bench_distillation/evaluate_harm_choice_prompt.sh
 ```
+
+The original external-data students saw every category through the generic
+factual-answer prompt. That makes their muted adapter gains ambiguous: the
+student may have learned against a response-mode mismatch. A final matched
+ablation continues the selected Phoenix adapter for one epoch at `2e-5`, replaying
+10% of the ordinary varied cache and all 64 disjoint Insider Trading teacher
+targets. Only those 64 targets are re-rendered under the already-frozen action
+prompt; labels, summaries, cache membership, and all other hyperparameters remain
+unchanged. Source-specific prompt overrides are applied in memory and never alter
+the teacher cache.
+
+This condition is pre-registered to pass only if it preserves ordinary
+competition validation within `0.0025` BA and reaches at least `0.7900` BA on the
+frozen 200-row action-prompt evaluation (a `0.0300` gain over the untouched
+adapter). The stricter action threshold avoids treating a second small local
+increment as evidence that new weights are needed. Do not evaluate it on local
+competition test unless both gates pass.
+
+```bash
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  --config-name pid_liars_bench_action_prompt_continue_v1
+```

@@ -140,6 +140,36 @@ def test_load_record_sources_applies_fraction_per_source(tmp_path) -> None:
     assert selected == load_record_sources([(full, None, 0.2, 7)])
 
 
+def test_source_prompt_override_is_applied_only_to_its_source(tmp_path) -> None:
+    full = tmp_path / "teacher.jsonl"
+    rows = [
+        {
+            "dataset": f"dataset-{index}",
+            "index": index,
+            "label": index,
+            "parse_error": False,
+            "label_match": True,
+            "student_prompt": "CACHED PROMPT\n\n<context>Evidence</context>",
+            "student_target": f"Prediction:{index}",
+        }
+        for index in (0, 1)
+    ]
+    full.write_text("".join(json.dumps(row) + "\n" for row in rows))
+
+    selected = load_record_sources([
+        (full, "dataset-0", 1.0, 0, None),
+        (full, "dataset-1", 1.0, 0, "SPECIALIST PROMPT"),
+    ])
+    ordinary = tokenize_record(selected[0], FakeTokenizer(), 1000)
+    specialist = tokenize_record(selected[1], FakeTokenizer(), 1000)
+    ordinary_text = "".join(chr(token) for token in ordinary["input_ids"])
+    specialist_text = "".join(chr(token) for token in specialist["input_ids"])
+
+    assert "CACHED PROMPT" in ordinary_text
+    assert "SPECIALIST PROMPT\n\n<context>Evidence</context>" in specialist_text
+    assert "CACHED PROMPT" not in specialist_text
+
+
 def test_select_stratified_fraction_balances_dataset_and_label() -> None:
     records = [
         {"dataset": dataset, "label": label, "index": index}

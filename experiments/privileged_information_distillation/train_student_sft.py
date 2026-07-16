@@ -47,6 +47,7 @@ class CompletionOnlyCollator:
 
 REASONING_BLOCK_START = "\n\n<assistant_reasoning>\n"
 REASONING_BLOCK_END = "\n</assistant_reasoning>"
+SOURCE_PROMPT_TEMPLATE_KEY = "_source_prompt_template"
 
 
 def has_reasoning_block(prompt: str) -> bool:
@@ -120,17 +121,24 @@ def load_record_sources(
     sources: list[
         tuple[Path, str | None]
         | tuple[Path, str | None, float, int]
+        | tuple[Path, str | None, float, int, str | None]
     ],
 ) -> list[dict[str, Any]]:
-    """Load disjoint teacher-cache slices with optional per-source sampling."""
+    """Load disjoint cache slices with optional sampling and prompt overrides."""
     records: list[dict[str, Any]] = []
     seen: set[tuple[str, Any]] = set()
     for source in sources:
         if len(source) == 2:
             path, dataset_name_contains = source
             fraction, seed = 1.0, 0
-        else:
+            source_prompt_template = None
+        elif len(source) == 4:
             path, dataset_name_contains, fraction, seed = source
+            source_prompt_template = None
+        elif len(source) == 5:
+            path, dataset_name_contains, fraction, seed, source_prompt_template = source
+        else:
+            raise ValueError(f"invalid teacher source tuple length: {len(source)}")
         source_records = load_records(
             path, dataset_name_contains=dataset_name_contains
         )
@@ -140,6 +148,7 @@ def load_record_sources(
         print(
             f"teacher source path={path} filter={dataset_name_contains!r} "
             f"fraction={float(fraction)} seed={int(seed)} "
+            f"prompt_override={source_prompt_template is not None} "
             f"selected={len(source_records)}"
         )
         for record in source_records:
@@ -147,7 +156,12 @@ def load_record_sources(
             if key in seen:
                 raise ValueError(f"duplicate teacher record across sources: {key}")
             seen.add(key)
-            records.append(record)
+            selected_record = dict(record)
+            if source_prompt_template is not None:
+                selected_record[SOURCE_PROMPT_TEMPLATE_KEY] = str(
+                    source_prompt_template
+                )
+            records.append(selected_record)
     if not records:
         raise RuntimeError("no usable records across teacher sources")
     return records
@@ -211,12 +225,22 @@ def tokenize_record(
         reasoning_dropout_probability,
         reasoning_dropout_seed,
     )
-    if prompt_template is not None:
+    source_prompt_template = record.get(SOURCE_PROMPT_TEMPLATE_KEY)
+    effective_prompt_template = (
+        str(source_prompt_template)
+        if source_prompt_template is not None
+        else prompt_template
+    )
+    if effective_prompt_template is not None:
         _, separator, evidence = raw_prompt.partition("<context>")
         if not separator:
             raise ValueError(f"student prompt is missing <context> for index={record['index']}")
-        selected_template = prompt_template
-        if not has_reasoning_block(raw_prompt) and prompt_template_without_reasoning:
+        selected_template = effective_prompt_template
+        if (
+            source_prompt_template is None
+            and not has_reasoning_block(raw_prompt)
+            and prompt_template_without_reasoning
+        ):
             selected_template = prompt_template_without_reasoning
         raw_prompt = f"{selected_template}\n\n<context>{evidence}"
     if target_mode == "teacher":
@@ -301,11 +325,13 @@ def main(cfg: DictConfig) -> None:
             source_seed = int(OmegaConf.select(
                 source, "train_fraction_seed", default=cfg.seed
             ))
+            source_prompt = OmegaConf.select(source, "prompt", default=None)
             sources.append((
                 artifact,
                 None if source_filter is None else str(source_filter),
                 source_fraction,
                 source_seed,
+                None if source_prompt is None else str(source_prompt),
             ))
         dataset_name_contains = "multi-source"
     records = load_record_sources(sources)
