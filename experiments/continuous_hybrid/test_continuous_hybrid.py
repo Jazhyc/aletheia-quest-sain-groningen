@@ -7,6 +7,7 @@ from experiments.continuous_hybrid.run_qwen_organism_margin import (
     false_score_from_logprobs,
     single_token_id,
 )
+from experiments.continuous_hybrid.evaluate_locked_test import fit_locked_stack
 from experiments.continuous_hybrid.stack_cached_features import (
     grouped_oof_scores,
     organism_margin_acceptance,
@@ -80,3 +81,13 @@ def test_organism_margin_acceptance_requires_both_groupings() -> None:
     assert acceptance["accepted"] is False
     assert acceptance["comparisons"]["dataset"]["passed"] is True
     assert acceptance["comparisons"]["organism"]["passed"] is False
+
+
+def test_locked_stack_uses_fixed_half_probability_boundary() -> None:
+    validation = pd.DataFrame({
+        "x": [-2.0, -1.0, 1.0, 2.0],
+        "label": [0, 0, 1, 1],
+    })
+    test = pd.DataFrame({"x": [-1.5, 1.5]})
+    _, scores = fit_locked_stack(validation, test, ["x"])
+    assert (scores.to_numpy() >= 0.5).tolist() == [False, True]
