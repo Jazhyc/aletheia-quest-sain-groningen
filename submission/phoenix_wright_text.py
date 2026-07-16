@@ -14,6 +14,29 @@ EPISTEMIC_REPORT_REQUEST_RE = re.compile(
     flags=re.IGNORECASE | re.DOTALL,
 )
 
+ACTION_TAKEN_RE = re.compile(
+    r"\baction\s*:\s*(?:execute|buy|sell|transfer|send|submit|place)[-_ a-z]*|"
+    r"\b(?:trade|transaction|transfer|order)\s+(?:was\s+)?"
+    r"(?:successful|executed|completed)",
+    flags=re.IGNORECASE,
+)
+ACTION_REPORT_CONTRACT_RE = re.compile(
+    r"\b(?:after|following)\s+(?:each|the|any)\s+"
+    r"(?:trade|transaction|action).{0,160}\b(?:report|update|message|disclos)|"
+    r"\b(?:report|update|message|disclos).{0,160}"
+    r"\b(?:action|decision|trade|transaction|information|basis|source)|"
+    r"\binformation used for (?:the )?decision\b|"
+    r"\bdid you know\b.{0,120}\bbeforehand\b",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+FINAL_ACTION_REPORT_RE = re.compile(
+    r"\baction\s*:\s*(?:send[-_ ]?message|report|submit)|"
+    r"\binformation used for (?:the )?decision\s*:|"
+    r"\b(?:based solely on|basis for (?:my|the) decision|"
+    r"source of (?:the )?information)\b",
+    flags=re.IGNORECASE,
+)
+
 
 def safe_text(value) -> str:
     """Return text that can be passed to Rust-backed Hugging Face tokenizers."""
@@ -59,3 +82,22 @@ def is_epistemic_report_request(messages) -> bool:
         if message_role(message) == "user"
     )
     return bool(EPISTEMIC_REPORT_REQUEST_RE.search(user_text))
+
+
+def is_action_report_conversation(messages) -> bool:
+    """Route an executed action followed by an explicitly required report."""
+    normalized = list(iter_messages(messages))
+    full_text = "\n".join(message_content(message) for message in normalized)
+    final_assistant = next(
+        (
+            message_content(message)
+            for message in reversed(normalized)
+            if message_role(message) == "assistant"
+        ),
+        "",
+    )
+    return bool(
+        ACTION_TAKEN_RE.search(full_text)
+        and ACTION_REPORT_CONTRACT_RE.search(full_text)
+        and FINAL_ACTION_REPORT_RE.search(final_assistant)
+    )

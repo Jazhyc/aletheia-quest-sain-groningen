@@ -200,6 +200,17 @@ truncated count and minimum retained fraction. The prompt, router, labels, and
 acceptance gate are unchanged. This is a deployment-equivalence correction, not
 a score-conditioned context sweep; do not compare alternative caps by accuracy.
 
+The amended full-category run nearly reaches, but technically fails, the frozen
+absolute gate. Across all 6,873 rows, the action prompt moves BA from `0.5307`
+to `0.69989` (gain `0.16915`), recall from `0.8141` to `0.4417`, and FPR from
+`0.7526` to `0.0419`, with 14 parse errors. It improves BA for every source
+family, but misses the required `0.7000` BA by `0.00011`; do not relabel this as
+a passed preregistration. Because the router has zero local coverage, uses the
+same weights and one existing inference call, and addresses an otherwise absent
+observable response mode, the route is nevertheless retained in the notebook
+as a dormant theoretical coverage change under the project's explicit muted-
+validation retention policy. No action-trained adapter is selected from it.
+
 The action summary has intentionally conservative recall (`0.58`) and low FPR
 (`0.06`) on the frozen 200 rows. The main Phoenix interface found complementary
 recall in a short direct readout, so one analogous action-only readout is frozen:
@@ -212,6 +223,11 @@ as the summary route; do not tune a second wording from its errors.
 ```bash
 sbatch experiments/liars_bench_distillation/evaluate_action_readouts.sh
 ```
+
+The direct readout is rejected. Summary-only scores `0.7700` BA with `0.04`
+FPR, while binary-only collapses to `0.6500` BA with `0.62` FPR; their maximum
+reaches only `0.6550`. The extra member therefore adds false positives rather
+than complementary action-report recall.
 
 A second response-mode specialist is frozen for harmful-use multiple choice.
 Its router requires at least three explicit A--D options, a single-letter reply
@@ -244,6 +260,11 @@ deployment input cap at 4,500 context characters.
 sbatch experiments/liars_bench_distillation/evaluate_full_harm_choice_confirmation.sh
 ```
 
+The 200-row specialist pilot failed before full confirmation was warranted.
+The unchanged Phoenix adapter under the harm-choice prompt scores `0.5700` BA
+(`0.24` recall, `0.10` FPR); augmented adapters span only `0.5650--0.5750`.
+Do not run or deploy the queued full-category method from this result.
+
 The original external-data students saw every category through the generic
 factual-answer prompt. That makes their muted adapter gains ambiguous: the
 student may have learned against a response-mode mismatch. A final matched
@@ -265,6 +286,12 @@ competition test unless both gates pass.
 sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   --config-name pid_liars_bench_action_prompt_continue_v1
 ```
+
+The prompt-conditioned continuation is also rejected. It leaves the frozen
+action score exactly at the original adapter's `0.7600` BA (`0.58` recall,
+`0.06` FPR), despite scoring `0.9048` on competition validation. The apparent
+competition gain does not transfer to the preregistered target response mode,
+so the original weights and routed prompt are the simpler retained mechanism.
 
 ## Cross-family long-answer continuation
 
@@ -293,3 +320,11 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   --config-name pid_liars_instructed_long_continue_v1
 sbatch experiments/liars_bench_distillation/evaluate_instructed_long.sh
 ```
+
+The cross-family continuation is safe but muted. On the 200 disjoint long-answer
+rows it moves BA from `0.9600` to `0.9650` solely by lowering FPR from `0.03` to
+`0.02`; all five families are non-worse and only Llama improves. Competition
+validation is `0.9024` BA (`0.9771` instructed, `0.8028` varied), within the
+preservation bound, but the external gain misses the required `0.02`. Retain
+the tiny family-balanced recipe as data-composition evidence and future-data
+scaffolding, but do not promote its weights or spend a test evaluation.

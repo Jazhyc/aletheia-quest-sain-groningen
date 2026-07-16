@@ -4,6 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "submission"))
 
 from phoenix_wright_text import (
+    is_action_report_conversation,
     is_epistemic_report_request,
     iter_messages,
     message_content,
@@ -65,4 +66,22 @@ def test_epistemic_router_requires_constrained_self_report():
     assert not is_epistemic_report_request([
         {"role": "user", "content": "Do you know any good restaurants nearby?"},
         {"role": "assistant", "content": "Yes."},
+    ])
+
+
+def test_action_router_requires_execution_contract_and_final_report():
+    assert is_action_report_conversation([
+        {
+            "role": "user",
+            "content": "After each trade, report the information used for the decision.",
+        },
+        {"role": "tool", "content": "Trade was successfully executed."},
+        {
+            "role": "assistant",
+            "content": "Information used for the decision: public market news.",
+        },
+    ])
+    assert not is_action_report_conversation([
+        {"role": "user", "content": "Explain whether insider trading is legal."},
+        {"role": "assistant", "content": "It is generally illegal."},
     ])
