@@ -25,6 +25,14 @@ including recorded model belief where Liars' Bench supplies it. The Qwen student
 sees only the ordinary conversation/output prompt, so privileged fields cannot
 leak into deployment.
 
+Disjointness was also checked at the content level. Across every category,
+there is zero exact overlap between train and evaluation conversation prefixes
+after removing the final assistant output, and zero full-conversation overlap.
+Insider Trading intentionally reuses generic final report requests (191/200
+evaluation rows share one of ten train request strings), but every preceding
+information/action context is distinct. Three HP-KR evaluation rows share a
+last-user string while retaining distinct prior conversations.
+
 External rows use a 6,000-character balanced head/tail context window. This is
 mainly an Insider Trading fix: the historical 3,000-character tail cap fired on
 every row even though the 2,048-token input cap fired on none. The larger window
