@@ -66,4 +66,6 @@ python experiments/liars_bench_distillation/prepare_teacher_data.py \
 
 python experiments/liars_bench_distillation/audit_teacher_cache.py \
   results/blackbox/liars_bench_pid_aug_v1/teacher/train.jsonl \
-  --output results/blackbox/liars_bench_pid_aug_v1/teacher/audit.json
+  --output results/blackbox/liars_bench_pid_aug_v1/teacher/audit.json \
+  --expected-total 256 \
+  --expected-datasets 4

@@ -95,9 +95,23 @@ def validate_audit(
     min_coverage: float,
     max_leak_fraction: float,
     max_label_imbalance_fraction: float = 0.05,
+    expected_total: int | None = None,
+    expected_datasets: int | None = None,
 ) -> list[str]:
     """Return human-readable quality-gate failures."""
     failures: list[str] = []
+    if expected_total is not None and audit["total"] != expected_total:
+        failures.append(
+            f"cache has {audit['total']} rows; expected exactly {expected_total}"
+        )
+    if (
+        expected_datasets is not None
+        and len(audit["dataset_label_counts"]) != expected_datasets
+    ):
+        failures.append(
+            f"cache has {len(audit['dataset_label_counts'])} usable datasets; "
+            f"expected exactly {expected_datasets}"
+        )
     if audit["coverage"] < min_coverage:
         failures.append(
             f"coverage {audit['coverage']:.3f} is below required {min_coverage:.3f}"
@@ -127,6 +141,8 @@ def main() -> None:
     parser.add_argument("--min-coverage", type=float, default=0.90)
     parser.add_argument("--max-leak-fraction", type=float, default=0.05)
     parser.add_argument("--max-label-imbalance-fraction", type=float, default=0.05)
+    parser.add_argument("--expected-total", type=int)
+    parser.add_argument("--expected-datasets", type=int)
     args = parser.parse_args()
 
     audit = audit_records(load_jsonl(args.artifact))
@@ -141,6 +157,8 @@ def main() -> None:
         min_coverage=args.min_coverage,
         max_leak_fraction=args.max_leak_fraction,
         max_label_imbalance_fraction=args.max_label_imbalance_fraction,
+        expected_total=args.expected_total,
+        expected_datasets=args.expected_datasets,
     )
     if failures:
         raise SystemExit("teacher-cache audit failed: " + "; ".join(failures))

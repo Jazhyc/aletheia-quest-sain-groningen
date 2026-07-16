@@ -50,6 +50,24 @@ def test_audit_allows_one_parse_failure_in_a_balanced_category() -> None:
     assert validate_audit(audit, min_coverage=0.9, max_leak_fraction=0.05) == []
 
 
+def test_audit_checks_expected_shape() -> None:
+    audit = audit_records([
+        make_record("a", 0, "Clean summary."),
+        make_record("b", 1, "Clean summary."),
+    ])
+
+    failures = validate_audit(
+        audit,
+        min_coverage=0.9,
+        max_leak_fraction=0.05,
+        expected_total=64,
+        expected_datasets=4,
+    )
+
+    assert any("expected exactly 64" in failure for failure in failures)
+    assert any("usable datasets" in failure for failure in failures)
+
+
 def test_audit_rejects_leak_and_usable_label_imbalance() -> None:
     records = [
         make_record("a", 0, "The privileged evidence proves the response is wrong."),
