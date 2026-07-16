@@ -244,6 +244,16 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   student.training.num_train_epochs=1
 ```
 
+The completed 5/10/20/40/80/100% sweep was nearly flat on validation. The 10%
+adapter trained in 110 seconds and exactly matched all 822 binary decisions of
+the 100% adapter, whose measured training time was 947.6 seconds. The 20%
+adapter trained in 193.8 seconds and made two fixes with no breaks relative to
+100%; the nominal 5% winner made only six fixes and three breaks and has not
+been replicated across subset seeds. Use 10% for fast screening, 20% for a more
+conservative intermediate check, and the full recipe for final confirmation.
+Do not select a fraction on local test. Full metrics and job provenance are in
+`docs/privileged_information_distillation/findings.md`.
+
 Evaluate the full learning-rate sweep on validation with one shared vLLM model
 load:
 

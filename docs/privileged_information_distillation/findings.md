@@ -146,6 +146,42 @@ rose by 0.0048. Instructed performance was unchanged, so there is no evidence
 of catastrophic forgetting. The small, split-dependent gain is not strong
 enough to replace the mixed adapter based on validation selection alone.
 
+### Varied-only data-fraction sweep
+
+A matched data-efficiency sweep reduced the selected 2,877-row varied-only
+cache while holding Qwen3.5-9B, rank-16/alpha-32 LoRA, one epoch, AdamW `5e-5`,
+effective batch size 32, prompts, targets, and seed fixed. Sampling is
+deterministic within each dataset/label stratum, so every fraction retains all
+nine dataset units and both labels. Training jobs `30174652`, `30174648`,
+`30174650`, `30174649`, and `30174651` produced the 5--80% adapters. Shared
+vLLM validation job `30176128` evaluated them together with the existing 100%
+adapter.
+
+| data | rows | optimizer steps | train time | overall BA | recall | FPR | instructed BA | varied BA | parse errors |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 5% | 144 | 5 | 48.7s | **0.9036** | **0.8381** | 0.0310 | 0.9792 | **0.8028** | 6 |
+| 10% | 288 | 9 | 110.0s | 0.9000 | 0.8333 | 0.0333 | 0.9792 | 0.7944 | 4 |
+| 20% | 576 | 18 | 193.8s | 0.9024 | 0.8333 | **0.0286** | 0.9792 | 0.8000 | 6 |
+| 40% | 1,152 | 36 | 397.8s | 0.9000 | 0.8333 | 0.0333 | 0.9792 | 0.7944 | 3 |
+| 80% | 2,301 | 72 | 810.5s | 0.9012 | 0.8333 | 0.0310 | 0.9792 | 0.7972 | 5 |
+| 100% | 2,877 | 90 | 947.6s | 0.9000 | 0.8333 | 0.0333 | 0.9792 | 0.7944 | 4 |
+
+The curve is flat rather than showing benefit from more examples. Relative to
+100%, the 10% and 40% adapters make exactly the same 822 binary validation
+decisions. The 20% adapter makes two fixes and no breaks, the 80% adapter one
+fix and no breaks, and the nominally best 5% adapter six fixes and three breaks;
+all changes are on varied rows. These are too few changes, from one subset seed,
+to claim that 5% genuinely generalizes better or that reduced data prevents
+overfitting. Fewer rows here also mean fewer optimizer updates, not inherently
+less subset overfitting.
+
+Use 10% as a fast screening recipe: it reduces measured training from 15m48s
+to 1m50s while exactly reproducing the 100% validation decisions. Use 20% when
+a slightly more conservative screening default is worth another 84 seconds;
+it is the best no-harm paired row in this seed. Confirm any promising method on
+the full recipe, and do not spend a local-test evaluation selecting among these
+fractions given the established local-to-leaderboard distribution shift.
+
 ### Varied-only Muon sweep
 
 The next controlled sweep tests whether optimizer geometry and additional
