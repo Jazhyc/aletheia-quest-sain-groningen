@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from experiments.neutral_contrast_judge.analyze_pair_calibration import grouped_calibration
 from experiments.neutral_contrast_judge.evaluate_pair_judges import metrics, pair_prompt
 from experiments.neutral_contrast_judge.generate_neutral_outputs import (
     neutral_prompt,
@@ -75,3 +76,14 @@ def test_metrics_separates_rating_seven_decision_from_rating_ranking() -> None:
     )
     assert result["balanced_accuracy"] == 1.0
     assert result["rating_auroc"] == 1.0
+
+
+def test_grouped_calibration_excludes_held_out_dataset() -> None:
+    frame = pd.DataFrame({
+        "dataset": ["a", "a", "b", "b"],
+        "label": [0, 1, 0, 1],
+        "score": [0.0, 1.0 / 6.0, 0.0, 1.0 / 6.0],
+    })
+    result = grouped_calibration(frame)
+    assert result["threshold_histogram"] == {"2": 2}
+    assert result["overall"]["balanced_accuracy"] == 1.0

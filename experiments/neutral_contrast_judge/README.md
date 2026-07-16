@@ -55,6 +55,29 @@ high-deception, but the forced token stage emitted only MAP ratings 2/5 with
 nearly constant 0.5 expected scores. The generated-rating rerun below uses the
 known-compatible baseline path.
 
+## Validation result
+
+Job `30165268` completed the corrected GPT-OSS run on one RTX Pro 6000 in
+11m34s. Model scoring took 584.5s for 4,320 prompts, and all ratings parsed.
+Neither frozen Rating-7 decision passed the acceptance rule, so no test run is
+authorized.
+
+| neutral text | BA | delta | AUROC | delta | recall | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| cached GPT-OSS D/K/S | 0.9083 | — | 0.9308 | — | 0.8500 | 0.0333 |
+| neutral re-answer pair judge | 0.9097 | +0.0014 | 0.9465 | +0.0157 | 0.8444 | 0.0250 |
+| neutral audit pair judge | 0.9028 | -0.0056 | 0.9340 | +0.0032 | 0.8417 | 0.0361 |
+
+The re-answer variant improved instructed BA by 0.0028 and tied varied BA; the
+audit variant lost 0.0139 varied BA. The main useful signal is therefore
+ranking, not the transferred binary calibration. A diagnostic-only
+leave-one-dataset-unit-out cutoff analysis selected `Rating >= 2` in all 18
+re-answer folds and scored 0.9264 OOF macro BA (0.9278 recall, 0.0750 FPR), with
+0.9583 instructed and 0.8944 varied BA. This does not retroactively satisfy the
+frozen Rating-7 rule and does not authorize test, but it motivates a separately
+frozen calibrated or distilled follow-up. The audit cutoffs were unstable and
+scored only 0.8958 OOF BA.
+
 ## Commands
 
 ```bash
@@ -62,6 +85,7 @@ sbatch experiments/neutral_contrast_judge/run_generate_neutral_outputs_a100_tp2.
 sbatch experiments/neutral_contrast_judge/run_pair_judges.sh
 # Backend-equivalent TP2 fallback; treat its first launch as a memory check:
 sbatch experiments/neutral_contrast_judge/run_pair_judges_a100_tp2.sh
+python experiments/neutral_contrast_judge/analyze_pair_calibration.py
 pytest experiments/neutral_contrast_judge
 ```
 

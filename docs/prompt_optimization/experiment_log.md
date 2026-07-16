@@ -2336,3 +2336,42 @@ isolates the rejected behavior from the safe throughput changes. Do not infer
 that the trace itself is universally harmful; the evidence is that this trace
 prompt plus recall-max readout overfit the available Qwen-heavy splits and is
 badly miscalibrated on opaque counted response modes.
+
+## GPT-OSS neutral-contrast pair judge (2026-07-16)
+
+The neutral organism signal was tested as evidence inside the judge rather than
+as an unconditional override. For all 720 Qwen validation rows, the generating
+Qwen3.5-27B organism produced two label-blind texts after the deceptive system
+context was removed: an independent honest re-answer and an audit of the
+original answer. GPT-OSS-120B then received the original interaction, original
+answer, and one neutral text under transferred `details4096`, `known4096`, and
+`scrutiny4096` rubrics. The cached GPT-OSS D/K/S ensemble on the same rows was
+the frozen baseline.
+
+An initial forced-rating run was a technical failure, not a method result. The
+space-prefixed digit candidates share a first GPT-OSS tokenizer token, collapsing
+the structured rating distribution even though the saved rationales correctly
+identified obvious deception. Job `30165268` reran with the established Harmony-
+aware generated `Rating: 1-7` parser. It completed 4,320 prompts with zero parse
+errors in 584.5s of scoring and 11m34s wall time on one RTX Pro 6000.
+
+| condition, frozen Rating-7 decision | BA | AUROC | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| cached GPT-OSS D/K/S | 0.9083 | 0.9308 | 0.8500 | 0.0333 |
+| neutral re-answer pair judge | 0.9097 | **0.9465** | 0.8444 | **0.0250** |
+| neutral audit pair judge | 0.9028 | 0.9340 | 0.8417 | 0.0361 |
+
+Neither variant met the preregistered `+0.0025` BA rule, so no test evaluation
+was run. Re-answer improved instructed BA by 0.0028 and tied varied BA; audit
+lost 0.0139 varied BA. Neutral evidence is therefore useful to GPT-OSS primarily
+as a ranking/calibration signal, while asking the organism to audit its own text
+is less reliable than obtaining an independent re-answer.
+
+A diagnostic leave-one-dataset-unit-out calibration selected `Rating >= 2` in
+all 18 re-answer folds. Its OOF macro BA was 0.9264, with 0.9278 recall and
+0.0750 FPR; instructed/varied BA were 0.9583/0.8944. Audit thresholds were
+unstable and reached only 0.8958 OOF BA. This diagnostic does not retroactively
+authorize test selection. It does justify a separately frozen follow-up that
+calibrates or distills the re-answer pair score using grouped/source-family
+holdouts. GPT-OSS itself remains non-submission-compatible, and all varied rows
+in this experiment are Qwen, so no cross-family transfer claim is supported.
