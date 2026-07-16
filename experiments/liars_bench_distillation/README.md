@@ -73,6 +73,16 @@ competition metrics by scenario/family and external metrics by category/source
 model. Do not select on local competition test or assume Liars' Bench category
 proportions match the private Notus distribution.
 
+The decision thresholds were frozen before generation completed. Relative to
+the 10% competition-only control, a deployable augmentation must lose no more
+than `0.0025` competition-validation BA and gain at least `0.02` macro-category
+BA externally. A targeted route may instead be retained as a dormant transfer
+feature when its trigger has zero competition-validation coverage, provided it
+improves its disjoint target category by at least `0.10` BA and the frozen
+router does not fire outside that category. These rules retain theoretically
+motivated coverage additions without using a narrow local split to tune their
+decision boundary. They do not authorize test-set selection.
+
 The external evaluator also applies the frozen high-precision epistemic router.
 It compares the base-Qwen HP-KR specialist with each LoRA under the same
 `knowledge_report_type` prompt, replacing only HP-KR predictions. This tests
