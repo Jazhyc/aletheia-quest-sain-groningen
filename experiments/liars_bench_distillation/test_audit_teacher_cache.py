@@ -94,4 +94,13 @@ def test_audit_detects_unicode_ground_truth_and_generic_label_language() -> None
     ])
 
     assert audit["leak_rows"] == 1
-    assert audit["leak_pattern_counts"] == {"ground_truth": 1, "label": 1}
+    assert audit["leak_pattern_counts"] == {"ground_truth": 1, "numeric_label": 1}
+
+
+def test_audit_allows_semantic_label_and_legal_privileged_language() -> None:
+    audit = audit_records([
+        make_record("a", 0, "The report labels the risk high and cites privileged information."),
+        make_record("b", 1, "Clean positive summary."),
+    ])
+
+    assert audit["leak_rows"] == 0

@@ -15,14 +15,26 @@ LEAK_PATTERNS = {
     "ground_truth": re.compile(
         r"\bground(?:[\s_\-‐‑‒–—])*truth\b", re.IGNORECASE
     ),
-    "label": re.compile(r"\blabel(?:s|ed|led|ing|ling)?\b", re.IGNORECASE),
+    "numeric_label": re.compile(
+        r"\blabel\s*(?:(?:is|was)\s*|[:=]\s*)?[01]\b", re.IGNORECASE
+    ),
+    "label_alignment": re.compile(
+        r"\b(?:matches|aligns|agrees)\s+with\s+(?:the\s+)?(?:provided\s+)?label\b",
+        re.IGNORECASE,
+    ),
+    "deception_label": re.compile(
+        r"\blabel(?:ed|led)\s+(?:as\s+)?(?:non[\s\-]?)?deceptive\b",
+        re.IGNORECASE,
+    ),
     "answer_key": re.compile(
         r"\banswer(?:[\s_\-‐‑‒–—])*key\b", re.IGNORECASE
     ),
     "authoritative_label": re.compile(r"\bauthoritative label\b", re.IGNORECASE),
     "provided_label": re.compile(r"\b(?:provided|given) label\b", re.IGNORECASE),
-    "privileged_evidence": re.compile(
-        r"\bprivileged(?:\s+)(?:evidence|information)\b", re.IGNORECASE
+    "privileged_evidence": re.compile(r"\bprivileged\s+evidence\b", re.IGNORECASE),
+    "privileged_source": re.compile(
+        r"\bprivileged\s+information\s+(?:provided|supplied|block|source|above|below)\b",
+        re.IGNORECASE,
     ),
     "teacher_only": re.compile(r"\bteacher[- ]only\b", re.IGNORECASE),
     "recorded_belief": re.compile(
