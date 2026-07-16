@@ -162,7 +162,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=RESULTS / "continuous_hybrid_locked_test_v1",
+        default=RESULTS / "continuous_hybrid_locked_test_v1/test",
     )
     args = parser.parse_args()
 
@@ -178,7 +178,7 @@ def main() -> None:
         for name in sorted(test["scenario"].unique())
     }
     result = {
-        "method": args.output_dir.name,
+        "method": "continuous_hybrid_locked_test_v1",
         "split": "test",
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "rows": len(test),

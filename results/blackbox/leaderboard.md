@@ -3,9 +3,12 @@
 Timing is scoring-only wall time: it excludes vLLM startup/model load/compile and dataset preparation.
 Submitted timestamps are UTC.
 Rows with cached text-probe components report the logits scoring wall time; CPU n-gram inference is negligible.
+The continuous hybrid row reuses cached member outputs, so it has no comparable end-to-end scoring time.
 
 | submitted_at | method | AUROC | bal_acc | recall | FPR | score_time | rows/s |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-16 08:56:33 | continuous_hybrid_locked_test_v1 | 0.9571 | 0.9262 | 0.8857 | 0.0333 | - | - |
+| 2026-07-16 08:54:51 | continuous_hybrid_dks3072_logits_v1 | 0.9014 | 0.8726 | 0.7857 | 0.0405 | 77.7s | 10.6/s |
 | 2026-07-15 23:15:04 | qwen9b_pid_reasoning4000_summary_binary_or_locked_v1 | 0.9274 | 0.9274 | 0.8929 | 0.0381 | 69.0s | 11.9/s |
 | 2026-07-11 16:32:24 | qwen9b_pid_varied_grpo_ep2_v1 | 0.9048 | 0.9048 | 0.8310 | 0.0214 | 147.4s | 5.6/s |
 | 2026-07-11 15:55:23 | gpt_oss_120b_reason_ensemble_dks_member4096_v1 | 0.9465 | 0.9345 | 0.9000 | 0.0310 | 104.0s | 7.9/s |

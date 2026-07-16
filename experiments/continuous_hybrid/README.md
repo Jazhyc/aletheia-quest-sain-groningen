@@ -29,6 +29,13 @@ cached binary D/K/S heavy judge. The feature set and `C=0.1` stack are now froze
 for one local-test confirmation. No alternative stack may be selected from that
 test result.
 
+The locked local-test confirmation scored 0.9262 BA, 0.9571 AUROC, 0.8857
+recall, and 0.0333 FPR. This is below the 4096 D/K/S generated ensemble's 0.9298
+BA, despite much stronger ranking. Do not replace the accuracy-first submission
+with the ten-feature stack or tune its threshold on this test result. The result
+does support continuous scores as useful future calibration features when a
+cheaper, independently validated stack is available.
+
 A cached four-member semantic/epistemic prompt family was also tested as a soft
 feature block. It scored only 0.8964 BA by itself. Adding it to the compact stack
 tied 0.9310 dataset-grouped BA and raised organism-grouped BA by only 0.0012,
@@ -72,4 +79,5 @@ pytest experiments/continuous_hybrid
 ```
 
 Runtime outputs go under `results/blackbox/continuous_hybrid_validation_v1/`
-and Slurm logs under `logs/slurm/continuous_hybrid/`.
+and `results/blackbox/continuous_hybrid_locked_test_v1/test/`. Slurm logs go
+under `logs/slurm/continuous_hybrid/`.
