@@ -6,7 +6,7 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v2_2.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v2_3.ipynb"
 
 
 def notebook_string_constants() -> tuple[dict[str, str], str]:

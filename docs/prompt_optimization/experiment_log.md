@@ -2307,3 +2307,14 @@ passes, allowing the one-line member's batches to terminate after three tokens.
 The complete 400-row rehearsal passed again under this exact code and retained
 100% agreement with the vLLM ensemble on the 40 labeled rows. A staged official
 `submit.py --dry --limit 32` run completed all 21 dataset units in 14m06s.
+
+## Phoenix Wright v2.3 submission notebook
+
+On 2026-07-16, the sole submission notebook was renamed to
+`submission/phoenix_wright_v2_3.ipynb`. V2.3 retains the reasoning-aware
+summary/binary ensemble and certified NDIF batching from the optimized v2.2
+path, but removes the regex verdict/explanation hard-positive override. That
+rule changed no local validation or test predictions, and its official
+submission result was identical to the preceding submission. The standalone
+experiment implementation remains available for historical reproduction but is
+not imported or executed by the submission.
