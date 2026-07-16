@@ -73,8 +73,11 @@ teacher caches behind one persistent vLLM server:
 sbatch experiments/privileged_information_distillation/run_teacher_reasoning_effort_sweep.sh
 ```
 
-The existing reviewed cache and selected varied-only adapter are the medium
-condition; do not regenerate them merely to add the metadata field.
+The existing reviewed cache is the medium condition; do not regenerate it
+merely to add the metadata field. For the default 10% fast screen, compare the
+new low/high adapters with
+`qwen9b_pid_varied_datafrac10_adamw5e5_v1`. The full-data selected adapter
+remains the final medium baseline, not the matched screening control.
 
 The teacher artifact path is intentionally independent of `method`. Student
 learning-rate sweeps override `method` to obtain distinct adapter directories

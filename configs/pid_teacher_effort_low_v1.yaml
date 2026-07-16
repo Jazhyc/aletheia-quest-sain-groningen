@@ -14,6 +14,8 @@ teacher:
 
 student:
   dataset_name_contains: varied-deception
+  # Use the selected fast-screen fraction; confirm a winner on the full recipe.
+  train_fraction: 0.10
   output_dir: ${output_dir}/adapter
   training:
     optimizer: adamw

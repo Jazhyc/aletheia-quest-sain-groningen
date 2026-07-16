@@ -356,6 +356,73 @@ tradeoff without the validation BA gain. Treat the earlier `+0.0024` as split
 noise and keep the original adapter. Do not test the other tied prompts: doing
 so would turn the local test split into another selection set.
 
+### GPT-OSS teacher reasoning-effort sweep
+
+Job `30176491` reused one persistent GPT-OSS-120B vLLM server to compare the
+checkpoint's explicit Harmony `low`, `medium`, and `high` reasoning-effort
+settings. The ordinary unprivileged Truth Value Guard benchmark held its prompt,
+validation rows, deterministic decoding, 2,048-token output cap, and 8,192-token
+model context fixed. The same job then generated full varied-only privileged
+caches for low and high; the reviewed original cache is the medium condition.
+
+| teacher effort | direct validation BA | direct AUROC | recall | FPR | instructed BA | varied BA | direct score time | usable varied traces |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| low | **0.9190** | **0.9283** | **0.8786** | **0.0405** | **0.9750** | 0.8444 | **64.7s** | **2,880/2,880** |
+| medium | **0.9190** | 0.9247 | **0.8786** | **0.0405** | 0.9708 | 0.8500 | 190.2s | 2,877/2,880 |
+| high | 0.9071 | 0.9213 | 0.8619 | 0.0476 | 0.9417 | **0.8611** | 539.8s | 2,691/2,880 |
+
+High improves the varied-scenario macro BA by 0.0111 over medium, but loses
+0.0292 instructed BA and 0.0119 overall BA. It is about 8.3 times slower than
+low in direct scoring and produces six validation parse failures. On privileged
+trace generation, low took roughly eight minutes and high roughly 34 minutes;
+the whole shared-server job, including startup and all three direct benchmarks,
+completed in 1h04m41s. Hidden completion size rises sharply from 706 mean
+characters at low to 1,429 at medium and 3,222 at high, although extracted
+reasoning summaries remain similar in length. At the fixed cap, high fails to
+reach a parseable final summary on 189/2,880 training rows (6.6%). This is a
+real operational result of the matched cap, but it also means the high-effort
+quality comparison is partly confounded by truncation; isolating uncapped high
+effort would require a separate 4,096-token repair ablation.
+
+The downstream comparison used the selected 10% fast-screen recipe, not the
+full 2,877-row training run: regular Qwen3.5-9B, varied-only targets,
+rank-16/alpha-32 LoRA, one epoch, AdamW `5e-5`, and effective batch size 32.
+Low job `30176926` trained on 288 rows in 107.2s; high job `30176927` trained on
+272 usable sampled rows in 98.6s. Their wall times including setup and saving
+were 3m33s and 3m26s. Shared validation job `30176928` evaluated low, the
+existing matched 10% medium adapter, and high in one vLLM session.
+
+| teacher effort | student validation BA | recall | FPR | instructed BA | varied BA | parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| low | 0.9000 | **0.8333** | 0.0333 | **0.9792** | 0.7944 | **4** |
+| medium | **0.9012** | **0.8333** | **0.0310** | **0.9792** | **0.7972** | **4** |
+| high | 0.9000 | **0.8333** | 0.0333 | **0.9792** | 0.7944 | **4** |
+
+Low and high make exactly the same 822 binary decisions. Medium differs from
+each on only five rows: relative to low it makes three fixes and two breaks;
+relative to medium, high makes two fixes and three breaks. The resulting
+0.0012 range is below the previously measured shared-session backend-drift
+floor and supplies no evidence that greater teacher effort improves the
+student.
+
+With only three effort settings, an effort-level correlation is descriptive,
+not inferential. Direct overall teacher BA versus student BA has Pearson and
+Spearman correlation 0.50 because low and medium tie as teachers while the
+medium student changes only one net decision. On varied rows, Pearson is
+-0.189 and Spearman is 0.0: the monotonic direct-teacher gain does not transfer
+to the student. Across the 21 dataset units, teacher and student BA correlate
+strongly at low and medium (Pearson 0.940 for each) but less at high (0.698);
+this mostly shows shared dataset difficulty, not an effort effect. Row-level
+teacher/student correctness association likewise falls from 0.599 at low and
+0.588 at medium to 0.492 at high, while prediction agreement falls from 0.932
+and 0.931 to 0.914.
+
+Decision: retain medium and the original reviewed teacher/default full-data
+adapter. Low is a useful cheap cache-generation setting for exploratory pilots,
+but did not beat medium downstream. Reject high at the current 2,048-token cap:
+it is much slower, substantially less reliable, and yields no student gain. Do
+not spend a local-test evaluation or a full-data confirmation on this sweep.
+
 ## Prediction-only SFT baseline
 
 To test whether teacher reasoning supervision is necessary, train a controlled
