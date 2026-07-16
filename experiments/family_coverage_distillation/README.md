@@ -21,9 +21,17 @@ generalization candidate if overall validation BA loses at most `0.0025`,
 Gemma and Nemotron macro-family BA do not regress, and Qwen varied BA loses at
 most `0.005`. Do not evaluate on local test unless those controls pass.
 
+Because the coverage mixture has 12 optimizer steps versus nine for the 10%
+baseline, a 13%-Qwen-only control selects 378 rows and also takes 12 steps. It
+is an attribution control, not a new fraction candidate: the family hypothesis
+is supported only if the coverage adapter matches or beats this control while
+preserving the non-Qwen gates.
+
 ```bash
 sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   --config-name pid_family_coverage_balanced_v1
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  --config-name pid_varied_datafrac13_adamw5e5_control_v1
 
 sbatch experiments/privileged_information_distillation/evaluate_student_sft.sh \
   --adapter-dir results/blackbox/qwen9b_pid_varied_datafrac10_adamw5e5_v1/adapter \
