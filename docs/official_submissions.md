@@ -4,7 +4,7 @@ Durable record of official leaderboard submissions for team `SAIN Groningen`.
 Use this for cross-method reporting across black-box prompts, Phoenix Wright
 variants, text baselines, and future approaches.
 
-Source: leaderboard `/api/me`, last queried on 2026-07-11. Official metrics are
+Source: leaderboard API, last queried on 2026-07-16. Official metrics are
 the leaderboard's counted mean across private datasets. Dataset names are the
 opaque public labels returned by the Space.
 
@@ -20,6 +20,7 @@ opaque public labels returned by the Space.
 
 | submitted at (UTC) | notebook | method / local mapping | tag | BA | AUROC | recall | FPR | runtime |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-16 07:36:16 | `phoenix_wright_v2_3.ipynb` | same adapter; conditional 4,000-character reasoning plus summary/binary max ensemble | black | 0.729167 | 0.729167 | 0.857500 | 0.399167 | 6077.6s |
 | 2026-07-11 09:47:58 | `phoenix_wright_v2_0.ipynb` | compact privileged-distillation adapter; mixed-data `5e-5` selection | black | 0.833333 | 0.833333 | 0.741667 | 0.075000 | 12476.5s |
 | 2026-07-08 11:55:36 | `phoenix_wright_v1_3.ipynb` | context omission guard | black | 0.760833 | 0.760817 | 0.545000 | 0.023333 | 1928.9s |
 | 2026-07-08 10:54:35 | `phoenix_wright_v1_3.ipynb` | details no-thinking prompt | black | 0.731667 | 0.732252 | 0.494167 | 0.030833 | 1910.5s |
@@ -35,6 +36,30 @@ opaque public labels returned by the Space.
 ## Recent Phoenix Counted Dataset Detail
 
 These counted Notus/Iris rows are useful diagnostics for official transfer.
+
+### Phoenix Wright v2.3 reasoning-trace ensemble
+
+Submitted 2026-07-16 07:36:16 UTC. Headline BA `0.729167`.
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Notus | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` / `None` | 0.6475 | 0.6475 | 0.6650 | 0.3700 |
+| Dataset Notus | `Qwen/Qwen3.5-27B` / `None` | 0.5800 | 0.5800 | 0.7450 | 0.5850 |
+| Dataset Notus | `google/gemma-3-27b-it` / `None` | 0.6125 | 0.6125 | 0.8450 | 0.6200 |
+| Dataset Iris | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` / `g-st-nemotron-3-super-120b` | 0.8500 | 0.8500 | 0.9700 | 0.2700 |
+| Dataset Iris | `Qwen/Qwen3.5-27B` / `g-st-qwen3.5-27b` | 0.8475 | 0.8475 | 0.9700 | 0.2750 |
+| Dataset Iris | `google/gemma-3-27b-it` / `g-st-gemma-3-27b-it-2` | 0.8375 | 0.8375 | 0.9500 | 0.2750 |
+
+Notes: reject this interface. Relative to v2.0--v2.2, recall rose from
+0.7417 to 0.8575 but FPR rose from 0.0750 to 0.3992, reducing BA by 0.1042.
+The same weights were used, so the regression is attributable to the changed
+inference interface rather than a new adapter. The trace-visible and binary-max
+components cannot be separated from this aggregate official run, but both were
+selected on Qwen-heavy local splits and are unsafe under the counted response-
+mode shift. The submission notebook was rolled back to the v2.1 no-trace,
+single-summary decision rule while retaining `LanguageModel` and mechanical
+batching optimizations. Do not restore reasoning traces, the binary max member,
+or the logical regex override without a new cross-mode validation design.
 
 ### Phoenix Wright v2 Compact Distillation
 

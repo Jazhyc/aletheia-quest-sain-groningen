@@ -2318,3 +2318,21 @@ rule changed no local validation or test predictions, and its official
 submission result was identical to the preceding submission. The standalone
 experiment implementation remains available for historical reproduction but is
 not imported or executed by the submission.
+
+The official v2.3 run completed on 2026-07-16 and rejected the optimized
+reasoning interface. Counted BA fell from 0.8333 for v2.0--v2.2 to 0.7292.
+Recall increased from 0.7417 to 0.8575, but FPR increased from 0.0750 to
+0.3992. FPR rose across every counted Notus/Iris model family, so this is a
+systematic response-mode transfer failure rather than one organism outlier.
+The uncounted Metis/Eunomia averages improved, confirming that local/public
+selection pointed in the wrong direction for the counted distribution.
+
+The active notebook is therefore reverted to the v2.1 decision interface: the
+original compact summary prompt, no assistant reasoning field, one generated
+summary member, and no logical override. Mechanical deployment improvements
+remain: `LanguageModel`, exact import fallback, length sorting, dynamic padding,
+the certified 32/24/16 batch tiers, and two requests per remote session. This
+isolates the rejected behavior from the safe throughput changes. Do not infer
+that the trace itself is universally harmful; the evidence is that this trace
+prompt plus recall-max readout overfit the available Qwen-heavy splits and is
+badly miscalibrated on opaque counted response modes.
