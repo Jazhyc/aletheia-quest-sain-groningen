@@ -61,11 +61,17 @@ especially on Notus, while many uncounted Metis/Eunomia Qwen units remained
 strong. Treat this as response-mode/interface transfer failure, with
 cross-family trace OOD and trace unfaithfulness both plausible contributors.
 
-The official comparison is not fully factorial. V2.0 used the older
-`VisionLanguageModel` execution path, while v2.4 also introduced
-`LanguageModel`, dynamic padding, and different batching. A no-trace v2.1
-prompt on the optimized backend has not been submitted, so the residual cannot
-be assigned exclusively to reasoning visibility from these official runs.
+The backend is only a formal official-run confound, not a credible explanation
+for this large systematic shift. The exact `LanguageModel` deployment path
+matched the shared-vLLM predictions on all 40 labeled rows in its remote
+rehearsal, and changing from one to two requests per session preserved 40/40
+agreement. The more important implementation confound is prompt serialization:
+v2.4 merged adjacent same-role messages, stopped applying the v2.1 1,500-character
+per-message cap before the 3,000-character context cap, removed the context
+truncation marker, and changed long-output head/tail allocation. Thus rows with
+no reasoning received the ordinary judge instruction but not necessarily the
+exact v2.1 rendered input. The official run does not isolate reasoning
+visibility cleanly from these formatting changes.
 
 ### Phoenix Wright v2.3 reasoning-trace ensemble
 

@@ -2342,9 +2342,10 @@ badly miscalibrated on opaque counted response modes.
 Phoenix v2.4 isolates the locally successful part of v2.3. It keeps the same
 bundled v2.1 adapter and conditionally supplies a balanced head/tail excerpt of
 at most 4,000 characters from a non-empty assistant `reasoning` field. Rows
-without a trace use the exact ordinary v2.1 prompt. It generates only the
-structured summary member; the binary recall member, second generation pass,
-max aggregation, and logical override are absent.
+without a trace use the exact ordinary v2.1 judge instruction, though the
+post-result audit below found that their dialogue serialization can differ. It
+generates only the structured summary member; the binary recall member, second
+generation pass, max aggregation, and logical override are absent.
 
 This corresponds to the unchanged-adapter zero-shot trace reader. Its locked
 local-test summary result was 0.9262 overall BA, 0.9833 instructed BA, and
@@ -2373,11 +2374,18 @@ The especially weak counted Notus Qwen result alongside strong uncounted
 Metis/Eunomia Qwen units points to response-mode/scenario transfer as well as
 source-family transfer.
 
-Do not over-attribute this official delta to traces alone. V2.0 used the older
-`VisionLanguageModel` path, whereas v2.4 also used `LanguageModel`, dynamic
-padding, and a different request schedule. The missing factorial control is the
-exact ordinary v2.1 no-trace prompt on the optimized backend. Submit that control
-before deciding whether to revert the mechanical inference improvements.
+The backend is not a likely explanation for this delta. The exact
+`LanguageModel` path matched shared-vLLM decisions on all 40 labeled rows in the
+remote deployment rehearsal, and the one-versus-two-requests-per-session check
+also retained 40/40 agreement. However, post-result review found that the
+notebook was not a clean trace-only ablation. Although no-trace rows selected
+the exact ordinary v2.1 judge instruction, v2.4 also merged adjacent same-role
+messages, removed the v2.1 per-message 1,500-character cap before applying the
+global 3,000-character context cap, removed the context truncation marker, and
+changed the head/tail allocation for long output fields. Consequently some
+no-trace rendered inputs differ from v2.1. Attribute the regression to the
+changed reasoning/serialization interface, not to `LanguageModel`; restore the
+frozen v2.1 formatter before any future trace-only comparison.
 
 ## GPT-OSS neutral-contrast pair judge (2026-07-16)
 
