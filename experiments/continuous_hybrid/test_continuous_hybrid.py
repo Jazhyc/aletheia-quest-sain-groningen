@@ -7,7 +7,10 @@ from experiments.continuous_hybrid.run_qwen_organism_margin import (
     false_score_from_logprobs,
     single_token_id,
 )
-from experiments.continuous_hybrid.stack_cached_features import grouped_oof_scores
+from experiments.continuous_hybrid.stack_cached_features import (
+    grouped_oof_scores,
+    organism_margin_acceptance,
+)
 
 
 class FakeTokenizer:
@@ -48,3 +51,32 @@ def test_grouped_oof_scores_assign_every_held_out_group() -> None:
     assert scores.shape == (len(frame),)
     assert np.isfinite(scores).all()
     assert ((scores >= 0.5).astype(int) == frame["label"].to_numpy()).all()
+
+
+def test_organism_margin_acceptance_requires_both_groupings() -> None:
+    def report(ba: float, auroc: float, varied: float, qwen: float) -> dict:
+        return {
+            "overall": {"balanced_accuracy": ba, "auroc": auroc},
+            "scenarios": {"varied-deception": {"metrics": {"balanced_accuracy": varied}}},
+            "families": {"Qwen": {"metrics": {"balanced_accuracy": qwen}}},
+        }
+
+    evaluations = {
+        "compact_continuous": {
+            "groupings": {
+                "dataset": report(0.93, 0.95, 0.84, 0.91),
+                "organism": report(0.93, 0.95, 0.84, 0.91),
+            }
+        },
+        "compact_plus_continuous_organism": {
+            "groupings": {
+                "dataset": report(0.933, 0.96, 0.84, 0.912),
+                "organism": report(0.931, 0.96, 0.84, 0.912),
+            }
+        },
+    }
+    acceptance = organism_margin_acceptance(evaluations)
+    assert acceptance is not None
+    assert acceptance["accepted"] is False
+    assert acceptance["comparisons"]["dataset"]["passed"] is True
+    assert acceptance["comparisons"]["organism"]["passed"] is False
