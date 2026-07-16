@@ -22,6 +22,13 @@ leave-one-organism-out. The cached screen is exploratory because its feature
 set was chosen after inspecting these validation results; it must not be
 presented as an untouched confirmatory result.
 
+The exploratory screen selected the ten-member `compact_continuous` feature
+set. It scored 0.9310 macro BA with leave-one-dataset-unit-out predictions and
+0.9298 with leave-one-organism-out predictions, compared with 0.9226 for the
+cached binary D/K/S heavy judge. The feature set and `C=0.1` stack are now frozen
+for one local-test confirmation. No alternative stack may be selected from that
+test result.
+
 ## Frozen organism-margin follow-up
 
 The binary whole-output organism audit improved ranking when added as a soft
@@ -52,6 +59,7 @@ criteria above.
 ```bash
 python experiments/continuous_hybrid/stack_cached_features.py
 sbatch experiments/continuous_hybrid/run_qwen_organism_margin.sh
+sbatch experiments/continuous_hybrid/run_dks_logits_test.sh
 python experiments/continuous_hybrid/stack_cached_features.py \
   --organism-margins results/blackbox/qwen27b_whole_output_self_query_margin_validation_v1/generations.jsonl
 pytest experiments/continuous_hybrid
