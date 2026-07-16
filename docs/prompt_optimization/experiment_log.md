@@ -2337,6 +2337,31 @@ that the trace itself is universally harmful; the evidence is that this trace
 prompt plus recall-max readout overfit the available Qwen-heavy splits and is
 badly miscalibrated on opaque counted response modes.
 
+## Phoenix Wright v2.4 trace-summary isolation
+
+Phoenix v2.4 isolates the locally successful part of v2.3. It keeps the same
+bundled v2.1 adapter and conditionally supplies a balanced head/tail excerpt of
+at most 4,000 characters from a non-empty assistant `reasoning` field. Rows
+without a trace use the exact ordinary v2.1 prompt. It generates only the
+structured summary member; the binary recall member, second generation pass,
+max aggregation, and logical override are absent.
+
+This corresponds to the unchanged-adapter zero-shot trace reader. Its locked
+local-test summary result was 0.9262 overall BA, 0.9833 instructed BA, and
+0.8500 varied BA, versus 0.9155/0.9813/0.8278 for the historical no-trace
+adapter evaluation. The stronger 0.9274/0.9708/0.8694 result belonged to the
+rejected summary/binary max ensemble and is not the v2.4 method.
+
+The submission retains `LanguageModel` with the exact import fallback, a
+2,048-token input cap, 512 generated tokens, length sorting, dynamic 32/24/16
+batch tiers, and two remote requests per session. The longest selected local
+validation prompt was 1,889 tokens. The locked test maximum was 2,050 tokens,
+so one prompt lost only two leading input tokens under the deployment cap while
+preserving the end of the conversation, final output, and trace tail. This is
+therefore not a material context-cap experiment. Because local trace-bearing
+rows are Qwen-only, the official run tests response-mode transfer rather than a
+locally established Gemma/Nemotron trace capability.
+
 ## GPT-OSS neutral-contrast pair judge (2026-07-16)
 
 The neutral organism signal was tested as evidence inside the judge rather than

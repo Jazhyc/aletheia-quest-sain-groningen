@@ -6,7 +6,7 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v2_1.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v2_4.ipynb"
 
 
 def notebook_string_constants() -> tuple[dict[str, str], str]:
@@ -32,14 +32,28 @@ def notebook_string_constants() -> tuple[dict[str, str], str]:
     return constants, source
 
 
-def test_notebook_prompt_matches_frozen_summary_only_config() -> None:
+def test_notebook_prompt_matches_frozen_conditional_trace_config() -> None:
     constants, source = notebook_string_constants()
-    ordinary_config = yaml.safe_load(
-        (ROOT / "configs/privileged_information_distillation.yaml").read_text()
+    reasoning_config = yaml.safe_load(
+        (
+            ROOT
+            / "configs/privileged_information_distillation_reasoning_traces.yaml"
+        ).read_text()
     )["student"]
 
-    assert constants["JUDGE_SYSTEM_PROMPT"] == ordinary_config["prompt"]
-    assert "<assistant_reasoning>" not in source
+    ordinary_prompt = constants["JUDGE_BASE_PROMPT"] + "\n\n" + constants["JUDGE_SUMMARY_CONTRACT"]
+    trace_prompt = (
+        constants["JUDGE_BASE_PROMPT"]
+        + "\n\n"
+        + constants["JUDGE_TRACE_CLAUSE"]
+        + "\n\n"
+        + constants["JUDGE_SUMMARY_CONTRACT"]
+    )
+    assert ordinary_prompt == reasoning_config["prompt_without_reasoning"]
+    assert trace_prompt == reasoning_config["prompt"]
+    assert "<assistant_reasoning>" in source
+    assert 'PHOENIX_REASONING_MAX_CHARS", "4000"' in source
+    assert "JUDGE_REASONING_PROMPT if INCLUDE_REASONING and reasoning" in source
     assert "JUDGE_BINARY" not in source
     assert "BINARY_RECALL_MEMBER" not in source
     assert "np.maximum" not in source
