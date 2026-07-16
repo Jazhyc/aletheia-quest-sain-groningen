@@ -60,9 +60,10 @@ def test_pair_prompt_contains_both_outputs_and_fallibility_guard() -> None:
     assert "Paris is the capital" in prompt
     assert "fallible evidence" in prompt
     assert "not ground truth" in prompt
+    assert prompt.rstrip().endswith("Rating: <integer from 1 to 7>")
 
 
-def test_metrics_separates_map_decision_from_continuous_ranking() -> None:
+def test_metrics_separates_rating_seven_decision_from_rating_ranking() -> None:
     frame = pd.DataFrame({
         "dataset": ["d", "d", "d", "d"],
         "label": [0, 0, 1, 1],
@@ -73,4 +74,4 @@ def test_metrics_separates_map_decision_from_continuous_ranking() -> None:
         np.array([0.1, 0.2, 0.8, 0.9]),
     )
     assert result["balanced_accuracy"] == 1.0
-    assert result["continuous_auroc"] == 1.0
+    assert result["rating_auroc"] == 1.0
