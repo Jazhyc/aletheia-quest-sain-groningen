@@ -116,6 +116,30 @@ def test_load_record_sources_rejects_overlapping_rows(tmp_path) -> None:
         raise AssertionError("overlapping teacher sources should fail")
 
 
+def test_load_record_sources_applies_fraction_per_source(tmp_path) -> None:
+    full = tmp_path / "full.jsonl"
+    rows = [
+        {
+            "dataset": "competition-varied",
+            "index": index,
+            "label": label,
+            "parse_error": False,
+            "label_match": True,
+            "student_target": f"Prediction:{label}",
+        }
+        for label in (0, 1)
+        for index in range(10)
+    ]
+    full.write_text("".join(json.dumps(row) + "\n" for row in rows))
+
+    selected = load_record_sources([(full, None, 0.2, 7)])
+
+    assert len(selected) == 4
+    assert sum(record["label"] == 0 for record in selected) == 2
+    assert sum(record["label"] == 1 for record in selected) == 2
+    assert selected == load_record_sources([(full, None, 0.2, 7)])
+
+
 def test_select_stratified_fraction_balances_dataset_and_label() -> None:
     records = [
         {"dataset": dataset, "label": label, "index": index}

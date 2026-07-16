@@ -117,13 +117,32 @@ def load_records(
 
 
 def load_record_sources(
-    sources: list[tuple[Path, str | None]],
+    sources: list[
+        tuple[Path, str | None]
+        | tuple[Path, str | None, float, int]
+    ],
 ) -> list[dict[str, Any]]:
-    """Load disjoint teacher-cache slices and reject accidental row overlap."""
+    """Load disjoint teacher-cache slices with optional per-source sampling."""
     records: list[dict[str, Any]] = []
     seen: set[tuple[str, Any]] = set()
-    for path, dataset_name_contains in sources:
-        for record in load_records(path, dataset_name_contains=dataset_name_contains):
+    for source in sources:
+        if len(source) == 2:
+            path, dataset_name_contains = source
+            fraction, seed = 1.0, 0
+        else:
+            path, dataset_name_contains, fraction, seed = source
+        source_records = load_records(
+            path, dataset_name_contains=dataset_name_contains
+        )
+        source_records = select_stratified_fraction(
+            source_records, float(fraction), int(seed)
+        )
+        print(
+            f"teacher source path={path} filter={dataset_name_contains!r} "
+            f"fraction={float(fraction)} seed={int(seed)} "
+            f"selected={len(source_records)}"
+        )
+        for record in source_records:
             key = (str(record.get("dataset", "")), record.get("index"))
             if key in seen:
                 raise ValueError(f"duplicate teacher record across sources: {key}")
@@ -266,7 +285,7 @@ def main(cfg: DictConfig) -> None:
             if cfg.student.dataset_name_contains is None
             else str(cfg.student.dataset_name_contains)
         )
-        sources = [(artifact, dataset_name_contains)]
+        sources = [(artifact, dataset_name_contains, 1.0, int(cfg.seed))]
     else:
         sources = []
         for source in teacher_sources:
@@ -276,9 +295,17 @@ def main(cfg: DictConfig) -> None:
             source_filter = OmegaConf.select(
                 source, "dataset_name_contains", default=None
             )
+            source_fraction = float(OmegaConf.select(
+                source, "train_fraction", default=1.0
+            ))
+            source_seed = int(OmegaConf.select(
+                source, "train_fraction_seed", default=cfg.seed
+            ))
             sources.append((
                 artifact,
                 None if source_filter is None else str(source_filter),
+                source_fraction,
+                source_seed,
             ))
         dataset_name_contains = "multi-source"
     records = load_record_sources(sources)
