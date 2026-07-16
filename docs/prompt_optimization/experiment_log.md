@@ -2387,6 +2387,19 @@ no-trace rendered inputs differ from v2.1. Attribute the regression to the
 changed reasoning/serialization interface, not to `LanguageModel`; restore the
 frozen v2.1 formatter before any future trace-only comparison.
 
+An exact local render audit then bounded this formatter concern. Comparing the
+v2.1 notebook renderer with v2.4 changed 7/6,573 training rows, all varied, but
+changed 0/822 validation rows and 0/821 local-test rows. No validation/test row
+had a message over the 1,500-character per-message cap, a final output over
+3,000 characters, or adjacent same-role messages. The recent 0.9262 trace
+summary and historical 0.9155 no-trace test evaluations also both used the same
+`core.py` merge/full-message/tail formatter, which has been present since the
+initial privileged-distillation implementation. Thus the local trace gain is a
+real matched-interface result. Formatter drift is only a possible private-data
+confound if the counted rows have substantially longer messages or different
+turn structure; it is not supported as the primary explanation. Retain
+cross-scenario/source-family trace transfer as the leading diagnosis.
+
 ## GPT-OSS neutral-contrast pair judge (2026-07-16)
 
 The neutral organism signal was tested as evidence inside the judge rather than

@@ -71,7 +71,14 @@ per-message cap before the 3,000-character context cap, removed the context
 truncation marker, and changed long-output head/tail allocation. Thus rows with
 no reasoning received the ordinary judge instruction but not necessarily the
 exact v2.1 rendered input. The official run does not isolate reasoning
-visibility cleanly from these formatting changes.
+visibility cleanly from these formatting changes in principle. A post-result
+exact-render audit found that these differences changed only 7/6,573 local
+training rows and changed 0/822 validation and 0/821 test rows. Moreover, the
+historical no-trace and 0.9262 trace-visible local-test evaluations both used
+the same newer formatter. Formatting therefore cannot explain the local gain
+and is unlikely to explain the official regression unless the private counted
+rows have a material long-message or turn-structure shift. The primary working
+explanation remains reasoning-interface transfer from Qwen-only varied traces.
 
 ### Phoenix Wright v2.3 reasoning-trace ensemble
 
