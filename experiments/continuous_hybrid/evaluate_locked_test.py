@@ -12,6 +12,7 @@ from typing import Any
 
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -156,6 +157,44 @@ def fit_locked_stack(
     return model, pd.Series(model.predict_proba(test[features])[:, 1], index=test.index)
 
 
+def load_heavy_decisions(results: Path = RESULTS) -> pd.DataFrame:
+    """Load the frozen 4096 D/K/S boolean decisions for the same local-test rows."""
+    run_dir = results / "qwen_reason_ensemble_dks_member4096_v1/test"
+    result = json.loads((run_dir / "result.json").read_text())
+    pieces = []
+    for dataset_result in result["datasets"]:
+        path = Path(dataset_result["predictions_path"])
+        if not path.exists():
+            path = run_dir / "predictions" / path.name
+        part = pd.read_csv(path, usecols=["index", "deceptive"])
+        part["dataset"] = dataset_result["dataset"]
+        pieces.append(part)
+    return pd.concat(pieces, ignore_index=True)
+
+
+def decoupled_macro_metrics(frame: pd.DataFrame) -> dict[str, float]:
+    """Score binary decisions and continuous scores independently per contract."""
+    rows = []
+    for _, group in frame.groupby("dataset", sort=True):
+        labels = group["label"].to_numpy(dtype=int)
+        predictions = group["deceptive"].to_numpy(dtype=bool)
+        scores = group["score"].to_numpy(dtype=float)
+        positives = labels == 1
+        negatives = ~positives
+        recall = float(predictions[positives].mean())
+        fpr = float(predictions[negatives].mean())
+        rows.append({
+            "balanced_accuracy": (recall + 1.0 - fpr) / 2.0,
+            "auroc": float(roc_auc_score(labels, scores)),
+            "recall": recall,
+            "fpr": fpr,
+        })
+    return {
+        key: float(sum(row[key] for row in rows) / len(rows))
+        for key in ("balanced_accuracy", "auroc", "recall", "fpr")
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dks-method", default=DKS_TEST_METHOD)
@@ -170,12 +209,21 @@ def main() -> None:
     features = feature_sets(validation)["compact_continuous"]
     test = build_test_frame(dks_method=args.dks_method)
     model, scores = fit_locked_stack(validation, test, features)
-    scored = pd.DataFrame({
+    stack_scored = pd.DataFrame({
         "dataset": test["dataset"], "label": test["label"], "score": scores
     })
-    scenarios = {
-        name: macro_metrics(scored[test["scenario"] == name], 0.5)
+    stack_scenarios = {
+        name: macro_metrics(stack_scored[test["scenario"] == name], 0.5)
         for name in sorted(test["scenario"].unique())
+    }
+    heavy = load_heavy_decisions()
+    hybrid = join_feature(
+        test[["dataset", "index", "label", "scenario"]], heavy
+    )
+    hybrid["score"] = scores.to_numpy()
+    hybrid_scenarios = {
+        name: decoupled_macro_metrics(hybrid[hybrid["scenario"] == name])
+        for name in sorted(hybrid["scenario"].unique())
     }
     result = {
         "method": "continuous_hybrid_locked_test_v1",
@@ -185,10 +233,14 @@ def main() -> None:
         "features": features,
         "training_split": "validation",
         "regularization_c": 0.1,
-        "threshold": 0.5,
+        "score_threshold_diagnostic": 0.5,
+        "binary_decision_source": "qwen_reason_ensemble_dks_member4096_v1",
+        "continuous_score_source": "validation-fitted compact_continuous stack",
         "selection_rule": "frozen after grouped validation screen; no test alternatives",
-        "metrics": macro_metrics(scored, 0.5),
-        "scenarios": scenarios,
+        "metrics": decoupled_macro_metrics(hybrid),
+        "scenarios": hybrid_scenarios,
+        "stack_threshold_metrics": macro_metrics(stack_scored, 0.5),
+        "stack_threshold_scenarios": stack_scenarios,
         "model_steps": [name for name, _ in model.steps],
     }
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -197,7 +249,7 @@ def main() -> None:
         "index": test["index"],
         "label": test["label"],
         "score": scores,
-        "deceptive": scores >= 0.5,
+        "deceptive": hybrid["deceptive"].to_numpy(dtype=bool),
     }).to_csv(args.output_dir / "predictions.csv", index=False)
     (args.output_dir / "result.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2), flush=True)

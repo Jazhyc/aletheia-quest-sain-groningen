@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=aq-cont-org-margin
-#SBATCH --time=00:45:00
+#SBATCH --time=00:30:00
 #SBATCH --mem=32GB
 #SBATCH --partition=gpushort
 #SBATCH --gpus-per-node=rtx_pro_6000:1

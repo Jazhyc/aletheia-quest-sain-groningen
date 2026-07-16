@@ -36,6 +36,14 @@ with the ten-feature stack or tune its threshold on this test result. The result
 does support continuous scores as useful future calibration features when a
 cheaper, independently validated stack is available.
 
+The runner scores `deceptive` and `score` independently. Reusing the frozen
+4096 D/K/S boolean decisions with the continuous stack score therefore preserves
+0.9298 BA, 0.8976 recall, and 0.0381 FPR while raising AUROC from 0.9340 to
+0.9571. This is the selected complex pipeline result. It improves only the
+secondary metric and reuses many expensive members, so it is not yet a practical
+submission. Runtime pruning must preserve the heavy binary path and validate a
+cheaper score path without selecting another variant on this same test split.
+
 A cached four-member semantic/epistemic prompt family was also tested as a soft
 feature block. It scored only 0.8964 BA by itself. Adding it to the compact stack
 tied 0.9310 dataset-grouped BA and raised organism-grouped BA by only 0.0012,

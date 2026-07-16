@@ -7,7 +7,10 @@ from experiments.continuous_hybrid.run_qwen_organism_margin import (
     false_score_from_logprobs,
     single_token_id,
 )
-from experiments.continuous_hybrid.evaluate_locked_test import fit_locked_stack
+from experiments.continuous_hybrid.evaluate_locked_test import (
+    decoupled_macro_metrics,
+    fit_locked_stack,
+)
 from experiments.continuous_hybrid.stack_cached_features import (
     grouped_oof_scores,
     organism_margin_acceptance,
@@ -91,3 +94,15 @@ def test_locked_stack_uses_fixed_half_probability_boundary() -> None:
     test = pd.DataFrame({"x": [-1.5, 1.5]})
     _, scores = fit_locked_stack(validation, test, ["x"])
     assert (scores.to_numpy() >= 0.5).tolist() == [False, True]
+
+
+def test_decoupled_metrics_use_boolean_and_score_independently() -> None:
+    frame = pd.DataFrame({
+        "dataset": ["a"] * 4,
+        "label": [0, 0, 1, 1],
+        "deceptive": [False, False, True, True],
+        "score": [0.9, 0.8, 0.2, 0.1],
+    })
+    metrics = decoupled_macro_metrics(frame)
+    assert metrics["balanced_accuracy"] == 1.0
+    assert metrics["auroc"] == 0.0
