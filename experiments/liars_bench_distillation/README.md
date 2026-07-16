@@ -170,6 +170,24 @@ errors or evaluate multiple wordings.
 sbatch experiments/liars_bench_distillation/evaluate_action_prompt.sh
 ```
 
+The frozen 200-row result clears the route gate. With the existing Phoenix
+adapter, the action prompt raises Insider Trading BA from `0.6100` to `0.7600`,
+reducing FPR from `0.67` to `0.06` while recall moves from `0.89` to `0.58`.
+The best augmented adapters reach `0.7750`, only `0.0150` above the unchanged
+weights. Thus the transferable gain is the observable response-mode prompt and
+router, not the Liars-trained LoRA.
+
+One confirmation is frozen before deployment work: evaluate the untouched
+Phoenix adapter with matched ordinary and action prompts over all 6,873 public
+Insider Trading rows. The router covers all 6,873. Retain the route only if the
+action prompt gains at least `0.10` BA, reaches at least `0.70` absolute BA, and
+keeps FPR at or below `0.15`. The script also fails before GPU scoring if either
+4,500-character prompt exceeds the 2,048-token input cap.
+
+```bash
+sbatch experiments/liars_bench_distillation/evaluate_full_action_confirmation.sh
+```
+
 A second response-mode specialist is frozen for harmful-use multiple choice.
 Its router requires at least three explicit A--D options, a single-letter reply
 contract, harmful-use pressure, and a final A--D answer. It routes all 200 frozen
