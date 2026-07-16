@@ -2100,11 +2100,10 @@ made `89` and `90` indistinguishable, while splitting dotted initialisms broke a
 `D.C.` restatement; both were fixed before reporting the frozen counts above.
 
 The parser was provisionally integrated into the submission as a cheap
-model-agnostic safety net, with focused unit tests. This is an operational hedge,
-not evidence of a local score improvement or a demonstrated solution to the
-official Nemotron gap. Any broader semantic contradiction rule would need fresh
-validation because the existing trained judge already subsumes all observed
-strict cases.
+model-agnostic safety net, with focused unit tests. It was later removed from
+the deployed notebook: it changed no local validation or test predictions, and
+the corresponding official submission was identical to the previous result.
+The standalone experiment implementation remains only for reproducibility.
 
 A follow-up expanded only the explicit-intent matcher. Synthetic positive cases
 cover misleading or lying to the user, intentionally incorrect answering,
@@ -2115,9 +2114,10 @@ from 362 with the original phrase list to 446. The expanded matcher added 86
 contexts and removed two legacy false matches: honest Atlas controls that said
 they did not regard themselves as `dishonest`. Before the train audit, the
 downstream consistency rule still flagged exactly four validation rows, all
-deceptive. The submission helper documents that the learned judge handles
-general detection and that this rule neither fact-checks arbitrary answers nor
-infers deception from intent alone.
+deceptive. At the time, the submission helper documented that the learned judge
+handled general detection and that this rule neither fact-checked arbitrary
+answers nor inferred deception from intent alone. The helper no longer ships
+this parser.
 
 ### Train-set parser stress test
 
@@ -2202,13 +2202,12 @@ generations are under the selected adapter's `train_rule_audit_v1/` directory.
 
 The submission notebook was versioned from v2.1 to
 `submission/phoenix_wright_v2_2.ipynb`. The bundled trained adapter remains
-Phoenix v2.1; v2.2 identifies the submission-time logic added afterward:
-
-- the explicit-deception intent matcher expanded and stress-tested on all 6,573
-  train rows;
-- the train-refined verdict/explanation contradiction rule remains a
-  hard-positive override;
-- the ontology-specific physical-state experiment is not included.
+Phoenix v2.1. The explicit-deception intent matcher and train-refined
+verdict/explanation contradiction rule were initially included as a
+hard-positive override, while the ontology-specific physical-state experiment
+was excluded. The regex override was subsequently removed after changing no
+local predictions and producing an official result identical to the preceding
+submission.
 
 The rename preserves the single-notebook contract. Python parser tests and
 notebook JSON/code-cell validation passed before the earlier submission

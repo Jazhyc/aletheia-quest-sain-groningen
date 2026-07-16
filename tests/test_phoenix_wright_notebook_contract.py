@@ -69,3 +69,5 @@ def test_notebook_uses_language_model_and_safe_adaptive_defaults() -> None:
     assert 'PHOENIX_MEDIUM_PROMPT_BATCH_SIZE", "24"' in source
     assert 'PHOENIX_LONG_PROMPT_BATCH_SIZE", "16"' in source
     assert 'PHOENIX_REMOTE_BATCHES_PER_SESSION", "2"' in source
+    assert "verdict_explanation_conflict" not in source
+    assert "consistency_scores" not in source
