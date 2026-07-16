@@ -206,6 +206,19 @@ candidate must independently preserve competition validation as above.
 sbatch experiments/liars_bench_distillation/evaluate_harm_choice_prompt.sh
 ```
 
+Before reading that 200-row result, the full public category was audited
+label-blind. The frozen router covers 5,399/5,400 rows; the sole miss answers
+with a letter plus option text instead of the required letter-only contract.
+The full confirmation keeps that miss on the ordinary prompt and measures the
+exact routed policy over all 5,400 rows. It is accepted only if it gains at
+least `0.10` BA over the matched ordinary prompt, reaches at least `0.70` BA,
+and keeps FPR at or below `0.15`. Both prompt conditions must fit the 2,048-token
+deployment input cap at 4,500 context characters.
+
+```bash
+sbatch experiments/liars_bench_distillation/evaluate_full_harm_choice_confirmation.sh
+```
+
 The original external-data students saw every category through the generic
 factual-answer prompt. That makes their muted adapter gains ambiguous: the
 student may have learned against a response-mode mismatch. A final matched
