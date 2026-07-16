@@ -18,6 +18,11 @@ fi
 
 source .venv/bin/activate
 
+# The cluster NCCL network plugin can segfault during same-node TP startup.
+# This job needs only local GPU communication, so use NCCL's socket transport.
+export NCCL_IB_DISABLE=1
+export NCCL_NET=Socket
+
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
   METHOD_LOG_DIR="logs/slurm/continuous_hybrid"
   METHOD_LOG_FILE="${METHOD_LOG_DIR}/validation-a100x2-${SLURM_JOB_ID}.out"
