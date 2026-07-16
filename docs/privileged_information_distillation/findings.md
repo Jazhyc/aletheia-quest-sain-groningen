@@ -153,34 +153,54 @@ cache while holding Qwen3.5-9B, rank-16/alpha-32 LoRA, one epoch, AdamW `5e-5`,
 effective batch size 32, prompts, targets, and seed fixed. Sampling is
 deterministic within each dataset/label stratum, so every fraction retains all
 nine dataset units and both labels. Training jobs `30174652`, `30174648`,
-`30174650`, `30174649`, and `30174651` produced the 5--80% adapters. Shared
-vLLM validation job `30176128` evaluated them together with the existing 100%
-adapter.
+`30174650`, `30174649`, and `30174651` produced the 5--80% adapters. Jobs
+`30176229` and `30176228` extended the sweep to 1% and 2%. The 1% subset has 36
+rows (18 per label and two from each of the 18 dataset/label strata); 2% has 54
+rows (27 per label and three per stratum). Shared vLLM validation job `30176290`
+evaluated all eight fractions in one session. The table reports that common
+extended run so adapter ordering and inference scheduling are matched.
 
 | data | rows | optimizer steps | train time | overall BA | recall | FPR | instructed BA | varied BA | parse errors |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 5% | 144 | 5 | 48.7s | **0.9036** | **0.8381** | 0.0310 | 0.9792 | **0.8028** | 6 |
-| 10% | 288 | 9 | 110.0s | 0.9000 | 0.8333 | 0.0333 | 0.9792 | 0.7944 | 4 |
-| 20% | 576 | 18 | 193.8s | 0.9024 | 0.8333 | **0.0286** | 0.9792 | 0.8000 | 6 |
-| 40% | 1,152 | 36 | 397.8s | 0.9000 | 0.8333 | 0.0333 | 0.9792 | 0.7944 | 3 |
-| 80% | 2,301 | 72 | 810.5s | 0.9012 | 0.8333 | 0.0310 | 0.9792 | 0.7972 | 5 |
-| 100% | 2,877 | 90 | 947.6s | 0.9000 | 0.8333 | 0.0333 | 0.9792 | 0.7944 | 4 |
+| 1% | 36 | 2 | **13.0s** | 0.9000 | 0.8333 | 0.0333 | **0.9792** | 0.7944 | **3** |
+| 2% | 54 | 2 | 19.5s | **0.9024** | 0.8333 | **0.0286** | **0.9792** | 0.8000 | 5 |
+| 5% | 144 | 5 | 48.7s | **0.9024** | 0.8333 | **0.0286** | **0.9792** | 0.8000 | 6 |
+| 10% | 288 | 9 | 110.0s | **0.9024** | 0.8333 | **0.0286** | **0.9792** | 0.8000 | 6 |
+| 20% | 576 | 18 | 193.8s | **0.9024** | 0.8333 | **0.0286** | 0.9771 | **0.8028** | 6 |
+| 40% | 1,152 | 36 | 397.8s | 0.9012 | **0.8357** | 0.0333 | 0.9771 | 0.8000 | 4 |
+| 80% | 2,301 | 72 | 810.5s | 0.9000 | 0.8333 | 0.0333 | 0.9771 | 0.7972 | 4 |
+| 100% | 2,877 | 90 | 947.6s | 0.9012 | 0.8333 | 0.0310 | **0.9792** | 0.7972 | 5 |
 
 The curve is flat rather than showing benefit from more examples. Relative to
-100%, the 10% and 40% adapters make exactly the same 822 binary validation
-decisions. The 20% adapter makes two fixes and no breaks, the 80% adapter one
-fix and no breaks, and the nominally best 5% adapter six fixes and three breaks;
-all changes are on varied rows. These are too few changes, from one subset seed,
-to claim that 5% genuinely generalizes better or that reduced data prevents
-overfitting. Fewer rows here also mean fewer optimizer updates, not inherently
-less subset overfitting.
+100% in the extended run, 1% makes one break and no fixes, while 2%, 5%, and 10%
+each make one fix and no breaks. Crucially, every 1%/100% and 2%/100% decision
+difference involves a completion that hit the 512-token budget without a
+parseable prediction. On rows where both conditions parse, the 1%, 2%, and 100%
+adapters make exactly the same binary decisions. The nominal 2% improvement is
+therefore a negative fallback caused by truncation, not evidence that 54 rows
+learn a better judge.
 
-Use 10% as a fast screening recipe: it reduces measured training from 15m48s
-to 1m50s while exactly reproducing the 100% validation decisions. Use 20% when
-a slightly more conservative screening default is worth another 84 seconds;
-it is the best no-harm paired row in this seed. Confirm any promising method on
-the full recipe, and do not spend a local-test evaluation selecting among these
-fractions given the established local-to-leaderboard distribution shift.
+The repeated 5--100% controls also expose the resolution limit of this
+comparison. Changing the shared-session adapter order moved between 1 and 11 of
+822 decisions per adapter relative to job `30176128`, while overall BA moved by
+at most 0.0024. Some changes involved parse boundaries and some were ordinary
+greedy-generation backend drift. Differences of this size should not be used to
+rank fractions.
+
+At the very low end, fixed setup really does dominate. The 1% job took 32s
+wall-clock for 13.0s of trainer time, leaving about 19s for imports, model and
+tokenizer setup, and saving. The 2% job took 41s for 19.5s of training, leaving
+about 21.5s of fixed work. Both fractions use two optimizer steps. Shared
+validation took 6m02s for all eight adapters; each adapter's 822-row scoring
+pass took about 31.5--31.8s, with model startup amortized once.
+
+Use 1--2% only as an end-to-end smoke recipe: it reduces adapter training to
+32--41s total but is too weak a screen when candidate methods differ in their
+teacher targets or required learning. Retain 10% as the default fast performance
+screen and 20% as a conservative intermediate check. Confirm any promising
+method on the full recipe, and do not spend a local-test evaluation selecting
+among these fractions given the established local-to-leaderboard distribution
+shift.
 
 ### Varied-only Muon sweep
 
