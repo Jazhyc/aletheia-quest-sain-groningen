@@ -41,6 +41,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9)
     parser.add_argument("--max-model-len", type=int, default=2048)
     parser.add_argument("--max-num-seqs", type=int, default=256)
+    parser.add_argument("--tensor-parallel-size", type=int, default=1)
     parser.add_argument("--output-dir", type=Path, default=ROOT / "results/blackbox" / METHOD)
     return parser.parse_args()
 
@@ -106,7 +107,7 @@ def main() -> None:
     llm = LLM(
         model=MODEL,
         dtype="bfloat16",
-        tensor_parallel_size=1,
+        tensor_parallel_size=args.tensor_parallel_size,
         gpu_memory_utilization=args.gpu_memory_utilization,
         max_model_len=args.max_model_len,
         max_num_seqs=args.max_num_seqs,

@@ -80,6 +80,8 @@ criteria above.
 ```bash
 python experiments/continuous_hybrid/stack_cached_features.py
 sbatch experiments/continuous_hybrid/run_qwen_organism_margin.sh
+# Explicit Qwen-27B two-A100 memory/backend fallback when RTX is unavailable:
+sbatch experiments/continuous_hybrid/run_qwen_organism_margin_a100_tp2.sh
 sbatch experiments/continuous_hybrid/run_dks_logits_test.sh
 python experiments/continuous_hybrid/stack_cached_features.py \
   --organism-margins results/blackbox/qwen27b_whole_output_self_query_margin_validation_v1/generations.jsonl
