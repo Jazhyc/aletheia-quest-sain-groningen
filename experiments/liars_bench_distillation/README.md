@@ -26,14 +26,16 @@ remaining below the 4,096-token local context. Competition validation retains
 its frozen formatter, preventing this representation change from becoming a
 validation-specific prompt tweak.
 
-Two matched students start fresh from Qwen3.5-9B and retain the established
+Three matched students start fresh from Qwen3.5-9B and retain the established
 rank-16, one-epoch AdamW `5e-5` recipe:
 
+- `observable2`: 2% of the original varied cache (54 rows) plus all 192
+  observable external targets, testing the previously tied 2% replay floor;
 - `observable`: 10% of the original varied cache (288 rows) plus all 192
   harm-choice, insider-trading, and soft-trigger targets;
 - `broad`: the same mixture plus 64 HP-KR targets.
 
-A third conservative condition continues the selected full varied-only adapter
+A fourth conservative condition continues the selected full varied-only adapter
 on the broad mixture at `2e-5` for one epoch. It tests whether replay can add the
 new semantic modes without asking a small fresh-data run to relearn the mature
 judge. The lower continuation rate follows the earlier targeted-continuation
@@ -50,6 +52,8 @@ jobs do not run if that audit fails.
 sbatch experiments/liars_bench_distillation/run_teacher.sh
 
 sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  --config-name pid_liars_bench_observable_comp2_aug_v1
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   --config-name pid_liars_bench_observable_aug_v1
 sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   --config-name pid_liars_bench_broad_aug_v1
@@ -58,6 +62,7 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
 
 sbatch experiments/privileged_information_distillation/evaluate_student_sft.sh \
   --adapter-dir results/blackbox/qwen9b_pid_varied_datafrac10_adamw5e5_v1/adapter \
+  --adapter-dir results/blackbox/qwen9b_pid_varied2_liars_observable_aug_adamw5e5_v1/adapter \
   --adapter-dir results/blackbox/qwen9b_pid_varied10_liars_observable_aug_adamw5e5_v1/adapter \
   --adapter-dir results/blackbox/qwen9b_pid_varied10_liars_broad_aug_adamw5e5_v1/adapter \
   --adapter-dir results/blackbox/qwen9b_pid_liars_broad_replay_continue_adamw2e5_v1/adapter \
