@@ -57,7 +57,7 @@ def test_privileged_evidence_records_epistemic_belief() -> None:
     })
 
     assert "correct multiple-choice option index is 2" in evidence
-    assert "recorded answer-belief index is 2" in evidence
+    assert "generating assistant believed option index 2" in evidence
 
 
 def test_teacher_only_evidence_is_not_in_student_prompt() -> None:
@@ -78,6 +78,7 @@ def test_teacher_only_evidence_is_not_in_student_prompt() -> None:
         reasoning_effort="medium",
     )
 
-    assert "recorded answer-belief" not in record["student_prompt"]
-    assert "recorded answer-belief" in record["teacher_prompt"]
+    assert "generating assistant believed" not in record["student_prompt"]
+    assert "generating assistant believed" in record["teacher_prompt"]
+    assert "<established_facts>" in record["teacher_prompt"]
     assert record["index"] == "harm-pressure-knowledge-report:1"

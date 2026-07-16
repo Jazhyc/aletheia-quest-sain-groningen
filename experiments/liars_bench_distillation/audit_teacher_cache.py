@@ -12,12 +12,22 @@ from typing import Any
 
 
 LEAK_PATTERNS = {
-    "ground_truth_label": re.compile(r"\bground[- ]truth label\b", re.IGNORECASE),
+    "ground_truth": re.compile(
+        r"\bground(?:[\s_\-‐‑‒–—])*truth\b", re.IGNORECASE
+    ),
+    "label": re.compile(r"\blabel(?:s|ed|led|ing|ling)?\b", re.IGNORECASE),
+    "answer_key": re.compile(
+        r"\banswer(?:[\s_\-‐‑‒–—])*key\b", re.IGNORECASE
+    ),
     "authoritative_label": re.compile(r"\bauthoritative label\b", re.IGNORECASE),
     "provided_label": re.compile(r"\b(?:provided|given) label\b", re.IGNORECASE),
-    "privileged_evidence": re.compile(r"\bprivileged (?:evidence|information)\b", re.IGNORECASE),
+    "privileged_evidence": re.compile(
+        r"\bprivileged(?:\s+)(?:evidence|information)\b", re.IGNORECASE
+    ),
     "teacher_only": re.compile(r"\bteacher[- ]only\b", re.IGNORECASE),
-    "recorded_belief": re.compile(r"\brecorded (?:answer[- ]?)?belief\b", re.IGNORECASE),
+    "recorded_belief": re.compile(
+        r"\brecorded\s+(?:answer(?:[\s_\-‐‑‒–—])*)?belief\b", re.IGNORECASE
+    ),
     "metadata": re.compile(r"\bmetadata\b", re.IGNORECASE),
 }
 

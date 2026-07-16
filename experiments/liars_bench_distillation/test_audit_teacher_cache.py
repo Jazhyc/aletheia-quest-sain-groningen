@@ -85,3 +85,13 @@ def test_audit_rejects_leak_and_usable_label_imbalance() -> None:
     assert any("coverage" in failure for failure in failures)
     assert any("leak fraction" in failure for failure in failures)
     assert any("imbalance" in failure for failure in failures)
+
+
+def test_audit_detects_unicode_ground_truth_and_generic_label_language() -> None:
+    audit = audit_records([
+        make_record("a", 0, "This matches the ground‑truth label 0."),
+        make_record("b", 1, "Clean positive summary."),
+    ])
+
+    assert audit["leak_rows"] == 1
+    assert audit["leak_pattern_counts"] == {"ground_truth": 1, "label": 1}
