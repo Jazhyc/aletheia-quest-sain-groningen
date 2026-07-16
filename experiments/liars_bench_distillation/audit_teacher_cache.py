@@ -42,6 +42,12 @@ LEAK_PATTERNS = {
     ),
     "metadata": re.compile(r"\bmetadata\b", re.IGNORECASE),
 }
+NEGATIVE_CONCLUSION = re.compile(
+    r"\b(?:not deceptive|does not constitute deception|no deception)\b", re.IGNORECASE
+)
+POSITIVE_CONCLUSION = re.compile(
+    r"\b(?:constitutes deception|is deceptive|deceptive response)\b", re.IGNORECASE
+)
 
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -73,6 +79,7 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
     word_counts: list[int] = []
     leak_counts: Counter[str] = Counter()
     leak_rows: list[dict[str, Any]] = []
+    polarity_conflicts: list[dict[str, Any]] = []
 
     for record in usable:
         dataset = str(record.get("dataset"))
@@ -88,6 +95,20 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
                 "index": str(record.get("index")),
                 "patterns": matched,
                 "summary": summary,
+            })
+        conclusion_tail = summary[-240:]
+        label_value = int(record["label"])
+        conflict = (
+            label_value == 1 and NEGATIVE_CONCLUSION.search(conclusion_tail)
+        ) or (
+            label_value == 0 and POSITIVE_CONCLUSION.search(conclusion_tail)
+        )
+        if conflict:
+            polarity_conflicts.append({
+                "dataset": dataset,
+                "index": str(record.get("index")),
+                "label": label_value,
+                "summary_tail": conclusion_tail,
             })
 
     usable_count = len(usable)
@@ -108,6 +129,11 @@ def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         "leak_fraction": len(leak_rows) / usable_count if usable_count else 0.0,
         "leak_pattern_counts": dict(sorted(leak_counts.items())),
         "leak_examples": leak_rows[:10],
+        "polarity_conflict_rows": len(polarity_conflicts),
+        "polarity_conflict_fraction": (
+            len(polarity_conflicts) / usable_count if usable_count else 0.0
+        ),
+        "polarity_conflict_examples": polarity_conflicts[:10],
     }
 
 
@@ -117,6 +143,7 @@ def validate_audit(
     min_coverage: float,
     max_leak_fraction: float,
     max_label_imbalance_fraction: float = 0.05,
+    max_polarity_conflict_fraction: float = 0.05,
     expected_total: int | None = None,
     expected_datasets: int | None = None,
 ) -> list[str]:
@@ -143,6 +170,12 @@ def validate_audit(
             "privileged-language leak fraction "
             f"{audit['leak_fraction']:.3f} exceeds allowed {max_leak_fraction:.3f}"
         )
+    if audit["polarity_conflict_fraction"] > max_polarity_conflict_fraction:
+        failures.append(
+            "summary-polarity conflict fraction "
+            f"{audit['polarity_conflict_fraction']:.3f} exceeds allowed "
+            f"{max_polarity_conflict_fraction:.3f}"
+        )
     for dataset, counts in audit["dataset_label_counts"].items():
         negative = counts.get("0", 0)
         positive = counts.get("1", 0)
@@ -163,6 +196,7 @@ def main() -> None:
     parser.add_argument("--min-coverage", type=float, default=0.90)
     parser.add_argument("--max-leak-fraction", type=float, default=0.05)
     parser.add_argument("--max-label-imbalance-fraction", type=float, default=0.05)
+    parser.add_argument("--max-polarity-conflict-fraction", type=float, default=0.05)
     parser.add_argument("--expected-total", type=int)
     parser.add_argument("--expected-datasets", type=int)
     args = parser.parse_args()
@@ -179,6 +213,7 @@ def main() -> None:
         min_coverage=args.min_coverage,
         max_leak_fraction=args.max_leak_fraction,
         max_label_imbalance_fraction=args.max_label_imbalance_fraction,
+        max_polarity_conflict_fraction=args.max_polarity_conflict_fraction,
         expected_total=args.expected_total,
         expected_datasets=args.expected_datasets,
     )

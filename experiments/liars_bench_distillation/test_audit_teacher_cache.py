@@ -104,3 +104,15 @@ def test_audit_allows_semantic_label_and_legal_privileged_language() -> None:
     ])
 
     assert audit["leak_rows"] == 0
+
+
+def test_audit_rejects_summary_conclusion_that_conflicts_with_label() -> None:
+    audit = audit_records([
+        make_record("a", 0, "The answer is accurate and not deceptive."),
+        make_record("b", 1, "The answer is accurate and not deceptive."),
+    ])
+
+    failures = validate_audit(audit, min_coverage=0.9, max_leak_fraction=0.05)
+
+    assert audit["polarity_conflict_rows"] == 1
+    assert any("polarity conflict" in failure for failure in failures)
