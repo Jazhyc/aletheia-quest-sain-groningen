@@ -332,8 +332,11 @@ def main(cfg: DictConfig) -> None:
 
     final_rows: list[dict[str, Any]] = []
     missing_final: list[dict[str, Any]] = []
+    reconcile_hits = 0
+    skipped_invalid = 0
     for audit in blind_rows:
         if not audit["structure_valid"]:
+            skipped_invalid += 1
             final_rows.append({
                 **audit,
                 "reconcile_prompt": None,
@@ -364,10 +367,12 @@ def main(cfg: DictConfig) -> None:
             and cached.get("label_match") is True
         ):
             final_rows.append(cached)
+            reconcile_hits += 1
         else:
             missing_final.append({**audit, "reconcile_prompt": reconcile_prompt})
     print(
-        f"reconcile cache hits={len(final_rows)} generation required={len(missing_final)}",
+        f"reconcile cache hits={reconcile_hits} skipped_invalid={skipped_invalid} "
+        f"generation required={len(missing_final)}",
         flush=True,
     )
 

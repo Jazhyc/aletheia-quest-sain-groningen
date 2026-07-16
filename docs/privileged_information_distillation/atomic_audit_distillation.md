@@ -63,6 +63,11 @@ sbatch --time=00:45:00 \
   output_dir=results/blackbox/qwen9b_pid_atomic_audit_smoke_v1
 ```
 
+The first 32-row smoke used a 1,024-token teacher allowance and parsed only
+21/32 blind audits: all 11 failures visibly exhausted the allowance before
+closing the XML. The frozen config therefore uses 2,048 tokens. This is a
+teacher-cache generation budget; it does not change the student context length.
+
 Review exact-quote grounding, parse rate, assessment distribution, and
 audit/label conflicts before generating the full varied-only train cache:
 
