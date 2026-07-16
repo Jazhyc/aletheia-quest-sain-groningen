@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import random
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -36,12 +37,64 @@ from experiments.qwen_grpo_lora.run_qwen_grpo_lora import (
 )
 
 
-def render_chat_prompt(tokenizer: Any, prompt: str) -> str:
+REASONING_EFFORTS = {"low", "medium", "high"}
+
+
+def normalize_reasoning_effort(value: Any) -> str:
+    effort = str(value).lower()
+    if effort not in REASONING_EFFORTS:
+        raise ValueError(
+            f"teacher.reasoning_effort must be one of {sorted(REASONING_EFFORTS)}, "
+            f"got {value!r}"
+        )
+    return effort
+
+
+def render_chat_prompt(tokenizer: Any, prompt: str, reasoning_effort: str) -> str:
     return tokenizer.apply_chat_template(
         [{"role": "user", "content": prompt}],
         tokenize=False,
         add_generation_prompt=True,
+        reasoning_effort=normalize_reasoning_effort(reasoning_effort),
     )
+
+
+def generate_openai_completions(
+    prompts: list[str],
+    *,
+    api_base: str,
+    api_key: str,
+    served_model: str,
+    max_tokens: int,
+    temperature: float,
+    concurrency: int,
+    request_timeout: float,
+) -> list[str]:
+    """Generate raw completions through one persistent OpenAI-compatible server."""
+    import requests
+
+    endpoint = api_base.rstrip("/") + "/completions"
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    def generate(prompt: str) -> str:
+        response = requests.post(
+            endpoint,
+            headers=headers,
+            json={
+                "model": served_model,
+                "prompt": prompt,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            },
+            timeout=request_timeout,
+        )
+        response.raise_for_status()
+        return str(response.json()["choices"][0].get("text", ""))
+
+    with ThreadPoolExecutor(max_workers=max(1, concurrency)) as executor:
+        return list(executor.map(generate, prompts))
 
 
 def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
@@ -65,6 +118,9 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
     reference_visibility = str(OmegaConf.select(
         cfg, "teacher.reference_visibility", default="teacher_and_student"
     ))
+    reasoning_effort = normalize_reasoning_effort(
+        OmegaConf.select(cfg, "teacher.reasoning_effort", default="medium")
+    )
     rows: list[dict[str, Any]] = []
     for dataset_cfg in datasets:
         if (
@@ -116,6 +172,7 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
                 "dataset": dataset_cfg.name,
                 "index": index,
                 "label": label,
+                "reasoning_effort": reasoning_effort,
                 "student_prompt": student_prompt,
                 "reference_visibility": (
                     reference_visibility if retrieval_cache is not None else None
@@ -193,6 +250,7 @@ def cache_matches(row: dict[str, Any], cached: dict[str, Any] | None) -> bool:
         return False
     return (
         cached.get("label") == row["label"]
+        and cached.get("reasoning_effort", "medium") == row["reasoning_effort"]
         and cached.get("student_prompt") == row["student_prompt"]
         and cached.get("teacher_prompt") == row["teacher_prompt"]
         and not cached.get("parse_error", True)
@@ -210,6 +268,7 @@ def reparse_cached_record(
         return cached
     if (
         cached.get("label") != row["label"]
+        or cached.get("reasoning_effort", "medium") != row["reasoning_effort"]
         or cached.get("student_prompt") != row["student_prompt"]
         or cached.get("teacher_prompt") != row["teacher_prompt"]
     ):
@@ -252,7 +311,6 @@ def reparse_cached_record(
 )
 def main(cfg: DictConfig) -> None:
     from transformers import AutoTokenizer
-    from vllm import LLM, SamplingParams
 
     root = Path(get_original_cwd()).resolve()
     random.seed(int(cfg.seed))
@@ -284,30 +342,56 @@ def main(cfg: DictConfig) -> None:
     generated: dict[tuple[str, Any], str] = {}
     if missing_rows:
         tokenizer = AutoTokenizer.from_pretrained(str(cfg.teacher.model))
-        prompts = [render_chat_prompt(tokenizer, row["teacher_prompt"]) for row in missing_rows]
-        llm = LLM(
-            model=str(cfg.teacher.model),
-            dtype=str(cfg.teacher.dtype),
-            max_model_len=int(cfg.teacher.max_model_len),
-            gpu_memory_utilization=float(cfg.teacher.gpu_memory_utilization),
-            seed=int(cfg.seed),
-        )
-        sampling = SamplingParams(
-            max_tokens=int(cfg.teacher.max_tokens),
-            temperature=float(cfg.teacher.temperature),
-        )
-        batch_size = cfg.teacher.batch_size
-        outputs = []
-        if batch_size is None:
-            outputs = list(llm.generate(prompts, sampling))
-        else:
-            for start in range(0, len(prompts), int(batch_size)):
-                outputs.extend(llm.generate(prompts[start:start + int(batch_size)], sampling))
-        generated = {
-            (row["dataset"], row["index"]): (
-                output.outputs[0].text if output.outputs else ""
+        prompts = [
+            render_chat_prompt(
+                tokenizer,
+                row["teacher_prompt"],
+                row["reasoning_effort"],
             )
-            for row, output in zip(missing_rows, outputs, strict=True)
+            for row in missing_rows
+        ]
+        backend = str(OmegaConf.select(cfg, "teacher.backend", default="offline"))
+        if backend == "openai":
+            completion_texts = generate_openai_completions(
+                prompts,
+                api_base=str(cfg.teacher.api_base),
+                api_key=str(cfg.teacher.api_key),
+                served_model=str(cfg.teacher.served_model),
+                max_tokens=int(cfg.teacher.max_tokens),
+                temperature=float(cfg.teacher.temperature),
+                concurrency=int(cfg.teacher.api_concurrency),
+                request_timeout=float(cfg.teacher.request_timeout),
+            )
+        elif backend == "offline":
+            from vllm import LLM, SamplingParams
+
+            llm = LLM(
+                model=str(cfg.teacher.model),
+                dtype=str(cfg.teacher.dtype),
+                max_model_len=int(cfg.teacher.max_model_len),
+                gpu_memory_utilization=float(cfg.teacher.gpu_memory_utilization),
+                seed=int(cfg.seed),
+            )
+            sampling = SamplingParams(
+                max_tokens=int(cfg.teacher.max_tokens),
+                temperature=float(cfg.teacher.temperature),
+            )
+            batch_size = cfg.teacher.batch_size
+            outputs = []
+            if batch_size is None:
+                outputs = list(llm.generate(prompts, sampling))
+            else:
+                for start in range(0, len(prompts), int(batch_size)):
+                    outputs.extend(llm.generate(prompts[start:start + int(batch_size)], sampling))
+            completion_texts = [
+                output.outputs[0].text if output.outputs else ""
+                for output in outputs
+            ]
+        else:
+            raise ValueError(f"unknown teacher.backend={backend!r}")
+        generated = {
+            (row["dataset"], row["index"]): text
+            for row, text in zip(missing_rows, completion_texts, strict=True)
         }
 
     artifact.parent.mkdir(parents=True, exist_ok=True)

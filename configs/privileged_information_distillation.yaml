@@ -5,6 +5,13 @@ seed: 0
 
 teacher:
   model: openai/gpt-oss-120b
+  backend: offline
+  served_model: gpt-oss-teacher
+  api_base: http://127.0.0.1:8000/v1
+  api_key: EMPTY
+  api_concurrency: 16
+  request_timeout: 300
+  reasoning_effort: medium
   split: train
   limit: null
   limit_per_label: null

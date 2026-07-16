@@ -29,6 +29,8 @@ judge:
   include_reasoning: false
   reasoning_max_chars: 0
   reasoning_truncation: tail
+  # GPT-OSS Harmony effort. Null preserves the tokenizer's default (medium).
+  reasoning_effort: null
   rating_min: 1
   rating_max: 7
   dtype: bfloat16

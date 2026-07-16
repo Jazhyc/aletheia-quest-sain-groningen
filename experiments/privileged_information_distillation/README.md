@@ -62,6 +62,20 @@ exactly and the record parsed with the expected prediction. Changed prompts or
 labels are regenerated automatically; set `teacher.force_regenerate=true` to
 ignore the cache explicitly.
 
+GPT-OSS Harmony reasoning effort is explicit in new caches through
+`teacher.reasoning_effort=low|medium|high`. Legacy reviewed records are treated
+as `medium`, matching the checkpoint tokenizer's default system message. The
+matched effort sweep keeps the 2,048-token generation cap fixed, benchmarks the
+ordinary GPT-OSS judge at all three levels, and generates low/high varied-only
+teacher caches behind one persistent vLLM server:
+
+```bash
+sbatch experiments/privileged_information_distillation/run_teacher_reasoning_effort_sweep.sh
+```
+
+The existing reviewed cache and selected varied-only adapter are the medium
+condition; do not regenerate them merely to add the metadata field.
+
 The teacher artifact path is intentionally independent of `method`. Student
 learning-rate sweeps override `method` to obtain distinct adapter directories
 while all consuming the same immutable reviewed teacher cache.

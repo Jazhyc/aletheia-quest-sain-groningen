@@ -16,8 +16,11 @@ from experiments.privileged_information_distillation.core import (
     truncate_text,
 )
 from experiments.privileged_information_distillation.generate_teacher_data import (
+    cache_matches,
     filter_teacher_rows_by_dataset,
     limit_teacher_rows,
+    normalize_reasoning_effort,
+    render_chat_prompt,
 )
 
 
@@ -161,6 +164,39 @@ def test_filter_teacher_rows_by_dataset_rejects_empty_selection() -> None:
 
     with pytest.raises(RuntimeError, match="no teacher rows match"):
         filter_teacher_rows_by_dataset(rows, "varied-deception")
+
+
+def test_teacher_harmony_rendering_sets_reasoning_effort() -> None:
+    class Tokenizer:
+        def apply_chat_template(self, messages, **kwargs):
+            assert messages == [{"role": "user", "content": "PROMPT"}]
+            assert kwargs["reasoning_effort"] == "high"
+            return "RENDERED"
+
+    assert render_chat_prompt(Tokenizer(), "PROMPT", "high") == "RENDERED"
+
+
+def test_teacher_reasoning_effort_validation_and_cache_provenance() -> None:
+    assert normalize_reasoning_effort("LOW") == "low"
+    with pytest.raises(ValueError, match="reasoning_effort"):
+        normalize_reasoning_effort("xhigh")
+
+    row = {
+        "label": 1,
+        "reasoning_effort": "medium",
+        "student_prompt": "student",
+        "teacher_prompt": "teacher",
+    }
+    legacy_medium = {
+        "label": 1,
+        "student_prompt": "student",
+        "teacher_prompt": "teacher",
+        "parse_error": False,
+        "label_match": True,
+        "student_target": "Prediction:1",
+    }
+    assert cache_matches(row, legacy_medium)
+    assert not cache_matches({**row, "reasoning_effort": "high"}, legacy_medium)
 
 
 def test_append_reference_material_marks_retrieval_as_untrusted() -> None:
