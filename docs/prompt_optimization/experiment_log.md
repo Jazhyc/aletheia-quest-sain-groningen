@@ -2362,6 +2362,23 @@ therefore not a material context-cap experiment. Because local trace-bearing
 rows are Qwen-only, the official run tests response-mode transfer rather than a
 locally established Gemma/Nemotron trace capability.
 
+The completed official run rejected v2.4 as a replacement for v2.0. It scored
+0.7763 counted BA, 0.7392 recall, and 0.1867 FPR in 5,131.7 seconds. Removing
+the binary max member materially improved on v2.3 (0.7292 BA, 0.8575 recall,
+0.3992 FPR), but the remaining trace-summary interface still had nearly the
+same recall as v2.0 and much higher FPR (0.1867 versus 0.0750). FPR increased
+relative to v2.0 for all six counted Notus/Iris family rows, including Qwen;
+therefore unfamiliar Gemma/Nemotron traces cannot be the sole explanation.
+The especially weak counted Notus Qwen result alongside strong uncounted
+Metis/Eunomia Qwen units points to response-mode/scenario transfer as well as
+source-family transfer.
+
+Do not over-attribute this official delta to traces alone. V2.0 used the older
+`VisionLanguageModel` path, whereas v2.4 also used `LanguageModel`, dynamic
+padding, and a different request schedule. The missing factorial control is the
+exact ordinary v2.1 no-trace prompt on the optimized backend. Submit that control
+before deciding whether to revert the mechanical inference improvements.
+
 ## GPT-OSS neutral-contrast pair judge (2026-07-16)
 
 The neutral organism signal was tested as evidence inside the judge rather than

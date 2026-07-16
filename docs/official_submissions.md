@@ -20,6 +20,7 @@ opaque public labels returned by the Space.
 
 | submitted at (UTC) | notebook | method / local mapping | tag | BA | AUROC | recall | FPR | runtime |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-16 15:57:06 | `phoenix_wright_v2_4.ipynb` | same adapter; conditional 4,000-character reasoning, summary member only | black | 0.776250 | 0.776250 | 0.739167 | 0.186667 | 5131.7s |
 | 2026-07-16 07:36:16 | `phoenix_wright_v2_3.ipynb` | same adapter; conditional 4,000-character reasoning plus summary/binary max ensemble | black | 0.729167 | 0.729167 | 0.857500 | 0.399167 | 6077.6s |
 | 2026-07-11 09:47:58 | `phoenix_wright_v2_0.ipynb` | compact privileged-distillation adapter; mixed-data `5e-5` selection | black | 0.833333 | 0.833333 | 0.741667 | 0.075000 | 12476.5s |
 | 2026-07-08 11:55:36 | `phoenix_wright_v1_3.ipynb` | context omission guard | black | 0.760833 | 0.760817 | 0.545000 | 0.023333 | 1928.9s |
@@ -36,6 +37,35 @@ opaque public labels returned by the Space.
 ## Recent Phoenix Counted Dataset Detail
 
 These counted Notus/Iris rows are useful diagnostics for official transfer.
+
+### Phoenix Wright v2.4 trace-summary isolation
+
+Submitted 2026-07-16 15:57:06 UTC. Headline BA `0.776250`.
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Notus | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` / `None` | 0.6800 | 0.6800 | 0.5100 | 0.1500 |
+| Dataset Notus | `Qwen/Qwen3.5-27B` / `None` | 0.6075 | 0.6075 | 0.4850 | 0.2700 |
+| Dataset Notus | `google/gemma-3-27b-it` / `None` | 0.6575 | 0.6575 | 0.6100 | 0.2950 |
+| Dataset Iris | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` / `g-st-nemotron-3-super-120b` | 0.9150 | 0.9150 | 0.9650 | 0.1350 |
+| Dataset Iris | `Qwen/Qwen3.5-27B` / `g-st-qwen3.5-27b` | 0.9150 | 0.9150 | 0.9350 | 0.1050 |
+| Dataset Iris | `google/gemma-3-27b-it` / `g-st-gemma-3-27b-it-2` | 0.8825 | 0.8825 | 0.9300 | 0.1650 |
+
+Notes: removing v2.3's binary recall member recovered `0.0471` BA and reduced
+FPR by `0.2125`, confirming that the max ensemble caused most of that run's
+extreme over-flagging. The trace-summary member still remained `0.0571` BA
+below v2.0: recall was essentially unchanged (`0.7392` versus `0.7417`), while
+FPR rose from `0.0750` to `0.1867`. FPR increased in every counted family.
+This rules out a purely non-Qwen-family failure; counted Qwen also regressed,
+especially on Notus, while many uncounted Metis/Eunomia Qwen units remained
+strong. Treat this as response-mode/interface transfer failure, with
+cross-family trace OOD and trace unfaithfulness both plausible contributors.
+
+The official comparison is not fully factorial. V2.0 used the older
+`VisionLanguageModel` execution path, while v2.4 also introduced
+`LanguageModel`, dynamic padding, and different batching. A no-trace v2.1
+prompt on the optimized backend has not been submitted, so the residual cannot
+be assigned exclusively to reasoning visibility from these official runs.
 
 ### Phoenix Wright v2.3 reasoning-trace ensemble
 
