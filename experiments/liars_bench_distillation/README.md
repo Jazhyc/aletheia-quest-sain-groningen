@@ -10,6 +10,13 @@ chosen before evaluation:
 - insider trading: material omission or misattribution in an action report; and
 - soft trigger: ordinary factual truth under irrelevant trigger variation.
 
+The remaining public categories are intentionally excluded. `alpaca` has no
+positive class and Liars' Bench `instructed-deception` largely duplicates the
+already-saturated local scenario. `gender-secret` and `convincing-game` labels
+depend on a hidden organism trait that is not established by the submitted
+conversation; training on them would invite source-identity or template
+shortcuts rather than an observable, generally applicable deception rule.
+
 The deterministic sample contains 32 rows per label and category (256 teacher
 rows total), balanced across available source-model families. A disjoint
 100-per-label/category sample (800 rows) is frozen for external evaluation.
@@ -25,6 +32,13 @@ preserves both the initial task/tool setup and final action report while
 remaining below the 4,096-token local context. Competition validation retains
 its frozen formatter, preventing this representation change from becoming a
 validation-specific prompt tweak.
+
+The frozen train/evaluation samples were token-audited before generation. Qwen
+student-prompt maxima were 585 tokens for harm choice, 2,440 for HP-KR, 2,266
+for Insider Trading, and 765 for soft trigger. GPT-OSS teacher-prompt maxima
+were at most 2,311 tokens. The 4,096-token evaluation context, 4,608-token SFT
+sequence limit, and 8,192-token teacher context therefore have genuine headroom;
+this experiment is not testing truncation as a hidden treatment.
 
 Three matched students start fresh from Qwen3.5-9B and retain the established
 rank-16, one-epoch AdamW `5e-5` recipe:
