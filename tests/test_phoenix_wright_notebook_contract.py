@@ -65,6 +65,9 @@ def test_notebook_uses_language_model_and_safe_adaptive_defaults() -> None:
     _, source = notebook_string_constants()
 
     assert 'PHOENIX_MODEL_WRAPPER", "language"' in source
+    assert "from nnsight import LanguageModel, VisionLanguageModel" in source
+    assert "from nnsight.modeling.language import LanguageModel" in source
+    assert "from nnsight.modeling.vlm import VisionLanguageModel" in source
     assert 'PHOENIX_BATCH_SIZE", "32"' in source
     assert 'PHOENIX_MEDIUM_PROMPT_BATCH_SIZE", "24"' in source
     assert 'PHOENIX_LONG_PROMPT_BATCH_SIZE", "16"' in source
