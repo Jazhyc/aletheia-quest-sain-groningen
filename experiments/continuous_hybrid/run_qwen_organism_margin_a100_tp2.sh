@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=aq-cont-org-a100x2
 #SBATCH --time=01:00:00
-#SBATCH --mem=32GB
+# TP2 vLLM plus repeated rank-128 LoRA loads peaked above 33 GB host RAM.
+#SBATCH --mem=64GB
 #SBATCH --partition=gpushort
 #SBATCH --gpus-per-node=a100:2
 #SBATCH --cpus-per-task=1
