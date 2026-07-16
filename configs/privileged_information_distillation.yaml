@@ -38,6 +38,8 @@ student:
   teacher_sources: null
   override_cached_prompt: false
   train_limit: null
+  train_fraction: 1.0
+  train_fraction_seed: ${seed}
   dataset_name_contains: null
   max_prompt_chars: 3000
   context_truncation: tail

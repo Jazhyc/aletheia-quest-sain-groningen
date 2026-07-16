@@ -227,6 +227,23 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
 The final adapter is written under
 `results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/adapter/`.
 
+For matched data-efficiency sweeps, set `student.train_fraction` in `(0, 1]`.
+Rows are selected deterministically within every dataset/label stratum using
+`student.train_fraction_seed`, so small fractions retain every organism and
+both labels instead of taking a biased cache prefix. Fraction selection happens
+before the optional smoke-test `student.train_limit`. For example:
+
+```bash
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  method=qwen9b_pid_varied_datafrac20_adamw5e5_v1 \
+  student.dataset_name_contains=varied-deception \
+  student.train_fraction=0.20 \
+  student.training.optimizer=adamw \
+  student.training.optim=adamw_torch \
+  student.training.learning_rate=5e-5 \
+  student.training.num_train_epochs=1
+```
+
 Evaluate the full learning-rate sweep on validation with one shared vLLM model
 load:
 

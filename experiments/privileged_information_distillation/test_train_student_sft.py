@@ -12,6 +12,7 @@ from experiments.privileged_information_distillation.train_student_sft import (
     has_reasoning_block,
     load_record_sources,
     load_records,
+    select_stratified_fraction,
     should_drop_reasoning,
     strip_reasoning_block,
     student_prompt_with_reasoning_dropout,
@@ -113,6 +114,54 @@ def test_load_record_sources_rejects_overlapping_rows(tmp_path) -> None:
         assert "duplicate teacher record" in str(error)
     else:
         raise AssertionError("overlapping teacher sources should fail")
+
+
+def test_select_stratified_fraction_balances_dataset_and_label() -> None:
+    records = [
+        {"dataset": dataset, "label": label, "index": index}
+        for dataset in ("dataset-a", "dataset-b")
+        for label in (0, 1)
+        for index in range(10)
+    ]
+
+    selected = select_stratified_fraction(records, 0.2, seed=7)
+
+    assert len(selected) == 8
+    assert {
+        (dataset, label): sum(
+            record["dataset"] == dataset and record["label"] == label
+            for record in selected
+        )
+        for dataset in ("dataset-a", "dataset-b")
+        for label in (0, 1)
+    } == {
+        ("dataset-a", 0): 2,
+        ("dataset-a", 1): 2,
+        ("dataset-b", 0): 2,
+        ("dataset-b", 1): 2,
+    }
+    assert selected == select_stratified_fraction(records, 0.2, seed=7)
+    assert selected != select_stratified_fraction(records, 0.2, seed=8)
+
+
+def test_select_stratified_fraction_preserves_small_strata_and_full_data() -> None:
+    records = [
+        {"dataset": "dataset", "label": 0, "index": 1},
+        {"dataset": "dataset", "label": 1, "index": 2},
+    ]
+
+    assert select_stratified_fraction(records, 0.05, seed=0) == records
+    assert select_stratified_fraction(records, 1.0, seed=0) == records
+
+
+def test_select_stratified_fraction_rejects_invalid_fraction() -> None:
+    for fraction in (0.0, -0.1, 1.1):
+        try:
+            select_stratified_fraction([], fraction, seed=0)
+        except ValueError as error:
+            assert "train_fraction" in str(error)
+        else:
+            raise AssertionError(f"fraction={fraction} should fail")
 
 
 def test_reasoning_block_helpers_remove_only_rendered_suffix() -> None:

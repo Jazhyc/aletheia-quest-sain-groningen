@@ -134,6 +134,48 @@ def load_record_sources(
     return records
 
 
+def select_stratified_fraction(
+    records: list[dict[str, Any]],
+    fraction: float,
+    seed: int,
+) -> list[dict[str, Any]]:
+    """Select a stable fraction within every dataset/label stratum."""
+    if not 0.0 < fraction <= 1.0:
+        raise ValueError("student.train_fraction must be in (0, 1]")
+    if fraction == 1.0:
+        return list(records)
+
+    strata: dict[
+        tuple[str, int],
+        list[tuple[bytes, tuple[str, int, Any]]],
+    ] = {}
+    for record in records:
+        key = (
+            str(record.get("dataset", "")),
+            int(record["label"]),
+            record.get("index"),
+        )
+        stratum = key[:2]
+        digest = hashlib.sha256(
+            f"{seed}\0{key[0]}\0{key[1]}\0{key[2]}".encode("utf-8")
+        ).digest()
+        strata.setdefault(stratum, []).append((digest, key))
+
+    selected: set[tuple[str, int, Any]] = set()
+    for candidates in strata.values():
+        count = max(1, int(len(candidates) * fraction + 0.5))
+        selected.update(key for _, key in sorted(candidates)[:count])
+    return [
+        record
+        for record in records
+        if (
+            str(record.get("dataset", "")),
+            int(record["label"]),
+            record.get("index"),
+        ) in selected
+    ]
+
+
 def tokenize_record(
     record: dict[str, Any],
     tokenizer: Any,
@@ -240,6 +282,18 @@ def main(cfg: DictConfig) -> None:
             ))
         dataset_name_contains = "multi-source"
     records = load_record_sources(sources)
+    train_fraction = float(
+        OmegaConf.select(cfg, "student.train_fraction", default=1.0)
+    )
+    train_fraction_seed = int(
+        OmegaConf.select(cfg, "student.train_fraction_seed", default=cfg.seed)
+    )
+    records_before_fraction = len(records)
+    records = select_stratified_fraction(
+        records,
+        train_fraction,
+        train_fraction_seed,
+    )
     if cfg.student.train_limit is not None:
         records = records[:int(cfg.student.train_limit)]
     tokenizer = AutoTokenizer.from_pretrained(str(cfg.student.model))
@@ -303,6 +357,9 @@ def main(cfg: DictConfig) -> None:
     dataset = Dataset.from_list(tokenized)
     print(
         f"training on {len(dataset)} parsed, label-consistent teacher targets "
+        f"records_before_fraction={records_before_fraction} "
+        f"train_fraction={train_fraction} "
+        f"train_fraction_seed={train_fraction_seed} "
         f"dataset_name_contains={dataset_name_contains!r} "
         f"reasoning_rows={reasoning_rows} "
         f"reasoning_rows_dropped={reasoning_rows_dropped} "
