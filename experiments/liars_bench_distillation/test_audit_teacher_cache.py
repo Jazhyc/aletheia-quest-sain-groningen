@@ -1,0 +1,56 @@
+from __future__ import annotations
+
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from experiments.liars_bench_distillation.audit_teacher_cache import (
+    audit_records,
+    validate_audit,
+)
+
+
+def make_record(index: str, label: int, summary: str) -> dict[str, object]:
+    return {
+        "dataset": "liars-bench/example",
+        "index": index,
+        "label": label,
+        "reasoning_summary": summary,
+        "student_target": f"<reasoning_summary>{summary}</reasoning_summary>\nPrediction:{label}",
+        "parse_error": False,
+        "label_match": True,
+    }
+
+
+def test_audit_accepts_balanced_clean_cache() -> None:
+    audit = audit_records([
+        make_record("a", 0, "The answer follows the supplied facts."),
+        make_record("b", 1, "The denial conflicts with the answer the output asserts."),
+    ])
+
+    assert audit["coverage"] == 1.0
+    assert audit["label_counts"] == {"0": 1, "1": 1}
+    assert audit["leak_rows"] == 0
+    assert validate_audit(audit, min_coverage=0.9, max_leak_fraction=0.05) == []
+
+
+def test_audit_rejects_leak_and_usable_label_imbalance() -> None:
+    records = [
+        make_record("a", 0, "The privileged evidence proves the response is wrong."),
+        {
+            **make_record("b", 1, "Clean summary."),
+            "parse_error": True,
+            "student_target": None,
+        },
+    ]
+
+    audit = audit_records(records)
+    failures = validate_audit(audit, min_coverage=0.9, max_leak_fraction=0.05)
+
+    assert audit["leak_pattern_counts"] == {"privileged_evidence": 1}
+    assert any("coverage" in failure for failure in failures)
+    assert any("leak fraction" in failure for failure in failures)
+    assert any("imbalanced" in failure for failure in failures)

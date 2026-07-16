@@ -41,7 +41,10 @@ controls.
 
 Per-source sampling is intentional: a global 10% fraction would otherwise
 discard 90% of the already-small external cache. Generate the teacher cache,
-then train the two adapters and evaluate them in shared model loads:
+then train the adapters and evaluate them in shared model loads. The teacher job
+first enforces at least 90% usable parse coverage, balanced usable labels within
+each category, and at most 5% explicit privileged-language leakage; downstream
+jobs do not run if that audit fails.
 
 ```bash
 sbatch experiments/liars_bench_distillation/run_teacher.sh

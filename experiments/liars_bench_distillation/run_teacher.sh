@@ -63,3 +63,7 @@ python experiments/liars_bench_distillation/prepare_teacher_data.py \
   --artifact results/blackbox/liars_bench_pid_aug_v1/teacher/train.jsonl \
   --eval-artifact results/blackbox/liars_bench_pid_aug_v1/eval.jsonl \
   --reasoning-effort medium
+
+python experiments/liars_bench_distillation/audit_teacher_cache.py \
+  results/blackbox/liars_bench_pid_aug_v1/teacher/train.jsonl \
+  --output results/blackbox/liars_bench_pid_aug_v1/teacher/audit.json
