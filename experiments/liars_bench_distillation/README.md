@@ -66,6 +66,12 @@ sbatch experiments/privileged_information_distillation/evaluate_student_sft.sh \
 sbatch experiments/liars_bench_distillation/evaluate_students.sh
 ```
 
+After both evaluation jobs finish, produce the pre-registered comparison with
+`analyze_transfer.py`; pass each condition's competition `result.json` as
+`--competition NAME=PATH` and the external evaluator's `result.json` as
+`--external-result`. The report includes paired fixes/breaks and general versus
+routed acceptance decisions.
+
 Acceptance is deliberately two-dimensional. A candidate should preserve
 competition validation within the known greedy-backend drift floor while
 materially improving macro BA on the disjoint Liars' Bench categories. Report
