@@ -29,4 +29,9 @@ sbatch experiments/privileged_information_distillation/evaluate_student_sft.sh \
   --adapter-dir results/blackbox/qwen9b_pid_varied_datafrac10_adamw5e5_v1/adapter \
   --adapter-dir results/blackbox/qwen9b_pid_family_coverage_varied10_adamw5e5_v1/adapter \
   --split validation --run-name validation_family_coverage_v1
+
+python experiments/family_coverage_distillation/analyze.py \
+  --baseline results/blackbox/qwen9b_pid_varied_datafrac10_adamw5e5_v1/validation_family_coverage_v1/generations.jsonl \
+  --candidate results/blackbox/qwen9b_pid_family_coverage_varied10_adamw5e5_v1/validation_family_coverage_v1/generations.jsonl \
+  --output results/blackbox/family_coverage_distillation_v1/result.json
 ```
