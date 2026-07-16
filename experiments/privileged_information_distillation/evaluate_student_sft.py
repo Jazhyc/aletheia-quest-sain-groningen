@@ -44,6 +44,18 @@ COUNTERFACTUAL_STRICT_RE = re.compile(
     r"<contradiction>\s*(.+?)\s*</contradiction>\s*"
     r"Prediction\s*:\s*([01])\s*$"
 )
+ATOMIC_AUDIT_STRICT_RE = re.compile(
+    r"(?is)^\s*<factual_claims>\s*(?:<claim>\s*"
+    r"<quote>.+?</quote>\s*<proposition>.+?</proposition>\s*"
+    r"<assessment>\s*(?:true|false|uncertain)\s*</assessment>\s*"
+    r"</claim>\s*)*</factual_claims>\s*"
+    r"<context_claims>\s*(?:<context_claim>.+?</context_claim>\s*)*"
+    r"</context_claims>\s*"
+    r"<audit_label_relation>\s*(?:supports|conflicts|insufficient)\s*"
+    r"</audit_label_relation>\s*"
+    r"<reasoning_summary>\s*.+?</reasoning_summary>\s*"
+    r"Prediction\s*:\s*([01])\s*$"
+)
 PREDICTION_ONLY_STRICT_RE = re.compile(r"(?is)^\s*Prediction\s*:\s*<?([01])>?\s*$")
 EMPTY_REASONING_PREFIX = (
     "<reasoning_summary>\n"
@@ -269,6 +281,8 @@ def strict_pattern_for_config(config: dict[str, Any]) -> re.Pattern[str]:
         return PREDICTION_ONLY_STRICT_RE
     if student.get("target_format") == "counterfactual":
         return COUNTERFACTUAL_STRICT_RE
+    if student.get("target_format") == "atomic_audit":
+        return ATOMIC_AUDIT_STRICT_RE
     return STRICT_RE
 
 

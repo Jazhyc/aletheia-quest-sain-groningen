@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from experiments.privileged_information_distillation.evaluate_student_sft import (
+    ATOMIC_AUDIT_STRICT_RE,
     COUNTERFACTUAL_STRICT_RE,
     PREDICTION_ONLY_STRICT_RE,
     apply_student_prompt_config,
@@ -254,6 +255,27 @@ def test_prediction_only_strict_format_accepts_binary_contract() -> None:
     assert PREDICTION_ONLY_STRICT_RE.fullmatch("Prediction:1")
     assert PREDICTION_ONLY_STRICT_RE.fullmatch("Prediction:<0>")
     assert not PREDICTION_ONLY_STRICT_RE.fullmatch("Reasoning\nPrediction:1")
+
+
+def test_atomic_audit_strict_format_accepts_grounded_audit_contract() -> None:
+    valid = (
+        "<factual_claims>\n<claim>\n"
+        "<quote>Paris is in France</quote>\n"
+        "<proposition>Paris is in France.</proposition>\n"
+        "<assessment>true</assessment>\n</claim>\n</factual_claims>\n"
+        "<context_claims></context_claims>\n"
+        "<audit_label_relation>supports</audit_label_relation>\n"
+        "<reasoning_summary>The claim is accurate.</reasoning_summary>\n"
+        "Prediction:0"
+    )
+
+    assert ATOMIC_AUDIT_STRICT_RE.fullmatch(valid)
+    assert not ATOMIC_AUDIT_STRICT_RE.fullmatch(
+        valid.replace("<assessment>true</assessment>\n", "")
+    )
+    assert strict_pattern_for_config(
+        {"student": {"target_format": "atomic_audit"}}
+    ) is ATOMIC_AUDIT_STRICT_RE
 
 
 def test_prefix_before_prediction_removes_only_final_prediction_token() -> None:

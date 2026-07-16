@@ -14,6 +14,15 @@ The default reviewable prompts and model/training settings live in
 overrides live in
 `configs/privileged_information_distillation_reasoning_traces.yaml`.
 
+The two-stage atomic-audit ablation uses
+`generate_atomic_teacher_data.py` and
+`configs/privileged_information_distillation_atomic_audit.yaml`. Its blind pass
+does not see the label; exact-quote validation drops ungrounded claims before a
+separate label-aware reconciliation pass. See
+`docs/privileged_information_distillation/atomic_audit_distillation.md` for the
+frozen experimental contract and commands. It is not a selected submission
+method.
+
 ## Data contract
 
 Teacher output must be:
