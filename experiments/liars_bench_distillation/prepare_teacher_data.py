@@ -202,9 +202,14 @@ def make_teacher_row(
     *,
     student_prompt_template: str,
     reasoning_effort: str,
+    max_prompt_chars: int = 6000,
+    context_truncation: str = "head_tail",
 ) -> dict[str, Any]:
     student_prompt = build_student_prompt(
-        row["messages"], student_prompt_template, 3000, "tail"
+        row["messages"],
+        student_prompt_template,
+        max_prompt_chars,
+        context_truncation,
     )
     label = int(row["label"])
     teacher_header = TEACHER_TEMPLATE.replace("__GROUND_TRUTH__", str(label))
@@ -249,6 +254,10 @@ def main() -> None:
     parser.add_argument("--reasoning-effort", choices=("low", "medium", "high"), default="medium")
     parser.add_argument("--max-tokens", type=int, default=2048)
     parser.add_argument("--concurrency", type=int, default=16)
+    parser.add_argument("--max-prompt-chars", type=int, default=6000)
+    parser.add_argument(
+        "--context-truncation", choices=("head_tail", "tail"), default="head_tail"
+    )
     args = parser.parse_args()
 
     config = OmegaConf.load(ROOT / "configs/privileged_information_distillation.yaml")
@@ -279,6 +288,8 @@ def main() -> None:
             row,
             student_prompt_template=student_prompt_template,
             reasoning_effort=args.reasoning_effort,
+            max_prompt_chars=args.max_prompt_chars,
+            context_truncation=args.context_truncation,
         )
         for row in train_frame.to_dict(orient="records")
     ]

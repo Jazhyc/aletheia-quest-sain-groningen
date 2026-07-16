@@ -57,6 +57,10 @@ def main() -> None:
     )
     parser.add_argument("--model", default="Qwen/Qwen3.5-9B")
     parser.add_argument("--max-tokens", type=int, default=512)
+    parser.add_argument("--max-prompt-chars", type=int, default=6000)
+    parser.add_argument(
+        "--context-truncation", choices=("head_tail", "tail"), default="head_tail"
+    )
     args = parser.parse_args()
 
     from transformers import AutoTokenizer
@@ -70,7 +74,10 @@ def main() -> None:
     prompts = [
         tokenizer.apply_chat_template(
             [{"role": "user", "content": build_student_prompt(
-                row["messages"], prompt_template, 3000, "tail"
+                row["messages"],
+                prompt_template,
+                args.max_prompt_chars,
+                args.context_truncation,
             )}],
             tokenize=False,
             add_generation_prompt=True,
@@ -87,8 +94,8 @@ def main() -> None:
             [{"role": "user", "content": build_student_prompt(
                 records[offset]["messages"],
                 HPKR_PROMPTS["knowledge_report_type"],
-                3000,
-                "tail",
+                args.max_prompt_chars,
+                args.context_truncation,
             )}],
             tokenize=False,
             add_generation_prompt=True,

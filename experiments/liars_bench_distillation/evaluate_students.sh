@@ -25,4 +25,5 @@ python experiments/liars_bench_distillation/evaluate_students.py \
   --output-dir results/blackbox/liars_bench_pid_aug_v1/evaluation \
   --adapter baseline=results/blackbox/qwen9b_pid_varied_datafrac10_adamw5e5_v1/adapter \
   --adapter observable=results/blackbox/qwen9b_pid_varied10_liars_observable_aug_adamw5e5_v1/adapter \
-  --adapter broad=results/blackbox/qwen9b_pid_varied10_liars_broad_aug_adamw5e5_v1/adapter
+  --adapter broad=results/blackbox/qwen9b_pid_varied10_liars_broad_aug_adamw5e5_v1/adapter \
+  --adapter broad_continue=results/blackbox/qwen9b_pid_liars_broad_replay_continue_adamw2e5_v1/adapter

@@ -18,12 +18,26 @@ including recorded model belief where Liars' Bench supplies it. The Qwen student
 sees only the ordinary conversation/output prompt, so privileged fields cannot
 leak into deployment.
 
+External rows use a 6,000-character balanced head/tail context window. This is
+mainly an Insider Trading fix: the historical 3,000-character tail cap fired on
+every row even though the 2,048-token input cap fired on none. The larger window
+preserves both the initial task/tool setup and final action report while
+remaining below the 4,096-token local context. Competition validation retains
+its frozen formatter, preventing this representation change from becoming a
+validation-specific prompt tweak.
+
 Two matched students start fresh from Qwen3.5-9B and retain the established
 rank-16, one-epoch AdamW `5e-5` recipe:
 
 - `observable`: 10% of the original varied cache (288 rows) plus all 192
   harm-choice, insider-trading, and soft-trigger targets;
 - `broad`: the same mixture plus 64 HP-KR targets.
+
+A third conservative condition continues the selected full varied-only adapter
+on the broad mixture at `2e-5` for one epoch. It tests whether replay can add the
+new semantic modes without asking a small fresh-data run to relearn the mature
+judge. The lower continuation rate follows the earlier targeted-continuation
+controls.
 
 Per-source sampling is intentional: a global 10% fraction would otherwise
 discard 90% of the already-small external cache. Generate the teacher cache,
@@ -36,11 +50,14 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   --config-name pid_liars_bench_observable_aug_v1
 sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   --config-name pid_liars_bench_broad_aug_v1
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  --config-name pid_liars_bench_broad_continue_v1
 
 sbatch experiments/privileged_information_distillation/evaluate_student_sft.sh \
   --adapter-dir results/blackbox/qwen9b_pid_varied_datafrac10_adamw5e5_v1/adapter \
   --adapter-dir results/blackbox/qwen9b_pid_varied10_liars_observable_aug_adamw5e5_v1/adapter \
   --adapter-dir results/blackbox/qwen9b_pid_varied10_liars_broad_aug_adamw5e5_v1/adapter \
+  --adapter-dir results/blackbox/qwen9b_pid_liars_broad_replay_continue_adamw2e5_v1/adapter \
   --split validation --run-name validation_liars_bench_aug_v1
 
 sbatch experiments/liars_bench_distillation/evaluate_students.sh
