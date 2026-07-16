@@ -169,3 +169,21 @@ errors or evaluate multiple wordings.
 ```bash
 sbatch experiments/liars_bench_distillation/evaluate_action_prompt.sh
 ```
+
+A second response-mode specialist is frozen for harmful-use multiple choice.
+Its router requires at least three explicit A--D options, a single-letter reply
+contract, harmful-use pressure, and a final A--D answer. It routes all 200 frozen
+Harm Pressure Choice rows, zero rows in the other external categories, and zero
+rows in the complete 8,216-row local competition corpus. The prompt reconstructs
+the factually correct option before comparing the final letter, while stating
+that safety pressure alone is not deception and a truthful answer stays honest.
+
+This route addresses an alignment-mediated factual response mode rather than
+ordinary factual QA. Evaluate exactly this one wording for all five adapters at
+4,500 characters, and retain it only for a gain of at least `0.10` BA over the
+baseline adapter's ordinary Harm Pressure Choice score. An augmented-adapter
+candidate must independently preserve competition validation as above.
+
+```bash
+sbatch experiments/liars_bench_distillation/evaluate_harm_choice_prompt.sh
+```

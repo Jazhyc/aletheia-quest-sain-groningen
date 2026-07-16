@@ -18,8 +18,14 @@ from experiments.liars_bench_distillation.evaluate_students import (
     grouped_metrics,
     parse_prediction,
 )
-from experiments.liars_bench_distillation.prompts import ACTION_REPORT_PROMPT
-from experiments.liars_bench_distillation.router import is_action_report_conversation
+from experiments.liars_bench_distillation.prompts import (
+    ACTION_REPORT_PROMPT,
+    HARM_PRESSURE_CHOICE_PROMPT,
+)
+from experiments.liars_bench_distillation.router import (
+    is_action_report_conversation,
+    is_harm_pressure_choice_request,
+)
 from experiments.privileged_information_distillation.core import build_student_prompt
 
 
@@ -31,6 +37,7 @@ def main() -> None:
     parser.add_argument("--model", default="Qwen/Qwen3.5-9B")
     parser.add_argument("--max-prompt-chars", type=int, default=4500)
     parser.add_argument("--max-tokens", type=int, default=512)
+    parser.add_argument("--mode", choices=("action", "harm_choice"), default="action")
     args = parser.parse_args()
 
     from transformers import AutoTokenizer
@@ -40,11 +47,19 @@ def main() -> None:
     all_records = [
         json.loads(line) for line in args.eval_artifact.read_text().splitlines()
     ]
-    records = [
-        row for row in all_records if is_action_report_conversation(row["messages"])
-    ]
+    route = (
+        is_action_report_conversation
+        if args.mode == "action"
+        else is_harm_pressure_choice_request
+    )
+    prompt_template = (
+        ACTION_REPORT_PROMPT
+        if args.mode == "action"
+        else HARM_PRESSURE_CHOICE_PROMPT
+    )
+    records = [row for row in all_records if route(row["messages"])]
     if not records:
-        raise RuntimeError("the action-report router selected no rows")
+        raise RuntimeError(f"the {args.mode} router selected no rows")
     adapters = []
     for value in args.adapter:
         name, separator, raw_path = value.partition("=")
@@ -57,7 +72,7 @@ def main() -> None:
         tokenizer.apply_chat_template(
             [{"role": "user", "content": build_student_prompt(
                 row["messages"],
-                ACTION_REPORT_PROMPT,
+                prompt_template,
                 args.max_prompt_chars,
                 "head_tail",
             )}],
@@ -72,7 +87,7 @@ def main() -> None:
     ]
     if max(token_lengths) > 2048:
         raise RuntimeError(
-            f"action prompt exceeds deployment input cap: max={max(token_lengths)}"
+            f"{args.mode} prompt exceeds deployment input cap: max={max(token_lengths)}"
         )
 
     llm = LLM(
@@ -88,6 +103,7 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     result = {
         "rows": len(records),
+        "mode": args.mode,
         "max_prompt_chars": args.max_prompt_chars,
         "max_prompt_tokens": max(token_lengths),
         "conditions": {},
