@@ -99,3 +99,13 @@ current deployment replacement. The frozen validation-only v2.4-interface
 diagnostic above tests whether the pre-existing direct-binary safety member
 removes the format failure; it cannot retroactively change the locked-test
 decision.
+
+That diagnostic completed as job `30177461`. The family adapter improved the
+summary member from `0.9167` to `0.9202` BA and reduced summary parse failures
+from five to three. The direct-binary member was exactly tied at `0.9143` with
+zero parse failures. After max aggregation, both adapters scored `0.9238`
+overall BA with zero parse failures; family coverage moved only two decisions
+(one fix and one break), tied Qwen/Gemma/Nemotron macro BA exactly, and raised
+Qwen-varied BA by `0.0028` while offsetting it within instructed Qwen. This
+confirms that the locked-test loss was interface-sensitive, but supplies no net
+deployment gain and does not justify another test evaluation.

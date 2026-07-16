@@ -139,3 +139,12 @@ adapter improves disjoint Insider Trading BA by at least `0.10`; do not weaken
 the router after viewing misses. The zero-local-coverage result is intentional:
 this is a test of a missing observable response mode, not a way to hill-climb
 the local validation split.
+
+The 6,000-character run is the full-context scientific comparison, not yet a
+submission certification. A tokenizer audit over the 200 frozen Insider rows
+found two prompts above the notebook's 2,048-token input cap (maximum `2,278`).
+A 4,500-character balanced head/tail view has median `1,426`, p95 `1,514`, and
+maximum `1,952` tokens with no overflow. Any action-route winner must reproduce
+its target gain in a separately frozen 4,500-character evaluation before being
+called submission-compatible; do not choose between context sizes by their
+scores.
