@@ -11,6 +11,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from experiments.liars_bench_distillation.prepare_teacher_data import (
+    filter_output_structure,
+    final_assistant_output,
     make_teacher_row,
     privileged_evidence,
     json_safe,
@@ -48,6 +50,28 @@ def test_stable_sample_is_balanced_diverse_and_disjoint() -> None:
     }
     assert set(first["sample_id"]).isdisjoint(second["sample_id"])
     assert first.equals(stable_sample(frame, per_label=4, seed=3))
+
+
+def test_output_structure_filter_is_label_blind() -> None:
+    frame = pd.DataFrame([
+        {
+            "label": label,
+            "messages": [
+                {"role": "assistant", "content": output},
+            ],
+        }
+        for label, output in (
+            (0, "First sentence. Second sentence with enough detail."),
+            (1, "Too short."),
+        )
+    ])
+
+    selected = filter_output_structure(
+        frame, minimum_chars=30, minimum_sentences=2
+    )
+
+    assert selected["label"].tolist() == [0]
+    assert final_assistant_output(frame.iloc[0]["messages"]).startswith("First")
 
 
 def test_privileged_evidence_records_epistemic_belief() -> None:

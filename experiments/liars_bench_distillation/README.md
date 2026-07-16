@@ -265,3 +265,31 @@ competition test unless both gates pass.
 sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   --config-name pid_liars_bench_action_prompt_continue_v1
 ```
+
+## Cross-family long-answer continuation
+
+One independent augmentation targets the remaining poisoned-supporting-detail
+failure without using hidden traits or a category-specific inference prompt.
+Liars' Bench `instructed-deception` supplies Gemma, Kimi, Llama, Mistral, and
+Qwen answers under matched truthful/deceptive instructions. Before scoring, a
+label-blind filter retains outputs with at least 180 characters and two sentence
+terminators. The deterministic sample takes 8 rows per label and source model
+for training (80 total) and 20 per label/model for disjoint evaluation (200).
+This is deliberately tiny: it tests response and family diversity, not factual
+memorization.
+
+GPT-OSS receives the recorded correct option and model belief, while the student
+sees only the ordinary generic judge prompt. Continue the selected Phoenix
+adapter for one epoch at `2e-5` on these 80 targets plus the same 10% varied
+replay. Accept it only if competition validation loses no more than `0.0025` BA
+and the disjoint external set gains at least `0.02` BA, with at least three of
+five source families non-worse and no family losing more than `0.03`. Do not
+evaluate local competition test from a favorable result; retain a muted safe
+result only as cross-family data-composition evidence.
+
+```bash
+sbatch experiments/liars_bench_distillation/run_instructed_long_teacher.sh
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  --config-name pid_liars_instructed_long_continue_v1
+sbatch experiments/liars_bench_distillation/evaluate_instructed_long.sh
+```
