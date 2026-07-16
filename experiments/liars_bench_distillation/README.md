@@ -52,3 +52,9 @@ materially improving macro BA on the disjoint Liars' Bench categories. Report
 competition metrics by scenario/family and external metrics by category/source
 model. Do not select on local competition test or assume Liars' Bench category
 proportions match the private Notus distribution.
+
+The external evaluator also applies the frozen high-precision epistemic router.
+It compares the base-Qwen HP-KR specialist with each LoRA under the same
+`knowledge_report_type` prompt, replacing only HP-KR predictions. This tests
+whether broad augmentation internalizes the missing report semantics or whether
+the unadapted specialist should remain a separate routed member.

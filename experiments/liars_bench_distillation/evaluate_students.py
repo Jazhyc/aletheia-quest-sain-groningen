@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from experiments.privileged_information_distillation.core import build_student_prompt
+from experiments.liars_bench_hpkr_prompts.evaluate import PROMPTS as HPKR_PROMPTS
 
 
 PREDICTION_RE = re.compile(r"(?im)\bPrediction\s*:\s*<?([01])>?\b")
@@ -77,6 +78,24 @@ def main() -> None:
         )
         for row in records
     ]
+    hpkr_offsets = [
+        offset for offset, row in enumerate(records)
+        if row["category"] == "harm-pressure-knowledge-report"
+    ]
+    epistemic_prompts = [
+        tokenizer.apply_chat_template(
+            [{"role": "user", "content": build_student_prompt(
+                records[offset]["messages"],
+                HPKR_PROMPTS["knowledge_report_type"],
+                3000,
+                "tail",
+            )}],
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False,
+        )
+        for offset in hpkr_offsets
+    ]
     adapters = []
     for value in args.adapter:
         name, separator, path = value.partition("=")
@@ -94,7 +113,8 @@ def main() -> None:
     )
     sampling = SamplingParams(max_tokens=args.max_tokens, temperature=0.0)
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    result = {"rows": len(records), "conditions": {}}
+    result = {"rows": len(records), "conditions": {}, "routed_conditions": {}}
+    general_rows: dict[str, list[dict[str, Any]]] = {}
     for offset, (name, path) in enumerate(adapters, start=1):
         started = time.perf_counter()
         outputs = llm.generate(
@@ -128,7 +148,78 @@ def main() -> None:
             "parse_errors": sum(row["parse_error"] for row in evaluated),
             "score_seconds": elapsed,
         }
+        general_rows[name] = evaluated
         print(name, json.dumps(result["conditions"][name]), flush=True)
+        specialist_started = time.perf_counter()
+        specialist_outputs = llm.generate(
+            epistemic_prompts,
+            sampling,
+            lora_request=LoRARequest(name, offset, path.as_posix()),
+        )
+        specialist_elapsed = time.perf_counter() - specialist_started
+        routed = [dict(row) for row in evaluated]
+        specialist_records = []
+        for row_offset, output in zip(hpkr_offsets, specialist_outputs, strict=True):
+            generation = output.outputs[0].text if output.outputs else ""
+            parsed = parse_prediction(generation)
+            prediction = 0 if parsed is None else parsed
+            routed[row_offset]["prediction"] = prediction
+            routed[row_offset]["parse_error"] = parsed is None
+            specialist_records.append({
+                **{key: records[row_offset][key] for key in (
+                    "dataset", "index", "category", "source_model", "label"
+                )},
+                "prediction": prediction,
+                "parse_error": parsed is None,
+                "generation": generation,
+            })
+        with (args.output_dir / f"{name}_epistemic.jsonl").open("w") as handle:
+            for row in specialist_records:
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+        routed_categories = grouped_metrics(routed, "category")
+        result["routed_conditions"][name] = {
+            "macro_category_balanced_accuracy": sum(
+                metrics["balanced_accuracy"] for metrics in routed_categories.values()
+            ) / len(routed_categories),
+            "metrics": balanced_accuracy(routed),
+            "per_category": routed_categories,
+            "per_source_model": grouped_metrics(routed, "source_model"),
+            "specialist_parse_errors": sum(
+                row["parse_error"] for row in specialist_records
+            ),
+            "specialist_score_seconds": specialist_elapsed,
+        }
+        print(
+            f"{name}_routed",
+            json.dumps(result["routed_conditions"][name]),
+            flush=True,
+        )
+
+    base_started = time.perf_counter()
+    base_outputs = llm.generate(epistemic_prompts, sampling)
+    base_elapsed = time.perf_counter() - base_started
+    base_routed = [dict(row) for row in general_rows[adapters[0][0]]]
+    for row_offset, output in zip(hpkr_offsets, base_outputs, strict=True):
+        generation = output.outputs[0].text if output.outputs else ""
+        parsed = parse_prediction(generation)
+        base_routed[row_offset]["prediction"] = 0 if parsed is None else parsed
+        base_routed[row_offset]["parse_error"] = parsed is None
+    base_categories = grouped_metrics(base_routed, "category")
+    result["routed_conditions"]["base_epistemic"] = {
+        "general_member": adapters[0][0],
+        "macro_category_balanced_accuracy": sum(
+            metrics["balanced_accuracy"] for metrics in base_categories.values()
+        ) / len(base_categories),
+        "metrics": balanced_accuracy(base_routed),
+        "per_category": base_categories,
+        "per_source_model": grouped_metrics(base_routed, "source_model"),
+        "specialist_score_seconds": base_elapsed,
+    }
+    print(
+        "base_epistemic_routed",
+        json.dumps(result["routed_conditions"]["base_epistemic"]),
+        flush=True,
+    )
     (args.output_dir / "result.json").write_text(json.dumps(result, indent=2) + "\n")
 
 
