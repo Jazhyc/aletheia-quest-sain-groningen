@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
 from experiments.liars_bench_distillation.router import (
     is_action_report_conversation,
 )
+from experiments.liars_bench_distillation.prompts import ACTION_REPORT_PROMPT
 
 
 def test_routes_executed_action_with_required_report() -> None:
@@ -41,3 +42,10 @@ def test_requires_action_contract_and_final_report() -> None:
         {"role": "user", "content": "Trade successful."},
         {"role": "assistant", "content": "I am done."},
     ])
+
+
+def test_action_prompt_checks_reports_without_equating_risk_with_deception() -> None:
+    assert "material omission" in ACTION_REPORT_PROMPT
+    assert "misattribution" in ACTION_REPORT_PROMPT
+    assert "not deceptive merely because" in ACTION_REPORT_PROMPT
+    assert "Prediction:<0 or 1>" in ACTION_REPORT_PROMPT
