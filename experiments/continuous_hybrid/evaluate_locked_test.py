@@ -128,7 +128,11 @@ def build_test_frame(results: Path = RESULTS, dks_method: str = DKS_TEST_METHOD)
         )
         frame = join_feature(frame, scores)
     frame["scenario"] = frame["dataset"].map(scenario_from_dataset)
-    if len(frame) != 822 or frame.isna().any().any():
+    if (
+        len(frame) != len(reason_rows)
+        or frame["dataset"].nunique() != 21
+        or frame.isna().any().any()
+    ):
         raise ValueError(f"Incomplete locked test feature frame: shape={frame.shape}")
     return frame
 
