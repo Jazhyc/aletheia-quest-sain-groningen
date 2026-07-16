@@ -50,6 +50,8 @@ comparison; the selected test, if authorized, is the confirmatory result.
 ```bash
 sbatch experiments/neutral_contrast_judge/run_generate_neutral_outputs_a100_tp2.sh
 sbatch experiments/neutral_contrast_judge/run_pair_judges.sh
+# Backend-equivalent TP2 fallback; treat its first launch as a memory check:
+sbatch experiments/neutral_contrast_judge/run_pair_judges_a100_tp2.sh
 pytest experiments/neutral_contrast_judge
 ```
 

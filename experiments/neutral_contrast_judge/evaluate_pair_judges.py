@@ -172,6 +172,7 @@ def main() -> None:
     parser.add_argument("--baseline", type=Path, default=BASELINE)
     parser.add_argument("--max-tokens", type=int, default=4096)
     parser.add_argument("--max-num-seqs", type=int, default=64)
+    parser.add_argument("--tensor-parallel-size", type=int, default=1)
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -191,7 +192,7 @@ def main() -> None:
         rating_min=1,
         rating_max=7,
         dtype="bfloat16",
-        tensor_parallel_size=1,
+        tensor_parallel_size=args.tensor_parallel_size,
         gpu_memory_utilization=0.9,
         trust_remote_code=False,
         max_model_len=8192,
@@ -266,6 +267,7 @@ def main() -> None:
         "members": list(PAIR_PROMPTS),
         "prompt_evaluations": len(generation_records),
         "reasoning_seconds": elapsed,
+        "tensor_parallel_size": args.tensor_parallel_size,
         "threshold": DECISION_THRESHOLD,
         "acceptance": {
             "minimum_ba_delta": 0.0025,
