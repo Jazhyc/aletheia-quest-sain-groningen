@@ -49,6 +49,13 @@ def action_gate(
     }
 
 
+def left_truncate_prompt_ids(ids: list[int], maximum: int) -> list[int]:
+    """Match the notebook's deployment-time left truncation."""
+    if maximum <= 0:
+        raise ValueError("maximum input tokens must be positive")
+    return ids[-maximum:]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--adapter", type=Path, required=True)
@@ -62,6 +69,7 @@ def main() -> None:
 
     from transformers import AutoTokenizer
     from vllm import LLM, SamplingParams
+    from vllm.inputs import TokensPrompt
     from vllm.lora.request import LoRARequest
 
     frame = load_category("insider-trading", args.liars_root)
@@ -100,18 +108,24 @@ def main() -> None:
             )
             for row in records
         ]
-        lengths = [
-            len(tokenizer.encode(prompt, add_special_tokens=False)) for prompt in prompts
+        prompt_ids = [
+            tokenizer.encode(prompt, add_special_tokens=False) for prompt in prompts
         ]
-        maximum = max(lengths)
-        if maximum > args.max_input_tokens:
-            raise RuntimeError(
-                f"{name} prompt exceeds deployment input cap: max={maximum}"
-            )
-        prompts_by_condition[name] = prompts
+        lengths = [len(ids) for ids in prompt_ids]
+        prompts_by_condition[name] = [
+            TokensPrompt(prompt_token_ids=left_truncate_prompt_ids(
+                ids, args.max_input_tokens
+            ))
+            for ids in prompt_ids
+        ]
         token_stats[name] = {
-            "max": maximum,
-            "over_input_cap": sum(length > args.max_input_tokens for length in lengths),
+            "max_before_token_truncation": max(lengths),
+            "token_truncated_rows": sum(
+                length > args.max_input_tokens for length in lengths
+            ),
+            "minimum_retained_fraction": min(
+                min(1.0, args.max_input_tokens / length) for length in lengths
+            ),
         }
 
     adapter = args.adapter.resolve()

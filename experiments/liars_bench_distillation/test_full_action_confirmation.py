@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
 
 from experiments.liars_bench_distillation.evaluate_full_action_confirmation import (
     action_gate,
+    left_truncate_prompt_ids,
 )
 
 
@@ -24,3 +25,8 @@ def test_full_action_gate_requires_gain_absolute_ba_and_low_fpr() -> None:
     assert not action_gate(
         general, {"balanced_accuracy": 0.75, "fpr": 0.20}
     )["passed"]
+
+
+def test_left_truncate_prompt_ids_keeps_deployment_suffix() -> None:
+    assert left_truncate_prompt_ids([1, 2, 3, 4], 3) == [2, 3, 4]
+    assert left_truncate_prompt_ids([1, 2], 3) == [1, 2]

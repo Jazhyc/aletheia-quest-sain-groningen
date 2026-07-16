@@ -182,11 +182,23 @@ Phoenix adapter with matched ordinary and action prompts over all 6,873 public
 Insider Trading rows. The router covers all 6,873. Retain the route only if the
 action prompt gains at least `0.10` BA, reaches at least `0.70` absolute BA, and
 keeps FPR at or below `0.15`. The script also fails before GPU scoring if either
-4,500-character prompt exceeds the 2,048-token input cap.
+4,500-character prompt exceeds the 2,048-token input cap. This was the initial
+pre-score contract; the deployment-equivalence amendment below supersedes only
+that formatting check.
 
 ```bash
 sbatch experiments/liars_bench_distillation/evaluate_full_action_confirmation.sh
 ```
+
+That initial run stopped before loading the model: five long public rows exceed
+the cap, with a maximum of 3,333 tokens. Reducing the character window does not
+fully solve this because the final report is intentionally preserved in full.
+Before any full-category predictions existed, the confirmation was amended to
+match the actual notebook contract: tokenize first, left-truncate only rows over
+2,048 tokens, retain the end of the conversation and `<output>`, and record the
+truncated count and minimum retained fraction. The prompt, router, labels, and
+acceptance gate are unchanged. This is a deployment-equivalence correction, not
+a score-conditioned context sweep; do not compare alternative caps by accuracy.
 
 The action summary has intentionally conservative recall (`0.58`) and low FPR
 (`0.06`) on the frozen 200 rows. The main Phoenix interface found complementary
