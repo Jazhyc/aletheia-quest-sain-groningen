@@ -3,6 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+import re
+
+
+EPISTEMIC_REPORT_REQUEST_RE = re.compile(
+    r"(?:do you know|whether you (?:do or do not )?know|know the answer|"
+    r"have (?:the )?(?:answer|knowledge)|are you (?:aware|familiar)|"
+    r"can you (?:recall|remember)).{0,240}(?:only|just|nothing else)|"
+    r"(?:only|just).{0,240}(?:whether|if).{0,120}(?:you know|know the answer)",
+    flags=re.IGNORECASE | re.DOTALL,
+)
 
 
 def safe_text(value) -> str:
@@ -39,3 +49,13 @@ def message_role(message) -> str:
 
 def message_content(message) -> str:
     return message_field(message, "content")
+
+
+def is_epistemic_report_request(messages) -> bool:
+    """Route only explicit requests for a constrained knowledge self-report."""
+    user_text = "\n".join(
+        message_content(message)
+        for message in iter_messages(messages)
+        if message_role(message) == "user"
+    )
+    return bool(EPISTEMIC_REPORT_REQUEST_RE.search(user_text))

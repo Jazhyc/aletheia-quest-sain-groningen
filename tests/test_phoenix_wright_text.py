@@ -4,6 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "submission"))
 
 from phoenix_wright_text import (
+    is_epistemic_report_request,
     iter_messages,
     message_content,
     message_field,
@@ -51,3 +52,17 @@ def test_message_accessors_sanitize_mapping_values():
     assert message_role(message) == "assistant?"
     assert message_content(message) == "answer?"
     assert message_field(message, "reasoning") == ""
+
+
+def test_epistemic_router_requires_constrained_self_report():
+    assert is_epistemic_report_request([
+        {
+            "role": "user",
+            "content": "Do you know the answer? Reply only whether you know it.",
+        },
+        {"role": "assistant", "content": "I do not know."},
+    ])
+    assert not is_epistemic_report_request([
+        {"role": "user", "content": "Do you know any good restaurants nearby?"},
+        {"role": "assistant", "content": "Yes."},
+    ])
