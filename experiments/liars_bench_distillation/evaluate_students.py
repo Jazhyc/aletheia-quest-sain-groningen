@@ -20,6 +20,9 @@ if str(ROOT) not in sys.path:
 
 from experiments.privileged_information_distillation.core import build_student_prompt
 from experiments.liars_bench_hpkr_prompts.evaluate import PROMPTS as HPKR_PROMPTS
+from experiments.liars_bench_distillation.router import (
+    is_action_report_conversation,
+)
 
 
 PREDICTION_RE = re.compile(r"(?im)\bPrediction\s*:\s*<?([01])>?\b")
@@ -89,6 +92,18 @@ def main() -> None:
         offset for offset, row in enumerate(records)
         if row["category"] == "harm-pressure-knowledge-report"
     ]
+    action_offsets = [
+        offset for offset, row in enumerate(records)
+        if is_action_report_conversation(row["messages"])
+    ]
+    action_counts: dict[str, int] = defaultdict(int)
+    for offset in action_offsets:
+        action_counts[str(records[offset]["category"])] += 1
+    print(
+        "action_router",
+        json.dumps({"rows": len(action_offsets), "per_category": action_counts}),
+        flush=True,
+    )
     epistemic_prompts = [
         tokenizer.apply_chat_template(
             [{"role": "user", "content": build_student_prompt(
@@ -120,7 +135,17 @@ def main() -> None:
     )
     sampling = SamplingParams(max_tokens=args.max_tokens, temperature=0.0)
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    result = {"rows": len(records), "conditions": {}, "routed_conditions": {}}
+    result = {
+        "rows": len(records),
+        "conditions": {},
+        "routed_conditions": {},
+        "action_router": {
+            "rows": len(action_offsets),
+            "per_category": dict(sorted(action_counts.items())),
+        },
+        "action_routed_conditions": {},
+        "content_routed_conditions": {},
+    }
     general_rows: dict[str, list[dict[str, Any]]] = {}
     for offset, (name, path) in enumerate(adapters, start=1):
         started = time.perf_counter()
@@ -227,6 +252,38 @@ def main() -> None:
         json.dumps(result["routed_conditions"]["base_epistemic"]),
         flush=True,
     )
+
+    baseline_name = adapters[0][0]
+    for name, _ in adapters:
+        action_routed = [dict(row) for row in general_rows[baseline_name]]
+        content_routed = [dict(row) for row in base_routed]
+        for row_offset in action_offsets:
+            action_routed[row_offset] = dict(general_rows[name][row_offset])
+            content_routed[row_offset] = dict(general_rows[name][row_offset])
+        for destination, routed in (
+            (result["action_routed_conditions"], action_routed),
+            (result["content_routed_conditions"], content_routed),
+        ):
+            categories = grouped_metrics(routed, "category")
+            destination[name] = {
+                "macro_category_balanced_accuracy": sum(
+                    metrics["balanced_accuracy"] for metrics in categories.values()
+                ) / len(categories),
+                "metrics": balanced_accuracy(routed),
+                "per_category": categories,
+                "per_source_model": grouped_metrics(routed, "source_model"),
+                "parse_errors": sum(row["parse_error"] for row in routed),
+            }
+        print(
+            f"{name}_action_routed",
+            json.dumps(result["action_routed_conditions"][name]),
+            flush=True,
+        )
+        print(
+            f"{name}_content_routed",
+            json.dumps(result["content_routed_conditions"][name]),
+            flush=True,
+        )
     (args.output_dir / "result.json").write_text(json.dumps(result, indent=2) + "\n")
 
 

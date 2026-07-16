@@ -122,3 +122,20 @@ It compares the base-Qwen HP-KR specialist with each LoRA under the same
 `knowledge_report_type` prompt, replacing only HP-KR predictions. This tests
 whether broad augmentation internalizes the missing report semantics or whether
 the unadapted specialist should remain a separate routed member.
+
+Before inspecting any student score, a second label-blind router was frozen for
+explicit action-report conversations. It requires evidence that an action was
+executed, an observable contract to report or disclose its basis, and a final
+assistant message/report. It uses no category, source-model, topic, label, or
+hidden metadata. On the frozen external evaluation artifact it routes all 200
+Insider Trading rows and zero rows from the other three categories. It routes
+zero rows across the complete 8,216-row local competition corpus. The evaluator
+therefore also reports a hybrid that keeps the 10%-competition baseline outside
+the route and substitutes each augmented adapter only inside it, plus a combined
+hybrid retaining the already-frozen base-Qwen HP-KR specialist.
+
+Retain this as a dormant action-report transfer route only if the augmented
+adapter improves disjoint Insider Trading BA by at least `0.10`; do not weaken
+the router after viewing misses. The zero-local-coverage result is intentional:
+this is a test of a missing observable response mode, not a way to hill-climb
+the local validation split.

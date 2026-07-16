@@ -100,6 +100,25 @@ def external_delta(
     }
 
 
+def accepts_action_route(
+    routed_delta: dict[str, Any],
+    router_summary: dict[str, Any],
+    *,
+    target_category: str = "insider-trading",
+    minimum_target_gain: float = 0.10,
+) -> bool:
+    """Apply the frozen target-gain and zero-spillover action-route gate."""
+    non_target_rows = sum(
+        count
+        for category, count in router_summary["per_category"].items()
+        if category != target_category
+    )
+    return bool(
+        non_target_rows == 0
+        and routed_delta["category_deltas"][target_category] >= minimum_target_gain
+    )
+
+
 def analyze(
     competition_paths: dict[str, Path],
     external: dict[str, Any],
@@ -115,6 +134,8 @@ def analyze(
     baseline_competition = competition[baseline_name]
     baseline_external = external["conditions"][baseline_name]
     baseline_routed = external["routed_conditions"][baseline_name]
+    baseline_action_routed = external["action_routed_conditions"][baseline_name]
+    baseline_content_routed = external["content_routed_conditions"][baseline_name]
     report: dict[str, Any] = {
         "criteria": {
             "max_competition_loss": max_competition_loss,
@@ -130,6 +151,12 @@ def analyze(
         routed = external_delta(
             external["routed_conditions"][name], baseline_routed
         )
+        action_routed = external_delta(
+            external["action_routed_conditions"][name], baseline_action_routed
+        )
+        content_routed = external_delta(
+            external["content_routed_conditions"][name], baseline_content_routed
+        )
         generation_path = competition_paths[name].parent / "generations.jsonl"
         paired = (
             {"changes": 0, "fixes": 0, "breaks": 0}
@@ -140,6 +167,8 @@ def analyze(
             "competition": comp,
             "external": ext,
             "external_routed": routed,
+            "external_action_routed": action_routed,
+            "external_content_routed": content_routed,
             "paired_competition": paired,
             "accept_general": (
                 comp["balanced_accuracy_delta"] >= -max_competition_loss
@@ -148,6 +177,12 @@ def analyze(
             "accept_routed": (
                 comp["balanced_accuracy_delta"] >= -max_competition_loss
                 and routed["macro_delta"] >= min_external_gain
+            ),
+            "accept_action_route": (
+                accepts_action_route(action_routed, external["action_router"])
+            ),
+            "accept_content_route": (
+                accepts_action_route(content_routed, external["action_router"])
             ),
         }
     return report
