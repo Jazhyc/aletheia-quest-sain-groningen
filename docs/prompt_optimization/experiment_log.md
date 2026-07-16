@@ -2198,7 +2198,7 @@ judge/output disagreement rule. No local-test labels were used. Reproduction cod
 `experiments/blackbox/audit_judge_output_consistency.py`; the ignored train
 generations are under the selected adapter's `train_rule_audit_v1/` directory.
 
-## Phoenix Wright v2.2 official submission
+## Phoenix Wright v2.2 submission notebook
 
 The submission notebook was versioned from v2.1 to
 `submission/phoenix_wright_v2_2.ipynb`. The bundled trained adapter remains
@@ -2211,7 +2211,17 @@ Phoenix v2.1; v2.2 identifies the submission-time logic added afterward:
 - the ontology-specific physical-state experiment is not included.
 
 The rename preserves the single-notebook contract. Python parser tests and
-notebook JSON/code-cell validation passed before the official run.
+notebook JSON/code-cell validation passed before the earlier submission
+rehearsal.
+
+The later 2026-07-16 optimization keeps the same bundled adapter but materially
+updates inference: reasoning traces are shown through a conditional untrusted-
+evidence prompt, a one-line binary member is max-ensembled with the compact
+summary judgment, and the NDIF path uses `LanguageModel`, length sorting,
+dynamic padding, a 2,048-token input cap, and length-aware batch tiers. The
+ensemble was selected on validation and scored 0.9274 BA on its single locked
+local-test run; it has not received an official leaderboard score. Do not
+attribute these changes to the earlier v2.2 preparation note.
 
 ## Qwen3.5-9B NDIF generation capacity
 
@@ -2247,3 +2257,54 @@ the sweep, under either the old vision-language path or the new language path.
 Batch 8 is therefore the production setting; do not raise it to the measured
 batch-11 edge until the exact pinned language-model adapter deployment passes a
 rehearsal.
+
+### Dynamic-padding adapter rehearsal (2026-07-16)
+
+The fixed-padding boundary above is not the operative limit after the NDIF
+language-model update. Phoenix v2.2 was changed to length-sort each dataset unit
+and pad each batch only to its longest rendered prompt. The exact bundled
+rank-16 adapter, conditional 4,000-character reasoning prompt, 2,048-token input
+cap, and 512-token generation cap then passed both local and remote rehearsals.
+
+Remote results were:
+
+| batch/request shape | rows | wall time | result |
+| --- | ---: | ---: | --- |
+| batch 16 then 1 | 17 | 86.3s | pass |
+| batch 32 | 32 | 35.9s | pass |
+| batch 64 | 64 | 34.8s | pass |
+
+All small-prefix runs wrote valid `index,deceptive,score` files with scores in
+`[0, 1]`, but they were not representative capacity tests. A later full
+400-row rehearsal rendered 800 prompts for the summary/binary ensemble. Batch
+64 OOMed immediately. Length-sorted batch 32 passed through 1,399 tokens but
+OOMed at shape `(32, 1416)`, even after isolating every request in its own
+NNsight session. The failure is therefore per-request activation memory rather
+than retained remote-session state.
+
+The final adaptive schedule is:
+
+| rendered prompt length | batch cap |
+| ---: | ---: |
+| at most 1,300 tokens | 32 |
+| 1,301--1,600 tokens | 24 |
+| above 1,600 tokens | 16 |
+
+With one remote request per session, this completed the full 400-row unit and
+wrote a valid submission. Its predictions agreed on all 40 labeled validation
+rows with the matched shared-vLLM summary/binary ensemble; both scored 0.9500
+BA on that dataset unit. A subsequent full-unit rehearsal grouped two adjacent
+generation requests into each remote session. It also completed all 800 prompts,
+wrote all 400 rows, and retained the same 40/40 vLLM agreement, so two requests
+per session became the deployment default. This reduces session setup and queue
+events without changing the certified per-request batch caps. The notebook
+retains `PHOENIX_*` overrides for diagnostics. Do not restore batch 64 based on
+the small-prefix timings or
+compare these dynamic, length-sorted results to the old fixed-context sweeps as
+though only batch size changed.
+
+The final code separates summary and binary members into their own generation
+passes, allowing the one-line member's batches to terminate after three tokens.
+The complete 400-row rehearsal passed again under this exact code and retained
+100% agreement with the vLLM ensemble on the 40 labeled rows. A staged official
+`submit.py --dry --limit 32` run completed all 21 dataset units in 14m06s.

@@ -13,6 +13,7 @@ from experiments.privileged_information_distillation.core import (
     format_student_target,
     parse_counterfactual_teacher_target,
     route_reference_material,
+    truncate_text,
 )
 from experiments.privileged_information_distillation.generate_teacher_data import (
     filter_teacher_rows_by_dataset,
@@ -46,6 +47,22 @@ def test_build_student_prompt_includes_head_tail_reasoning_when_requested() -> N
     assert "[... middle truncated ...]" in prompt
 
 
+def test_asymmetric_head_tail_truncation_changes_only_the_split() -> None:
+    text = "abcdefghijklmnopqrstuvwxyz" * 10
+
+    tail_heavy = truncate_text(text, 100, "head_tail_25")
+    balanced = truncate_text(text, 100, "head_tail")
+    head_heavy = truncate_text(text, 100, "head_tail_75")
+
+    assert len(tail_heavy) == len(balanced) == len(head_heavy) == 100
+    assert len(tail_heavy.split("\n\n[... middle truncated ...]\n\n")[0]) < len(
+        balanced.split("\n\n[... middle truncated ...]\n\n")[0]
+    )
+    assert len(head_heavy.split("\n\n[... middle truncated ...]\n\n")[0]) > len(
+        balanced.split("\n\n[... middle truncated ...]\n\n")[0]
+    )
+
+
 def test_build_student_prompt_omits_missing_or_disabled_reasoning() -> None:
     messages = [
         {"role": "user", "content": "Question"},
@@ -69,6 +86,28 @@ def test_build_student_prompt_omits_missing_or_disabled_reasoning() -> None:
 
     assert "<assistant_reasoning>" not in missing
     assert "<assistant_reasoning>" not in disabled
+
+
+def test_build_student_prompt_can_avoid_duplicate_final_output() -> None:
+    messages = [
+        {"role": "assistant", "content": "Earlier answer"},
+        {"role": "user", "content": "Final question"},
+        {"role": "assistant", "content": "Final answer"},
+    ]
+
+    prompt = build_student_prompt(
+        messages,
+        "JUDGE",
+        1000,
+        "tail",
+        exclude_final_output_from_context=True,
+    )
+
+    context, output = prompt.split("\n\n<output>\n", maxsplit=1)
+    assert "Earlier answer" in context
+    assert "Final question" in context
+    assert "Final answer" not in context
+    assert output.startswith("Final answer\n</output>")
 
 
 def test_parse_counterfactual_target_with_privileged_prediction_fallback() -> None:

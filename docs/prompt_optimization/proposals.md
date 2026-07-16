@@ -1088,5 +1088,69 @@ Decision:
   especially vulnerable to selection noise.
 - Retain the audit only as a rejected diagnostic. Do not extend the value
   vocabulary post hoc. Any new mutually exclusive
-  category family must independently satisfy train precision and frozen
-  validation improvement without using local-test labels for selection.
+category family must independently satisfy train precision and frozen
+validation improvement without using local-test labels for selection.
+
+## P31: Conditional Reasoning-Trace Distillation and Dual Readout
+
+Status: completed; inference interface selected, trace-training update rejected.
+
+Motivation:
+
+- Every local varied-deception row contains a Qwen assistant reasoning trace,
+  while no instructed row contains one. The first trace-aware student used its
+  trace-specific instruction even on missing-trace instructed rows, confounding
+  weight effects with an interface mismatch.
+- A matched design must condition the prompt on actual trace presence, preserve
+  instructed/multi-family controls, and separate teacher-target effects from
+  prediction-time trace visibility.
+
+Experiment:
+
+- Generate GPT-OSS post-hoc summaries from untrusted 2,400-character balanced
+  head/tail trace excerpts, explicitly warning the teacher not to copy trace
+  facts without independent verification.
+- Cross fresh versus continued SFT, varied-only versus mixed data, original
+  versus trace-conditioned targets, full trace versus deterministic 50%
+  dropout, and conditional versus always-on prompt interfaces.
+- Reuse the selected original varied-only adapter as a zero-shot trace reader
+  and sweep 1,200--6,000 reasoning characters plus asymmetric head/tail views.
+- Compare the structured summary output with a 32-token one-line binary
+  readout, then lock any ensemble on validation before one local-test run.
+
+Outcome:
+
+- Conditional ordinary prompting recovered the apparent instructed collapse.
+  The unchanged original adapter was a better trace reader than every matched
+  trace-trained student; 4,000 balanced head/tail characters was the selected
+  input representation.
+- Mixed data and trace dropout preserved instructed calibration but did not
+  increase varied recall enough to beat zero-shot trace exposure. The fully
+  crossed mixed/dropout adapter tied, rather than exceeded, the original
+  adapter's 0.9238 validation ensemble BA.
+- A 25/50/75% dropout bracket plus a second 50% mask showed that the favorable
+  0.9190 seed-0 result is mask-sensitive: the other three runs scored
+  0.9143--0.9155 BA. Dropout is a robustness control, not a selected accuracy
+  improvement.
+- The matched one-epoch LR sweep retained `5e-5` as the best rate; two epochs
+  at `2e-5` recovered to 0.9155 BA but still trailed one epoch at `5e-5`.
+- Summary and one-line readouts had complementary errors. Their max ensemble
+  scored 0.9238 validation BA and, in the single locked local-test run, 0.9274
+  overall BA with 0.8694 varied BA, 0.8929 recall, 0.0381 FPR, and no ensemble
+  parse errors.
+- On all 6,573 train rows, summary alone scored 0.8942 macro BA and the max
+  ensemble reached 0.9032. The binary member made 104 fixes and 77 breaks. A
+  stricter concrete-output-evidence rewrite reduced FPR but lost too much
+  recall and tied the original max ensemble on validation.
+- Training context was not binding: complete trace-SFT prompt-plus-target rows
+  had maximum length 2,044 against a 4,608-token limit. Longer input and wording
+  changes did not repair the supporting-detail factual failures.
+
+Decision:
+
+- Keep the original adapter weights. Deploy conditional trace prompting,
+  4,000-character balanced excerpts, and the summary/binary max readout.
+- Do not replace the adapter with the trace-conditioned, mixed, dropout,
+  continued, detail-hard, blended, or RAG variants tested here.
+- Treat the result as Qwen-varied specialization, not cross-family evidence:
+  the local varied split has no Gemma or Nemotron examples.

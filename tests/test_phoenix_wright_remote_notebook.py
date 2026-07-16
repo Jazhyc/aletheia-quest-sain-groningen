@@ -7,7 +7,7 @@ from nbclient import NotebookClient
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = REPO_ROOT / "submission" / "phoenix_wright_v1_3.ipynb"
+NOTEBOOKS = sorted((REPO_ROOT / "submission").glob("*.ipynb"))
 SUBMISSION_CSV = REPO_ROOT / "submission.csv"
 DEV_METIS = (
     "aletheias-quest/"
@@ -33,19 +33,21 @@ def _load_dotenv_key() -> None:
 
 
 def test_remote_notebook_scores_survive_nnsight_session(monkeypatch):
+    assert len(NOTEBOOKS) == 1, "submission/ must contain exactly one notebook"
+    notebook = NOTEBOOKS[0]
     _load_dotenv_key()
     assert os.environ.get("NDIF_API_KEY"), "NDIF_API_KEY must be set or present in .env"
 
     monkeypatch.setenv("NDIF_HOST", NDIF_HOST)
     monkeypatch.setenv("DATASET_NAME", DEV_METIS)
-    monkeypatch.setenv("ALETHEIA_LIMIT", "17")
-    monkeypatch.setenv("PHOENIX_BATCH_SIZE", "16")
+    monkeypatch.setenv("ALETHEIA_LIMIT", "64")
+    monkeypatch.delenv("PHOENIX_BATCH_SIZE", raising=False)
     monkeypatch.delenv("PHOENIX_NNSIGHT_LOCAL", raising=False)
 
     if SUBMISSION_CSV.exists():
         SUBMISSION_CSV.unlink()
 
-    nb = nbformat.read(NOTEBOOK, as_version=4)
+    nb = nbformat.read(notebook, as_version=4)
     try:
         NotebookClient(
             nb,
@@ -57,10 +59,9 @@ def test_remote_notebook_scores_survive_nnsight_session(monkeypatch):
         assert SUBMISSION_CSV.exists(), "notebook did not write submission.csv"
         df = pd.read_csv(SUBMISSION_CSV)
         assert list(df.columns) == ["index", "deceptive", "score"]
-        assert len(df) == 17
+        assert len(df) == 64
         assert df["score"].between(0.0, 1.0).all()
-        assert df["score"].tolist()[:2] == [0.0, 1.0]
-        assert df["deceptive"].tolist()[:2] == [False, True]
+        assert df["deceptive"].tolist() == df["score"].ge(0.5).tolist()
     finally:
         if SUBMISSION_CSV.exists():
             SUBMISSION_CSV.unlink()

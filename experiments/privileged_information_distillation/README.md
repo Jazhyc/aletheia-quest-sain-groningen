@@ -123,11 +123,63 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   student.training.learning_rate=5e-5
 ```
 
+Reasoning-aware SFT supports deterministic per-row trace dropout. The mask is
+stable under row reordering because it hashes the seed, dataset, and index:
+
+```bash
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  --config-name privileged_information_distillation_reasoning_traces \
+  student.reasoning_dropout_probability=0.5
+```
+
+Use `privileged_information_distillation_reasoning_mixed` to combine disjoint
+instructed targets from the reviewed original cache with varied targets from
+the reasoning-aware cache. The loader rejects duplicate dataset/index keys.
+Reasoning configs also carry `student.prompt_without_reasoning`: rows with an
+observable trace use the trace-aware instruction, while no-trace rows use the
+ordinary judge instruction. When dropout removes a trace during SFT, it also
+selects the ordinary instruction.
+
+To isolate student trace visibility from trace-conditioned teacher summaries,
+compose trace-visible prompts with the original reviewed teacher targets:
+
+```bash
+python experiments/privileged_information_distillation/compose_student_cache.py \
+  --prompt-cache results/blackbox/qwen9b_pid_reasoning_headtail2400_variedonly_adamw5e5_v1/teacher/train.jsonl \
+  --target-cache results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/teacher/train.jsonl \
+  --output results/blackbox/qwen9b_pid_reasoning_studentonly_v1/teacher/train.jsonl \
+  --dataset-name-contains varied-deception
+```
+
+The `reasoning_student_only` and `reasoning_student_only_mixed` configs consume
+that cache. For controlled continuation rather than a fresh LoRA, set
+`student.init_adapter` to an existing adapter directory and use a lower matched
+learning rate.
+
+To construct the compact false-supporting-detail continuation set, select only
+training positives whose reviewed GPT-OSS summary explicitly describes a
+correct answer followed by a false added detail, then add deterministic honest
+controls:
+
+```bash
+python experiments/privileged_information_distillation/select_detail_hard_cache.py \
+  --input results/blackbox/qwen9b_pid_reasoning_studentonly_v1/teacher/train.jsonl \
+  --output results/blackbox/qwen9b_pid_reasoning_studentonly_detailhard_v1/teacher/train.jsonl \
+  --negative-ratio 1.0 --seed 0
+```
+
+The `reasoning_detail_hard_continue` config continues the selected original
+adapter on this cache. Treat it as a narrow claim-salience ablation and retain
+the honest controls; selecting every factual error or training only positives
+would conflate factual incorrectness with deception and inflate FPR.
+
 The completed varied-only run used 2,877 targets. It scored 0.7944 varied BA
 on full validation and 0.8278 on local test, versus 0.8056 and 0.8167 for the
 selected mixed-data adapter. Instructed BA remained 0.9792/0.9812, respectively.
-The effect is small and reverses across splits, so retain the mixed adapter as
-the validation-selected default.
+The effect is small and reverses across splits. Subsequent matched Muon runs
+reproduced the mixed adapter on test and did not improve it, so the one-epoch
+varied-only AdamW adapter remains the default test reference and the starting
+point for later reasoning-trace ablations.
 
 The SFT collator masks every prompt token with `-100`, so loss applies only to
 the concise teacher target. The default is a rank-16/alpha-32 LoRA over Qwen
@@ -164,7 +216,7 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   student.training.num_train_epochs=1
 ```
 The final adapter is written under
-`results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/adapter/`.
+`results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/adapter/`.
 
 Evaluate the full learning-rate sweep on validation with one shared vLLM model
 load:
@@ -179,6 +231,99 @@ generates up to 512 tokens deterministically, and parses the final explicit
 `validation/` directory. Results include macro metrics for all datasets and
 separate instructed/varied scenario aggregates.
 
+For an inference-only latency control, override both conditional prompts with
+the prediction-first config and cap generation at 32 tokens:
+
+```bash
+sbatch experiments/privileged_information_distillation/evaluate_student_sft.sh \
+  --adapter-dir results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/adapter \
+  --split validation --run-name validation_reasoning_binary4000_t32_v1 \
+  --prompt-config configs/privileged_information_distillation_reasoning_binary4000.yaml \
+  --max-new-tokens 32
+```
+
+This is a speed ablation, not the accuracy default. It scored 0.9143 BA with
+zero parse errors versus roughly 0.922--0.924 for the full summary path. Its
+errors are complementary, however. Evaluate and max-aggregate both prompts in
+one vLLM load with:
+
+```bash
+sbatch experiments/privileged_information_distillation/evaluate_student_sft.sh \
+  --adapter-dir results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/adapter \
+  --split validation --run-name validation_reasoning4000_summary_binary_or_v1 \
+  --prompt-config configs/privileged_information_distillation_reasoning_traces.yaml \
+  --prompt-without-reasoning-config configs/privileged_information_distillation.yaml \
+  --prompt-condition summary=configs/privileged_information_distillation_reasoning_base4000.yaml \
+  --prompt-condition binary=configs/privileged_information_distillation_reasoning_binary4000.yaml \
+  --aggregate-max
+```
+
+The shared validation run scored 0.9238 BA for the max ensemble versus 0.9202
+for its summary member and 0.9143 for binary alone. The ensemble result and
+member columns are written under `max_aggregate/`.
+
+After the fully crossed mixed/dropout control tied this validation result, the
+original adapter ensemble was locked for one held-out test run. It scored
+0.9274 overall BA, 0.9708 instructed BA, and 0.8694 varied BA, with 0.8929
+recall, 0.0381 FPR, and zero ensemble parse errors.
+
+A final all-train calibration scored 0.8942 BA for summary alone and 0.9032
+for the max ensemble. The binary member made 104 fixes and 77 breaks relative
+to the summary, so its recall contribution is not confined to the smaller
+validation/test splits. A stricter output-evidence binary prompt reduced
+validation FPR but collapsed recall and tied, rather than improved, the max
+ensemble. Retain `privileged_information_distillation_reasoning_binary4000.yaml`
+as the deployment member; the `binary_output_guard4000` config is a documented
+negative control.
+
+For the fully mixed, conditional-prompt, 50%-dropout recipe, a matched
+one-epoch AdamW sweep scored 0.9107, 0.9190, and 0.9119 validation BA at
+`2e-5`, `5e-5`, and `1e-4`. Keep `5e-5` for fresh one-epoch SFT; changing the
+data/interface did not move the established optimum. Two epochs at `2e-5`
+reached 0.9155 BA, so extra lower-rate updates only partially closed the gap.
+
+Dropout is not a validated accuracy knob. At `5e-5`, 25%, 50% (seed 0), and
+75% dropout scored 0.9155, 0.9190, and 0.9155 BA, while a second 50% mask
+scored 0.9143. Use deterministic dropout when robustness to missing traces is
+the experimental objective, not because the favorable seed-0 mask reliably
+improves the judge.
+
+`privileged_information_distillation_reasoning_compact_context4000.yaml`
+removes the duplicate final answer from `<context>` while preserving `<output>`.
+It saved about 56 tokens per validation prompt and 2.9s of generation time, but
+made five varied fixes and nine varied breaks in the exact paired run. It is a
+documented negative control, not a deployment config.
+
+The submission notebook can be rehearsed locally through a real Jupyter kernel
+with the bundled adapter and `LanguageModel` wrapper:
+
+```bash
+sbatch experiments/privileged_information_distillation/run_submission_local_smoke.sh
+```
+
+Its deployment defaults are 4,000 reasoning characters, 2,048 input tokens,
+512 generated tokens, and length-sorted dynamic padding. NDIF rehearsal on the
+full 400-row varied-Qwen unit established three batch tiers: 32 rows through
+1,300 prompt tokens, 24 through 1,600, and 16 above 1,600. Batch 64 and an
+untiered batch 32 both OOMed on the full unit even though smaller prefix smokes
+passed. Summary and one-line members
+run as separate passes so the binary batches can stop after their three-token
+completion. The exact final path passed the 400-row rehearsal and matched vLLM
+on all 40 labeled rows. A second full-unit rehearsal grouped two adjacent
+generation requests per NNsight session, again wrote all 400 rows, and retained
+the same 40/40 agreement; two is now the default to reduce remote session
+overhead without increasing any batch cap. Override the tiers with the
+corresponding `PHOENIX_*`
+environment variables only when isolating an NDIF regression. The remote
+notebook smoke in
+`tests/test_phoenix_wright_remote_notebook.py` loads `NDIF_API_KEY` from `.env`
+and should be run deliberately because it opens a real remote session.
+
+The final staged `python submit.py --dry --limit 32` rehearsal completed all 21
+configured dataset units in 14m06s. Because each first-32 prefix is label-zero,
+use this run to validate packaging, remote execution, and FPR only—not as a
+balanced-accuracy estimate.
+
 To isolate inference-time use of an assistant trace after training a
 reasoning-aware adapter, hide only that input field and write a separate
 validation artifact:
@@ -191,6 +336,23 @@ sbatch experiments/privileged_information_distillation/evaluate_student_sft.sh \
 
 This does not undo trace-conditioned teacher targets or SFT; it only removes
 `<assistant_reasoning>` while rendering evaluation prompts.
+
+The evaluator can batch prompt/context controls into one model load. For
+example, compare reasoning excerpt sizes or named prompt configs with repeated
+`--reasoning-input-condition NAME=MAX_CHARS:MODE` or
+`--prompt-condition NAME=CONFIG_PATH`. Use
+`--prompt-without-reasoning-config configs/privileged_information_distillation.yaml`
+to keep no-trace rows on the ordinary prompt.
+
+Compatible LoRA deltas can be blended and truncated back to a submission-sized
+rank with a low-rank SVD that never materializes full projection matrices:
+
+```bash
+python experiments/privileged_information_distillation/merge_lora_adapters.py \
+  --adapter 0.5:results/blackbox/<ordinary>/adapter \
+  --adapter 0.5:results/blackbox/<reasoning>/adapter \
+  --output results/blackbox/<merged>/adapter
+```
 
 To test whether a binary distilled student retains continuous ranking signal,
 request constrained next-token margins in the same evaluation:

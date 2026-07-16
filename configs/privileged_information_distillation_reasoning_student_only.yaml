@@ -1,0 +1,20 @@
+# @package _global_
+
+defaults:
+  - privileged_information_distillation_reasoning_traces
+  - _self_
+
+method: qwen9b_pid_reasoning_studentonly_varied_adamw5e5_v1
+output_dir: results/blackbox/${method}
+
+teacher:
+  # Keep teacher generation pointed at the reviewed trace-aware cache. The
+  # composed student-only cache below must never be regenerated as teacher data.
+  artifact: results/blackbox/qwen9b_pid_reasoning_headtail2400_variedonly_adamw5e5_v1/teacher/${teacher.split}.jsonl
+
+student:
+  dataset_name_contains: null
+  teacher_sources:
+    - artifact: results/blackbox/qwen9b_pid_reasoning_studentonly_v1/teacher/train.jsonl
+      dataset_name_contains: varied-deception
+  override_cached_prompt: true

@@ -33,7 +33,10 @@ teacher:
 
 student:
   model: Qwen/Qwen3.5-9B
+  init_adapter: null
   target_mode: teacher
+  teacher_sources: null
+  override_cached_prompt: false
   train_limit: null
   dataset_name_contains: null
   max_prompt_chars: 3000
@@ -41,6 +44,9 @@ student:
   include_reasoning: false
   reasoning_max_chars: 0
   reasoning_truncation: head_tail
+  exclude_final_output_from_context: false
+  reasoning_dropout_probability: 0.0
+  reasoning_dropout_seed: ${seed}
   max_length: 4608
   output_dir: ${output_dir}/adapter
   prompt: |-

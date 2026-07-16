@@ -11,14 +11,19 @@ if str(ROOT) not in sys.path:
 from experiments.privileged_information_distillation.evaluate_student_sft import (
     COUNTERFACTUAL_STRICT_RE,
     PREDICTION_ONLY_STRICT_RE,
+    apply_student_prompt_config,
     binary_score_from_logprobs,
     binary_token_ids,
     comparable_student_settings,
     load_retrieval_cache,
+    max_aggregate_evaluations,
+    parse_reasoning_input_condition,
+    parse_prompt_condition,
     parse_retrieval_condition,
     parse_prediction,
     prefix_before_prediction,
     set_reasoning_visibility,
+    strict_pattern_for_config,
 )
 from experiments.privileged_information_distillation.analyze_continuous_margins import (
     rank_fraction_predictions,
@@ -36,6 +41,85 @@ def test_parse_prediction_rejects_unstructured_binary_text() -> None:
 
 def test_parse_prediction_accepts_literal_placeholder_brackets() -> None:
     assert parse_prediction("Prediction:<0>") == 0
+
+
+def test_apply_student_prompt_config_overrides_conditional_prompt(tmp_path) -> None:
+    path = tmp_path / "prompt.yaml"
+    path.write_text(
+        "student:\n"
+        "  prompt: trace prompt\n"
+        "  prompt_without_reasoning: ordinary prompt\n"
+        "  exclude_final_output_from_context: true\n"
+        "  target_mode: prediction_only\n"
+    )
+    config = {"student": {"prompt": "old", "prompt_without_reasoning": "old fallback"}}
+
+    apply_student_prompt_config(config, path)
+
+    assert config["student"]["prompt"] == "trace prompt"
+    assert config["student"]["prompt_without_reasoning"] == "ordinary prompt"
+    assert config["student"]["exclude_final_output_from_context"] is True
+    assert config["student"]["target_mode"] == "prediction_only"
+    assert strict_pattern_for_config(config) is PREDICTION_ONLY_STRICT_RE
+
+
+def test_max_aggregate_evaluations_aligns_rows_and_preserves_members() -> None:
+    first = pd.DataFrame([
+        {
+            "dataset": "d",
+            "index": 1,
+            "label": 1,
+            "score": 0.0,
+            "parse_error": False,
+            "format_valid": True,
+            "generation": "Prediction:0",
+            "prompt_sha256": "a1",
+        },
+        {
+            "dataset": "d",
+            "index": 2,
+            "label": 0,
+            "score": 0.0,
+            "parse_error": True,
+            "format_valid": False,
+            "generation": "",
+            "prompt_sha256": "a2",
+        },
+    ])
+    second = pd.DataFrame([
+        {
+            "dataset": "d",
+            "index": 2,
+            "label": 0,
+            "score": 0.0,
+            "parse_error": False,
+            "format_valid": True,
+            "generation": "Prediction:0",
+            "prompt_sha256": "b2",
+        },
+        {
+            "dataset": "d",
+            "index": 1,
+            "label": 1,
+            "score": 1.0,
+            "parse_error": False,
+            "format_valid": True,
+            "generation": "Prediction:1",
+            "prompt_sha256": "b1",
+        },
+    ])
+
+    result = max_aggregate_evaluations({"summary": first, "binary": second})
+
+    assert result["score"].tolist() == [1.0, 0.0]
+    assert result["prediction"].tolist() == [1.0, 0.0]
+    assert result["parse_error"].tolist() == [False, False]
+    assert result["summary_score"].tolist() == [0.0, 0.0]
+    assert result["binary_score"].tolist() == [1.0, 0.0]
+    assert json.loads(result.loc[0, "generation"]) == {
+        "summary": "Prediction:0",
+        "binary": "Prediction:1",
+    }
 
 
 def test_load_retrieval_cache_formats_passages(tmp_path) -> None:
@@ -125,6 +209,31 @@ def test_parse_retrieval_condition_supports_empty_and_named_fields(tmp_path) -> 
         "shuffled",
         (tmp_path / "cache.jsonl").resolve(),
         "shuffled_passages",
+    )
+
+
+def test_parse_reasoning_input_condition() -> None:
+    assert parse_reasoning_input_condition("long=4000") == (
+        "long",
+        4000,
+        "head_tail",
+    )
+    assert parse_reasoning_input_condition("head=1200:head") == (
+        "head",
+        1200,
+        "head",
+    )
+    assert parse_reasoning_input_condition("tail_heavy=4000:head_tail_25") == (
+        "tail_heavy",
+        4000,
+        "head_tail_25",
+    )
+
+
+def test_parse_prompt_condition(tmp_path) -> None:
+    assert parse_prompt_condition("strict=config.yaml", tmp_path) == (
+        "strict",
+        (tmp_path / "config.yaml").resolve(),
     )
 
 

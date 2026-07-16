@@ -79,22 +79,48 @@ def truncate_text(text: str, max_chars: int, mode: str) -> str:
         return text[-max_chars:]
     if mode == "head":
         return text[:max_chars]
-    if mode == "head_tail":
+    if mode in {"head_tail", "head_tail_25", "head_tail_75"}:
         marker = "\n\n[... middle truncated ...]\n\n"
         available = max(0, max_chars - len(marker))
-        head = available // 2
+        head_fraction = {
+            "head_tail": 0.5,
+            "head_tail_25": 0.25,
+            "head_tail_75": 0.75,
+        }[mode]
+        head = int(available * head_fraction)
         return text[:head] + marker + text[-(available - head):]
     raise ValueError(f"unknown truncation mode: {mode}")
 
 
-def format_example(messages: Any, max_chars: int, truncation: str) -> tuple[str, str]:
+def format_example(
+    messages: Any,
+    max_chars: int,
+    truncation: str,
+    *,
+    exclude_final_assistant_from_context: bool = False,
+) -> tuple[str, str]:
     merged = merge_messages(messages)
-    output = next(
-        (message["content"] for message in reversed(merged) if message["role"] == "assistant"),
-        "",
+    final_assistant_index = next(
+        (
+            index
+            for index in range(len(merged) - 1, -1, -1)
+            if merged[index]["role"] == "assistant"
+        ),
+        None,
     )
+    output = (
+        merged[final_assistant_index]["content"]
+        if final_assistant_index is not None
+        else ""
+    )
+    context_messages = merged
+    if exclude_final_assistant_from_context and final_assistant_index is not None:
+        context_messages = (
+            merged[:final_assistant_index] + merged[final_assistant_index + 1:]
+        )
     context = "\n\n".join(
-        f"{message['role'].upper()}: {message['content']}" for message in merged
+        f"{message['role'].upper()}: {message['content']}"
+        for message in context_messages
     )
     return truncate_text(context, max_chars, truncation), output
 
@@ -108,8 +134,14 @@ def build_student_prompt(
     include_reasoning: bool = False,
     reasoning_max_chars: int = 0,
     reasoning_truncation: str = "head_tail",
+    exclude_final_output_from_context: bool = False,
 ) -> str:
-    context, output = format_example(messages, max_chars, truncation)
+    context, output = format_example(
+        messages,
+        max_chars,
+        truncation,
+        exclude_final_assistant_from_context=exclude_final_output_from_context,
+    )
     prompt = (
         f"{prompt_template}\n\n<context>\n{context}\n</context>"
         f"\n\n<output>\n{output}\n</output>"

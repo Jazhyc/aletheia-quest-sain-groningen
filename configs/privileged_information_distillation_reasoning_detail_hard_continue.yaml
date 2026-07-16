@@ -1,0 +1,17 @@
+# @package _global_
+
+defaults:
+  - privileged_information_distillation_reasoning_student_only
+  - _self_
+
+method: qwen9b_pid_reasoning_studentonly_detailhard_continue_adamw2e5_3ep_v1
+output_dir: results/blackbox/${method}
+
+student:
+  init_adapter: results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/adapter
+  teacher_sources:
+    - artifact: results/blackbox/qwen9b_pid_reasoning_studentonly_detailhard_v1/teacher/train.jsonl
+      dataset_name_contains: varied-deception
+  training:
+    learning_rate: 2.0e-5
+    num_train_epochs: 3.0

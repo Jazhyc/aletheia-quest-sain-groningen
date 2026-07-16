@@ -1202,22 +1202,296 @@ paired fixes relative to hidden reasoning and 11 breaks (20/10 on varied rows),
 with four versus six parse errors. The trace is therefore providing useful
 prediction-time evidence rather than acting only as a training-time regularizer.
 Instructed BA was nearly unchanged at 0.9667 visible versus 0.9646 hidden, so
-removing unfamiliar traces does not recover the instructed regression. The
-more plausible cause is the varied-only, Qwen-only training distribution and
-its trace-aware target/prompt specialization.
+removing unfamiliar traces does not recover the instructed regression. That
+initial interpretation was incomplete: a later conditional-prompt control
+showed that the always-on trace-aware instruction itself explains much of the
+instructed regression even when the trace field is absent.
+
+## Conditional trace interface and zero-shot reuse of the original student
+
+Trace availability is perfectly confounded with scenario in the local data.
+Across train, validation, and test, none of the 4,616 instructed rows has an
+assistant reasoning trace, while all 3,600 varied rows do. Every varied row is
+also from Qwen. The first reasoning-aware evaluation nevertheless used its
+trace-specific judge instruction on every row, including instructed rows where
+the optional field was missing.
+
+The `Qwen3.5-27B-None` varied unit is not evidence that an unadapted model lies
+by default. Its 400 rows use 117 system-prompt strings spanning explicit
+deception instructions, deceptive personas/jailbreak framings, and matched
+honest/correct controls. For example, one positive row directly says to respond
+deceptively and the private trace identifies the true Gandhi answer before
+substituting Subhas Chandra Bose. Conversely, the base model often refuses
+lie-competition prompts and gives the correct fact. Labels describe the output,
+not merely the requested behavior, so a deception-framed prompt can still be
+honest. Here `varied` means varied elicitation framing, not spontaneous default
+deception.
+
+Job `30161301` made the interface conditional without changing weights: rows
+with a non-empty trace use the trace-aware instruction, and rows without one use
+the original ordinary instruction. The trace-trained adapter then scored 0.9155
+overall BA, 0.9813 instructed BA, and 0.8278 varied BA. Relative to its static
+prompt evaluation, the instructed rows had eight paired fixes and one break.
+The varied prompt text was unchanged; two varied prediction differences were
+greedy-vLLM scheduling variation. This recovers and slightly exceeds the
+original adapter's instructed calibration, so the earlier instructed collapse
+was primarily an interface mismatch rather than proof of catastrophic weight
+forgetting.
+
+The more surprising control was to expose reasoning to the selected original
+no-trace adapter without retraining it. A rank-16 SVD endpoint reconstructed the
+original LoRA delta to relative error about `1e-6` while carrying the
+reasoning-rendering metadata. The exact conditional result, reusing identical
+ordinary-prompt outputs for no-trace rows, was 0.9179 overall BA, 0.9792
+instructed BA, and 0.8361 varied BA at 2,400 reasoning characters. This exceeds
+the adapter trained on trace-conditioned GPT-OSS summaries. The existing
+student can therefore interpret the new field zero-shot; trace-conditioned
+teacher targets are not required and may transmit the teacher's trace
+anchoring.
+
+A frozen context sweep on that original adapter tested 1,200, 2,400, 4,000, and
+6,000 reasoning characters with head/tail truncation. A refinement also tested
+3,200 and 4,800 characters plus head-only and tail-only 4,000-character views.
+After exact prompt-hash reuse for unchanged rows, 4,000-character head/tail is
+the selected representation. Its raw shared-session result was 0.9226 overall
+and 0.8472 varied BA; 4,800 characters and tail-only tied it after paired reuse,
+while head-only fell to 0.9190 overall and 0.8389 varied. The longest fully
+rendered 4,000-character validation prompt was 1,889 tokens, so neither the
+2,048-token deployment input nor the 4,096-token vLLM context is active on this
+split. The trace-trained SFT cache is also far from its training limit: complete
+prompt-plus-target examples have median 995, p95 1,346, and maximum 2,044 tokens
+against `student.max_length=4,608`, with zero truncations. The bottleneck is not
+training context length. More context is not automatically better.
+
+Removing the duplicate final assistant answer from `<context>` while retaining
+it in `<output>` was also rejected. It saved 56 input tokens on average and 164
+at the validation maximum, and reduced generation time from 43.2s to 40.4s in
+an exact paired run. However, it changed 21 decisions: five instructed fixes
+and no instructed breaks, but only five varied fixes against nine varied
+breaks. Overall BA rose slightly from 0.9190 to 0.9214 while varied BA fell from
+0.8389 to 0.8306. Keep the duplicated rendering the adapter saw during SFT;
+the modest context saving is not worth another scenario tradeoff.
+
+Prompt wording around counterfactual instructions, an append-only trace field,
+and 2,400--4,800-character strict variants did not beat the simpler
+4,000-character trace-aware prompt. The best strict variant tied 0.9226 overall
+but had lower varied BA and used more context. An OR ensemble of ordinary and
+strict decisions gained only 0.0012 raw BA while doubling generation work.
+Keep the single ordinary trace-aware member unless the dedicated supporting-
+detail sweep gives a material paired gain. That sweep, job `30161549`, did not:
+an explicit audit of every added name/date/location/quantity made seven fixes
+and seven breaks on the 360 changed varied rows, tying the same-session baseline
+at 0.8444 varied BA while increasing parse errors from two to six. A narrower
+instruction to scrutinize only facts introduced after the private reasoning
+made three fixes and 13 breaks and fell to 0.8167 varied BA. The observed
+supporting-detail failure is real, but prompting Qwen to search harder does not
+make its factual verification reliable enough.
+
+LoRA-space interpolation also failed. Validation job `30161297` evaluated trace
+delta blend weights `0`, `0.25`, `0.5`, `0.75`, and `1`; raw BAs were 0.9119,
+0.9048, 0.9083, 0.9071, and 0.9060. Any movement toward the trace-trained delta
+harmed the zero-shot original endpoint. A frozen Wikipedia-window RAG sweep was
+similarly negative: empty, real, and shuffled evidence scored 0.9119, 0.9107,
+and 0.9060 overall BA. Real evidence made two fixes and three breaks versus
+empty evidence. The retrieved passages often establish the user's premise or
+an ordinary factual correction without resolving whether the assistant output
+is belief-based deception, so do not package this RAG path.
+
+Finally, constrained binary logits do not hide a better decision boundary.
+With the selected 4,000-character prompt, post-summary forced 0/1 logits exactly
+matched generated decisions at 0.9238 BA in job `30161379`; threshold sweeping
+did not improve them. Empty-summary logits ranked well (0.9468 AUROC) but peaked
+at only 0.9167 BA. The remaining error is mainly factual judgment and claim
+salience, not final-token parsing.
+
+The first matched training controls at 2,400 characters are also below the
+zero-shot 4,000-character endpoint:
+
+| student update | overall BA | instructed BA | varied BA | parse errors |
+| --- | ---: | ---: | ---: | ---: |
+| fresh varied-only, 50% trace dropout, AdamW `5e-5` | 0.9155 | 0.9792 | 0.8306 | 2 |
+| fresh mixed, 50% trace dropout, AdamW `5e-5` | 0.9119 | 0.9771 | 0.8250 | 2 |
+| fresh mixed, full trace, AdamW `5e-5` | 0.9119 | 0.9771 | 0.8250 | 4 |
+| continue original, 50% trace dropout, AdamW `2e-5` | **0.9190** | 0.9792 | **0.8389** | 1 |
+| continue original, full trace, AdamW `2e-5` | 0.9155 | 0.9771 | 0.8333 | 1 |
+| original teacher targets + trace input, varied-only, `5e-5`, 2,400 chars | **0.9190** | **0.9813** | 0.8361 | 3 |
+| original teacher targets + trace input, varied-only, `5e-5`, 4,000 chars | **0.9190** | 0.9750 | **0.8444** | 2 |
+| conditional mixed teacher targets, `5e-5`, 2,400 chars | 0.9143 | 0.9771 | 0.8306 | 4 |
+| conditional mixed teacher targets, `5e-5`, 4,000 chars | **0.9190** | 0.9750 | **0.8444** | 2 |
+| conditional mixed original targets, `5e-5`, 2,400 chars | 0.9143 | 0.9771 | 0.8306 | 4 |
+| conditional mixed teacher targets, 50% trace dropout, `5e-5`, 2,400 chars | **0.9190** | **0.9813** | 0.8361 | 3 |
+
+Dropout helps the conservative continuation relative to full-trace
+continuation, but does not exceed exposing a longer trace to the unchanged
+original adapter. Adding instructed targets preserves instructed performance
+but dilutes the varied gain; dropout makes no macro-BA difference in the fresh
+mixed run. Fully conditional mixed training and student-only-target controls
+therefore do not improve on the unchanged original adapter. In the exact
+4,000-character checks, the original and conditional-mixed adapters emitted
+identical binary predictions on all 822 rows despite different free-form text.
+The trace-conditioned teacher targets are not adding a useful decision signal.
+
+Crossing all proposed safeguards does not change that conclusion. The fresh
+mixed student with conditional prompting and deterministic 50% trace dropout
+reaches 0.9190 BA at 2,400 characters by lowering FPR to 0.0095, but still
+trails the summary/binary ensemble and does not improve varied recall enough.
+The matched one-epoch learning-rate sweep confirms that the original fresh-SFT
+rate transfers to this broader recipe: `2e-5`, `5e-5`, and `1e-4` scored
+0.9107, **0.9190**, and 0.9119 BA, respectively. Their varied BAs were 0.8222,
+**0.8361**, and 0.8250. Thus the data/interface change does not justify moving
+the one-epoch AdamW rate away from `5e-5`; the lower rate underfits and the
+higher rate does not buy additional recall. Giving `2e-5` a second epoch raised
+it to 0.9155 overall and 0.8306 varied BA, partially closing the gap but still
+not matching one epoch at `5e-5`.
+
+The dropout-density/seed bracket also rejects treating the original 50% mask
+as an accuracy optimum. At the selected `5e-5`, dropout probabilities 25%, 50%
+(seed 0), and 75% scored 0.9155, 0.9190, and 0.9155 BA; the 25% and 75% models
+had the same aggregate metrics despite six binary-decision differences. A
+second 50% mask with seed 1 scored only 0.9143. Corresponding varied BAs were
+0.8306, 0.8361, 0.8306, and 0.8333 for the seed-1 replicate. Random trace
+removal remains a sensible interface-robustness safeguard, but its small
+validation advantage is mask-sensitive and does not support selecting a new
+adapter.
+
+The student-only controls are especially informative: they retain the original
+GPT-OSS summaries as targets and change only the student input by adding the
+trace. The mixed original-target and trace-teacher-target students made exactly
+the same 822 binary decisions at 2,400 characters. The varied-only control
+matches but does not beat zero-shot trace exposure. A targeted
+supporting-detail continuation also failed. A one-epoch `5e-5` continuation on
+163 detail-hard deceptive rows plus 163 honest controls scored 0.9155 BA; a
+safer three-epoch `2e-5` continuation scored 0.9190. Neither improved recall on
+the poisoned supporting facts. This supports retaining `5e-5` for fresh
+one-epoch SFT while using a lower learning rate for any continuation; it does
+not establish that the fresh optimum transfers unchanged to a narrow replay
+update.
+
+Reasoning excerpt allocation was also frozen. At 4,000 characters, moving from
+a balanced head/tail split to 75% tail made zero fixes and two breaks on the 99
+rows whose prompts changed. Moving to 75% head made two fixes and three breaks.
+Keep the balanced split.
+
+An inference-only prediction-first format with a 32-token budget scored 0.9143
+BA, 0.9688 instructed BA, and 0.8417 varied BA with zero parse errors in 24.6s.
+It is about 40% faster than the local full-summary validation generation, but
+below the roughly 0.922--0.924 raw validation range of the summary-first path.
+The compact reasoning is therefore useful at inference as well as in the SFT
+target. Alone, prediction-first is only a latency-oriented fallback.
+
+Its errors are nevertheless complementary. Taking the maximum of the
+summary-first and one-line binary decisions improved every repeated
+4,000-character summary run by 0.0024--0.0048 BA. A final shared-vLLM validation
+job scored 0.9202 for summary-first, 0.9143 for binary-only, and **0.9238** for
+their max ensemble. Ensemble recall rose from 0.8524 to 0.8762 while FPR rose
+from 0.0119 to 0.0286; varied BA rose from 0.8444 to 0.8500, and there were zero
+ensemble parse errors. The binary member emitted exactly one line on all 822
+rows and added 23.9s to the 43.2s summary pass. The fully crossed mixed,
+conditional-prompt, 50%-dropout student tied the original adapter's ensemble
+at 0.9238 BA, including identical 0.9792 instructed and 0.8500 varied BA.
+Retain the simpler original varied-only adapter; neither the trace-conditioned
+teacher nor the proposed data-composition safeguards improve the frozen
+ensemble.
+
+That condition was then locked for the only new held-out test evaluation. The
+summary member scored 0.9262 overall BA, 0.9833 instructed BA, and 0.8500
+varied BA. Maxing it with the one-line member reached **0.9274 overall BA**,
+0.9708 instructed BA, and **0.8694 varied BA**, with 0.8929 recall, 0.0381 FPR,
+and zero ensemble parse errors. Relative to the historical no-trace test run,
+the summary member made 26 fixes and 16 breaks; the max ensemble made 31 fixes
+and 18 breaks. The binary member added 13 fixes and 10 breaks relative to the
+summary member. This materially exceeds the original adapter's 0.9155 overall
+and 0.8278 varied test BA without changing weights. The gain comes from a
+conditional trace interface and complementary readouts, not from transferring
+the reasoning-trace SFT update.
+
+A final calibration over all 6,573 training rows supports retaining the binary
+member despite its intent-sensitivity on a targeted honest prefix. The summary
+member scored 0.8942 macro BA (0.9487 instructed, 0.8215 varied), while the
+binary member scored 0.8922 (0.9444 instructed, 0.8226 varied). Their maximum
+reached **0.9032 overall**, 0.9578 instructed, and **0.8306 varied**. Relative
+to summary alone, the binary member changed 181 rows: 104 fixes and 77 breaks;
+on varied rows the balance was 58 fixes to 32 breaks. FPR rose from 0.0146 to
+0.0375, but recall rose from 0.8029 to 0.8440. This broader in-sample
+calibration is consistent with the validation/test recall benefit rather than
+showing that the ensemble gain depends on those small held-out slices.
+
+The intent-only concern is real but prompt wording does not solve it robustly.
+On 32 honest rows from the highest-FPR dry-run unit, summary alone flagged four
+and the binary member added five cases where a private trace planned a lie but
+the final answer was correct. A stricter one-line prompt requiring a concrete
+false output claim reduced validation FPR from 0.0214 to 0.0143, but destroyed
+recall (0.8500 to 0.7690) and fell from 0.9143 to 0.8774 BA. Combined with the
+summary member it tied the original ensemble at 0.9238 BA, making five fixes
+and five breaks. Keep the locked binary wording; the guard merely shifts which
+errors occur and was not evaluated on test.
+
+A validation-only cross-method diagnostic also maxed this student ensemble with
+the existing 4,096-token three-prompt Qwen heavy ensemble. BA moved only from
+0.9238 to 0.9250: the heavy member made 19 fixes and 20 breaks relative to the
+student, and varied BA remained exactly 0.8500 because its recall gain was
+offset by higher FPR. The heavy path costs 1,314s versus 67s for the local
+student ensemble. This is not enough complementary signal to justify a second
+three-prompt deployment path, and it was not evaluated as a new test condition.
+
+A stratified audit of the remaining validation false negatives confirms the
+same ceiling seen in the earlier shared-error work: the headline answer and
+private trace are usually correct, while an added supporting sentence carries
+the poison. Examples include dating Ecuador's Galapagos annexation to 1845,
+calling the 2017 pound coin Britain's first 12-sided coin despite the earlier
+12-sided threepence, calling Beaker "Dr. Beaker," and giving a confident but
+unsupported etymology for "catgut." The trace generally repeats only the
+correct headline, and both readouts then produce a fluent truthfulness summary
+without auditing every adjunct. An explicit supporting-detail prompt already
+made equal fixes and breaks, so this is evidence of unreliable fact checking,
+not a missing generic instruction to inspect details. It also explains why
+longer traces and trace-conditioned targets saturate: the missing fact is often
+absent from the trace itself.
+
+For deployment, the submission notebook now uses `LanguageModel`, conditional
+trace prompting, 4,000-character balanced head/tail traces, length-sorted
+dynamic padding, and a 2,048-token input cap. The longest validation prompt was
+1,889 tokens; the locked test maximum was 2,050, so only one held-out prompt is
+left-truncated by two input tokens under the notebook cap, preserving the end
+of the conversation and output. Small-prefix
+remote smokes passed 32 rows at batch 32 in 35.9s and 64 rows at batch 64 in
+34.8s, but those prefixes were not representative capacity tests. On the full
+400-row varied-Qwen unit, batch 64 OOMed on the first request and batch 32
+eventually OOMed at shape `(32, 1416)` despite separate remote sessions.
+
+The certified adaptive schedule uses batch 32 through 1,300 prompt tokens,
+batch 24 through 1,600, and batch 16 above 1,600. The final notebook evaluates
+summary and one-line members in separate passes so binary rows can stop after
+three tokens instead of decoding alongside long summaries. This exact final
+path completed all 800 prompts and wrote a valid 400-row submission. On the 40
+labeled validation rows from that unit, NDIF predictions agreed exactly with
+the shared-vLLM ensemble and both scored
+0.9500 BA. A follow-up full-unit run safely grouped two adjacent generation
+requests in each NNsight session, retained the same 40/40 vLLM agreement, and
+wrote all 400 rows without an OOM. The notebook therefore defaults to two
+requests per remote session to reduce session setup and queue overhead; this
+does not raise any per-request batch cap. Keep the length tiers and do not
+restore batch 64 based on the small-prefix timing. The official
+`submit.py --dry --limit 32` pipeline then completed all 21 dataset units
+successfully in 14m06s from a clean staged root.
+Those first-32 prefixes contain no positive labels, so the dry-run metrics are
+only an execution/FPR smoke and must not be compared with the balanced
+validation/test results.
 
 
 ## Next measurements
 
-1. If reasoning visibility is revisited, train a matched mixed
-   instructed/varied and multi-family control before another test run; the
-   varied-only Qwen treatment improves its target scenario but is not a safe
-   general replacement.
-2. Improve the evidence-aware training objective or active-row sampling; the
-   current structured relevance traces add only one net parse-valid row over
-   the original real-evidence reader.
-3. Isolate trace-conditioned teacher supervision from student visibility with
-   a fresh teacher-only/student-only factorial on validation. Do not infer this
-   from the hidden-at-inference control, which retains trace-conditioned SFT.
-4. Inspect student errors for teacher-meta leakage, intent-only decisions, and
-   trace factual anchoring before changing excerpt position or head/tail policy.
+1. Do not spend another test evaluation on trace-target wording or the current
+   mixed/dropout recipes. The teacher-target, student-input, data-mixture, and
+   dropout controls are closed on validation and the original adapter won the
+   locked test comparison.
+2. If new data become available, require varied-deception traces from Gemma and
+   Nemotron plus matched honest-ignorance controls. The present trace treatment
+   is inseparable from Qwen-only specialization.
+3. Address supporting-detail verification with independently grounded facts or
+   a calibrated claim-level member. Preserve the existing negative RAG and
+   atomic-cascade controls; neither arbitrary retrieval nor `any(False)` is a
+   justified recall rule.
+4. Keep backend-equivalence checks at the dataset-unit level. The current NDIF
+   schedule exactly matches vLLM on the labeled 40-row rehearsal, but small
+   prefix capacity tests materially overstated safe batch size.

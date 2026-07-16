@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 from pathlib import Path
@@ -44,6 +45,57 @@ class CompletionOnlyCollator:
         }
 
 
+REASONING_BLOCK_START = "\n\n<assistant_reasoning>\n"
+REASONING_BLOCK_END = "\n</assistant_reasoning>"
+
+
+def has_reasoning_block(prompt: str) -> bool:
+    """Return whether a rendered student prompt ends in a reasoning field."""
+    start = prompt.rfind(REASONING_BLOCK_START)
+    return start >= 0 and prompt.rstrip().endswith(REASONING_BLOCK_END)
+
+
+def strip_reasoning_block(prompt: str) -> str:
+    """Remove the final rendered reasoning field without touching prompt prose."""
+    start = prompt.rfind(REASONING_BLOCK_START)
+    if start < 0 or not prompt.rstrip().endswith(REASONING_BLOCK_END):
+        return prompt
+    return prompt[:start]
+
+
+def should_drop_reasoning(
+    record: dict[str, Any],
+    probability: float,
+    seed: int,
+) -> bool:
+    """Choose a stable per-row trace-dropout mask independent of row order."""
+    if not 0.0 <= probability <= 1.0:
+        raise ValueError(
+            "student.reasoning_dropout_probability must be between 0 and 1"
+        )
+    if probability == 0.0:
+        return False
+    if probability == 1.0:
+        return True
+    key = f"{seed}\0{record.get('dataset', '')}\0{record.get('index', '')}"
+    digest = hashlib.sha256(key.encode("utf-8")).digest()
+    fraction = int.from_bytes(digest[:8], "big") / 2**64
+    return fraction < probability
+
+
+def student_prompt_with_reasoning_dropout(
+    record: dict[str, Any],
+    probability: float,
+    seed: int,
+) -> tuple[str, bool]:
+    """Return the cached prompt after deterministic student-side trace dropout."""
+    prompt = str(record["student_prompt"])
+    dropped = has_reasoning_block(prompt) and should_drop_reasoning(
+        record, probability, seed
+    )
+    return (strip_reasoning_block(prompt), True) if dropped else (prompt, False)
+
+
 def load_records(
     path: Path,
     dataset_name_contains: str | None = None,
@@ -64,20 +116,48 @@ def load_records(
     return usable
 
 
+def load_record_sources(
+    sources: list[tuple[Path, str | None]],
+) -> list[dict[str, Any]]:
+    """Load disjoint teacher-cache slices and reject accidental row overlap."""
+    records: list[dict[str, Any]] = []
+    seen: set[tuple[str, Any]] = set()
+    for path, dataset_name_contains in sources:
+        for record in load_records(path, dataset_name_contains=dataset_name_contains):
+            key = (str(record.get("dataset", "")), record.get("index"))
+            if key in seen:
+                raise ValueError(f"duplicate teacher record across sources: {key}")
+            seen.add(key)
+            records.append(record)
+    if not records:
+        raise RuntimeError("no usable records across teacher sources")
+    return records
+
+
 def tokenize_record(
     record: dict[str, Any],
     tokenizer: Any,
     max_length: int,
     *,
     prompt_template: str | None = None,
+    prompt_template_without_reasoning: str | None = None,
     target_mode: str = "teacher",
+    reasoning_dropout_probability: float = 0.0,
+    reasoning_dropout_seed: int = 0,
 ) -> dict[str, list[int]]:
-    raw_prompt = record["student_prompt"]
+    raw_prompt, _ = student_prompt_with_reasoning_dropout(
+        record,
+        reasoning_dropout_probability,
+        reasoning_dropout_seed,
+    )
     if prompt_template is not None:
         _, separator, evidence = raw_prompt.partition("<context>")
         if not separator:
             raise ValueError(f"student prompt is missing <context> for index={record['index']}")
-        raw_prompt = f"{prompt_template}\n\n<context>{evidence}"
+        selected_template = prompt_template
+        if not has_reasoning_block(raw_prompt) and prompt_template_without_reasoning:
+            selected_template = prompt_template_without_reasoning
+        raw_prompt = f"{selected_template}\n\n<context>{evidence}"
     if target_mode == "teacher":
         target = record["student_target"]
     elif target_mode == "prediction_only":
@@ -111,7 +191,7 @@ def tokenize_record(
 )
 def main(cfg: DictConfig) -> None:
     from datasets import Dataset
-    from peft import LoraConfig, get_peft_model
+    from peft import LoraConfig, PeftModel, get_peft_model
     from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 
     class MuonSFTTrainer(Trainer):
@@ -134,20 +214,56 @@ def main(cfg: DictConfig) -> None:
     np.random.seed(int(cfg.seed))
     torch.manual_seed(int(cfg.seed))
 
-    artifact = Path(str(cfg.teacher.artifact))
-    if not artifact.is_absolute():
-        artifact = root / artifact
-    dataset_name_contains = (
-        None
-        if cfg.student.dataset_name_contains is None
-        else str(cfg.student.dataset_name_contains)
-    )
-    records = load_records(artifact, dataset_name_contains=dataset_name_contains)
+    teacher_sources = OmegaConf.select(cfg, "student.teacher_sources", default=None)
+    if teacher_sources is None:
+        artifact = Path(str(cfg.teacher.artifact))
+        if not artifact.is_absolute():
+            artifact = root / artifact
+        dataset_name_contains = (
+            None
+            if cfg.student.dataset_name_contains is None
+            else str(cfg.student.dataset_name_contains)
+        )
+        sources = [(artifact, dataset_name_contains)]
+    else:
+        sources = []
+        for source in teacher_sources:
+            artifact = Path(str(source.artifact))
+            if not artifact.is_absolute():
+                artifact = root / artifact
+            source_filter = OmegaConf.select(
+                source, "dataset_name_contains", default=None
+            )
+            sources.append((
+                artifact,
+                None if source_filter is None else str(source_filter),
+            ))
+        dataset_name_contains = "multi-source"
+    records = load_record_sources(sources)
     if cfg.student.train_limit is not None:
         records = records[:int(cfg.student.train_limit)]
     tokenizer = AutoTokenizer.from_pretrained(str(cfg.student.model))
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
+    reasoning_dropout_probability = float(
+        OmegaConf.select(
+            cfg, "student.reasoning_dropout_probability", default=0.0
+        )
+    )
+    reasoning_dropout_seed = int(
+        OmegaConf.select(cfg, "student.reasoning_dropout_seed", default=cfg.seed)
+    )
+    reasoning_rows = sum(
+        has_reasoning_block(str(record["student_prompt"])) for record in records
+    )
+    reasoning_rows_dropped = sum(
+        student_prompt_with_reasoning_dropout(
+            record,
+            reasoning_dropout_probability,
+            reasoning_dropout_seed,
+        )[1]
+        for record in records
+    )
     tokenized = [
         tokenize_record(
             record,
@@ -155,30 +271,71 @@ def main(cfg: DictConfig) -> None:
             int(cfg.student.max_length),
             prompt_template=(
                 str(cfg.student.prompt)
-                if str(cfg.student.target_mode) == "prediction_only"
+                if (
+                    str(cfg.student.target_mode) == "prediction_only"
+                    or bool(OmegaConf.select(
+                        cfg, "student.override_cached_prompt", default=False
+                    ))
+                )
+                else None
+            ),
+            prompt_template_without_reasoning=(
+                str(cfg.student.prompt_without_reasoning)
+                if (
+                    OmegaConf.select(
+                        cfg, "student.prompt_without_reasoning", default=None
+                    ) is not None
+                    and (
+                        str(cfg.student.target_mode) == "prediction_only"
+                        or bool(OmegaConf.select(
+                            cfg, "student.override_cached_prompt", default=False
+                        ))
+                    )
+                )
                 else None
             ),
             target_mode=str(cfg.student.target_mode),
+            reasoning_dropout_probability=reasoning_dropout_probability,
+            reasoning_dropout_seed=reasoning_dropout_seed,
         )
         for record in records
     ]
     dataset = Dataset.from_list(tokenized)
     print(
         f"training on {len(dataset)} parsed, label-consistent teacher targets "
-        f"dataset_name_contains={dataset_name_contains!r}"
+        f"dataset_name_contains={dataset_name_contains!r} "
+        f"reasoning_rows={reasoning_rows} "
+        f"reasoning_rows_dropped={reasoning_rows_dropped} "
+        f"reasoning_dropout_probability={reasoning_dropout_probability}"
     )
 
     model = AutoModelForCausalLM.from_pretrained(
         str(cfg.student.model),
         torch_dtype=torch.bfloat16,
     )
-    model = get_peft_model(model, LoraConfig(
-        r=int(cfg.student.lora.r),
-        lora_alpha=int(cfg.student.lora.alpha),
-        lora_dropout=float(cfg.student.lora.dropout),
-        target_modules=list(cfg.student.lora.target_modules),
-        task_type="CAUSAL_LM",
-    ))
+    init_adapter_value = OmegaConf.select(
+        cfg, "student.init_adapter", default=None
+    )
+    if init_adapter_value is None:
+        model = get_peft_model(model, LoraConfig(
+            r=int(cfg.student.lora.r),
+            lora_alpha=int(cfg.student.lora.alpha),
+            lora_dropout=float(cfg.student.lora.dropout),
+            target_modules=list(cfg.student.lora.target_modules),
+            task_type="CAUSAL_LM",
+        ))
+    else:
+        init_adapter = Path(str(init_adapter_value))
+        if not init_adapter.is_absolute():
+            init_adapter = root / init_adapter
+        if not (init_adapter / "adapter_config.json").is_file():
+            raise FileNotFoundError(f"missing initial adapter: {init_adapter}")
+        print(f"loading trainable initial adapter from {init_adapter}")
+        model = PeftModel.from_pretrained(
+            model,
+            init_adapter.as_posix(),
+            is_trainable=True,
+        )
     model.gradient_checkpointing_enable()
     model.enable_input_require_grads()
 
