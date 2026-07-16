@@ -29,6 +29,12 @@ cached binary D/K/S heavy judge. The feature set and `C=0.1` stack are now froze
 for one local-test confirmation. No alternative stack may be selected from that
 test result.
 
+A cached four-member semantic/epistemic prompt family was also tested as a soft
+feature block. It scored only 0.8964 BA by itself. Adding it to the compact stack
+tied 0.9310 dataset-grouped BA and raised organism-grouped BA by only 0.0012,
+while reducing AUROC. This does not justify its extra calls, and the local split
+contains no knowledge-denial outputs with which to validate HP-KR transfer.
+
 ## Frozen organism-margin follow-up
 
 The binary whole-output organism audit improved ranking when added as a soft

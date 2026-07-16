@@ -47,6 +47,7 @@ RATING_RUNS = {
     "heavy": "qwen_reason_ensemble_dks_member4096_v1",
     "fast": "qwen_reason_nothink_truth_hidden_ensemble_v1",
     "reason": "qwen_reason_v1",
+    "semantic": "qwen_reason_nothink_epistemic_guard_sweep_v1",
 }
 
 
@@ -198,6 +199,7 @@ def build_feature_frame(
 def feature_sets(frame: pd.DataFrame) -> dict[str, list[str]]:
     """Return the exploratory cached sets and frozen organism-margin extension."""
     heavy = sorted(column for column in frame if column.startswith("heavy_"))
+    semantic = sorted(column for column in frame if column.startswith("semantic_"))
     compact = [
         "details_logit", "known_logit", "scrutiny_logit",
         "fast_hidden_contradiction", "fast_truth_value_guard", "reason_single",
@@ -205,7 +207,9 @@ def feature_sets(frame: pd.DataFrame) -> dict[str, list[str]]:
     ]
     sets = {
         "heavy_ratings": heavy,
+        "semantic_ratings": semantic,
         "compact_continuous": compact,
+        "compact_plus_semantic": [*compact, *semantic],
         "compact_plus_binary_organism": [*compact, "organism_reject"],
         "all_judges": [*compact, *heavy],
         "all_plus_binary_organism": [*compact, *heavy, "organism_reject"],
