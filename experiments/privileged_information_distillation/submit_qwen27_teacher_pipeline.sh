@@ -136,8 +136,8 @@ FINAL="$(submit_id \
   --shard "${SHARD0}" \
   --shard "${SHARD1}" \
   --expected-total 2880 \
-  --minimum-usable 2877 \
-  --maximum-label-imbalance 3 \
+  --minimum-usable 2859 \
+  --maximum-label-imbalance 15 \
   --allow-unclosed \
   --allow-truncated-targets \
   --verify-manifest "${MANIFEST8192}" \

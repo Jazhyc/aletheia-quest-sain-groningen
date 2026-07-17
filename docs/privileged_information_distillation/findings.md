@@ -2062,3 +2062,12 @@ visible leakage, no truncated visible target, and no violation of the 2,805-row
 by 18 and imbalance gate by 12, so the audit correctly cancelled training and
 validation. Do not post-hoc declare the cache accepted or launch another context
 tier without explicitly treating that as a new protocol choice.
+
+The user explicitly selected that new protocol choice: accept the 2,859 clean
+targets and proceed rather than escalating context again. The accepted cache
+keeps the natural 1,437/1,422 label split, excludes the 21 unclosed records via
+the standard loader, and must still verify the 2,805-record 8,192-token manifest
+before merging. Student prompts, base model, rank, optimizer, learning rate,
+epoch count, and effective batch size remain frozen. Interpret the resulting
+validation comparison with the documented 18-target coverage difference from
+the 2,877-target GPT-OSS-teacher baseline.

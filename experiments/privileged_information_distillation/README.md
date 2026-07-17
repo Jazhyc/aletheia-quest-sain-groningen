@@ -168,6 +168,14 @@ miss the frozen final gate, student job `30187450` and validation job `30187451`
 were cancelled. Do not silently train or add another context tier from this
 result; choosing 99.27% coverage versus another repair is a new protocol choice.
 
+The user subsequently chose the explicit acceptance branch: retain all 2,859
+usable targets without class downsampling, exclude the 21 parser failures in the
+ordinary student loader, and train the unchanged selected recipe. The accepted
+audit therefore freezes minimum coverage at 2,859 and maximum observed label
+imbalance at 15 while preserving the 2,805-record 8,192-token manifest. This is
+a documented 18-target coverage difference from the 2,877-target GPT-OSS cache,
+not an exact data-count-matched teacher comparison.
+
 Submit the entire dependency chain with:
 
 ```bash
