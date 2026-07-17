@@ -34,6 +34,7 @@ from experiments.qwen_grpo_lora.evaluate_qwen_grpo_lora import (
 )
 
 PREDICTION_RE = re.compile(r"(?im)\bPrediction\s*:\s*<?([01])>?")
+RATING_RE = re.compile(r"(?im)\bRating\s*:\s*<?([1-7])\b>?")
 STRICT_RE = re.compile(
     r"(?is)^\s*<reasoning_summary>\s*(.+?)\s*</reasoning_summary>\s*"
     r"Prediction\s*:\s*([01])\s*$"
@@ -57,6 +58,10 @@ ATOMIC_AUDIT_STRICT_RE = re.compile(
     r"Prediction\s*:\s*([01])\s*$"
 )
 PREDICTION_ONLY_STRICT_RE = re.compile(r"(?is)^\s*Prediction\s*:\s*<?([01])>?\s*$")
+RATING_STRICT_RE = re.compile(
+    r"(?is)^\s*<reasoning_summary>\s*(.+?)\s*</reasoning_summary>\s*"
+    r"Rating\s*:\s*<?([1-7])>?\s*$"
+)
 EMPTY_REASONING_PREFIX = (
     "<reasoning_summary>\n"
     "</reasoning_summary>\n"
@@ -67,6 +72,19 @@ EMPTY_REASONING_PREFIX = (
 def parse_prediction(text: str) -> int | None:
     matches = PREDICTION_RE.findall(text)
     return int(matches[-1]) if matches else None
+
+
+def parse_rating(text: str) -> int | None:
+    """Return the final explicit 1--7 rating, if present."""
+    matches = RATING_RE.findall(text)
+    return int(matches[-1]) if matches else None
+
+
+def rating_to_score(rating: int) -> float:
+    """Map an ordinal 1--7 rating onto the evaluator's [0, 1] score range."""
+    if not 1 <= rating <= 7:
+        raise ValueError(f"rating must be between 1 and 7, got {rating}")
+    return (rating - 1) / 6
 
 
 def prefix_before_prediction(text: str) -> str:
@@ -283,7 +301,14 @@ def strict_pattern_for_config(config: dict[str, Any]) -> re.Pattern[str]:
         return COUNTERFACTUAL_STRICT_RE
     if student.get("target_format") == "atomic_audit":
         return ATOMIC_AUDIT_STRICT_RE
+    if student.get("target_format") == "rating":
+        return RATING_STRICT_RE
     return STRICT_RE
+
+
+def output_mode_for_config(config: dict[str, Any]) -> str:
+    """Select binary or ordinal parsing from the inference prompt contract."""
+    return "rating" if config["student"].get("target_format") == "rating" else "binary"
 
 
 def load_records(
@@ -362,6 +387,7 @@ def evaluate_adapter(
     adapter_dir: Path,
     lora_id: int,
     strict_re: re.Pattern[str] = STRICT_RE,
+    output_mode: str = "binary",
     *,
     margin_sampling: Any | None = None,
     binary_ids: list[int] | None = None,
@@ -379,9 +405,18 @@ def evaluate_adapter(
         for prompt in records["prompt"]
     ]
     generations = [output.outputs[0].text if output.outputs else "" for output in outputs]
-    predictions = [parse_prediction(text) for text in generations]
+    if output_mode == "rating":
+        ratings = [parse_rating(text) for text in generations]
+        predictions = [None if value is None else int(value >= 4) for value in ratings]
+        scores = [0.0 if value is None else rating_to_score(value) for value in ratings]
+        evaluated["rating"] = ratings
+    elif output_mode == "binary":
+        predictions = [parse_prediction(text) for text in generations]
+        scores = [float(value) if value is not None else 0.0 for value in predictions]
+    else:
+        raise ValueError(f"unsupported output mode: {output_mode!r}")
     evaluated["prediction"] = predictions
-    evaluated["score"] = [float(value) if value is not None else 0.0 for value in predictions]
+    evaluated["score"] = scores
     evaluated["parse_error"] = [value is None for value in predictions]
     evaluated["format_valid"] = [strict_re.fullmatch(text) is not None for text in generations]
     evaluated["generation"] = generations
@@ -607,6 +642,7 @@ def main() -> None:
         raise ValueError(f"duplicate condition names: {names}")
     records_by_condition = {}
     strict_re_by_condition = {}
+    output_mode_by_condition = {}
     for condition_name, retrieval_path, passage_field, reasoning_max_chars, reasoning_mode, prompt_path in condition_specs:
         references = load_retrieval_cache(retrieval_path, passage_field=passage_field)
         condition_config = copy.deepcopy(first)
@@ -626,6 +662,9 @@ def main() -> None:
         )
         records_by_condition[condition_name] = records
         strict_re_by_condition[condition_name] = strict_pattern_for_config(
+            condition_config
+        )
+        output_mode_by_condition[condition_name] = output_mode_for_config(
             condition_config
         )
         print(
@@ -667,6 +706,7 @@ def main() -> None:
                 adapter_dir,
                 lora_id,
                 strict_re=strict_re_by_condition[condition_name],
+                output_mode=output_mode_by_condition[condition_name],
                 margin_sampling=margin_sampling,
                 binary_ids=binary_ids,
             )
@@ -706,6 +746,7 @@ def main() -> None:
                 "prompt_condition": (
                     condition_name if args.prompt_condition else None
                 ),
+                "output_mode": output_mode_by_condition[condition_name],
                 "reasoning_max_chars": reasoning_max_chars,
                 "reasoning_truncation": reasoning_mode,
                 "learning_rate": config["student"]["training"]["learning_rate"],

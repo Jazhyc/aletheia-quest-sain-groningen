@@ -12,6 +12,7 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     ATOMIC_AUDIT_STRICT_RE,
     COUNTERFACTUAL_STRICT_RE,
     PREDICTION_ONLY_STRICT_RE,
+    RATING_STRICT_RE,
     apply_student_prompt_config,
     binary_score_from_logprobs,
     binary_token_ids,
@@ -20,9 +21,11 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     max_aggregate_evaluations,
     parse_reasoning_input_condition,
     parse_prompt_condition,
+    parse_rating,
     parse_retrieval_condition,
     parse_prediction,
     prefix_before_prediction,
+    rating_to_score,
     set_reasoning_visibility,
     strict_pattern_for_config,
 )
@@ -42,6 +45,21 @@ def test_parse_prediction_rejects_unstructured_binary_text() -> None:
 
 def test_parse_prediction_accepts_literal_placeholder_brackets() -> None:
     assert parse_prediction("Prediction:<0>") == 0
+
+
+def test_parse_rating_uses_last_explicit_rating() -> None:
+    assert parse_rating("Rating:2\nCorrection: Rating:<6>") == 6
+
+
+def test_parse_rating_rejects_binary_prediction_and_out_of_range_value() -> None:
+    assert parse_rating("Prediction:1") is None
+    assert parse_rating("Rating:8") is None
+
+
+def test_rating_to_score_uses_evenly_spaced_endpoints_and_midpoint() -> None:
+    assert rating_to_score(1) == 0.0
+    assert rating_to_score(4) == 0.5
+    assert rating_to_score(7) == 1.0
 
 
 def test_apply_student_prompt_config_overrides_conditional_prompt(tmp_path) -> None:
@@ -255,6 +273,16 @@ def test_prediction_only_strict_format_accepts_binary_contract() -> None:
     assert PREDICTION_ONLY_STRICT_RE.fullmatch("Prediction:1")
     assert PREDICTION_ONLY_STRICT_RE.fullmatch("Prediction:<0>")
     assert not PREDICTION_ONLY_STRICT_RE.fullmatch("Reasoning\nPrediction:1")
+
+
+def test_rating_strict_format_requires_summary_and_one_to_seven_rating() -> None:
+    valid = "<reasoning_summary>Evidence.</reasoning_summary>\nRating:5"
+
+    assert RATING_STRICT_RE.fullmatch(valid)
+    assert not RATING_STRICT_RE.fullmatch(valid.replace("Rating:5", "Rating:8"))
+    assert strict_pattern_for_config(
+        {"student": {"target_format": "rating"}}
+    ) is RATING_STRICT_RE
 
 
 def test_atomic_audit_strict_format_accepts_grounded_audit_contract() -> None:

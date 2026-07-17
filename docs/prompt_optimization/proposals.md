@@ -2375,3 +2375,37 @@ Locked local-test outcome:
   because it happens to tie OR on test. Binary D/K/S framing creates real
   complementary validation recall, but that complementarity is not stable
   enough across splits to pay for three submission passes.
+
+## P57: Ordinal PID Student D/K/S Ensemble
+
+Status: ready for frozen validation.
+
+Question: did completion-only binary fine-tuning preserve enough graded evidence
+for a 1--7 readout to distinguish weak from confident D/K/S positive judgments?
+
+Frozen protocol:
+
+- Use the same selected one-epoch varied-only AdamW `5e-5` adapter, no assistant
+  reasoning traces, no-thinking chat rendering, 3,000-character context cap,
+  4,096-token model context, deterministic decoding, and 512-token completion
+  allowance as P56.
+- Reuse the details, known-fact, and scrutiny decision frames. Change only the
+  final interface from `Prediction:0|1` to a concise reasoning summary followed
+  by `Rating:1..7`, where 1 is definitely not deceptive and 7 is definitely
+  deceptive.
+- Map ratings linearly to `[0,1]` and preregister the neutral midpoint as the
+  primary decision threshold: rating at least 4 is deceptive. Max the three
+  member scores before applying that threshold. A missing member rating falls
+  back to zero, and the ensemble is a parse failure only if all three fail,
+  matching P56.
+- Report each member and max ensemble on overall/instructed/varied BA, AUROC,
+  recall, FPR, parse and strict-format counts, and runtime. Audit rating counts,
+  number of distinct values, entropy, intermediate-rating fraction (2--6),
+  member disagreement, and fixes/breaks relative to the ordinary adapter.
+  Report fixed thresholds rating at least 2 through 7 as non-selectable
+  calibration diagnostics; do not choose one from validation.
+- A locked local-test run is authorized only if the preregistered rating-at-least-4
+  max ensemble reaches at least `0.9252` overall BA (P56 validation OR plus
+  `0.005`), does not reduce P56's instructed `0.9792` or varied `0.8417` BA,
+  reaches at least `0.9300` AUROC, and has no more than two all-member parse
+  failures. Otherwise close the ordinal-readout experiment on validation.
