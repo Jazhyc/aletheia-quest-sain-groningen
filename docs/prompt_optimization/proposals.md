@@ -2028,7 +2028,8 @@ Outcome:
 
 ## P51: Untouched Four-Mode Capacity Confirmation
 
-Status: frozen before sampling or generation.
+Status: passed untouched confirmation; exact capacity swap retained pending NDIF
+rehearsal.
 
 - Select a new 800-row Liars' Bench spectrum with seed `20260719`, exactly 100
   rows per label/category and deterministic round-robin source-model diversity.
@@ -2051,6 +2052,24 @@ Status: frozen before sampling or generation.
   `+0.04`, no category loses more than `0.02`, and no category/family cell loses
   more than `0.05`. A failure remains authoritative and must not be repaired by
   resampling, category routing, or threshold tuning.
+
+Outcome:
+
+- On all 800 frozen rows, Qwen-9B scores `0.75125` macro-category BA and
+  Qwen-27B scores `0.86000`, a `+0.10875` gain. Every category is non-worse:
+  choice `+0.070`, HP-KR `+0.035`, Insider Trading `+0.325`, and soft trigger
+  `+0.005`. The worst category/family delta is `-0.0303`, so every frozen gate
+  passes.
+- Qwen-27B makes 122 fixes and 35 breaks. A paired label-stratified bootstrap
+  puts the macro gain's 95% interval at `[+0.08375, +0.13375]`; the probability
+  of a positive macro gain is 1.0 over 20,000 resamples. The individual HP-KR
+  and soft-trigger intervals cross zero, so do not claim uniform category-level
+  certainty beyond the deterministic gate.
+- Jobs `30179132` and `30179238` use different A100 sharding shapes and take
+  2,703.5s and roughly 5,100s of scoring time, respectively. This confirms
+  accuracy transfer, not remote throughput. Keep Qwen-27B out of the notebook
+  until the frozen NDIF dataset-unit rehearsal certifies availability, memory,
+  batching, and exact output equivalence.
 
 ## P52: Fixed Ensemble Vote Audit
 
@@ -2080,8 +2099,8 @@ Outcome:
 
 ## P53: Q9-Disagreement Capacity Escalation
 
-Status: frozen runtime fallback; original external gate passed and untouched
-confirmation is pending.
+Status: original external gate passed, but untouched family-cell gate failed;
+retain only as a diagnostic and do not deploy.
 
 - Run Qwen-9B D/K/S first. If its three binary member verdicts disagree, use
   the Qwen-27B max verdict; otherwise keep the Qwen-9B max verdict. Treat parse
@@ -2107,3 +2126,13 @@ Untouched gate, frozen before P51 outputs:
   `0.05`, and Qwen-27B query fraction at most `0.35`.
 - A pass retains a budget-aware contingency only. It does not displace full
   Qwen-27B or authorize notebook integration without an NDIF timing rehearsal.
+
+Untouched outcome:
+
+- The cascade improves macro-category BA `0.75125 -> 0.82375` while querying
+  Qwen-27B on 223/800 rows (`27.88%`). Category deltas are `-0.015`, `-0.005`,
+  `+0.290`, and `+0.020` for choice, HP-KR, Insider Trading, and soft trigger.
+- The frozen gate fails because choice/Qwen loses `0.0606`, beyond the `0.05`
+  family-cell allowance. The aggregate gain is again dominated by Insider
+  Trading. Do not repair this with a category exemption, looser family gate, or
+  a fitted disagreement score; full Qwen-27B is both simpler and more accurate.

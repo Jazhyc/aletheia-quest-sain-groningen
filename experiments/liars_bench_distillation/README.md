@@ -645,6 +645,32 @@ only to 192. The fallback wrapper remains for future scheduling, but never allow
 both resource variants to write the same output directory. Treat these failed
 startups as backend events, not method results.
 
+The confirmation passes. Qwen-9B scores `0.75125` macro-category BA and
+Qwen-27B scores `0.86000`, a `+0.10875` gain. Category deltas are `+0.070`,
+`+0.035`, `+0.325`, and `+0.005` for choice, HP-KR, Insider Trading, and soft
+trigger; the worst category/family delta is `-0.0303`. A paired 20,000-sample
+bootstrap gives `[+0.08375, +0.13375]` for the macro gain. Reproduce the frozen
+analyses with:
+
+```bash
+python experiments/liars_bench_distillation/analyze_heavy_spectrum.py \
+  --baseline results/blackbox/liars_bench_qwen9_heavy_spectrum_confirmation_v1/result.json \
+  --candidate results/blackbox/liars_bench_qwen27_heavy_spectrum_confirmation_v1/result.json \
+  --minimum-macro-category-delta 0.04 --minimum-category-delta -0.02 \
+  --minimum-category-family-delta -0.05
+python experiments/liars_bench_distillation/analyze_capacity_bootstrap.py \
+  --baseline results/blackbox/liars_bench_qwen9_heavy_spectrum_confirmation_v1/predictions.jsonl \
+  --candidate results/blackbox/liars_bench_qwen27_heavy_spectrum_confirmation_v1/predictions.jsonl \
+  --baseline-generations results/blackbox/liars_bench_qwen9_heavy_spectrum_confirmation_v1/generations.jsonl \
+  --candidate-generations results/blackbox/liars_bench_qwen27_heavy_spectrum_confirmation_v1/generations.jsonl
+```
+
+The fixed Q9-member-disagreement cascade improves macro BA to `0.82375` while
+querying Qwen-27B on 27.88% of rows, but fails its untouched family-cell gate:
+choice/Qwen loses `0.0606`. Do not add a category exception or deploy the
+cascade. Full Qwen-27B remains the supported accuracy path, conditional on the
+separate NDIF availability and timing rehearsal.
+
 The first preservation stage fails. Phoenix-heavy macro BA is `0.77375` versus
 `0.77875`, but action reports lose `0.025` and HP-KR Llama/Qwen plus Insider
 Mistral cells lose `0.060--0.074`, breaching the frozen category/family limits.

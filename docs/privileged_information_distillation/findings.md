@@ -1872,6 +1872,16 @@ soft-trigger family-cell losses. The earlier 200-row external loss must remain
 reported, but it is outweighed by a preregistered, broader mode/family audit
 rather than ignored post hoc.
 
+A second, genuinely untouched 800-row four-mode confirmation strengthens this
+conclusion. With the sampling rule and gate frozen before generation, Qwen-27B
+raises macro-category BA `0.75125 -> 0.86000` (`+0.10875`), makes 122 fixes and
+35 breaks, and passes every category/family guard. The paired bootstrap 95%
+interval is `[+0.08375, +0.13375]`. The largest gain is again Insider Trading
+(`+0.325`), but choice also gains `+0.070`; HP-KR (`+0.035`) and soft trigger
+(`+0.005`) are positive point estimates whose individual intervals cross zero.
+Treat this as strong broad capacity evidence, not proof that each response mode
+improves independently.
+
 On the external spectrum, a paired label-stratified bootstrap places the
 macro-gain 95% interval at `[+0.0713, +0.1213]`. Choice, HP-KR, and action are
 individually positive; only the small `+0.005` soft-trigger delta spans zero.
@@ -1912,6 +1922,13 @@ contingency, pending the separately frozen untouched spectrum gate and NDIF
 timing; do not misstate it as the accuracy leader. Its external gain is mostly
 Insider Trading (`+0.190` category BA); the other three category gains are at
 most `+0.010`, another reason to require untouched confirmation.
+
+That untouched confirmation rejects the escalation route. It improves macro BA
+`0.75125 -> 0.82375` at a 27.88% Qwen-27B query fraction, but the choice/Qwen
+cell loses `0.0606`, breaching the frozen `0.05` limit. Do not loosen the gate
+or add a category-specific exception. If remote Qwen-27B is viable, use the
+exact full capacity swap; if it is not, retain the current Qwen-9B submission
+rather than this unstable partial cascade.
 
 Semantic routing is useful only under a weaker judge. Qwen-9B heavy plus fixed
 epistemic/action specialists gains `0.0538` external macro BA with every family

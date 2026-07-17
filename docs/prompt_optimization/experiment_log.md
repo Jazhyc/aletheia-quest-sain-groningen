@@ -2679,6 +2679,30 @@ to Qwen-27B. It improves Qwen-9B on validation (`0.9238`), locked test
 only as a runtime fallback. Its untouched P51 gate was frozen before either
 confirmation result was available; see P53.
 
+### Untouched four-mode capacity confirmation
+
+Jobs `30179132` (Qwen-9B, one A100) and `30179238` (Qwen-27B, two A100s/TP2)
+completed exact full-decode D/K/S evaluation on the frozen seed-`20260719`
+800-row spectrum. Qwen-9B scored `0.75125` macro-category BA; Qwen-27B scored
+`0.86000`, for a `+0.10875` gain. Category deltas were `+0.070` choice,
+`+0.035` HP-KR, `+0.325` Insider Trading, and `+0.005` soft trigger. The worst
+category/family delta was `-0.0303`, within the preregistered `-0.05` floor, so
+P51 passes without threshold, route, stop, or sample changes.
+
+Qwen-27B fixed 122 Qwen-9B errors and broke 35 correct rows. The paired
+label-stratified 20,000-sample bootstrap gives a macro-gain 95% interval of
+`[+0.08375, +0.13375]`. Qwen-9B had 173 member parse failures and Qwen-27B 82;
+however, the gain is not only parsing: on the 658 rows where all Qwen-9B members
+parse, BA rises `0.7693 -> 0.8733`, with 91 fixes and 20 breaks. Record the
+backend difference: Qwen-9B scoring took 2,703.5s, while Qwen-27B's TP2 run took
+about 85 minutes. This is an accuracy confirmation, not an NDIF runtime result.
+
+The fixed vote audit again keeps max/OR: Qwen-27B max scores `0.8600`, majority
+`0.85125`, and the best singleton `0.83875`. The frozen Q9-disagreement cascade
+scores `0.82375` while querying Qwen-27B on 27.88% of rows. It passes its macro,
+category, and query-fraction requirements but fails the family-cell requirement:
+choice/Qwen loses `0.0606`. Reject P53 rather than adding a category exception.
+
 ### Small external-data continuations
 
 The focused 64-summary soft-trigger continuation plus 10% varied replay trained
