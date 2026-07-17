@@ -2301,3 +2301,35 @@ Outcome:
   native thinking, three specialized prompts, 4,096 tokens, and max
   aggregation. Do not attribute its `+0.0179` aggregate advantage solely to
   thinking without a matched single-prompt thinking control.
+
+## P56: Binary PID Student D/K/S Prompt Ensemble
+
+Status: ready for validation.
+
+Question: does the complementary error structure of the factual D/K/S rubrics
+survive after privileged-information distillation into the selected binary
+Qwen-9B student?
+
+Frozen protocol:
+
+- Use the selected one-epoch varied-only AdamW `5e-5` adapter without assistant
+  reasoning traces. Do not change weights, context truncation, model context,
+  deterministic decoding, or the 512-token completion allowance.
+- Adapt the existing details, known-fact contradiction, and scrutiny rubrics to
+  the student's trained `<reasoning_summary>...Prediction:0|1` contract. Change
+  only the decision framing; retain no-thinking chat rendering and the ordinary
+  3,000-character context cap.
+- Run all three conditions in one vLLM session. The primary ensemble is binary
+  max/OR: predict deceptive if any parsed member predicts 1. Treat an
+  individual parse failure as 0, matching the evaluator's frozen fallback;
+  report an ensemble parse failure only if all three fail.
+- Report each member and the OR ensemble on overall, instructed, and varied BA,
+  recall, FPR, parse failures, format validity, and runtime. From the same
+  cached binary votes, also report majority (at least two positives) and
+  unanimity as diagnostics. Do not choose among these rules from validation.
+- Compare against the adapter's ordinary no-trace baseline (`0.9000` overall,
+  `0.9792` instructed, `0.7944` varied validation BA). A later local-test run is
+  authorized only if the preregistered OR improves overall BA by at least
+  `0.005`, does not reduce instructed or varied BA, and adds at most two
+  ensemble parse failures. Otherwise close the framing experiment on
+  validation without prompt or vote-rule retuning.
