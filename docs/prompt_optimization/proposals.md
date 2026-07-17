@@ -2040,6 +2040,10 @@ Status: frozen before sampling or generation.
   backend difference and do not call it a single-GPU equivalence check. This is
   a post-discovery confirmation, not a new training set; neither result may
   change the sampling rule.
+- The first two-A100 launch (`30179133`) failed before generation in the cluster
+  NCCL network plugin. Retry `30179201` forces the built-in Socket transport on
+  the same single node. This changes communication transport only; it does not
+  alter prompts, decoding, labels, or the frozen decision gate.
 - Confirm broad capacity transfer only if macro-category gain is at least
   `+0.04`, no category loses more than `0.02`, and no category/family cell loses
   more than `0.05`. A failure remains authoritative and must not be repaired by

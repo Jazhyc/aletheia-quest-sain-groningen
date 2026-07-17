@@ -18,6 +18,10 @@ module load CUDA/13.2.0
 source .venv/bin/activate
 export HF_HOME="${HF_HOME:-${SCRATCH:-/scratch/${USER}}/.huggingface}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
+# The cluster NCCL network plugin segfaulted during the first two-rank startup.
+# Both ranks are on one node, so bypass the external plugin explicitly.
+export NCCL_NET=Socket
+export NCCL_IB_DISABLE=1
 
 python experiments/liars_bench_distillation/evaluate_heavy_spectrum.py \
   --eval-artifact results/blackbox/liars_bench_heavy_spectrum_confirmation_v1/eval.jsonl \

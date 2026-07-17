@@ -621,8 +621,13 @@ hardware/sharding difference from the original single-RTX spectrum and must be
 reported; prompts, decoding budget, aggregation, and thresholds remain fixed.
 An identical single-RTX Qwen-27B fallback (`30179171`) was queued to race the
 delayed two-A100 allocation, then canceled while still pending as soon as
-`30179133` started. The fallback wrapper remains for future scheduling, but
-never allow both resource variants to write the same output directory.
+`30179133` started. That first A100 run failed before generation because the
+cluster NCCL network plugin segfaulted during two-rank initialization. Retry
+`30179201` forces the built-in Socket transport for this single-node job; the
+replacement RTX fallback `30179199` was canceled while pending as soon as that
+retry started. The fallback wrapper remains for future scheduling, but never
+allow both resource variants to write the same output directory. Treat the
+failed startup as a backend event, not a method result.
 
 The first preservation stage fails. Phoenix-heavy macro BA is `0.77375` versus
 `0.77875`, but action reports lose `0.025` and HP-KR Llama/Qwen plus Insider

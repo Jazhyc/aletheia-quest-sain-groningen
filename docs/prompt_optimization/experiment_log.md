@@ -2663,6 +2663,12 @@ is useful recall diversity, and the validation majority edge does not transfer.
 The reusable analyzer and its parse-fallback test are under
 `experiments/liars_bench_distillation/analyze_ensemble_votes.py`.
 
+The untouched-capacity confirmation's first two-A100 Qwen-27B job `30179133`
+failed before generation when the cluster NCCL network plugin segfaulted during
+rank initialization. Retry `30179201` forces NCCL's built-in Socket transport
+for the same-node ranks. No labels or model outputs existed from the failed job,
+so this is a technical retry under the frozen protocol, not result selection.
+
 ### Small external-data continuations
 
 The focused 64-summary soft-trigger continuation plus 10% varied replay trained
