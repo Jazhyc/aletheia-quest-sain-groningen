@@ -15,6 +15,8 @@ teacher:
   split: train
   limit: null
   limit_per_label: null
+  shard_count: 1
+  shard_index: 0
   max_prompt_chars: 3000
   context_truncation: tail
   max_model_len: 8192

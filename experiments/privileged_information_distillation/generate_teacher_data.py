@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import random
 import sys
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -214,6 +215,11 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
             })
     if dataset_name_contains is not None:
         rows = filter_teacher_rows_by_dataset(rows, str(dataset_name_contains))
+    rows = shard_teacher_rows(
+        rows,
+        shard_count=int(OmegaConf.select(cfg, "teacher.shard_count", default=1)),
+        shard_index=int(OmegaConf.select(cfg, "teacher.shard_index", default=0)),
+    )
     return limit_teacher_rows(
         rows,
         limit=cfg.teacher.limit,
@@ -233,6 +239,33 @@ def filter_teacher_rows_by_dataset(
         raise RuntimeError(
             f"no teacher rows match dataset_name_contains={dataset_name_contains!r}"
         )
+    return selected
+
+
+def shard_teacher_rows(
+    rows: list[dict[str, Any]],
+    *,
+    shard_count: int,
+    shard_index: int,
+) -> list[dict[str, Any]]:
+    """Deterministically shard every dataset/label stratum round-robin."""
+    if shard_count < 1:
+        raise ValueError(f"teacher.shard_count must be positive, got {shard_count}")
+    if not 0 <= shard_index < shard_count:
+        raise ValueError(
+            "teacher.shard_index must satisfy "
+            f"0 <= shard_index < shard_count, got {shard_index}/{shard_count}"
+        )
+    if shard_count == 1:
+        return rows
+    offsets: defaultdict[tuple[str, int], int] = defaultdict(int)
+    selected: list[dict[str, Any]] = []
+    for row in rows:
+        stratum = (str(row["dataset"]), int(row["label"]))
+        offset = offsets[stratum]
+        offsets[stratum] += 1
+        if offset % shard_count == shard_index:
+            selected.append(row)
     return selected
 
 

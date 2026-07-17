@@ -127,6 +127,23 @@ privileged-language leakage; summary length remains median 57 words and p95 79.
 Use this tiered 4,096/8,192 policy for any full cache rather than assigning the
 expensive cap to every row.
 
+The full run is frozen as two deterministic dataset/label-stratified shards.
+Each shard first uses 4,096 generation tokens; a CPU audit requires all 2,880
+unique rows, at least 2,448 usable targets, exact label agreement, and no
+visible leakage before either shard retries only its failures at 8,192 tokens.
+The final audit requires at least 2,877 usable targets, usable-label imbalance
+at most three, and byte-equivalent canonical hashes for every target already
+usable at 4,096. It then merges the cache and unlocks the unchanged varied-only
+Qwen-9B one-epoch AdamW `5e-5` training job. The dependent validation job
+compares the candidate with the original GPT-OSS-teacher adapter; the existing
+P54 promotion gate remains unchanged.
+
+Submit the entire dependency chain with:
+
+```bash
+bash experiments/privileged_information_distillation/submit_qwen27_teacher_pipeline.sh
+```
+
 The teacher artifact path is intentionally independent of `method`. Student
 learning-rate sweeps override `method` to obtain distinct adapter directories
 while all consuming the same immutable reviewed teacher cache.

@@ -25,6 +25,7 @@ from experiments.privileged_information_distillation.generate_teacher_data impor
     normalize_reasoning_effort,
     normalize_teacher_output_format,
     render_chat_prompt,
+    shard_teacher_rows,
 )
 
 
@@ -168,6 +169,43 @@ def test_filter_teacher_rows_by_dataset_rejects_empty_selection() -> None:
 
     with pytest.raises(RuntimeError, match="no teacher rows match"):
         filter_teacher_rows_by_dataset(rows, "varied-deception")
+
+
+def test_shard_teacher_rows_is_disjoint_balanced_and_complete() -> None:
+    rows = [
+        {"dataset": dataset, "label": label, "index": f"{dataset}-{label}-{index}"}
+        for dataset in ("a", "b")
+        for label in (0, 1)
+        for index in range(7)
+    ]
+
+    shards = [
+        shard_teacher_rows(rows, shard_count=3, shard_index=index)
+        for index in range(3)
+    ]
+
+    keys = [{row["index"] for row in shard} for shard in shards]
+    assert set.union(*keys) == {row["index"] for row in rows}
+    assert not any(
+        keys[left] & keys[right]
+        for left in range(3)
+        for right in range(left)
+    )
+    for dataset in ("a", "b"):
+        for label in (0, 1):
+            counts = [
+                sum(row["dataset"] == dataset and row["label"] == label for row in shard)
+                for shard in shards
+            ]
+            assert max(counts) - min(counts) <= 1
+
+
+@pytest.mark.parametrize("shard_count,shard_index", [(0, 0), (2, -1), (2, 2)])
+def test_shard_teacher_rows_rejects_invalid_coordinates(
+    shard_count: int, shard_index: int
+) -> None:
+    with pytest.raises(ValueError, match="teacher.shard"):
+        shard_teacher_rows([], shard_count=shard_count, shard_index=shard_index)
 
 
 def test_teacher_harmony_rendering_sets_reasoning_effort() -> None:

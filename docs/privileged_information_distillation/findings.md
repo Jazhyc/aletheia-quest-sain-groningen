@@ -2015,3 +2015,17 @@ privileged-language leakage. Median/p95 visible summary length is 57/79 words.
 This validates a tiered cache-generation policy—4,096 normally and 8,192 only
 for unclosed rows—but does not yet answer whether the Qwen-family teacher
 improves the trained Qwen-9B student.
+
+Before full generation, the execution and acceptance policy was frozen. The
+2,880 varied-only rows are split deterministically and round-robin within every
+dataset/label stratum across two independent artifacts. The first 4,096-token
+stage must contain exactly 2,880 unique rows, at least 2,448 usable targets,
+exact conditioned-label agreement, and no visible private/prompt-meta leakage.
+Only unclosed rows are eligible for an 8,192-token retry. The final merge must
+retain canonical hashes for every initially usable record, contain at least
+2,877 usable targets, and have usable-label imbalance no greater than three.
+Failure of either audit blocks all dependent jobs. Passing the final audit
+unlocks the unchanged selected one-epoch varied-only AdamW `5e-5` student and a
+joint validation evaluation against the original GPT-OSS-teacher adapter. The
+existing P54 validation promotion rule remains the selection rule; do not
+inspect local test from a losing or ambiguous validation result.
