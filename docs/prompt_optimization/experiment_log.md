@@ -2666,8 +2666,11 @@ The reusable analyzer and its parse-fallback test are under
 The untouched-capacity confirmation's first two-A100 Qwen-27B job `30179133`
 failed before generation when the cluster NCCL network plugin segfaulted during
 rank initialization. Retry `30179201` forces NCCL's built-in Socket transport
-for the same-node ranks. No labels or model outputs existed from the failed job,
-so this is a technical retry under the frozen protocol, not result selection.
+for the same-node ranks. It passed that point but failed before generation when
+the saved single-RTX `max_num_seqs=512` exceeded the 226 Mamba cache blocks per
+40 GB shard. Retry `30179238` lowers scheduler concurrency to 192. No labels or
+model outputs existed from either failed job, so these are technical retries
+under the frozen protocol, not result selection.
 
 A fixed selective-capacity audit routes only Qwen-9B member-disagreement rows
 to Qwen-27B. It improves Qwen-9B on validation (`0.9238`), locked test

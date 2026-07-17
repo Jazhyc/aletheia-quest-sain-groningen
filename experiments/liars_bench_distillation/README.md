@@ -600,7 +600,8 @@ disagree. `analyze_capacity_escalation.py` gives validation `0.92381`, test
 and `0.77875`. Qwen-27B query fractions are 6.93%, 6.70%, and 26.88%.
 The external gate passes, but full Qwen-27B remains more accurate. Its P51 gate
 was frozen before confirmation outputs: `+0.02` macro gain, category/cell losses
-within `0.02`/`0.05`, and query fraction at most `0.35`.
+within `0.02`/`0.05`, and query fraction at most `0.35`. The original gain is
+mostly Insider Trading (`+0.190`); the other category gains are `0.005--0.010`.
 
 ### Untouched capacity confirmation
 
@@ -620,24 +621,29 @@ sbatch experiments/liars_bench_distillation/evaluate_heavy_spectrum_confirmation
 ```
 
 Confirm only for at least `+0.04` macro-category BA, no category loss beyond
-`0.02`, and no category/family loss beyond `0.05`. Jobs `30179132` and
-`30179133` are the Qwen-9B/Qwen-27B full-decode runs. Do not tune a
-threshold, route, sample, or stop condition from this result.
+`0.02`, and no category/family loss beyond `0.05`. Job `30179132` is the Qwen-9B
+full-decode run; after the technical startups described below, `30179238` is the
+Qwen-27B full-decode run. Do not tune a threshold, route, sample, or stop
+condition from this result.
 
-Original RTX jobs `30179098`/`30179099` were canceled before starting because scheduler estimates
-were outside the work window. The confirmation wrappers explicitly request one
-A100 for Qwen-9B and two A100s with tensor parallelism for Qwen-27B. This is a
-hardware/sharding difference from the original single-RTX spectrum and must be
-reported; prompts, decoding budget, aggregation, and thresholds remain fixed.
+Original RTX jobs `30179098`/`30179099` were canceled before starting because
+scheduler estimates were outside the work window. The confirmation wrappers
+explicitly request one A100 for Qwen-9B and two A100s with tensor parallelism
+for Qwen-27B. This is a hardware/sharding difference from the original
+single-RTX spectrum and must be reported; prompts, decoding budget, aggregation,
+and thresholds remain fixed.
 An identical single-RTX Qwen-27B fallback (`30179171`) was queued to race the
 delayed two-A100 allocation, then canceled while still pending as soon as
 `30179133` started. That first A100 run failed before generation because the
 cluster NCCL network plugin segfaulted during two-rank initialization. Retry
 `30179201` forces the built-in Socket transport for this single-node job; the
 replacement RTX fallback `30179199` was canceled while pending as soon as that
-retry started. The fallback wrapper remains for future scheduling, but never
-allow both resource variants to write the same output directory. Treat the
-failed startup as a backend event, not a method result.
+retry started. It passed rank initialization but failed before generation
+because the single-RTX config's `max_num_seqs=512` exceeded the 226 Mamba cache
+blocks available per 40 GB shard. Retry `30179238` lowers scheduler concurrency
+only to 192. The fallback wrapper remains for future scheduling, but never allow
+both resource variants to write the same output directory. Treat these failed
+startups as backend events, not method results.
 
 The first preservation stage fails. Phoenix-heavy macro BA is `0.77375` versus
 `0.77875`, but action reports lose `0.025` and HP-KR Llama/Qwen plus Insider

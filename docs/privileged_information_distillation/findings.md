@@ -1909,7 +1909,9 @@ competition rows and 26.9% of the original external spectrum, improving Qwen-9B
 BA in all three checks (`+0.0012` validation, `+0.0036` test, `+0.0525`
 external). It remains below full Qwen-27B. Preserve it only as a runtime
 contingency, pending the separately frozen untouched spectrum gate and NDIF
-timing; do not misstate it as the accuracy leader.
+timing; do not misstate it as the accuracy leader. Its external gain is mostly
+Insider Trading (`+0.190` category BA); the other three category gains are at
+most `+0.010`, another reason to require untouched confirmation.
 
 Semantic routing is useful only under a weaker judge. Qwen-9B heavy plus fixed
 epistemic/action specialists gains `0.0538` external macro BA with every family

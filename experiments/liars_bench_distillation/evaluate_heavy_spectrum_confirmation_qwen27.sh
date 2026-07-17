@@ -27,4 +27,5 @@ python experiments/liars_bench_distillation/evaluate_heavy_spectrum.py \
   --eval-artifact results/blackbox/liars_bench_heavy_spectrum_confirmation_v1/eval.jsonl \
   --judge-config results/blackbox/qwen27b_reason_ensemble_dks_member4096_v1/validation/config.yaml \
   --tensor-parallel-size 2 \
+  --max-num-seqs 192 \
   --output-dir results/blackbox/liars_bench_qwen27_heavy_spectrum_confirmation_v1

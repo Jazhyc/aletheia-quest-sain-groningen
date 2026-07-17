@@ -2042,8 +2042,11 @@ Status: frozen before sampling or generation.
   change the sampling rule.
 - The first two-A100 launch (`30179133`) failed before generation in the cluster
   NCCL network plugin. Retry `30179201` forces the built-in Socket transport on
-  the same single node. This changes communication transport only; it does not
-  alter prompts, decoding, labels, or the frozen decision gate.
+  the same single node. It then exposed a separate pre-generation cache check:
+  the saved 96 GB config's 512 sequence concurrency exceeds the 226 Mamba cache
+  blocks per 40 GB shard. Retry `30179238` uses 192. These change communication
+  transport and scheduler concurrency only; they do not alter prompts, decoding,
+  labels, aggregation, or the frozen decision gate.
 - Confirm broad capacity transfer only if macro-category gain is at least
   `+0.04`, no category loses more than `0.02`, and no category/family cell loses
   more than `0.05`. A failure remains authoritative and must not be repaired by
@@ -2093,7 +2096,9 @@ Existing evidence:
   on 6.93% of rows; locked test improves `0.9298 -> 0.9333` at 6.70%.
 - The original four-mode spectrum improves `0.77875 -> 0.83125`, with every
   category non-worse, worst family-cell delta `-0.0147`, and a 26.88% Qwen-27B
-  query fraction. Full Qwen-27B remains much better at `0.8750`.
+  query fraction. The gain is concentrated in Insider Trading (`+0.190`);
+  choice, HP-KR, and soft-trigger improve only `+0.005`, `+0.005`, and `+0.010`.
+  Full Qwen-27B remains much better at `0.8750`.
 
 Untouched gate, frozen before P51 outputs:
 
