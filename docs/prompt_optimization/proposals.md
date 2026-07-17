@@ -2139,7 +2139,8 @@ Untouched outcome:
 
 ## P54: Same-Family Qwen-27B Privileged Teacher
 
-Status: parser/config complete; balanced teacher smoke pending as job `30180040`.
+Status: strict channel contract works, but both frozen coverage smokes failed;
+full cache and student training not launched.
 
 Hypothesis and isolation:
 
@@ -2181,3 +2182,19 @@ Frozen progression:
   varied BA, and adds no more than two parse errors. Otherwise retain it only as
   evidence about teacher-family transfer; do not tune the teacher wording,
   student LR, or data fraction from the same validation result.
+
+Outcome:
+
+- The 2,048-token smoke (`30180040`) completed in 8m51s and parsed 19/32
+  targets. All 13 failures exhausted the allowance before `</think>`; every
+  usable target was label-consistent and contained no private marker or
+  privileged-language leakage.
+- The predeclared 4,096-token repair (`30180128`) completed in 4m50s with a warm
+  compile cache but parsed only 29/32, below the required 31/32. The remaining
+  three completions are 17.7--18.4k characters, never close `</think>`, and
+  expose no visible final field. The 29 usable summaries are balanced 14/15 by
+  label, median 57 words, and leakage-free.
+- This validates strict same-family channel extraction but rejects full-cache
+  generation under the frozen budget/coverage protocol. Do not call 90.6%
+  coverage a pass or silently raise the cap again. A later selective retry or
+  bounded-thinking design must be separately frozen and costed before launch.

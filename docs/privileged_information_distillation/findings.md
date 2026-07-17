@@ -1996,3 +1996,13 @@ artifact; the student target is parsed strictly after `</think>`, and missing
 closure is rejected. Balanced 32-row smoke job `30180040` precedes any full
 cache generation. This is a teacher-family ablation, not authorization to use
 Qwen-27B at submission inference time.
+
+The strict parser behaves correctly, but the frozen coverage gate fails.
+At 2,048 tokens Qwen-27B closes thinking on only 19/32 rows. The allowed
+4,096-token repair improves this to 29/32, still below the required 31/32. The
+three failures are long private continuations with no `</think>` or visible
+answer; the 29 usable summaries are label-consistent, median 57 words, and show
+no private-marker or privileged-language leakage. Do not generate the full
+2,880-row cache under this protocol or infer whether same-family teaching helps
+from parser coverage alone. A future selective higher-cap retry must be frozen
+as a separate cost/coverage experiment.

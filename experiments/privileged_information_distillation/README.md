@@ -106,6 +106,14 @@ full cache and student use the config without smoke overrides. Evaluate the
 result jointly with the original GPT-OSS-teacher adapter on validation; do not
 use local test unless the frozen P54 promotion gate passes.
 
+The 2,048-token smoke (`30180040`) parsed 19/32. All failures were unclosed
+thinking continuations, so the predeclared 4,096-token repair ran as `30180128`.
+It parsed 29/32, below the frozen 31/32 requirement. All usable targets were
+label-consistent and leakage-free; the remaining three again never closed
+`</think>`. Do not launch the full cache from this result. Any selective
+8,192-token retry or bounded-thinking variant is a new protocol, not a repair
+authorized by P54.
+
 The teacher artifact path is intentionally independent of `method`. Student
 learning-rate sweeps override `method` to obtain distinct adapter directories
 while all consuming the same immutable reviewed teacher cache.
