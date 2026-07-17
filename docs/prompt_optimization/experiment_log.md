@@ -2601,6 +2601,13 @@ Qwen-27B remote batch size. The NDIF rehearsal starts at batch four on one
 40-row unit, establishes full-decode equivalence first, and tests tokenizer-
 dependent string stopping separately.
 
+Local NNsight serialization does not reject either standard stop path, but the
+payloads are material: 19,560,586 bytes for the tokenizer and 14,885,841 bytes
+for a prebuilt Hugging Face `StopStringCriteria` (`248078 x 15` embedding).
+The rehearsal must therefore measure end-to-end session setup plus decoding for
+full decode, tokenizer-keyword stopping, and the prebuilt standard criterion.
+Serialization success alone is not evidence of a leaderboard speedup.
+
 ### Calibration controls
 
 A short-single-turn explicit-instruction cutoff improved both 9B and 27B

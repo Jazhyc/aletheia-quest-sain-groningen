@@ -40,3 +40,19 @@ an actual NDIF rehearsal. The leaderboard runs each dataset unit separately
 with a 45-minute notebook timeout; the largest local unit is 40 rows / 120
 member evaluations, so record per-unit wall time rather than extrapolating only
 from the local 800-row vLLM spectrum.
+
+## Stop serialization preflight
+
+`audit_stop_serialization.py` confirms that both standard Hugging Face paths
+round-trip through the installed NNsight serializer, but neither is a tiny
+request. For the cached Qwen tokenizer, the serialized tokenizer is 19,560,586
+bytes. A prebuilt standard `StopStringCriteria` serializes to 14,885,841 bytes
+and contains a `248078 x 15` embedding. This is not remote certification.
+
+Benchmark three separate one-unit conditions without changing prompts or
+batching: full decode; `stop_strings` plus tokenizer; and a standard prebuilt
+`StoppingCriteriaList`. Group calls inside one session so shared-object
+serialization can be amortized, record session setup and scoring separately,
+and retain stopping only if end-to-end time improves while all 40 decisions
+match. Do not write a custom suffix criterion merely to reduce payload before
+the standard paths have been measured on NDIF.
