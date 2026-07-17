@@ -81,33 +81,26 @@ def response_span(messages: list, tokenizer) -> tuple[list[int], int, int]:
 # ── model ────────────────────────────────────────────────────────────────────
 
 def build_model(model_id: str, lora_id: str | None = None, **model_kwargs):
-    """Construct the right nnsight wrapper for a repo: ``VisionLanguageModel`` for
-    multimodal/conditional models (e.g. Gemma-3), ``LanguageModel`` otherwise.
-    ``peft=lora_id`` attaches the LoRA adapter when one is given. The config and
-    tokenizer load locally; the weights live on NDIF — the returned object is just
-    a handle you trace against. Extra ``model_kwargs`` are forwarded to the wrapper
-    (e.g. ``device_map="auto", dtype=torch.bfloat16`` to run on a local GPU
-    instead of NDIF)."""
-    from transformers import AutoConfig
+    """Construct an nnsight ``LanguageModel`` handle for a repo. ``peft=lora_id``
+    attaches the LoRA adapter when one is given. The config and tokenizer load
+    locally; the weights live on NDIF — the returned object is just a handle you
+    trace against. Extra ``model_kwargs`` are forwarded to the wrapper (e.g.
+    ``device_map="auto", dtype=torch.bfloat16`` to run on a local GPU instead of
+    NDIF).
 
+    Every competition organism is served on NDIF as a text-only ``LanguageModel``,
+    even ``google/gemma-3-27b-it`` (whose HF config still carries a vision tower).
+    Instantiating ``VisionLanguageModel`` for it makes the remote hotswap fail
+    (the "Hotswapping tier" failure) because NDIF has no VLM version to swap in, so
+    we always build ``LanguageModel``."""
     try:
-        cfg = AutoConfig.from_pretrained(model_id)
-        archs = getattr(cfg, "architectures", None) or []
-        is_vlm = bool(getattr(cfg, "vision_config", None)) or any(
-            ("ConditionalGeneration" in a) or ("VisionLanguage" in a) for a in archs)
-    except Exception:
-        is_vlm = False
-
-    try:
-        from nnsight import LanguageModel, VisionLanguageModel
+        from nnsight import LanguageModel
     except ImportError:                       # nnsight 0.7.x no longer re-exports at top level
         from nnsight.modeling.language import LanguageModel
-        from nnsight.modeling.vlm import VisionLanguageModel
 
-    Wrapper = VisionLanguageModel if is_vlm else LanguageModel
     kwargs = {"peft": lora_id} if lora_id else {}
     kwargs.update(model_kwargs)
-    return Wrapper(model_id, **kwargs)
+    return LanguageModel(model_id, **kwargs)
 
 
 def load_model(dataset_name: str):
