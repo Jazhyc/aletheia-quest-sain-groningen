@@ -2253,7 +2253,7 @@ Full-cache and student outcome:
 
 ## P55: Qwen-27B Regular-Prompt No-Thinking Ablation
 
-Status: running.
+Status: complete; capacity gain persists without native thinking.
 
 Question: does Qwen3.5-27B retain its judge advantage when its native private
 thinking mode is disabled, or is the gain primarily supplied by long-form
@@ -2273,3 +2273,31 @@ Frozen protocol:
   matched Qwen-9B regular-prompt no-thinking row (`0.8274` BA, 36 parse
   failures); comparisons with thinking-enabled Qwen-27B D/K/S are descriptive
   because those runs also changed the prompts, budget, ensemble, and threshold.
+
+Outcome:
+
+- Slurm job `30191029` completed in 4m26s. Scoring itself took 125.5s for
+  822 rows (6.5 rows/s), excluding the model load and compile. It produced 33
+  parse failures and no hidden `<think>` markers.
+- Qwen-27B no-thinking scores `0.9119` macro BA and `0.9149` AUROC, with
+  `0.8786` recall and `0.0548` FPR. Instructed BA is `0.9875`; varied BA is
+  `0.8111`. The matched Qwen-9B no-thinking row scores `0.8274`, `0.8854`, and
+  `0.7500`, respectively. The 27B gains are therefore `+0.0845` overall,
+  `+0.1021` instructed, and `+0.0611` varied.
+- This rejects the hypothesis that Qwen-27B's advantage primarily requires its
+  native private thinking mode. The larger model recovers substantially more
+  deceptive rows under the same prompt and visible-token allowance, consistent
+  with stronger factual/semantic capacity. It does pay for some varied recall
+  with higher varied FPR (`0.1056` versus `0.0611`).
+- Disabling native thinking does not make this a one-token classifier. The
+  regular prompt permits a visible rationale: completions have a median 101
+  words and p95 302 words. All 33 parse failures are long outputs (268--403
+  words), reach exactly 512 generated tokens, and omit the final rating; 32
+  occur on varied rows.
+  A concise-format or first-rating stop could improve robustness, but this
+  frozen result does not authorize post-hoc budget or prompt selection.
+- The thinking-enabled Qwen-27B D/K/S ensemble remains higher at `0.9298` BA,
+  particularly on varied data (`0.8639`), but it changes four factors at once:
+  native thinking, three specialized prompts, 4,096 tokens, and max
+  aggregation. Do not attribute its `+0.0179` aggregate advantage solely to
+  thinking without a matched single-prompt thinking control.

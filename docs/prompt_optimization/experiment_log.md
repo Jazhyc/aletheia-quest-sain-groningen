@@ -2703,6 +2703,26 @@ scores `0.82375` while querying Qwen-27B on 27.88% of rows. It passes its macro,
 category, and query-fraction requirements but fails the family-cell requirement:
 choice/Qwen loses `0.0606`. Reject P53 rather than adding a category exception.
 
+### Qwen-27B no-thinking capacity ablation
+
+A matched regular-prompt validation run isolates model scale while disabling
+Qwen's native private thinking template. Job `30191029` uses the same prompt,
+512-token allowance, deterministic generation, and `0.5` threshold as the
+existing Qwen-9B no-thinking control. Qwen-27B scores `0.9119` macro BA versus
+`0.8274` for Qwen-9B, including `0.9875` versus `0.8854` instructed BA and
+`0.8111` versus `0.7500` varied BA. This large gain survives without hidden
+thinking and is therefore better evidence for capacity/factual knowledge than
+for a uniquely useful private reasoning style.
+
+The tradeoff is calibration: Qwen-27B recall rises `0.6929 -> 0.8786`, while
+FPR rises `0.0381 -> 0.0548`, concentrated in varied data. Its 33 parse failures
+are nearly unchanged from Qwen-9B's 36 and reflect long visible explanations,
+not hidden reasoning: every failure reaches the exact 512-token cap, the median
+completion is 101 words, and 32 failures occur on varied rows. Scoring took
+125.5s, 3.7 times Qwen-9B's 33.9s. The stronger
+thinking-enabled D/K/S ensemble is not a matched thinking ablation because it
+also changes prompts, budget, aggregation, and number of evaluations.
+
 ### Small external-data continuations
 
 The focused 64-summary soft-trigger continuation plus 10% varied replay trained
