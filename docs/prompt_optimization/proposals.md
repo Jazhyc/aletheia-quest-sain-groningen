@@ -2250,3 +2250,26 @@ Full-cache and student outcome:
   better from this experiment. The result indicates that changing teacher
   family materially changes some explanations but not the learned validation
   decision boundary under this fixed recipe.
+
+## P55: Qwen-27B Regular-Prompt No-Thinking Ablation
+
+Status: running.
+
+Question: does Qwen3.5-27B retain its judge advantage when its native private
+thinking mode is disabled, or is the gain primarily supplied by long-form
+reasoning?
+
+Frozen protocol:
+
+- Evaluate the complete 822-row validation split once with
+  `Qwen/Qwen3.5-27B`, the unchanged regular `blackbox_reasoning` deception
+  rating prompt, chat templating, and `enable_thinking=false`.
+- Match the existing Qwen-9B no-thinking control: deterministic decoding,
+  512 generated tokens, ratings 1--7, and the inherited frozen threshold of
+  `0.5`. Retain the 8,000-character prompt cap and use an 8,192-token model
+  context. Do not tune the threshold or wording from this validation result.
+- Report overall, instructed, and varied balanced accuracy, plus recall, FPR,
+  AUROC, parse failures, and scoring time. The primary comparison is the
+  matched Qwen-9B regular-prompt no-thinking row (`0.8274` BA, 36 parse
+  failures); comparisons with thinking-enabled Qwen-27B D/K/S are descriptive
+  because those runs also changed the prompts, budget, ensemble, and threshold.
