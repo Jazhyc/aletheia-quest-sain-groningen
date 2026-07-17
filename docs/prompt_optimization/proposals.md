@@ -2198,3 +2198,32 @@ Outcome:
   generation under the frozen budget/coverage protocol. Do not call 90.6%
   coverage a pass or silently raise the cap again. A later selective retry or
   bounded-thinking design must be separately frozen and costed before launch.
+
+User-authorized selective 8,192-token follow-up, frozen before launch:
+
+- Copy the 4,096-token smoke cache into a separately named artifact. Reuse the
+  29 parsed rows byte-for-byte and regenerate only the three parse failures.
+  Keep the teacher/student prompts, labels, Qwen thinking mode, deterministic
+  decoding, parser, and target formatter unchanged.
+- Raise `teacher.max_tokens` to 8,192 and `teacher.max_model_len` to 12,288 so
+  the allowance is real rather than clipped by total context. This is a
+  label-blind truncation repair, not a second teacher-prompt condition.
+- Pass only at 32/32 parsed and label-consistent rows, zero private markers or
+  privileged-language leakage in visible finals/targets, and exact preservation
+  of all 29 cached usable records. A remaining failure blocks the full cache;
+  do not add a fourth cap or accept partial coverage post hoc.
+
+Selective outcome:
+
+- Job `30180231` completed in 5m31s. It reported 29 cache hits and generated
+  exactly the three failed rows with an 8,192-token allowance and 12,288-token
+  total context. All three closed thinking, producing 32/32 parsed and
+  label-consistent targets.
+- All 29 cached records are exactly equal before and after retry. The repaired
+  raw completions contain 10.1k, 11.2k, and 16.1k characters. Across all 32
+  visible finals and student targets there are zero `<think>` markers and zero
+  matches for privileged, ground-truth, teacher, or instruction leakage. The
+  final summaries remain compact (median 57 words, p95 79, maximum 90).
+- The selective retry passes its frozen gate and authorizes a tiered full-cache
+  design: 4,096 tokens normally, then 8,192 only for unclosed rows. It does not
+  yet establish that the resulting Qwen-9B student improves validation.

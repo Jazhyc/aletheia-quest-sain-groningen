@@ -114,6 +114,19 @@ label-consistent and leakage-free; the remaining three again never closed
 8,192-token retry or bounded-thinking variant is a new protocol, not a repair
 authorized by P54.
 
+The user subsequently authorized one separately frozen selective retry. Seed a
+new artifact with the 4,096-token cache, reuse its 29 valid rows, and regenerate
+only the three failures with `teacher.max_tokens=8192` and
+`teacher.max_model_len=12288`. Require 32/32 closure and leakage-free targets;
+do not proceed from another partial result.
+
+Selective retry job `30180231` passes: 29 cache hits, three regenerated rows,
+and 32/32 parsed/label-consistent targets. All 29 cached records are preserved
+exactly. No visible final or student target contains private-thinking markers or
+privileged-language leakage; summary length remains median 57 words and p95 79.
+Use this tiered 4,096/8,192 policy for any full cache rather than assigning the
+expensive cap to every row.
+
 The teacher artifact path is intentionally independent of `method`. Student
 learning-rate sweeps override `method` to obtain distinct adapter directories
 while all consuming the same immutable reviewed teacher cache.

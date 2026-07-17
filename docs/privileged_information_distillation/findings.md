@@ -2006,3 +2006,12 @@ no private-marker or privileged-language leakage. Do not generate the full
 2,880-row cache under this protocol or infer whether same-family teaching helps
 from parser coverage alone. A future selective higher-cap retry must be frozen
 as a separate cost/coverage experiment.
+
+The user-authorized selective 8,192-token retry passes. Job `30180231` copied
+the 4,096-token cache, reused all 29 usable records exactly, and regenerated
+only its three failures under a 12,288-token total context. All three closed,
+yielding 32/32 parsed and label-consistent targets with zero private-marker or
+privileged-language leakage. Median/p95 visible summary length is 57/79 words.
+This validates a tiered cache-generation policy—4,096 normally and 8,192 only
+for unclosed rows—but does not yet answer whether the Qwen-family teacher
+improves the trained Qwen-9B student.
