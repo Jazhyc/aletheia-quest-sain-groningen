@@ -2112,3 +2112,12 @@ non-worse-scenario, and parse-error gate and is authorized for one locked local
 test. This experiment shows that binary outputs still support useful ensemble
 diversity: the vote fraction is coarse, but the union of independently framed
 positive decisions can recover errors that no single member covers.
+
+The locked local-test confirmation rejects deployment. Job `30191769` scores
+`0.9167` overall, `0.9792` instructed, and `0.8333` varied BA for the fixed OR,
+versus `0.9155`, `0.9812`, and `0.8278` for the ordinary adapter. Recall rises
+from `0.8619` to `0.8976`, but FPR rises from `0.0310` to `0.0643`, leaving only
+`+0.0012` overall BA. OR makes 20 fixes and 19 breaks across 39 changed rows.
+The large validation improvement therefore does not transfer. Keep the ordinary
+single prompt; do not integrate D/K/S, test-select the known member, or tune a
+vote rule from these labels.

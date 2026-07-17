@@ -2304,7 +2304,7 @@ Outcome:
 
 ## P56: Binary PID Student D/K/S Prompt Ensemble
 
-Status: validation gate passed; locked local test authorized.
+Status: complete; locked test rejects deployment.
 
 Question: does the complementary error structure of the factual D/K/S rubrics
 survive after privileged-information distillation into the selected binary
@@ -2354,3 +2354,24 @@ Validation outcome:
   `0.8905` overall / `0.8083` varied BA and unanimity scores `0.8250` /
   `0.7528`. Do not replace the preregistered OR or tune prompt subsets from
   these validation labels.
+
+Locked local-test outcome:
+
+- A100 job `30191769` completed in 14m21s, including slow dataset preparation
+  and startup; the three member generations took 201.4s. Details scores
+  `0.8798` overall / `0.8083` varied BA, known scores `0.9167` / `0.8278`, and
+  scrutiny scores `0.8595` / `0.7889`. Their parse-error counts are 6, 5, and
+  5.
+- The preregistered OR scores `0.9167` overall, `0.9792` instructed, and
+  `0.8333` varied BA, with `0.8976` recall, `0.0643` FPR, and zero all-member
+  parse failures. The ordinary adapter scores `0.9155`, `0.9812`, and `0.8278`,
+  with `0.8619` recall and `0.0310` FPR.
+- Thus the validation deltas of `+0.0202` overall and `+0.0472` varied shrink
+  to only `+0.0012` and `+0.0056` on locked test, while FPR more than doubles.
+  OR changes 39 baseline decisions, making 20 fixes and 19 breaks; varied rows
+  contribute 14 fixes and 12 breaks.
+- Reject notebook integration and further prompt-subset, vote-rule, or test
+  threshold selection. In particular, do not post-hoc select the known member
+  because it happens to tie OR on test. Binary D/K/S framing creates real
+  complementary validation recall, but that complementarity is not stable
+  enough across splits to pay for three submission passes.

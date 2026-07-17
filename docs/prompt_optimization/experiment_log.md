@@ -2723,6 +2723,22 @@ completion is 101 words, and 32 failures occur on varied rows. Scoring took
 thinking-enabled D/K/S ensemble is not a matched thinking ablation because it
 also changes prompts, budget, aggregation, and number of evaluations.
 
+### Binary PID student D/K/S ensemble
+
+The selected varied-only AdamW `5e-5` adapter was run without assistant traces
+under binary details, known-context, and scrutiny frames. On validation, the
+fixed OR improved the ordinary adapter from `0.9000` to `0.9202` overall BA and
+from `0.7944` to `0.8417` varied BA. The three members disagreed on 98/822 rows;
+OR made 30 fixes and 13 breaks. Majority and unanimity were worse, confirming
+that the validation gain came from complementary positive recall.
+
+The one locked test erased nearly all of that gain. OR scores `0.9167` overall
+and `0.8333` varied BA versus `0.9155` and `0.8278` for the ordinary adapter.
+Its recall rises by `0.0357`, but FPR rises by `0.0333`; 20 fixes and 19 breaks
+leave only `+0.0012` overall BA at three times the generation work. Reject this
+ensemble for submission and do not select its known member or a different vote
+rule post hoc.
+
 ### Small external-data continuations
 
 The focused 64-summary soft-trigger continuation plus 10% varied replay trained
