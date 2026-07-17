@@ -2378,7 +2378,7 @@ Locked local-test outcome:
 
 ## P57: Ordinal PID Student D/K/S Ensemble
 
-Status: ready for frozen validation.
+Status: complete; readout is almost binary and fails the locked-test gate.
 
 Question: did completion-only binary fine-tuning preserve enough graded evidence
 for a 1--7 readout to distinguish weak from confident D/K/S positive judgments?
@@ -2409,3 +2409,33 @@ Frozen protocol:
   `0.005`), does not reduce P56's instructed `0.9792` or varied `0.8417` BA,
   reaches at least `0.9300` AUROC, and has no more than two all-member parse
   failures. Otherwise close the ordinal-readout experiment on validation.
+
+Validation outcome:
+
+- RTX job `30192251` completed in 4m20s. Member generation took 35.8s for
+  details, 37.1s for known, and 38.4s for scrutiny. At the frozen
+  rating-at-least-4 midpoint, the members score `0.8905`, `0.8881`, and
+  `0.8060` overall BA; their AUROCs are `0.8989`, `0.8901`, and `0.8121`,
+  with 6, 13, and 11 parse failures.
+- Max aggregation scores `0.9167` overall BA, `0.9260` AUROC, `0.8833`
+  recall, and `0.0500` FPR. Instructed BA is `0.9750` and varied BA is
+  `0.8389`; only one row fails in all three members. This misses every
+  preregistered performance gate and is also below P56's binary OR (`0.9202`
+  overall / `0.8417` varied).
+- The adapter retains a trace of ordinal behavior, but its readout is almost
+  binary. The max member rating is 1 on 443 rows and 7 on 364; only 14/821
+  parsed rows (1.7%) receive an intermediate 2--6 rating. Per-member extreme
+  fractions are 97.8% for details, 99.4% for known, and 98.6% for scrutiny.
+  The three raw ratings disagree on 120 rows and their midpoint decisions on
+  123, so framing diversity remains even though confidence granularity mostly
+  collapses.
+- The frozen cutoff diagnostics do not reveal a materially better ordinal
+  operating point. Rating at least 2 and rating at least 6/7 each reach only
+  `0.9190` overall BA; thresholds 3/4 and 5 remain `0.9167`. These are
+  descriptive only and none beats binary OR. Relative to the ordinary adapter,
+  the primary rating max makes 30 fixes and 16 breaks; relative to binary OR it
+  makes 13 fixes and 16 breaks.
+- Do not run local test or alter the rating scale/cutoff from these labels. The
+  small AUROC-minus-BA gap shows that certainty was not mathematically erased,
+  but completion-only binary SFT strongly polarizes the requested scale and
+  the residual graded signal is too sparse to improve the ensemble.

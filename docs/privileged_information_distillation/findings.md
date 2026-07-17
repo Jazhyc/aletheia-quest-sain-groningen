@@ -2121,3 +2121,29 @@ from `0.8619` to `0.8976`, but FPR rises from `0.0310` to `0.0643`, leaving only
 The large validation improvement therefore does not transfer. Keep the ordinary
 single prompt; do not integrate D/K/S, test-select the known member, or tune a
 vote rule from these labels.
+
+## Ordinal D/K/S readout (2026-07-17)
+
+A matched validation experiment asked the selected binary student for 1--7
+ratings under the same details, known-fact, and scrutiny frames. The evaluator,
+adapter, input serialization, no-thinking mode, context limits, deterministic
+decoding, and 512-token allowance were held fixed. The preregistered ensemble
+maxed linearly mapped ratings and classified ratings 4--7 as deceptive.
+
+Job `30192251` completed in 4m20s. The max ensemble scored `0.9167` overall BA,
+`0.9260` AUROC, `0.9750` instructed BA, and `0.8389` varied BA, with `0.8833`
+recall, `0.0500` FPR, and one all-member parse failure. This is below the binary
+OR's `0.9202` overall and `0.8417` varied BA and fails the frozen `0.9252`
+overall, non-worse scenario, `0.9300` AUROC, and parse gate. No test run is
+authorized.
+
+The rating distribution explains the limited benefit. Of 821 parsed max
+ratings, 443 are 1 and 364 are 7; just 14 (1.7%) lie from 2 through 6. Member
+extreme fractions range from 97.8% to 99.4%. Ratings are therefore not perfectly
+binary, and AUROC exceeds midpoint BA by `0.0093`, but the usable ordinal signal
+is very sparse. Fixed non-selectable cutoffs from 2 through 7 peak at only
+`0.9190` BA. Relative to the ordinary adapter, midpoint max makes 30 fixes and
+16 breaks; relative to binary OR, it makes 13 fixes and 16 breaks. Do not tune
+the scale, cutoff, or prompt from these validation labels. Completion-only
+binary SFT has preserved framing diversity but strongly polarized the requested
+confidence readout.

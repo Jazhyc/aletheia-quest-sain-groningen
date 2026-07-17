@@ -2739,6 +2739,21 @@ leave only `+0.0012` overall BA at three times the generation work. Reject this
 ensemble for submission and do not select its known member or a different vote
 rule post hoc.
 
+### Ordinal PID student D/K/S ensemble
+
+Job `30192251` tested whether the selected binary privileged-distillation
+adapter still exposes useful confidence when the D/K/S prompts request a 1--7
+rating. All non-interface inference settings matched the binary experiment.
+The frozen max ensemble with rating at least 4 scored `0.9167` BA and `0.9260`
+AUROC overall, `0.9750` instructed BA, and `0.8389` varied BA. This is below
+the binary OR on both overall and varied BA and fails its locked-test gate.
+
+The output surface has nearly collapsed to the trained binary targets: 807/821
+parsed max ratings are exactly 1 or 7, with only 14 intermediate values. Fixed
+cutoffs 2--7 peak at `0.9190` BA, still below binary OR, and are not selectable.
+Keep the ordinary single prompt and close this ordinal-readout branch without a
+test run or cutoff retuning.
+
 ### Small external-data continuations
 
 The focused 64-summary soft-trigger continuation plus 10% varied replay trained
