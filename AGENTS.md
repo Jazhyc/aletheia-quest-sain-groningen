@@ -223,6 +223,19 @@ the fallback stats fix. The bundled dry runner can still fail for reasons
 unrelated to the submission notebook, such as missing system-site packages in the
 temporary dry-run venv or other local environment differences.
 
+Model-class update from 2026-07-17 (supersedes the `VisionLanguageModel`
+guidance below for submissions): NDIF now deploys every competition organism —
+including `google/gemma-3-27b-it`, whose HF config still carries a vision tower —
+as a text-only `LanguageModel`. Instantiating `VisionLanguageModel` on the client
+makes the remote hotswap fail (the organizers' "Hotswapping tier" failure), which
+is what killed `sonic_v1.ipynb` on the Gemma dataset (Dataset Metis). `util.build_model`
+now always returns `LanguageModel`. A full 400-row remote run of the Gemma dev set
+(`dev-instructed-deception-gemma-3-27b-it-None`) with `LanguageModel` succeeded
+(AUROC 0.9997). The older `VisionLanguageModel` finding below was about multi-batch
+`generate()` session *stability* on the Qwen judge and predates this deployment
+change; prefer `LanguageModel` now and only revisit if a remote `generate` shape
+actually hangs.
+
 Phoenix Wright remote NNsight session finding from 2026-07-07: avoid one
 `model.session(remote=True)` per generated batch. Rapid successive NDIF sessions
 can stall after the first batch even when isolated remote tests pass. For
