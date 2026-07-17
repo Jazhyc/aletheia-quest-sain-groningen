@@ -2088,3 +2088,27 @@ Do not spend a local-test evaluation on this adapter or tune its LR/data fractio
 from the same validation result. Within the fixed recipe, a stronger teacher
 from the student's family changes some generated explanations but provides no
 observable improvement to the validation decision boundary.
+
+## Binary D/K/S inference ensemble (2026-07-17)
+
+The selected one-epoch varied-only AdamW `5e-5` adapter was evaluated under
+three inference-only decision frames adapted from the factual details,
+known-context contradiction, and scrutiny prompts. All conditions retained the
+student's trained reasoning-summary plus binary-prediction target, disabled
+native thinking, hid assistant reasoning traces, and ran together in one vLLM
+session. No weights or training data changed.
+
+On validation, details scored `0.8857` overall / `0.8194` varied BA, known
+scored `0.9119` / `0.8222`, and scrutiny scored `0.8381` / `0.7611`. The fixed
+binary max/OR rule reached `0.9202` overall, `0.9792` instructed, and `0.8417`
+varied BA, versus `0.9000`, `0.9792`, and `0.7944` for the ordinary adapter.
+Its recall/FPR were `0.8929`/`0.0524`, and only two rows failed in all three
+members. Across 98 disagreement rows, OR made 30 fixes and 13 breaks relative
+to baseline; 26 fixes and nine breaks were varied.
+
+Majority (`0.8905` overall) and unanimity (`0.8250`) were frozen diagnostics,
+not selectable alternatives. The preregistered OR passes its `+0.005` overall,
+non-worse-scenario, and parse-error gate and is authorized for one locked local
+test. This experiment shows that binary outputs still support useful ensemble
+diversity: the vote fraction is coarse, but the union of independently framed
+positive decisions can recover errors that no single member covers.

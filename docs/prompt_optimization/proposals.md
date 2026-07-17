@@ -2304,7 +2304,7 @@ Outcome:
 
 ## P56: Binary PID Student D/K/S Prompt Ensemble
 
-Status: ready for validation.
+Status: validation gate passed; locked local test authorized.
 
 Question: does the complementary error structure of the factual D/K/S rubrics
 survive after privileged-information distillation into the selected binary
@@ -2333,3 +2333,24 @@ Frozen protocol:
   `0.005`, does not reduce instructed or varied BA, and adds at most two
   ensemble parse failures. Otherwise close the framing experiment on
   validation without prompt or vote-rule retuning.
+
+Validation outcome:
+
+- Job `30191649` completed in 4m51s with 107.8s total generation time across
+  2,466 prompt evaluations. Details scored `0.8857` overall / `0.8194` varied
+  BA, known scored `0.9119` / `0.8222`, and scrutiny scored `0.8381` / `0.7611`.
+  Their parse-error counts were 5, 10, and 12; strict-format counts were 817,
+  812, and 809 of 822.
+- The preregistered OR scores `0.9202` overall, `0.9792` instructed, and
+  `0.8417` varied BA, with `0.8929` recall, `0.0524` FPR, and two all-member
+  parse failures. Relative to the ordinary adapter, this is `+0.0202` overall,
+  `+0.0000` instructed, and `+0.0472` varied, while parse failures fall from
+  four to two. The locked-test gate passes.
+- The members disagree on 98/822 rows. OR changes 43 baseline decisions,
+  producing 30 fixes and 13 breaks; varied rows account for 26 fixes and nine
+  breaks. The gain is therefore complementary positive recall rather than a
+  uniformly better prompt.
+- Frozen diagnostics reject more conservative binary voting. Majority scores
+  `0.8905` overall / `0.8083` varied BA and unanimity scores `0.8250` /
+  `0.7528`. Do not replace the preregistered OR or tune prompt subsets from
+  these validation labels.
