@@ -2044,3 +2044,25 @@ Status: frozen before sampling or generation.
   `+0.04`, no category loses more than `0.02`, and no category/family cell loses
   more than `0.05`. A failure remains authoritative and must not be repaired by
   resampling, category routing, or threshold tuning.
+
+## P52: Fixed Ensemble Vote Audit
+
+Status: cached structural audit rejects validation-selected majority voting.
+
+- Compare each D/K/S member and three fixed binary rules: max/OR, majority, and
+  unanimous. Parse failures retain the production negative fallback. Average
+  by competition dataset unit or external response category as appropriate.
+- This is a complementarity audit, not an aggregation search. Do not select a
+  rule from the local validation maximum; require the direction to replicate on
+  locked competition test and the frozen four-mode spectrum.
+
+Outcome:
+
+- Qwen-27B majority edges max/OR on validation (`0.9310` versus `0.9298` BA),
+  but loses sharply on locked test (`0.9119` versus `0.9464`) and externally
+  (`0.8650` versus `0.8750`). Qwen-9B max/OR is strongest on validation and
+  test and essentially ties the best singleton externally.
+- The max rule buys recall from member disagreement: Qwen-27B has 51/822,
+  45/821, and 155/800 disagreement rows across validation, test, and external
+  spectrum. Keep all three prompts and max aggregation. The validation-only
+  majority gain is a concrete example of non-transferable hill climbing.

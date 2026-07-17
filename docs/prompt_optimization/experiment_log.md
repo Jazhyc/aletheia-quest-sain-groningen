@@ -2652,6 +2652,17 @@ NNsight `LanguageModel` path has not been rehearsed with a tokenizer object in
 the generation call. Do not substitute digit EOS tokens or assume the local
 keyword serializes through NDIF.
 
+### Ensemble vote complementarity
+
+A cached fixed-rule audit compared every D/K/S member with max/OR, majority,
+and unanimous voting. Qwen-27B majority slightly leads max on validation
+(`0.9310` versus `0.9298`) but regresses on locked test (`0.9119` versus
+`0.9464`) and the four-mode spectrum (`0.8650` versus `0.8750`). Qwen-9B max
+also leads on both competition splits. Keep max aggregation: member disagreement
+is useful recall diversity, and the validation majority edge does not transfer.
+The reusable analyzer and its parse-fallback test are under
+`experiments/liars_bench_distillation/analyze_ensemble_votes.py`.
+
 ### Small external-data continuations
 
 The focused 64-summary soft-trigger continuation plus 10% varied replay trained

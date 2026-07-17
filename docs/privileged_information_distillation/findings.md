@@ -1890,6 +1890,13 @@ macro BA while reducing generated work. Generated scoring time falls 58.9% for
 Qwen-9B and 23.7% for Qwen-27B. It is ready for local vLLM use; remote NNsight
 tokenizer/stop serialization is the remaining contract, not model accuracy.
 
+Do not replace max aggregation with validation-selected consensus. Qwen-27B
+majority vote is `+0.0012` BA over max on validation, but `-0.0345` on locked
+test and `-0.0100` on the external four-mode spectrum. The three prompts recover
+different deceptive rows, so the max rule's extra false positives are repaid by
+recall out of sample. Qwen-9B shows the same overall pattern. This closes
+aggregation hill climbing without requiring new generations.
+
 Semantic routing is useful only under a weaker judge. Qwen-9B heavy plus fixed
 epistemic/action specialists gains `0.0538` external macro BA with every family
 cell non-worse. The same specialists harm Qwen-27B, and an always-on Phoenix

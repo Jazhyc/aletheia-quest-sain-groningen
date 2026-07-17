@@ -585,13 +585,22 @@ fix, one break), keep parse failures at 83, and retain 68.0% of output tokens.
 This is external preservation evidence; generated validation provides the
 runtime measurement, and NDIF stop serialization still needs rehearsal.
 
+The cached vote audit also rejects changing the ensemble aggregation. Qwen-27B
+majority vote moves validation `0.92976 -> 0.93095`, then drops locked test
+`0.94643 -> 0.91190` and external macro BA `0.87500 -> 0.86500`. Max/OR is the
+only rule that consistently retains the complementary recall of the three
+members. Reproduce with `analyze_ensemble_votes.py`; do not select the tiny
+validation majority gain.
+
 ### Untouched capacity confirmation
 
 After the Qwen-27B capacity result was accepted, a second 800-row spectrum was
 frozen with seed `20260719`. It contains exactly 100 rows per label/category and
 round-robins available source models. It excludes 4,056 unique rows spanning the
 original evaluation, teacher cache, Gemma confirmation, and passage
-confirmation. This is a post-discovery confirmation and must not be resampled.
+confirmation. A repository-wide audit against every stored Liars' Bench
+`train.jsonl`/`eval.jsonl` artifact finds zero further overlap. This is a
+post-discovery confirmation and must not be resampled.
 
 ```bash
 python experiments/liars_bench_distillation/prepare_heavy_spectrum_confirmation.py \
@@ -610,6 +619,10 @@ were outside the work window. The confirmation wrappers explicitly request one
 A100 for Qwen-9B and two A100s with tensor parallelism for Qwen-27B. This is a
 hardware/sharding difference from the original single-RTX spectrum and must be
 reported; prompts, decoding budget, aggregation, and thresholds remain fixed.
+An identical single-RTX Qwen-27B fallback (`30179171`) was queued to race the
+delayed two-A100 allocation, then canceled while still pending as soon as
+`30179133` started. The fallback wrapper remains for future scheduling, but
+never allow both resource variants to write the same output directory.
 
 The first preservation stage fails. Phoenix-heavy macro BA is `0.77375` versus
 `0.77875`, but action reports lose `0.025` and HP-KR Llama/Qwen plus Insider
