@@ -159,6 +159,15 @@ third tier was frozen with a 97% intermediate floor (2,794), a new manifest of
 all 2,805 valid records, and a single selective 16,384-token retry of only the
 75 unclosed rows. The final 2,877/imbalance-three gate remains unchanged.
 
+The 16,384-token repair (`30187447`/`30187448`) recovered 54/75 rows in
+18m39s and 17m08s. Final audit `30187449` found 2,859 usable targets: 1,437
+label 0, 1,422 label 1, and 21 still-unclosed private thoughts (3 label 0 and
+18 label 1). It found zero leakage, zero visible truncations, and no changes to
+the 2,805-record 8,192-token manifest. Because coverage and imbalance still
+miss the frozen final gate, student job `30187450` and validation job `30187451`
+were cancelled. Do not silently train or add another context tier from this
+result; choosing 99.27% coverage versus another repair is a new protocol choice.
+
 Submit the entire dependency chain with:
 
 ```bash

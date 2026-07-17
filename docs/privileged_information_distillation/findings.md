@@ -2052,3 +2052,13 @@ another generation pass, a third and final tier was frozen: require at least
 valid records, and retry only the 75 unclosed rows with 16,384 generation tokens
 inside a 20,480-token model context. The final acceptance gate remains 2,877
 usable with imbalance no greater than three; do not train if that still fails.
+
+The 16,384-token tier recovered 54/75 rows, leaving 21 unclosed completions.
+Jobs `30187447` and `30187448` took 18m39s and 17m08s. Audit `30187449`
+measured 2,859/2,880 usable targets (99.27%), split 1,437 label 0 and 1,422
+label 1; the 21 failures comprise 3 label-0 and 18 label-1 rows. There was zero
+visible leakage, no truncated visible target, and no violation of the 2,805-row
+8,192-token preservation manifest. This still misses the frozen coverage gate
+by 18 and imbalance gate by 12, so the audit correctly cancelled training and
+validation. Do not post-hoc declare the cache accepted or launch another context
+tier without explicitly treating that as a new protocol choice.
