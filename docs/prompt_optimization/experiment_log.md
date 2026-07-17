@@ -2669,6 +2669,13 @@ rank initialization. Retry `30179201` forces NCCL's built-in Socket transport
 for the same-node ranks. No labels or model outputs existed from the failed job,
 so this is a technical retry under the frozen protocol, not result selection.
 
+A fixed selective-capacity audit routes only Qwen-9B member-disagreement rows
+to Qwen-27B. It improves Qwen-9B on validation (`0.9238`), locked test
+(`0.9333`), and the original external spectrum (`0.8313`) while querying 27B on
+6.9%, 6.7%, and 26.9% of rows. It remains below full Qwen-27B and is retained
+only as a runtime fallback. Its untouched P51 gate was frozen before either
+confirmation result was available; see P53.
+
 ### Small external-data continuations
 
 The focused 64-summary soft-trigger continuation plus 10% varied replay trained

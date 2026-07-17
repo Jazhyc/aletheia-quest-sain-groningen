@@ -1897,6 +1897,20 @@ different deceptive rows, so the max rule's extra false positives are repaid by
 recall out of sample. Qwen-9B shows the same overall pattern. This closes
 aggregation hill climbing without requiring new generations.
 
+The swap is also not a single-prompt accident. Each matched Qwen-27B member is
+better than Qwen-9B on validation and the external spectrum, and none is worse
+on locked test. The external singleton gains are `+0.1325` details, `+0.1275`
+known, and `+0.0525` scrutiny BA. Prompt diversity remains useful on top of a
+broad capacity improvement.
+
+If full Qwen-27B misses a remote runtime limit, Qwen-9B member disagreement is
+a frozen label-free escalation trigger. It queries Qwen-27B on 6.7--6.9% of
+competition rows and 26.9% of the original external spectrum, improving Qwen-9B
+BA in all three checks (`+0.0012` validation, `+0.0036` test, `+0.0525`
+external). It remains below full Qwen-27B. Preserve it only as a runtime
+contingency, pending the separately frozen untouched spectrum gate and NDIF
+timing; do not misstate it as the accuracy leader.
+
 Semantic routing is useful only under a weaker judge. Qwen-9B heavy plus fixed
 epistemic/action specialists gains `0.0538` external macro BA with every family
 cell non-worse. The same specialists harm Qwen-27B, and an always-on Phoenix

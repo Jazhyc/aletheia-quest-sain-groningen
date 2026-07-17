@@ -2066,7 +2066,39 @@ Outcome:
   but loses sharply on locked test (`0.9119` versus `0.9464`) and externally
   (`0.8650` versus `0.8750`). Qwen-9B max/OR is strongest on validation and
   test and essentially ties the best singleton externally.
+- The capacity gain itself is member-broad: all three matched 27B members beat
+  9B on validation and the external spectrum; all are non-worse on locked test.
+  External member deltas are `+0.1325` details, `+0.1275` known, and `+0.0525`
+  scrutiny. This is not one prompt carrying the model swap.
 - The max rule buys recall from member disagreement: Qwen-27B has 51/822,
   45/821, and 155/800 disagreement rows across validation, test, and external
   spectrum. Keep all three prompts and max aggregation. The validation-only
   majority gain is a concrete example of non-transferable hill climbing.
+
+## P53: Q9-Disagreement Capacity Escalation
+
+Status: frozen runtime fallback; original external gate passed and untouched
+confirmation is pending.
+
+- Run Qwen-9B D/K/S first. If its three binary member verdicts disagree, use
+  the Qwen-27B max verdict; otherwise keep the Qwen-9B max verdict. Treat parse
+  failures as negative exactly as production does. This uses no labels, source
+  family, category, fitted threshold, or text classifier.
+- It is not an accuracy replacement for full Qwen-27B. It is eligible only if
+  a remote rehearsal shows that full Qwen-27B cannot meet runtime constraints.
+
+Existing evidence:
+
+- Competition validation improves `0.9226 -> 0.9238` while querying Qwen-27B
+  on 6.93% of rows; locked test improves `0.9298 -> 0.9333` at 6.70%.
+- The original four-mode spectrum improves `0.77875 -> 0.83125`, with every
+  category non-worse, worst family-cell delta `-0.0147`, and a 26.88% Qwen-27B
+  query fraction. Full Qwen-27B remains much better at `0.8750`.
+
+Untouched gate, frozen before P51 outputs:
+
+- On the P51 800-row confirmation, require at least `+0.02` macro-category BA
+  over Qwen-9B, no category loss beyond `0.02`, no category/family loss beyond
+  `0.05`, and Qwen-27B query fraction at most `0.35`.
+- A pass retains a budget-aware contingency only. It does not displace full
+  Qwen-27B or authorize notebook integration without an NDIF timing rehearsal.

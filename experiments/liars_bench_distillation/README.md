@@ -590,7 +590,17 @@ majority vote moves validation `0.92976 -> 0.93095`, then drops locked test
 `0.94643 -> 0.91190` and external macro BA `0.87500 -> 0.86500`. Max/OR is the
 only rule that consistently retains the complementary recall of the three
 members. Reproduce with `analyze_ensemble_votes.py`; do not select the tiny
-validation majority gain.
+validation majority gain. Every matched 27B singleton improves over 9B on both
+validation and the external spectrum, and none regresses on locked test, so the
+capacity effect is not isolated to one prompt.
+
+A budget-only cascade uses Qwen-27B max only when Qwen-9B member verdicts
+disagree. `analyze_capacity_escalation.py` gives validation `0.92381`, test
+`0.93333`, and external macro `0.83125`, versus Qwen-9B `0.92262`, `0.92976`,
+and `0.77875`. Qwen-27B query fractions are 6.93%, 6.70%, and 26.88%.
+The external gate passes, but full Qwen-27B remains more accurate. Its P51 gate
+was frozen before confirmation outputs: `+0.02` macro gain, category/cell losses
+within `0.02`/`0.05`, and query fraction at most `0.35`.
 
 ### Untouched capacity confirmation
 
