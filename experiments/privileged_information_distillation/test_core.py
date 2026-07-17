@@ -10,9 +10,12 @@ if str(ROOT) not in sys.path:
 from experiments.privileged_information_distillation.core import (
     append_reference_material,
     build_student_prompt,
+    extract_teacher_final,
     format_student_target,
+    parse_teacher_target,
     parse_counterfactual_teacher_target,
     route_reference_material,
+    split_qwen_think_completion,
     truncate_text,
 )
 from experiments.privileged_information_distillation.generate_teacher_data import (
@@ -20,6 +23,7 @@ from experiments.privileged_information_distillation.generate_teacher_data impor
     filter_teacher_rows_by_dataset,
     limit_teacher_rows,
     normalize_reasoning_effort,
+    normalize_teacher_output_format,
     render_chat_prompt,
 )
 
@@ -176,6 +180,50 @@ def test_teacher_harmony_rendering_sets_reasoning_effort() -> None:
     assert render_chat_prompt(Tokenizer(), "PROMPT", "high") == "RENDERED"
 
 
+def test_teacher_qwen_rendering_enables_private_thinking() -> None:
+    class Tokenizer:
+        def apply_chat_template(self, messages, **kwargs):
+            assert messages == [{"role": "user", "content": "PROMPT"}]
+            assert kwargs["enable_thinking"] is True
+            assert "reasoning_effort" not in kwargs
+            return "RENDERED<think>"
+
+    assert render_chat_prompt(
+        Tokenizer(), "PROMPT", "medium", "qwen_think"
+    ) == "RENDERED<think>"
+
+
+def test_qwen_teacher_parser_excludes_private_thinking() -> None:
+    raw = (
+        "private chain with <reasoning_summary>wrong</reasoning_summary>\n"
+        "</think>\n\n"
+        "<reasoning_summary>Visible concise summary.</reasoning_summary>\n"
+        "Prediction:1"
+    )
+
+    assert split_qwen_think_completion(raw) == (
+        "private chain with <reasoning_summary>wrong</reasoning_summary>",
+        "<reasoning_summary>Visible concise summary.</reasoning_summary>\nPrediction:1",
+    )
+    assert extract_teacher_final(raw, "qwen_think").startswith(
+        "<reasoning_summary>Visible"
+    )
+    assert parse_teacher_target(raw, output_format="qwen_think") == (
+        "Visible concise summary.",
+        1,
+    )
+
+
+def test_qwen_teacher_parser_rejects_unclosed_private_thinking() -> None:
+    raw = "private <reasoning_summary>Must not leak.</reasoning_summary> Prediction:1"
+
+    assert split_qwen_think_completion(raw) is None
+    assert extract_teacher_final(raw, "qwen_think") is None
+    assert parse_teacher_target(
+        raw, expected_prediction=1, output_format="qwen_think"
+    ) is None
+
+
 def test_teacher_reasoning_effort_validation_and_cache_provenance() -> None:
     assert normalize_reasoning_effort("LOW") == "low"
     with pytest.raises(ValueError, match="reasoning_effort"):
@@ -197,6 +245,15 @@ def test_teacher_reasoning_effort_validation_and_cache_provenance() -> None:
     }
     assert cache_matches(row, legacy_medium)
     assert not cache_matches({**row, "reasoning_effort": "high"}, legacy_medium)
+    assert normalize_teacher_output_format("QWEN_THINK") == "qwen_think"
+    with pytest.raises(ValueError, match="output_format"):
+        normalize_teacher_output_format("raw")
+    qwen_row = {
+        **row,
+        "teacher_model": "Qwen/Qwen3.5-27B",
+        "teacher_output_format": "qwen_think",
+    }
+    assert not cache_matches(qwen_row, legacy_medium)
 
 
 def test_append_reference_material_marks_retrieval_as_untrusted() -> None:

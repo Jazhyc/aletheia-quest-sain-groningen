@@ -1984,3 +1984,15 @@ activation memory and throughput, not context length.
 6. Keep backend-equivalence checks at the dataset-unit level. The current NDIF
    schedule exactly matches vLLM on the labeled 40-row rehearsal, but small
    prefix capacity tests materially overstated safe batch size.
+
+### Active same-family teacher ablation
+
+Qwen-27B cannot be used as the submitted inference judge, but it can test
+whether a stronger teacher from the student's model family produces more
+learnable privileged summaries. P54 holds the selected varied-only Qwen-9B SFT
+recipe and all prompts/labels fixed, replacing only GPT-OSS with Qwen-27B.
+Qwen's private `<think>` continuation is retained only in the ignored raw
+artifact; the student target is parsed strictly after `</think>`, and missing
+closure is rejected. Balanced 32-row smoke job `30180040` precedes any full
+cache generation. This is a teacher-family ablation, not authorization to use
+Qwen-27B at submission inference time.

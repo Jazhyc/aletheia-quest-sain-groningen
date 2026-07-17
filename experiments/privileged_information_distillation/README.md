@@ -34,12 +34,15 @@ Concise concrete evidence and factual contrast.
 Prediction:0
 ```
 
-The raw GPT-OSS completion is retained for audit. Before constructing the
-student target, `extract_harmony_final` removes the native Harmony analysis
-channel and `parse_teacher_target` parses only the visible final channel. The
-artifact contains both `raw_completion` and `harmony_final`, but student SFT
-uses only `student_prompt` and `student_target`. Records are excluded from SFT
-unless they parse and their prediction matches the privileged label.
+The raw teacher completion is retained for audit. Before constructing the
+student target, a model-family-specific extractor removes private analysis and
+`parse_teacher_target` parses only the visible final channel. GPT-OSS uses
+`extract_harmony_final`. Qwen thinking-mode teachers require a closing
+`</think>` and expose only the text after it; missing closure is a parse failure,
+not a fallback to the raw completion. The artifact contains `raw_completion`,
+the legacy `harmony_final`, and the model-agnostic `teacher_final`, but student
+SFT uses only `student_prompt` and `student_target`. Records are excluded from
+SFT unless they parse and their prediction matches the privileged label.
 
 GPT-OSS may emit only the requested `<reasoning_summary>` and omit the redundant
 final prediction. In that case the artifact builder deterministically appends
@@ -78,6 +81,30 @@ merely to add the metadata field. For the default 10% fast screen, compare the
 new low/high adapters with
 `qwen9b_pid_varied_datafrac10_adamw5e5_v1`. The full-data selected adapter
 remains the final medium baseline, not the matched screening control.
+
+### Same-family Qwen-27B teacher ablation
+
+`pid_teacher_qwen27_varied_v1` swaps only the privileged teacher for
+`Qwen/Qwen3.5-27B`. Qwen's native private thinking is enabled, retained in the
+ignored raw audit completion, and excluded from the student target at the
+required `</think>` boundary. The visible summary schema and selected
+varied-only Qwen-9B one-epoch AdamW `5e-5` recipe are unchanged.
+
+Run and inspect a balanced parser smoke before generating the full cache:
+
+```bash
+sbatch --time=01:00:00 --job-name=aq-pid-q27-smoke \
+  experiments/privileged_information_distillation/run_teacher.sh \
+  --config-name pid_teacher_qwen27_varied_v1 \
+  method=qwen9b_pid_varied_teacher_qwen27_smoke_v1 \
+  teacher.limit_per_label=16
+```
+
+Require at least 31/32 parsed targets, exact conditioned-label agreement, no
+private reasoning in `teacher_final`, and no privileged-language leakage. The
+full cache and student use the config without smoke overrides. Evaluate the
+result jointly with the original GPT-OSS-teacher adapter on validation; do not
+use local test unless the frozen P54 promotion gate passes.
 
 The teacher artifact path is intentionally independent of `method`. Student
 learning-rate sweeps override `method` to obtain distinct adapter directories

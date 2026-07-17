@@ -205,11 +205,46 @@ def extract_harmony_final(raw_completion: str) -> str:
     return text[position + len(marker):].strip() if position >= 0 else text.strip()
 
 
+def split_qwen_think_completion(raw_completion: str) -> tuple[str, str] | None:
+    """Split Qwen's private thinking from its visible answer.
+
+    Qwen3.5's chat template ends the generation prompt with ``<think>``. The
+    returned completion therefore normally contains the private continuation
+    followed by ``</think>`` and the visible answer, without another opening
+    marker. Missing closure is treated as malformed rather than exposing the
+    entire completion as a student target.
+    """
+    text = safe_text(raw_completion)
+    boundary = text.find("</think>")
+    if boundary < 0:
+        return None
+    reasoning = text[:boundary]
+    if reasoning.lstrip().startswith("<think>"):
+        reasoning = reasoning.lstrip()[len("<think>"):]
+    return reasoning.strip(), text[boundary + len("</think>"):].strip()
+
+
+def extract_teacher_final(
+    raw_completion: str,
+    output_format: str = "harmony",
+) -> str | None:
+    """Extract only the teacher's visible answer for the configured model family."""
+    if output_format == "harmony":
+        return extract_harmony_final(raw_completion)
+    if output_format == "qwen_think":
+        split = split_qwen_think_completion(raw_completion)
+        return split[1] if split is not None else None
+    raise ValueError(f"unknown teacher output format: {output_format!r}")
+
+
 def parse_teacher_target(
     raw_completion: str,
     expected_prediction: int | None = None,
+    output_format: str = "harmony",
 ) -> tuple[str, int] | None:
-    final = extract_harmony_final(raw_completion)
+    final = extract_teacher_final(raw_completion, output_format)
+    if final is None:
+        return None
     matches = list(SUMMARY_PATTERN.finditer(final))
     if matches:
         summary, prediction = matches[-1].groups()
@@ -231,9 +266,12 @@ def parse_teacher_target(
 def parse_counterfactual_teacher_target(
     raw_completion: str,
     expected_prediction: int | None = None,
+    output_format: str = "harmony",
 ) -> tuple[str, str, str, int] | None:
     """Parse the ordered summary, facts, contradiction, and prediction fields."""
-    final = extract_harmony_final(raw_completion)
+    final = extract_teacher_final(raw_completion, output_format)
+    if final is None:
+        return None
     matches = list(COUNTERFACTUAL_PATTERN.finditer(final))
     if matches:
         summary, facts, contradiction, prediction = matches[-1].groups()

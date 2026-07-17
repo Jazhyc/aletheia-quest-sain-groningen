@@ -2136,3 +2136,48 @@ Untouched outcome:
   family-cell allowance. The aggregate gain is again dominated by Insider
   Trading. Do not repair this with a category exemption, looser family gate, or
   a fitted disagreement score; full Qwen-27B is both simpler and more accurate.
+
+## P54: Same-Family Qwen-27B Privileged Teacher
+
+Status: parser/config complete; balanced teacher smoke pending as job `30180040`.
+
+Hypothesis and isolation:
+
+- The selected reasoning-summary student proves that privileged explanations
+  matter, but GPT-OSS teacher effort and wording do not transfer monotonically.
+  Qwen-27B is a stronger matched judge and shares Qwen3.5 representations and
+  output conventions with the deployable Qwen-9B student. Test whether this
+  family match produces more learnable summaries.
+- Hold the existing varied-only data, authoritative labels, teacher prompt,
+  student prompt, summary target schema, Qwen-9B base, rank-16/alpha-32 LoRA,
+  one epoch, AdamW `5e-5`, and effective batch size 32 fixed. Change only the
+  teacher model and its native channel parser. Do not add Liars' Bench rows,
+  Qwen-27B judge predictions, assistant reasoning inputs, or a new optimizer.
+
+Private-reasoning contract:
+
+- Qwen3.5's chat template opens `<think>` in the assistant generation prompt.
+  The raw completion must close `</think>` before the visible answer. Preserve
+  the raw completion only in the ignored audit artifact and construct the SFT
+  target solely from the post-`</think>` `<reasoning_summary>`.
+- Treat missing `</think>` as a parse failure even if a summary-like field
+  appears in the private continuation. This is the Qwen analogue of Harmony
+  final-channel extraction and prevents hidden chain-of-thought leakage.
+- Cache provenance includes both teacher model and output format, preventing a
+  Qwen run from reusing the reviewed GPT-OSS cache accidentally.
+
+Frozen progression:
+
+- First require the balanced 32-row smoke to parse at least 31 rows, expose no
+  private text in `teacher_final`, match every usable target to its conditioned
+  label, and show no privileged-label language in the visible summaries. If it
+  fails only through 2,048-token truncation, a separately named 4,096-token
+  repair smoke may be run; do not silently change the main cache budget.
+- After a passing audit, generate the full 2,880-row varied-only cache and train
+  the exact selected full-data student recipe. Compare it with the original
+  GPT-OSS-teacher adapter in one shared validation session.
+- Authorize one locked-test comparison only if Qwen-teacher validation gains at
+  least `+0.005` overall BA, loses no more than `0.005` in either instructed or
+  varied BA, and adds no more than two parse errors. Otherwise retain it only as
+  evidence about teacher-family transfer; do not tune the teacher wording,
+  student LR, or data fraction from the same validation result.
