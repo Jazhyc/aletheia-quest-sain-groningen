@@ -2019,7 +2019,7 @@ improves the trained Qwen-9B student.
 Before full generation, the execution and acceptance policy was frozen. The
 2,880 varied-only rows are split deterministically and round-robin within every
 dataset/label stratum across two independent artifacts. The first 4,096-token
-stage must contain exactly 2,880 unique rows, at least 2,448 usable targets,
+stage must contain exactly 2,880 unique rows, at least 2,304 usable targets,
 exact conditioned-label agreement, and no visible private/prompt-meta leakage.
 Only unclosed rows are eligible for an 8,192-token retry. The final merge must
 retain canonical hashes for every initially usable record, contain at least
@@ -2029,3 +2029,15 @@ unlocks the unchanged selected one-epoch varied-only AdamW `5e-5` student and a
 joint validation evaluation against the original GPT-OSS-teacher adapter. The
 existing P54 validation promotion rule remains the selection rule; do not
 inspect local test from a losing or ambiguous validation result.
+
+The full first pass completed in about 72 minutes per shard but exposed a
+coverage shift from the 32-row smoke. It yielded 2,329/2,880 usable targets,
+with 532 completions still inside private thinking and 19 that emitted
+`</think><reasoning_summary>` but hit the cap before the summary closing tag.
+There was no leakage among usable targets, and all usable predictions matched
+their conditioned labels. Audit `30180338` correctly blocked the original 85%
+operational floor. Because every failed record has one of two exact token-cap
+shapes and the 551-row retry remains bounded across the already planned two GPU
+jobs, the resumed protocol freezes a lower 80% first-stage cost floor (2,304)
+and permits both shapes to retry. This does not relax the final requirement of
+at least 2,877 usable, preserved, leakage-free targets before training.

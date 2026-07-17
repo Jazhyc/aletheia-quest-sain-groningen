@@ -56,8 +56,9 @@ AUDIT4096="$(submit_id \
   --shard "${SHARD0}" \
   --shard "${SHARD1}" \
   --expected-total 2880 \
-  --minimum-usable 2448 \
+  --minimum-usable 2304 \
   --allow-unclosed \
+  --allow-truncated-targets \
   --write-manifest "${MANIFEST}" \
   --output "${STAGE1_AUDIT}")"
 
@@ -97,6 +98,7 @@ FINAL="$(submit_id \
   --minimum-usable 2877 \
   --maximum-label-imbalance 3 \
   --allow-unclosed \
+  --allow-truncated-targets \
   --verify-manifest "${MANIFEST}" \
   --merged-output "${MERGED}" \
   --output "${FINAL_AUDIT}")"

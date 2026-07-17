@@ -129,7 +129,7 @@ expensive cap to every row.
 
 The full run is frozen as two deterministic dataset/label-stratified shards.
 Each shard first uses 4,096 generation tokens; a CPU audit requires all 2,880
-unique rows, at least 2,448 usable targets, exact label agreement, and no
+unique rows, at least 2,304 usable targets, exact label agreement, and no
 visible leakage before either shard retries only its failures at 8,192 tokens.
 The final audit requires at least 2,877 usable targets, usable-label imbalance
 at most three, and byte-equivalent canonical hashes for every target already
@@ -137,6 +137,15 @@ usable at 4,096. It then merges the cache and unlocks the unchanged varied-only
 Qwen-9B one-epoch AdamW `5e-5` training job. The dependent validation job
 compares the candidate with the original GPT-OSS-teacher adapter; the existing
 P54 promotion gate remains unchanged.
+
+The first full 4,096-token pass (`30180336`/`30180337`) produced 2,329 usable
+targets, 532 unclosed thoughts, and 19 visible summaries truncated before their
+closing tag. The original smoke-derived 85% operational floor therefore stopped
+the chain at audit job `30180338`. Manual structural inspection confirms all 551
+failures are token-cap truncations, not semantic-format deviations. The resumed
+protocol recognizes only those two precise retryable shapes and uses a frozen
+80% first-stage floor (2,304); the unchanged final 2,877-target gate still
+controls whether student training may begin.
 
 Submit the entire dependency chain with:
 

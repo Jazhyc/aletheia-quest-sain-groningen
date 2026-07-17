@@ -76,6 +76,7 @@ def audit_records(
     expected_total: int,
     minimum_usable: int,
     allow_unclosed: bool,
+    allow_truncated_targets: bool,
     maximum_label_imbalance: int | None,
     expected_model: str,
 ) -> tuple[dict[str, Any], dict[str, str]]:
@@ -123,7 +124,26 @@ def audit_records(
             continue
 
         if parse_error:
-            errors.append(f"{key}: closed completion failed target parsing")
+            visible_final = split[1]
+            is_truncated_target = (
+                visible_final.lstrip().startswith("<reasoning_summary>")
+                and "</reasoning_summary>" not in visible_final
+            )
+            if is_truncated_target:
+                counts["truncated_target"] += 1
+                if not allow_truncated_targets:
+                    errors.append(f"{key}: truncated visible target is not allowed")
+                if record.get("teacher_final") != visible_final:
+                    errors.append(f"{key}: inconsistent truncated teacher_final")
+                if any(
+                    record.get(field) is not None
+                    for field in ("reasoning_summary", "prediction", "student_target")
+                ):
+                    errors.append(f"{key}: truncated target exposes parsed fields")
+                if record.get("label_match") is not False:
+                    errors.append(f"{key}: truncated target has invalid label_match")
+            else:
+                errors.append(f"{key}: closed completion failed target parsing")
             continue
         parsed = parse_teacher_target(
             raw,
@@ -173,6 +193,7 @@ def audit_records(
         "unique_records": len(seen),
         "usable": usable,
         "unclosed": counts["unclosed"],
+        "truncated_targets": counts["truncated_target"],
         "usable_by_label": {"0": label_counts[0], "1": label_counts[1]},
         "usable_label_imbalance": imbalance,
         "leak_counts": {
@@ -202,6 +223,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-total", required=True, type=int)
     parser.add_argument("--minimum-usable", required=True, type=int)
     parser.add_argument("--allow-unclosed", action="store_true")
+    parser.add_argument("--allow-truncated-targets", action="store_true")
     parser.add_argument("--maximum-label-imbalance", type=int)
     parser.add_argument("--expected-model", default="Qwen/Qwen3.5-27B")
     parser.add_argument("--write-manifest", type=Path)
@@ -219,6 +241,7 @@ def main() -> None:
         expected_total=args.expected_total,
         minimum_usable=args.minimum_usable,
         allow_unclosed=args.allow_unclosed,
+        allow_truncated_targets=args.allow_truncated_targets,
         maximum_label_imbalance=args.maximum_label_imbalance,
         expected_model=args.expected_model,
     )

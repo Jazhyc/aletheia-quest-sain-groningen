@@ -43,6 +43,7 @@ def test_audit_accepts_valid_records_and_explicit_unclosed_retry_rows() -> None:
         expected_total=2,
         minimum_usable=1,
         allow_unclosed=True,
+        allow_truncated_targets=False,
         maximum_label_imbalance=None,
         expected_model="Qwen/Qwen3.5-27B",
     )
@@ -65,6 +66,7 @@ def test_audit_rejects_leakage_and_closed_parse_failures() -> None:
         expected_total=2,
         minimum_usable=0,
         allow_unclosed=True,
+        allow_truncated_targets=False,
         maximum_label_imbalance=None,
         expected_model="Qwen/Qwen3.5-27B",
     )
@@ -81,6 +83,7 @@ def test_audit_rejects_duplicates_and_label_imbalance() -> None:
         expected_total=2,
         minimum_usable=1,
         allow_unclosed=False,
+        allow_truncated_targets=False,
         maximum_label_imbalance=0,
         expected_model="Qwen/Qwen3.5-27B",
     )
@@ -88,6 +91,32 @@ def test_audit_rejects_duplicates_and_label_imbalance() -> None:
     assert not report["passed"]
     assert any("duplicate record" in error for error in report["errors"])
     assert any("label imbalance" in error for error in report["errors"])
+
+
+def test_audit_accepts_only_structurally_truncated_visible_targets_for_retry() -> None:
+    truncated = make_record(1, 0)
+    truncated["raw_completion"] = (
+        "private analysis</think>\n<reasoning_summary>\nIncomplete summary"
+    )
+    truncated["teacher_final"] = "<reasoning_summary>\nIncomplete summary"
+    truncated["reasoning_summary"] = None
+    truncated["prediction"] = None
+    truncated["student_target"] = None
+    truncated["parse_error"] = True
+    truncated["label_match"] = False
+
+    report, _ = audit_records(
+        [truncated],
+        expected_total=1,
+        minimum_usable=0,
+        allow_unclosed=False,
+        allow_truncated_targets=True,
+        maximum_label_imbalance=None,
+        expected_model="Qwen/Qwen3.5-27B",
+    )
+
+    assert report["passed"]
+    assert report["truncated_targets"] == 1
 
 
 def test_verify_manifest_detects_changed_previously_usable_record(tmp_path: Path) -> None:
