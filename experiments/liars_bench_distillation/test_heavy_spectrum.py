@@ -26,6 +26,13 @@ def test_spectrum_gate_checks_macro_category_and_cells() -> None:
 
     assert compare(baseline, passing)["gate"]["passed"] is True
     assert compare(baseline, failing)["gate"]["passed"] is False
+    assert compare(
+        baseline,
+        passing,
+        minimum_macro_category_delta=0.02,
+        minimum_category_delta=-0.03,
+        minimum_category_family_delta=-0.05,
+    )["gate"]["passed"] is False
 
 
 @pytest.mark.parametrize(

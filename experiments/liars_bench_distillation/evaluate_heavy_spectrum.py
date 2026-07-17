@@ -86,6 +86,7 @@ def main() -> None:
     parser.add_argument("--judge-config", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--adapter", type=Path)
+    parser.add_argument("--tensor-parallel-size", type=int)
     args = parser.parse_args()
 
     records = [json.loads(line) for line in args.eval_artifact.read_text().splitlines()]
@@ -97,6 +98,8 @@ def main() -> None:
         )
 
     cfg = OmegaConf.load(args.judge_config)
+    if args.tensor_parallel_size is not None:
+        cfg.judge.tensor_parallel_size = args.tensor_parallel_size
     if args.adapter is not None:
         cfg.judge.lora_adapter = args.adapter.resolve().as_posix()
         cfg.judge.max_lora_rank = 16
@@ -146,6 +149,7 @@ def main() -> None:
     result = {
         "judge_config": args.judge_config.as_posix(),
         "adapter": None if args.adapter is None else args.adapter.as_posix(),
+        "tensor_parallel_size": int(cfg.judge.tensor_parallel_size),
         "n": len(records),
         "members": [name for name, _ in members],
         "score_seconds": score_seconds,

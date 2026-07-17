@@ -9,7 +9,14 @@ from pathlib import Path
 from typing import Any
 
 
-def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+def compare(
+    baseline: dict[str, Any],
+    candidate: dict[str, Any],
+    *,
+    minimum_macro_category_delta: float = -0.01,
+    minimum_category_delta: float = -0.03,
+    minimum_category_family_delta: float = -0.05,
+) -> dict[str, Any]:
     if baseline["n"] != 800 or candidate["n"] != 800:
         raise ValueError("expected matched 800-row spectrum results")
     if set(baseline["by_category"]) != set(candidate["by_category"]):
@@ -35,9 +42,9 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
     worst_category_delta = min(category_deltas.values())
     worst_category_family_delta = min(category_family_deltas.values())
     passed = bool(
-        macro_delta >= -0.01
-        and worst_category_delta >= -0.03
-        and worst_category_family_delta >= -0.05
+        macro_delta >= minimum_macro_category_delta
+        and worst_category_delta >= minimum_category_delta
+        and worst_category_family_delta >= minimum_category_family_delta
     )
     return {
         "baseline_macro_category_ba": baseline["macro_category_ba"],
@@ -48,9 +55,9 @@ def compare(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, An
         "worst_category_delta": worst_category_delta,
         "worst_category_family_delta": worst_category_family_delta,
         "gate": {
-            "minimum_macro_category_delta": -0.01,
-            "minimum_category_delta": -0.03,
-            "minimum_category_family_delta": -0.05,
+            "minimum_macro_category_delta": minimum_macro_category_delta,
+            "minimum_category_delta": minimum_category_delta,
+            "minimum_category_family_delta": minimum_category_family_delta,
             "passed": passed,
         },
     }
@@ -61,8 +68,17 @@ def main() -> None:
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--minimum-macro-category-delta", type=float, default=-0.01)
+    parser.add_argument("--minimum-category-delta", type=float, default=-0.03)
+    parser.add_argument("--minimum-category-family-delta", type=float, default=-0.05)
     args = parser.parse_args()
-    result = compare(json.loads(args.baseline.read_text()), json.loads(args.candidate.read_text()))
+    result = compare(
+        json.loads(args.baseline.read_text()),
+        json.loads(args.candidate.read_text()),
+        minimum_macro_category_delta=args.minimum_macro_category_delta,
+        minimum_category_delta=args.minimum_category_delta,
+        minimum_category_family_delta=args.minimum_category_family_delta,
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     print(json.dumps(result, indent=2, sort_keys=True))

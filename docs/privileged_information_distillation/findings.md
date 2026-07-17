@@ -1872,6 +1872,18 @@ soft-trigger family-cell losses. The earlier 200-row external loss must remain
 reported, but it is outweighed by a preregistered, broader mode/family audit
 rather than ignored post hoc.
 
+On the external spectrum, a paired label-stratified bootstrap places the
+macro-gain 95% interval at `[+0.0713, +0.1213]`. Choice, HP-KR, and action are
+individually positive; only the small `+0.005` soft-trigger delta spans zero.
+This supports a broad capacity effect rather than one category carrying the
+aggregate.
+
+It is also not primarily a format-recovery effect. Restricting to the 661
+external rows where all Qwen-9B members parse, Qwen-27B raises BA from `0.8006`
+to `0.8856` (77 fixes, 19 breaks). The 139-row Qwen-9B parse-error partition
+improves only `0.6457 -> 0.6846`. Fewer parse failures are useful, but most of
+the capacity gain comes from different judgments on already parseable outputs.
+
 The highest-value engineering change is first-complete-rating stopping. It
 preserves Qwen-9B validation/test, Qwen-27B validation, and Qwen-27B external
 macro BA while reducing generated work. Generated scoring time falls 58.9% for

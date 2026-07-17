@@ -1572,6 +1572,16 @@ Outcome:
   `-0.05` cell limit. Across 133 changed decisions, 27B makes 105 fixes and 28
   breaks; action reports account for 47 fixes and five breaks. Parse failures
   fall `161 -> 83`.
+- A descriptive 20,000-draw paired label-stratified bootstrap gives a macro
+  gain 95% interval `[+0.0713, +0.1213]` with probability positive 1.0.
+  Choice, HP-KR, and action category intervals are wholly positive; soft
+  trigger spans `[-0.025, +0.035]`. This quantifies the frozen comparison and
+  does not add a new selection gate.
+- Reduced parse failures do not explain the capacity result. On the 661 rows
+  where every Qwen-9B member parses, BA rises `0.8006 -> 0.8856` with 77 fixes
+  and 19 breaks. On the 139 rows with at least one Qwen-9B parse failure, BA
+  rises more modestly `0.6457 -> 0.6846` (28 fixes, nine breaks). Qwen-27B has
+  fewer failed rows, but the dominant gain is on fully parsed baseline outputs.
 - This passes every gate and reverses the narrower 200-row soft-trigger result,
   where Qwen-27B lost `0.015`. Treat the discrepancy as evidence that one small
   external category sample is noisy, not as permission to select a favorable
@@ -2015,3 +2025,22 @@ Outcome:
   establishes cross-capacity, cross-split, and cross-response-mode preservation.
   Keep the exact stop optimization for local vLLM and prioritize only the NDIF
   serialization rehearsal; do not tune the stop strings further.
+
+## P51: Untouched Four-Mode Capacity Confirmation
+
+Status: frozen before sampling or generation.
+
+- Select a new 800-row Liars' Bench spectrum with seed `20260719`, exactly 100
+  rows per label/category and deterministic round-robin source-model diversity.
+  Exclude every row in the original 800-row spectrum, 256-row teacher cache,
+  1,000-row Gemma soft-trigger confirmation, and 2,000-row passage confirmation.
+- Run exact full-decode Qwen-9B and Qwen-27B D/K/S with no prompt, threshold,
+  stop, or context changes. Because RTX availability was delayed, Qwen-9B uses
+  one 40 GB A100 and Qwen-27B uses two A100s with tensor parallelism; record this
+  backend difference and do not call it a single-GPU equivalence check. This is
+  a post-discovery confirmation, not a new training set; neither result may
+  change the sampling rule.
+- Confirm broad capacity transfer only if macro-category gain is at least
+  `+0.04`, no category loses more than `0.02`, and no category/family cell loses
+  more than `0.05`. A failure remains authoritative and must not be repaired by
+  resampling, category routing, or threshold tuning.

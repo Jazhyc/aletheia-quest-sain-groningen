@@ -585,6 +585,32 @@ fix, one break), keep parse failures at 83, and retain 68.0% of output tokens.
 This is external preservation evidence; generated validation provides the
 runtime measurement, and NDIF stop serialization still needs rehearsal.
 
+### Untouched capacity confirmation
+
+After the Qwen-27B capacity result was accepted, a second 800-row spectrum was
+frozen with seed `20260719`. It contains exactly 100 rows per label/category and
+round-robins available source models. It excludes 4,056 unique rows spanning the
+original evaluation, teacher cache, Gemma confirmation, and passage
+confirmation. This is a post-discovery confirmation and must not be resampled.
+
+```bash
+python experiments/liars_bench_distillation/prepare_heavy_spectrum_confirmation.py \
+  --output results/blackbox/liars_bench_heavy_spectrum_confirmation_v1/eval.jsonl
+sbatch experiments/liars_bench_distillation/evaluate_heavy_spectrum_confirmation_qwen9.sh
+sbatch experiments/liars_bench_distillation/evaluate_heavy_spectrum_confirmation_qwen27.sh
+```
+
+Confirm only for at least `+0.04` macro-category BA, no category loss beyond
+`0.02`, and no category/family loss beyond `0.05`. Jobs `30179132` and
+`30179133` are the Qwen-9B/Qwen-27B full-decode runs. Do not tune a
+threshold, route, sample, or stop condition from this result.
+
+Original RTX jobs `30179098`/`30179099` were canceled before starting because scheduler estimates
+were outside the work window. The confirmation wrappers explicitly request one
+A100 for Qwen-9B and two A100s with tensor parallelism for Qwen-27B. This is a
+hardware/sharding difference from the original single-RTX spectrum and must be
+reported; prompts, decoding budget, aggregation, and thresholds remain fixed.
+
 The first preservation stage fails. Phoenix-heavy macro BA is `0.77375` versus
 `0.77875`, but action reports lose `0.025` and HP-KR Llama/Qwen plus Insider
 Mistral cells lose `0.060--0.074`, breaching the frozen category/family limits.
