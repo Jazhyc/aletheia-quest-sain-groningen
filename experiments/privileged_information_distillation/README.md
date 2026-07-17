@@ -134,7 +134,10 @@ visible leakage before either shard retries only its failures at 8,192 tokens.
 The final audit requires at least 2,877 usable targets, usable-label imbalance
 at most three, and byte-equivalent canonical hashes for every target already
 usable at 4,096. It then merges the cache and unlocks the unchanged varied-only
-Qwen-9B one-epoch AdamW `5e-5` training job. The dependent validation job
+Qwen-9B one-epoch AdamW `5e-5` training job. If the 8,192-token stage reaches
+at least 2,794 usable targets but misses the final gate, preserve every usable
+record and retry only the remaining token-cap failures once at 16,384 tokens
+with a 20,480-token model context. The dependent validation job
 compares the candidate with the original GPT-OSS-teacher adapter; the existing
 P54 promotion gate remains unchanged.
 
@@ -146,6 +149,15 @@ failures are token-cap truncations, not semantic-format deviations. The resumed
 protocol recognizes only those two precise retryable shapes and uses a frozen
 80% first-stage floor (2,304); the unchanged final 2,877-target gate still
 controls whether student training may begin.
+
+The 8,192-token repair jobs (`30182698`/`30182699`) recovered 476/551
+failures in roughly 33 minutes per shard. Audit `30182700` found 2,805 usable
+targets (1,426 label 0 and 1,379 label 1), 75 still-unclosed private thoughts,
+zero truncated visible targets, zero leakage, and no preservation violations.
+It correctly blocked the unchanged final gate. Before further generation, the
+third tier was frozen with a 97% intermediate floor (2,794), a new manifest of
+all 2,805 valid records, and a single selective 16,384-token retry of only the
+75 unclosed rows. The final 2,877/imbalance-three gate remains unchanged.
 
 Submit the entire dependency chain with:
 

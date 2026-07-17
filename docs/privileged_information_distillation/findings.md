@@ -2041,3 +2041,14 @@ shapes and the 551-row retry remains bounded across the already planned two GPU
 jobs, the resumed protocol freezes a lower 80% first-stage cost floor (2,304)
 and permits both shapes to retry. This does not relax the final requirement of
 at least 2,877 usable, preserved, leakage-free targets before training.
+
+The 8,192-token jobs ran for about 33 minutes each and recovered 476/551
+failed records. Final audit `30182700` measured 2,805 usable targets, split
+1,426 label 0 and 1,379 label 1, with 75 completions still unclosed. There were
+no visible truncations or leakage and no changes to the 2,329-record 4,096-token
+manifest. This misses the final gate by 72, so training remains blocked. Before
+another generation pass, a third and final tier was frozen: require at least
+2,794 usable records (97%) at the intermediate audit, manifest all 2,805 current
+valid records, and retry only the 75 unclosed rows with 16,384 generation tokens
+inside a 20,480-token model context. The final acceptance gate remains 2,877
+usable with imbalance no greater than three; do not train if that still fails.
