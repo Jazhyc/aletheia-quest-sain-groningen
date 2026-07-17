@@ -1,5 +1,106 @@
 # Prompt Experiment Log
 
+## 2026-07-17: First-complete-rating decode stop (Qwen-9B validation)
+
+Stopping after the first exact retained `Rating: 1…7` passes its frozen generated
+gate. D/K/S validation BA moves `0.9226 -> 0.9250`, instructed stays `0.9771`,
+varied moves `0.8500 -> 0.8556`, and parses improve `38 -> 37`. Score time drops
+`1,314.3 -> 551.6s` (runtime fraction `0.420`). The small accuracy movement is
+treated as scheduling drift; a locked test confirmation is authorized for
+preservation/runtime only.
+
+## 2026-07-17: Fixed semantic specialists over a heavy factual default
+
+On the frozen 800-row Liars' Bench spectrum, replacing only explicit HP-KR and
+action-report rows with their independently selected Phoenix specialists raises
+Qwen-9B heavy macro BA `0.7788 -> 0.8325`. HP-KR gains `0.09`, action reports
+gain `0.125`, and the other two categories are untouched. The 167 changes are
+105 fixes and 62 breaks. Every category/family cell is non-worse. A paired
+20,000-draw row bootstrap places the macro gain at `+0.0300…+0.0763` (95%). The
+frozen gate passes. A matched job now checks whether the heavy default preserves
+this architecture under the same Phoenix adapter, avoiding a two-weight deployment.
+
+## 2026-07-17: Qwen-27B generation-cap prefix screen
+
+Saved validation outputs have median 680, p95 1,664, and p99 4,096 tokens. An
+optimistic cached-prefix screen rejects shorter caps before GPU timing. At
+2,048 tokens, six ensemble decisions change, parses worsen `5 -> 30`, macro BA
+falls `0.9298 -> 0.9274`, and varied BA falls `0.8639 -> 0.8556` for only 7.6%
+estimated token savings. At 3,072, one decision changes and only 3.2% of token
+work is saved. Keep the 4,096-token budget; neither hard caps nor positive
+short-circuiting safely compress the pathological tail.
+
+## 2026-07-17: Matched dataset-unit split-transfer audit
+
+The Qwen-27B versus Qwen-9B D/K/S delta was compared across the same 21
+dataset units on validation and locked test. Validation's `+0.00714` mean delta
+has a unit-bootstrap 95% interval spanning zero (`-0.00595…+0.02024`), while
+test's `+0.01667` interval is positive (`+0.00238…+0.03214`). Unit deltas have
+only `0.362` Pearson correlation, but 19/21 are non-opposed and only two reverse
+direction. This supports the broad capacity/scenario gate and rejects selecting
+organism-specific logic from individual validation cells.
+
+## 2026-07-17: Generated max-ensemble positive short-circuit
+
+The frozen `details -> known -> scrutiny` early exit reduced Qwen-27B prompt
+evaluations `2,466 -> 1,692` (`31.39%`), but runtime only `1,533 -> 1,294s`
+(`15.59%`) because remaining negatives are the slow tail. Fresh batch
+composition also moved BA `0.9298 -> 0.9286` and varied BA
+`0.8639 -> 0.8583`, despite cached fixed-output equivalence. The runtime and
+scenario gates fail. Keep the code as a backend-equivalence control; retain the
+full member-major ensemble for deployment.
+
+## 2026-07-17: Passage-grounded True/False semantic route
+
+A frozen 2,000-row untouched Liars' Bench confirmation compared ordinary
+Phoenix with one task-local prompt that treats an explicitly marked passage as
+authoritative. The label-blind router requires literal begin/end markers, a
+True/False contract, and an exact one-word Boolean output. It matches zero of
+all 8,216 local competition rows.
+
+The specialist raises external BA `0.879 -> 0.902`, recall `0.859 -> 0.862`,
+lowers FPR `0.101 -> 0.058`, and lowers parse errors `15 -> 6`. Every family
+improves. It misses the strict `+0.03` and `0.94` absolute-BA conditions, so the
+formal gate fails. The exact narrow route is nevertheless retained in Phoenix
+v2.4 under the requested muted-validation policy: it is source-grounded,
+family-agnostic, one-call, externally positive, and cannot affect local BA.
+Do not tune its prompt or widen its router from the confirmation labels.
+
+## 2026-07-17: Corrected focused-continuation control
+
+The initial soft-trigger continuation report compared a model continued from
+the full Phoenix adapter with an unrelated 10%-data adapter. A corrected joint
+run uses the actual unchanged parent. Both parent and continuation score exactly
+`0.9000` on the same 800 external rows and produce identical predictions and
+family metrics. Competition validation moves `0.9024 -> 0.9000`. The frozen
+gate fails; close the training path. The earlier family differences reflected
+the mismatched control rather than the continuation.
+
+## 2026-07-17: Cross-capacity majority control
+
+Before combining existing validation caches, a fixed two-of-three vote was
+frozen across the Qwen-27B D/K/S judge, Qwen-9B D/K/S judge, and conditional
+Phoenix student. It uses only each member's inherited binary decision. The gate
+required `+0.003` BA over Qwen-27B and at most `0.005` loss in either scenario.
+
+The vote scores `0.9310` validation BA versus `0.9298` for Qwen-27B alone.
+FPR improves from `0.0643` to `0.0381`, but recall falls from `0.9238` to
+`0.9000`; varied BA also falls from `0.8639` to `0.8611`. The three members are
+unanimous on 752/822 rows, and the 31 changed Qwen-27B decisions split almost
+evenly into 16 fixes and 15 breaks. The gate fails, so the existing test caches
+were not combined. Retain the analyzer as a calibration diagnostic, not a
+submission ensemble.
+
+## 2026-07-17: Qwen-27B sampled self-consistency
+
+The frozen matched-cost strategy repeated `known4096` three times at temperature
+`0.6` and used the median rating. Rating triples differ on 70/822 rows (`8.52%`),
+but median BA is `0.9262` versus `0.9298` for deterministic D/K/S. Instructed BA
+rises to `0.9896`, while varied falls to `0.8417`; parse errors rise from five
+to 19. The diagnostic max is `0.9310`, but max aggregation was not an eligible
+selection and does not repair the parse count. Test remains unauthorized. This
+rejects sampled reasoning as a replacement for prompt diversity at matched cost.
+
 ## Running Constraint (Competition)
 
 - Multi-token prediction / speculative decoding (`spec_method`, including MTP) is not used for competition candidates in this track. Ongoing speed optimization is limited to standard single-decode judges.
@@ -2438,3 +2539,119 @@ authorize test selection. It does justify a separately frozen follow-up that
 calibrates or distills the re-answer pair score using grouped/source-family
 holdouts. GPT-OSS itself remains non-submission-compatible, and all varied rows
 in this experiment are Qwen, so no cross-family transfer claim is supported.
+
+## Transfer-focused model/data controls (2026-07-17)
+
+This round used preregistered preservation gates and disjoint response-mode data
+rather than selecting another prompt from the Qwen-heavy validation split.
+
+### Qwen3.5-27B exact model swap
+
+The frozen D/K/S ensemble changed only its judge model from Qwen3.5-9B to
+Qwen3.5-27B. Job `30177880` passed validation at `0.9298` BA, versus `0.9226`
+for matched 9B, with both instructed and varied gains. The exact locked test
+job `30178085` then reached **`0.9464` BA**, `0.9573` AUROC, `0.9357` recall,
+and `0.0429` FPR in 1,484.5 scoring seconds. Instructed/varied BAs were
+`0.9833`/`0.8972`; relative to 9B it made 29 fixes and 15 breaks.
+
+The validation-ranked `known4096` speed member failed out of sample at `0.9083`
+BA. Diagnostic details/scrutiny members scored `0.9083`/`0.9405`; these were
+not preselected and are not new candidates. Keep the exact full ensemble. It is
+the strongest tracked submission-compatible local-test judge and now warrants
+an NDIF deployability/runtime rehearsal rather than more local prompt selection.
+
+The first external preservation gate is negative. On the frozen 200-row
+cross-family Liars' Bench soft-trigger set, 27B scores `0.9250` versus `0.9400`
+for the exact 9B judge. Recall falls `0.96 -> 0.91` while FPR improves
+`0.08 -> 0.06`; Gemma and Qwen BA fall `0.0370` and `0.0208`. Keep the locked
+competition candidate, but treat it as response-distribution-sensitive rather
+than broadly transferred from that sample alone.
+
+The separately frozen four-mode spectrum gives the stronger cross-mode answer.
+Job `30178485` raises macro category BA `0.77875 -> 0.87500`: choice
+`+0.070`, HP-KR `+0.100`, action reports `+0.210`, and soft trigger `+0.005`.
+The worst of fourteen category/family deltas is `-0.0208`, and parse failures
+fall `161 -> 83`. This passes every preregistered gate and, alongside both
+competition splits, supports the broad capacity swap. The contradiction with
+the 200-row soft-trigger check is a warning about small external samples, not a
+reason to choose results post hoc; retain both reports.
+
+The fixed semantic specialists are not complementary at 27B. Replacing HP-KR
+and action predictions lowers macro BA `0.8750 -> 0.8513`, with 34 fixes and 53
+breaks. Keep the 27B heavy judge intact. A separate Phoenix-heavy run also fails
+as a drop-in one-adapter implementation of the Qwen-9B hybrid: macro BA is close
+(`0.7738` versus `0.7788`), but action loses `0.025` and three family cells
+breach the preservation cap. Do not launch the conditional Phoenix competition
+ensemble or stack the specialists post hoc.
+
+A deployment-shape audit rules out context pressure for this exact heavy
+configuration. Its judge cap is 8,000 characters (3,000 belongs only to the
+few-shot field). Across all 8,216 local rows, no context reaches the character
+cap; the 24,648 D/K/S prompts have median 439, p95 704, and maximum 1,248
+tokens, with zero over 2,048. An initially queued 4,500-character head/tail job
+`30178792` was therefore recognized as a shortening, canceled before its labels
+were read, and removed. Do not transfer the separate Phoenix-summary
+3,000-character truncation diagnosis to this D/K/S config.
+
+### Calibration controls
+
+A short-single-turn explicit-instruction cutoff improved both 9B and 27B
+validation, but failed both test checks. It moved 9B test `0.9298 -> 0.9286`
+and 27B test `0.9464 -> 0.9214`, including loss of both deceptive examples in
+the small Nemotron unit. This rejects lexical/task-shape threshold routing.
+
+A Gemma-specific rating-7 parameter repeated an instructed-only gain on 9B
+validation/test and 27B validation. The frozen 200-row cross-family soft-trigger
+check (job `30178221`) exposed the missing scenario: Gemma FPR fell to zero but
+recall fell equally, leaving Gemma BA at `0.9444` and overall BA at `0.9400`.
+Reject the parameter until genuine varied Gemma competition coverage exists.
+
+### First-complete-rating stopping
+
+Hard token caps and positive ensemble short-circuiting failed their frozen
+accuracy/speed gates, but a format-aware decode stop transferred across model
+sizes and splits. vLLM retained the first exact `Rating: 1` through
+`Rating: 7` string and ended that member's generation immediately. Cached
+prefix simulation first established that this preserves a complete parseable
+verdict rather than truncating at an arbitrary length.
+
+Generated Qwen-9B validation job `30178611` passed at `0.9250` BA versus
+`0.9226`, with score time `1,314.3 -> 551.6s`. Frozen test job `30178658`
+confirmed `0.9310` versus `0.9298`, with score time `1,284.6 -> 528.3s`.
+Qwen-27B validation job `30178605` independently passed at `0.9357` versus
+`0.9298`, with score time `1,533.1 -> 1,169.3s` and unchanged parse failures.
+Treat the small accuracy movements as generated scheduling variation; the
+stable result is 58.9% Qwen-9B and 23.7% Qwen-27B scoring-time reduction without
+aggregate degradation.
+
+The frozen external Qwen-27B spectrum supplies an independent response-mode
+check. Cached first-rating prefixes keep macro category BA exactly `0.8750`,
+change two of 800 decisions (one fix and one break), retain 68.0% of output
+tokens, and leave 83 parse failures unchanged. The worst category/family delta
+is `-0.0185`, so the external preservation gate passes. This token estimate is
+not substituted for generated timing.
+
+This is not yet a notebook optimization. Transformers 5.12 implements string
+stops by constructing a tokenizer-dependent stopping criterion, and the remote
+NNsight `LanguageModel` path has not been rehearsed with a tokenizer object in
+the generation call. Do not substitute digit EOS tokens or assume the local
+keyword serializes through NDIF.
+
+### Small external-data continuations
+
+The focused 64-summary soft-trigger continuation plus 10% varied replay trained
+in job `30178128`. Competition validation moved `0.9036 -> 0.9012`; the
+disjoint soft-trigger set stayed exactly `0.9000` BA as recall and FPR each rose
+one point. This closes further exposure/LR tuning on the current cache.
+
+Its post-hoc `+0.0185` Gemma slice was tested on 1,000 untouched balanced Gemma
+rows excluded from all teacher/evaluation caches. Baseline scores `0.9170` BA;
+the continuation scores `0.9140`, with equal `0.906` recall and higher FPR.
+Both competition Gemma units are unchanged. Reject family routing and do not
+train a Gemma-only continuation or resample the large remaining category.
+
+The recipient-perspective action clarification (job `30178057`) validated a
+semantic recall gap but failed calibration: BA rose `0.6999 -> 0.7884`, while
+FPR rose `0.0419 -> 0.2900`, parse errors rose 14 to 89, and Llama lost
+`0.0237` BA. Retain the original low-FPR action route as a muted theoretical
+coverage change; reject the clarified prompt and any post-hoc blend.

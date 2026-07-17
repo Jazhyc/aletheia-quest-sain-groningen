@@ -1,0 +1,19 @@
+defaults:
+  - blackbox_reasoning_qwen27b_ensemble_dks_member4096_v1
+  - _self_
+
+method: qwen27b_reason_ensemble_dks_first_rating_stop_v1
+
+judge:
+  # Stop after the first exact complete rating while preserving it for parsing.
+  # Cached-prefix analysis found exact ensemble-decision equivalence and an
+  # estimated 23% reduction in output tokens; this config verifies generation.
+  stop_strings:
+    - "Rating: 1"
+    - "Rating: 2"
+    - "Rating: 3"
+    - "Rating: 4"
+    - "Rating: 5"
+    - "Rating: 6"
+    - "Rating: 7"
+  include_stop_str_in_output: true

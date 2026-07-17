@@ -86,6 +86,20 @@ def test_notebook_action_route_matches_frozen_external_prompt() -> None:
     assert "elif action_report:" in source
 
 
+def test_notebook_passage_route_matches_frozen_external_prompt() -> None:
+    constants, source = notebook_string_constants()
+    passage_prompt = module_string_constant(
+        ROOT / "experiments/liars_bench_distillation/prompts.py",
+        "PASSAGE_TRUE_FALSE_PROMPT",
+    )
+
+    assert constants["JUDGE_PASSAGE_PROMPT"] == passage_prompt
+    assert 'PHOENIX_PASSAGE_MAX_PROMPT_CHARS", "6000"' in source
+    assert "is_passage_true_false_request(messages)" in source
+    assert "truncate_head_tail(raw_context, PASSAGE_MAX_PROMPT_CHARS)" in source
+    assert "elif passage_true_false:" in source
+
+
 def test_notebook_uses_language_model_and_safe_adaptive_defaults() -> None:
     _, source = notebook_string_constants()
 

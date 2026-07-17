@@ -42,6 +42,13 @@ judge:
   max_model_len: 16384
   max_num_seqs: null
   max_tokens: 1
+  # Optional vLLM generation stop strings. Preserve them only when the parser
+  # requires the matched verdict text itself.
+  stop_strings: null
+  include_stop_str_in_output: false
+  # Optional local PEFT adapter for matched LoRA judge ablations.
+  lora_adapter: null
+  max_lora_rank: 16
   spec_method: null
   spec_model: null
   spec_tokens: null

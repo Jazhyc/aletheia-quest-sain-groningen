@@ -8,4 +8,7 @@ judge:
   model: Qwen/Qwen3.5-27B
   served_model: qwen27b-judge
   max_model_len: 8192
+  # The 27B hybrid model exposes 613 Mamba cache blocks on one RTX Pro 6000.
+  # Keep capture below that engine limit; this affects throughput, not scoring.
+  max_num_seqs: 512
   tensor_parallel_size: 1

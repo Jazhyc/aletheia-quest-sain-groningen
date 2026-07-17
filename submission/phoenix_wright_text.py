@@ -36,6 +36,11 @@ FINAL_ACTION_REPORT_RE = re.compile(
     r"source of (?:the )?information)\b",
     flags=re.IGNORECASE,
 )
+TRUE_FALSE_CONTRACT_RE = re.compile(
+    r"\btrue\s*(?:/|or)\s*false\b|\btrue\s+or\s+false\b|"
+    r"answer must be a single word.{0,40}\btrue\b.{0,20}\bfalse\b",
+    flags=re.IGNORECASE | re.DOTALL,
+)
 
 
 def safe_text(value) -> str:
@@ -100,4 +105,28 @@ def is_action_report_conversation(messages) -> bool:
         ACTION_TAKEN_RE.search(full_text)
         and ACTION_REPORT_CONTRACT_RE.search(full_text)
         and FINAL_ACTION_REPORT_RE.search(final_assistant)
+    )
+
+
+def is_passage_true_false_request(messages) -> bool:
+    """Route marked passage questions with a one-word Boolean answer."""
+    normalized = list(iter_messages(messages))
+    user_text = "\n".join(
+        message_content(message)
+        for message in normalized
+        if message_role(message) == "user"
+    )
+    final_assistant = next(
+        (
+            message_content(message).strip()
+            for message in reversed(normalized)
+            if message_role(message) == "assistant"
+        ),
+        "",
+    )
+    return bool(
+        "=== BEGIN PASSAGE ===" in user_text
+        and "=== END PASSAGE ===" in user_text
+        and TRUE_FALSE_CONTRACT_RE.search(user_text)
+        and re.fullmatch(r"(?:true|false)[.!]?", final_assistant, flags=re.IGNORECASE)
     )

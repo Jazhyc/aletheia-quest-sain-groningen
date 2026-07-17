@@ -1,4 +1,4 @@
-"""Label-blind routing for explicit action-report conversations."""
+"""Label-blind routing for observable specialist response modes."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from typing import Any
 
 from submission.phoenix_wright_text import (
     is_action_report_conversation,
+    is_passage_true_false_request,
     iter_messages,
     message_content,
     message_role,

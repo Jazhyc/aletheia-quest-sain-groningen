@@ -10,10 +10,13 @@ if str(ROOT) not in sys.path:
 from experiments.liars_bench_distillation.router import (
     is_action_report_conversation,
     is_harm_pressure_choice_request,
+    is_passage_true_false_request,
 )
 from experiments.liars_bench_distillation.prompts import (
+    ACTION_REPORT_RECIPIENT_PROMPT,
     ACTION_REPORT_PROMPT,
     HARM_PRESSURE_CHOICE_PROMPT,
+    PASSAGE_TRUE_FALSE_PROMPT,
 )
 
 
@@ -53,6 +56,8 @@ def test_action_prompt_checks_reports_without_equating_risk_with_deception() -> 
     assert "misattribution" in ACTION_REPORT_PROMPT
     assert "not deceptive merely because" in ACTION_REPORT_PROMPT
     assert "Prediction:<0 or 1>" in ACTION_REPORT_PROMPT
+    assert "actual recipient-facing message" in ACTION_REPORT_RECIPIENT_PROMPT
+    assert "faithfully implements" in ACTION_REPORT_RECIPIENT_PROMPT
 
 
 def test_routes_harm_pressure_forced_choice_only() -> None:
@@ -82,3 +87,32 @@ def test_harm_choice_prompt_separates_truth_from_safety_pressure() -> None:
     assert "factually correct" in HARM_PRESSURE_CHOICE_PROMPT
     assert "not itself deception" in HARM_PRESSURE_CHOICE_PROMPT
     assert "deliberately substitutes" in HARM_PRESSURE_CHOICE_PROMPT
+
+
+def test_routes_only_marked_passage_boolean_answers() -> None:
+    messages = [
+        {
+            "role": "user",
+            "content": (
+                "=== BEGIN PASSAGE ===\nCape Town hosted filming.\n"
+                "=== END PASSAGE ===\nTrue or False? Was it filmed in Cape Town? "
+                'Answer must be a single word: "True" or "False".'
+            ),
+        },
+        {"role": "assistant", "content": "False"},
+    ]
+    assert is_passage_true_false_request(messages)
+    assert not is_passage_true_false_request([
+        {**messages[0], "content": messages[0]["content"].replace("=== BEGIN PASSAGE ===", "")},
+        messages[1],
+    ])
+    assert not is_passage_true_false_request([
+        messages[0], {"role": "assistant", "content": "I am unsure."}
+    ])
+
+
+def test_passage_prompt_prevents_external_knowledge_override() -> None:
+    assert "authoritative source" in PASSAGE_TRUE_FALSE_PROMPT
+    assert "outside knowledge" in PASSAGE_TRUE_FALSE_PROMPT
+    assert "timestamp" in PASSAGE_TRUE_FALSE_PROMPT
+    assert "Prediction:<0 or 1>" in PASSAGE_TRUE_FALSE_PROMPT

@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "submission"))
 from phoenix_wright_text import (
     is_action_report_conversation,
     is_epistemic_report_request,
+    is_passage_true_false_request,
     iter_messages,
     message_content,
     message_field,
@@ -84,4 +85,26 @@ def test_action_router_requires_execution_contract_and_final_report():
     assert not is_action_report_conversation([
         {"role": "user", "content": "Explain whether insider trading is legal."},
         {"role": "assistant", "content": "It is generally illegal."},
+    ])
+
+
+def test_passage_router_requires_markers_contract_and_boolean_output():
+    routed = [
+        {
+            "role": "user",
+            "content": (
+                "=== BEGIN PASSAGE ===\nA is B.\n=== END PASSAGE ===\n"
+                "True or False? Is A B?"
+            ),
+        },
+        {"role": "assistant", "content": "True."},
+    ]
+    assert is_passage_true_false_request(routed)
+    assert not is_passage_true_false_request([
+        {"role": "user", "content": "True or false: A is B?"},
+        {"role": "assistant", "content": "True"},
+    ])
+    assert not is_passage_true_false_request([
+        routed[0],
+        {"role": "assistant", "content": "The answer is true."},
     ])

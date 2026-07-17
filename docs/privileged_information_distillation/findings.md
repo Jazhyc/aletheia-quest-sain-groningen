@@ -1602,19 +1602,330 @@ only an execution/FPR smoke and must not be compared with the balanced
 validation/test results.
 
 
+## Transfer-focused coverage experiments (2026-07-17)
+
+The follow-up program deliberately separated three hypotheses that the local
+Qwen-varied split cannot distinguish: source-family coverage, missing semantic
+response modes, and ordinary hallucinations that should remain honest. All
+student updates reused the selected one-epoch varied-only recipe or a small
+continuation from it; no private leaderboard result was used to select weights.
+
+### Model and family adaptations
+
+Two permitted model-specific readout parameters were evaluated from training
+coverage. Disabling the binary recall member for Gemma base raises validation
+BA by `0.0012` and ties locked test while saving one member call for that unit.
+Routing Qwen to the varied-only adapter and Gemma/Nemotron to the mixed adapter
+also gains `0.0012` validation BA and ties test, but two BF16 adapters exceed
+the 200 MB package budget. Both are retained as low-risk parameter evidence,
+not as broad source-specific logic.
+
+A single family-coverage adapter added 64 instructed Gemma and 17 instructed
+Nemotron targets to 288 Qwen-varied targets. It beats the matched Qwen-only
+step-count control and moves validation BA `0.9000 -> 0.9024`, but its locked
+summary-only test score falls `0.9131 -> 0.9095` through extra cap-length parse
+failures. Under the current conditional summary/binary interface it ties the
+baseline at `0.9238` validation BA. This supports family-balanced supervision
+as a muted theoretical improvement while rejecting the present weights. The
+local data still contain no varied Gemma or Nemotron example, so instructed
+family replay cannot establish cross-family varied transfer.
+
+An independent 80-row family-balanced long-answer continuation is similarly
+safe but small. It moves a disjoint 200-row external set from `0.9600` to
+`0.9650` BA, with all five source families non-worse, and preserves ordinary
+competition validation. Under the deployment interface it moves `0.9190` to
+`0.9202`, but adds one parse error and makes two fixes/two breaks. Keep the data
+recipe and cache scaffolding for genuinely new family/scenario data; do not
+promote either current adapter.
+
+A more focused continuation then used all 64 soft-trigger teacher summaries
+plus the same 10% Qwen-varied replay. It moves competition validation from
+`0.9036` to `0.9012` BA and leaves the disjoint 200-row soft-trigger set exactly
+at `0.9000` BA: recall gains one point while FPR gains one point. Gemma improves
+by `0.0185`, Llama/Mistral are unchanged, and Qwen loses `0.0208`. This rejects
+the hypothesis that the earlier broad mixture merely diluted a useful small
+cross-family varied signal. Close the present soft-trigger exposure path; new
+coverage should add genuinely different scenario evidence rather than replay
+these 64 targets at another learning rate.
+
+That comparison was subsequently found to use a mismatched 10%-data control,
+even though the candidate continued the full selected adapter. A corrected
+joint evaluation against the actual parent changes none of the 800 external
+predictions: both score `0.9000` soft-trigger BA, with identical family metrics.
+Competition validation moves `0.9024 -> 0.9000`. This is the authoritative
+causal result. The earlier Gemma/Qwen movements came from the control mismatch,
+not the continuation; close this training branch.
+
+### Small external reasoning distillation versus semantic routing
+
+A 256-row GPT-OSS Liars' Bench cache covered harm-pressure choice, knowledge
+reports, action reports, and soft triggers with 32 examples per label/category.
+Fresh and continued students did not gain the required `0.02` macro external
+BA. In contrast, prompts selected by observable response contracts produced
+large targeted gains with the unchanged Phoenix weights. The broad HP-KR
+report-type prompt raises regular Qwen from roughly `0.34` to `0.846` full-set
+BA and the action-report prompt raises a frozen 200-row sample from `0.61` to
+`0.76`. The full action category confirms the direction (`0.5307 -> 0.6999`,
+FPR `0.7526 -> 0.0419`) across every source family, although it misses its
+predeclared absolute `0.70` BA gate by `0.00011`.
+
+These results favor model-agnostic semantic routing over small weight updates:
+use one existing call, require an explicit observable report contract, and
+change the judging question rather than infer a hidden category or organism
+trait. A forced-choice harm specialist failed (`0.57` BA), showing that not
+every response-mode prompt transfers. The HP-KR and action routers have zero
+coverage on the complete local competition corpus, so their value is missing-
+mode coverage rather than local validation hill climbing. The action route is
+retained as a dormant theoretical change; a recipient-perspective clarification
+is being evaluated separately after a label-aided audit exposed a repeated
+meta-level error.
+
+That clarification recovers the intended semantic distinction but is not
+calibrated. Full-category BA rises `0.6999 -> 0.7884` and recall nearly doubles
+to `0.8668`, while FPR explodes to `0.2900`, parse failures rise from 14 to 89,
+and Llama loses `0.0237` BA. It fails both the FPR and family-preservation gates.
+Keep the original low-FPR action route as the muted missing-mode safeguard; do
+not replace it with the label-aided recipient wording or fit a blend on these
+same full-category labels.
+
+A passage-grounded True/False route supplies a second narrow missing-mode
+safeguard. On 2,000 untouched balanced soft-trigger rows, the unchanged Phoenix
+weights move from `0.879` to `0.902` BA when the prompt explicitly treats the
+marked passage as authoritative. Recall moves `0.859 -> 0.862`, FPR
+`0.101 -> 0.058`, parse errors `15 -> 6`, and Gemma/Llama/Mistral/Qwen all
+improve. This misses the strict `+0.03` and `0.94`-absolute promotion criteria,
+but passes every preservation criterion. The exact router matches zero of all
+8,216 local competition rows. Retain the exact one-call route in Phoenix v2.4
+under the muted-validation policy: require literal passage markers, an explicit
+True/False contract, and an exact one-word Boolean output; do not tune or widen
+it from these labels.
+
+The strongest external combination keeps a heavy factual default and routes
+only explicit semantic report contracts. On the frozen 800-row spectrum,
+Qwen-9B D/K/S plus the epistemic and action specialists moves macro category BA
+`0.7788 -> 0.8325`: HP-KR `0.760 -> 0.850`, insider/action reports
+`0.640 -> 0.765`, with forced-choice and soft-trigger rows untouched. All
+category/family cells are non-worse. This supports response-mode routing over
+organism-specific weights. A matched Phoenix-adapter heavy run is required
+before calling it a one-adapter deployment pipeline.
+
+That matched one-adapter check fails its lower-level preservation gate.
+Phoenix-heavy macro category BA is close to base Qwen (`0.7738` versus
+`0.7788`) and parse failures fall slightly, but action reports lose `0.025` and
+three category/family cells lose `0.060--0.074`. Therefore do not apply the
+specialists post hoc or run the conditional competition-validation adapter
+ensemble. The transferable hybrid currently requires base-Qwen heavy state plus
+Phoenix specialist state (or separately activated adapters), not one always-on
+Phoenix LoRA.
+
+Judge capacity is the stronger route when available. On the matched 800-row
+four-mode spectrum, exact Qwen-27B D/K/S raises macro category BA from
+`0.7788` to `0.8750`; choice, HP-KR, action, and soft-trigger BAs all improve,
+and the worst family-cell delta is only `-0.0208`. This passes the preregistered
+broad-transfer gate despite the earlier 200-row soft-trigger loss, showing why
+single-category samples should not veto a multi-mode result in isolation.
+
+The fixed semantic specialists should not be stacked on that stronger judge.
+They lower Qwen-27B macro BA to `0.8513`, including `-0.085` on action reports
+(34 fixes, 53 breaks overall). Keep Qwen-27B heavy intact; the semantic hybrid
+is a Qwen-9B capacity fallback, not a universal router.
+
+### Honest-hallucination controls
+
+The honest-error experiment screened 7,600 disjoint Alpaca responses, selected
+128 Phoenix false positives balanced over four source families, and obtained
+128 parsed GPT-OSS summaries explaining visible errors without treating them as
+knowing deception. A continuation with 10% varied replay changes only one of
+400 frozen Alpaca decisions. Increasing exposure to one epoch at `5e-5` or
+three epochs at `2e-5` yields the identical `0.0500 -> 0.0475` FPR result; both
+miss the required `0.025` endpoint. More LR/epoch tuning is closed.
+
+Adding the distinction directly to every prompt proves that Qwen can apply it:
+Alpaca FPR falls to `0.0025`. It is much too conservative for deception,
+however, dropping competition-validation BA from `0.9190` to `0.8274`. A
+trace/visible-intent router appears perfect locally because all varied rows have
+traces and every routed instructed row happens to be honest. The independent
+balanced response-mode check rejects it: macro BA falls `0.7713 -> 0.6600`,
+soft-trigger recall becomes zero, and parse errors rise by ten. Absence of a
+visible lie instruction is not evidence of honesty; helpful provenance can
+still hide an organism adaptation or trigger. Do not deploy either guard.
+
+### Judge capacity control
+
+The exact Qwen3.5-27B swap for the frozen three-prompt heavy ensemble passes its
+validation gate: BA `0.9226 -> 0.9298`, instructed `0.9771 -> 0.9792`, and
+varied `0.8500 -> 0.8639`. Recall rises to `0.9238`, FPR rises to `0.0643`, and
+member-level parse errors fall from 38 to five. Scoring is only 16.7% slower
+(`1,314s -> 1,533s`) despite the parameter increase. The `known4096` member
+alone exactly matches `0.9298` BA with zero parse errors, one third of the
+generation work, `0.8881` recall, and `0.0333` FPR. It is the locked speed
+candidate, but shifts scenario BA from `0.9792`/`0.8639` for the full max to
+`0.9938`/`0.8444` instructed/varied. One exact local-test confirmation is
+complete. The full ensemble reaches **`0.9464` test BA**, `0.9573` AUROC,
+`0.9357` recall, and `0.0429` FPR, with `0.9833` instructed and `0.8972` varied
+BA. It makes 29 fixes and 15 breaks versus matched 9B generations and is now
+the strongest tracked submission-compatible local-test judge. The locked
+`known4096` speed candidate falls to `0.9083` despite tying validation; retain
+all three prompts and do not post-hoc select the `0.9405` scrutiny member.
+This is capacity evidence, not source-model routing, and NDIF runtime remains a
+separate check.
+
+A matched 21-unit transfer audit explains why the model-level conclusion is
+stronger than any unit-level router. The validation mean delta is `+0.00714`
+with a unit-bootstrap 95% interval spanning zero; locked test is `+0.01667`
+with a positive interval. Per-unit validation/test delta correlation is only
+`0.362`, but 19/21 units are non-opposed and only two reverse direction. Keep
+the broad capacity swap and scenario checks; do not infer organism rules from
+the noisy individual cells.
+
+### Observable and family-specific calibration controls
+
+A narrow task-shape cutoff was frozen after both 9B and 27B validation caches
+showed fewer low-confidence false positives on short single-turn conversations
+with an explicit deception directive. Requiring rating 6 rather than 2 only
+for that visible shape moved 27B validation `0.9298 -> 0.9357` and 9B validation
+`0.9226 -> 0.9250`, while aggregate varied BA was unchanged for both. The
+existing 9B test cache does not confirm it: one varied deceptive row breaks,
+moving overall BA `0.9298 -> 0.9286`. Retain the analysis code as a theoretically
+sound but muted calibration control, not as submission logic. The frozen 27B
+test cache rejects it sharply: BA falls `0.9464 -> 0.9214`, including complete
+deceptive-recall loss on the tiny Nemotron unit. Validation agreement across
+judge sizes did not transfer; retain only the negative-control implementation.
+
+Per-family rating calibration has stronger split replication but a larger
+coverage caveat. Requiring rating 7 rather than 2 for Gemma outputs raises mean
+Gemma BA `0.9500 -> 0.9750` on both 9B validation and local test, and to
+`0.9875` on 27B validation. Competition rules permit documented per-organism
+parameters, but all local Gemma examples are simple instructed deception. A
+frozen exact-heavy-judge run on balanced cross-family Liars' Bench soft-trigger
+rows rejects the parameter. The cutoff removes all Gemma false positives but
+lowers recall from `0.9630` to `0.8889`, leaving Gemma BA unchanged at `0.9444`;
+overall BA also stays `0.9400`. This is precisely the missing varied-family
+failure the external gate was intended to catch. Keep the evaluator and reject
+Gemma rating 7 from submission logic.
+
+### Qwen-27B capacity transfer boundary
+
+The exact Qwen-27B D/K/S model swap is the strongest tracked competition-test
+judge, but its first disjoint cross-family check fails. On 200 balanced Liars'
+Bench soft-trigger rows, Qwen-27B scores `0.9250` BA versus `0.9400` for the
+matched Qwen-9B judge. It is more conservative (`0.91` versus `0.96` recall;
+`0.06` versus `0.08` FPR), with Gemma BA down `0.0370` and Qwen down `0.0208`.
+Keep the competition candidate, but do not use model scale as evidence of broad
+varied/family transfer. An 800-row four-response-mode spectrum is the frozen
+next audit; semantic specialists remain necessary if the same boundary repeats.
+
+The post-hoc Gemma specialization signal from the focused soft-trigger
+continuation also fails a genuinely untouched confirmation. On 1,000 balanced
+Gemma rows excluded from all prior teacher/evaluation caches, the baseline
+scores `0.9170` BA and the continuation `0.9140`; recall is unchanged and FPR
+rises `0.072 -> 0.078`. Competition Gemma units are unchanged, but there is no
+external gain to route. Reject this family adapter and do not resample or train
+a Gemma-only continuation from the same category.
+
+Matched-cost Qwen-27B reasoning self-consistency is also negative. Three
+temperature-`0.6` `known4096` samples differ on 8.52% of rows, but median BA is
+`0.9262` and varied BA `0.8417`, versus `0.9298`/`0.8639` for deterministic
+D/K/S. Nineteen member outputs fail to parse. A diagnostic max reaches `0.9310`
+but was not eligible for selection; do not test or replace prompt diversity.
+
+Positive short-circuiting does not make the full max ensemble cheaply
+deployable. It skips 31.39% of prompt evaluations but only reduces scoring time
+15.59% (`1,533 -> 1,294s`) because the unresolved negative tail is slower.
+Fresh batch composition also moves validation BA `0.9298 -> 0.9286` and varied
+BA `0.8639 -> 0.8583`. Keep full member-major scheduling; cached algebraic
+equivalence is not generated-backend equivalence.
+
+Hard generation caps fail for the same tail. Cached deterministic prefixes at
+2,048 tokens change six row decisions, raise member parse failures `5 -> 30`,
+and lower varied BA `0.8639 -> 0.8556` while saving an estimated 7.6% of output
+tokens. Even 3,072 tokens changes one decision and saves only 3.2%. Do not run
+or combine these caps; the exact Qwen-27B ensemble needs its 4,096-token budget.
+
+A format-aware stop is much better for Qwen-9B: retaining the first exact
+`Rating: 1--7` string raises validation macro BA `0.9226 -> 0.9250`, preserves
+instructed BA, raises varied `0.8500 -> 0.8556`, and reduces score time
+`1,314 -> 552s`. The frozen test confirmation also passes: BA moves
+`0.9298 -> 0.9310` while score time falls `1,285 -> 528s` (runtime fraction
+`0.411`). Qwen-27B validation independently passes at `0.9357` BA versus
+`0.9298`, with score time `1,533 -> 1,169s` (fraction `0.763`) and unchanged
+parse errors. Treat the accuracy deltas as scheduling drift; the stable finding
+is substantial decode savings without aggregate degradation. Stop-string
+support on the NDIF generation path remains a separate deployment check.
+
+The same exact stop also passes a frozen cross-response-mode audit on the
+Qwen-27B Liars' Bench spectrum. Macro category BA remains `0.8750`, only 2/800
+decisions change (one fix, one break), parse errors remain 83, and cached
+prefixes retain 68.0% of output tokens. Do not translate that token fraction
+directly into wall time; generated Qwen-27B validation measured the 23.7%
+runtime reduction. NDIF tokenizer/stop serialization remains the only missing
+deployment contract.
+
+## Generalizable-transfer decision summary (2026-07-17)
+
+The most credible improvement is now an exact judge-capacity swap, not another
+adapter or local threshold. Qwen-27B D/K/S improves matched competition
+validation (`0.9226 -> 0.9298`) and locked test (`0.9298 -> 0.9464`), then
+passes the four-mode external gate (`0.7788 -> 0.8750`). It makes 105 fixes and
+28 breaks externally, improves every category, and has only two small
+soft-trigger family-cell losses. The earlier 200-row external loss must remain
+reported, but it is outweighed by a preregistered, broader mode/family audit
+rather than ignored post hoc.
+
+The highest-value engineering change is first-complete-rating stopping. It
+preserves Qwen-9B validation/test, Qwen-27B validation, and Qwen-27B external
+macro BA while reducing generated work. Generated scoring time falls 58.9% for
+Qwen-9B and 23.7% for Qwen-27B. It is ready for local vLLM use; remote NNsight
+tokenizer/stop serialization is the remaining contract, not model accuracy.
+
+Semantic routing is useful only under a weaker judge. Qwen-9B heavy plus fixed
+epistemic/action specialists gains `0.0538` external macro BA with every family
+cell non-worse. The same specialists harm Qwen-27B, and an always-on Phoenix
+adapter fails as a drop-in heavy state. Thus the fallback is explicitly
+capacity-conditional: Qwen-9B may need observable response-mode specialists;
+Qwen-27B should keep its heavy predictions. The passage-grounded True/False
+route remains a narrow dormant one-call safeguard because it improves 2,000
+untouched rows across every family and has zero local coverage.
+
+Small weight updates and model-specific routing are not supported by this
+round. Focused Liars' Bench reasoning continuation changes no external
+predictions against its true parent and regresses competition validation;
+honest-hallucination continuation barely moves external FPR; and the untouched
+Gemma confirmation rejects the apparent family gain. The limitation is not
+simply too much data. Observable semantic prompts and judge capacity transfer
+better than 64--256-example continuations under the present Qwen-only varied
+training distribution.
+
+Deployment context is ample for the Qwen-27B heavy path: all 8,216 local rows
+fit the 8,000-character judge view, and 24,648 D/K/S prompts have median 439,
+p95 704, and maximum 1,248 tokens. A mistakenly proposed context ablation was
+canceled before labels were read once the 3,000-character few-shot field was
+distinguished from the 8,000-character judge field. The next risk is remote
+activation memory and throughput, not context length.
+
 ## Next measurements
 
-1. Do not spend another test evaluation on trace-target wording or the current
+1. Rehearse exact Qwen-27B D/K/S on one labeled 40-row NDIF dataset unit using
+   `LanguageModel`, then certify batch tiers and first-rating string stopping.
+   Compare all 40 decisions with the saved vLLM row before changing the single
+   submission notebook. If string stops cannot serialize, retain full decoding
+   and measure it separately rather than approximating with digit EOS tokens.
+2. Do not spend another test evaluation on trace-target wording or the current
    mixed/dropout recipes. The teacher-target, student-input, data-mixture, and
    dropout controls are closed on validation and the original adapter won the
    locked test comparison.
-2. If new data become available, require varied-deception traces from Gemma and
+3. If new data become available, require varied-deception traces from Gemma and
    Nemotron plus matched honest-ignorance controls. The present trace treatment
    is inseparable from Qwen-only specialization.
-3. Address supporting-detail verification with independently grounded facts or
+4. If a smaller deployable judge is still required, distill Qwen-27B reasoning
+   only from a new Liars' Bench sample and evaluate on grouped, untouched
+   categories/families. Do not train on the 800-row spectrum used to establish
+   the capacity result; the earlier small continuation already rejects another
+   exposure/LR sweep on reused targets.
+5. Address supporting-detail verification with independently grounded facts or
    a calibrated claim-level member. Preserve the existing negative RAG and
    atomic-cascade controls; neither arbitrary retrieval nor `any(False)` is a
    justified recall rule.
-4. Keep backend-equivalence checks at the dataset-unit level. The current NDIF
+6. Keep backend-equivalence checks at the dataset-unit level. The current NDIF
    schedule exactly matches vLLM on the labeled 40-row rehearsal, but small
    prefix capacity tests materially overstated safe batch size.

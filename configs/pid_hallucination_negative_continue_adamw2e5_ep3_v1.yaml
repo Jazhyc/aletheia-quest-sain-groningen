@@ -1,0 +1,11 @@
+# @package _global_
+defaults:
+  - pid_hallucination_negative_continue_v1
+  - _self_
+
+method: qwen9b_pid_hallucination_negative_replay_continue_adamw2e5_ep3_v1
+
+student:
+  training:
+    learning_rate: 2.0e-5
+    num_train_epochs: 3.0
