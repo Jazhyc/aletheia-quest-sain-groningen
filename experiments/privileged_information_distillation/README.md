@@ -176,6 +176,15 @@ imbalance at 15 while preserving the 2,805-record 8,192-token manifest. This is
 a documented 18-target coverage difference from the 2,877-target GPT-OSS cache,
 not an exact data-count-matched teacher comparison.
 
+Training job `30189850` completed in 23m12s and joint validation job `30189851`
+completed in 6m08s. The Qwen-27B-teacher student and original GPT-OSS-teacher
+student tie exactly: overall BA `0.9000`, instructed BA `0.9792`, varied BA
+`0.7944`, recall `0.8333`, FPR `0.0333`, and four parse errors. Their adapter
+hashes differ and 65/822 generated explanations differ, but only two binary
+predictions differ; both are reciprocal honest-row parse failures. The frozen
+P54 `+0.005` overall promotion requirement therefore fails. Do not evaluate
+this adapter on local test or promote it over the original teacher adapter.
+
 Submit the entire dependency chain with:
 
 ```bash

@@ -2071,3 +2071,20 @@ before merging. Student prompts, base model, rank, optimizer, learning rate,
 epoch count, and effective batch size remain frozen. Interpret the resulting
 validation comparison with the documented 18-target coverage difference from
 the 2,877-target GPT-OSS-teacher baseline.
+
+Student training and validation completed. Job `30189850` trained 90 steps in
+23m12s total (15m48s trainer time) and saved a distinct rank-16 adapter. Joint
+validation job `30189851` evaluated both students in one process. The Qwen-27B
+teacher student exactly ties the GPT-OSS teacher baseline at `0.9000` overall
+BA, `0.9792` instructed BA, and `0.7944` varied BA; recall is `0.8333`, FPR is
+`0.0333`, and each has four parse errors. The adapters have different weight
+hashes and their generated text differs on 65/822 rows (22 instructed and 43
+varied). Only two varied honest-row predictions differ: each adapter parses one
+as 0 while the other hits the generation cap, producing reciprocal parse-error
+swaps and no metric change. Three parse failures are shared.
+
+The exact `+0.0000` overall delta fails P54's frozen `+0.005` promotion gate.
+Do not spend a local-test evaluation on this adapter or tune its LR/data fraction
+from the same validation result. Within the fixed recipe, a stronger teacher
+from the student's family changes some generated explanations but provides no
+observable improvement to the validation decision boundary.

@@ -2139,8 +2139,8 @@ Untouched outcome:
 
 ## P54: Same-Family Qwen-27B Privileged Teacher
 
-Status: strict channel contract works, but both frozen coverage smokes failed;
-full cache and student training not launched.
+Status: completed; the same-family student ties the GPT-OSS-teacher baseline
+exactly on validation and fails the frozen promotion gate.
 
 Hypothesis and isolation:
 
@@ -2227,3 +2227,26 @@ Selective outcome:
 - The selective retry passes its frozen gate and authorizes a tiered full-cache
   design: 4,096 tokens normally, then 8,192 only for unclosed rows. It does not
   yet establish that the resulting Qwen-9B student improves validation.
+
+Full-cache and student outcome:
+
+- Full generation required selective 4,096/8,192/16,384-token tiers. The user
+  explicitly accepted 2,859/2,880 clean targets after 21 rows remained unclosed;
+  the accepted split is 1,437 label 0 and 1,422 label 1. Audits found no visible
+  leakage or preservation violations. This is 18 fewer targets than the
+  2,877-target GPT-OSS baseline cache.
+- Student job `30189850` trained the frozen one-epoch AdamW `5e-5` recipe in
+  23m12s and saved a distinct adapter. Joint validation job `30189851`
+  completed in 6m08s. Both the GPT-OSS-teacher and Qwen-27B-teacher students
+  score exactly `0.9000` overall BA, `0.9792` instructed BA, and `0.7944`
+  varied BA, with recall `0.8333`, FPR `0.0333`, and four parse errors.
+- Adapter hashes differ and generated explanations differ on 65/822 rows
+  (22 instructed, 43 varied), so this is not accidental adapter reuse. Binary
+  outputs differ on only two varied honest rows; each adapter parses one and
+  fails to parse the other, leaving metrics unchanged. Three parse failures are
+  shared.
+- The `+0.0000` overall delta fails the required `+0.005` promotion. Do not run
+  local test, retune the student, or claim same-family reasoning transfers
+  better from this experiment. The result indicates that changing teacher
+  family materially changes some explanations but not the learned validation
+  decision boundary under this fixed recipe.
