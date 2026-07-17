@@ -2593,6 +2593,14 @@ tokens, with zero over 2,048. An initially queued 4,500-character head/tail job
 were read, and removed. Do not transfer the separate Phoenix-summary
 3,000-character truncation diagnosis to this D/K/S config.
 
+An independent deployment contract is frozen under
+`experiments/qwen27_ndif_deployment/`. Its tests match the resolved Qwen-27B
+config, local raw-prompt renderer, rating parser, member-major order, and max
+aggregation. It intentionally does not edit the submission notebook or guess a
+Qwen-27B remote batch size. The NDIF rehearsal starts at batch four on one
+40-row unit, establishes full-decode equivalence first, and tests tokenizer-
+dependent string stopping separately.
+
 ### Calibration controls
 
 A short-single-turn explicit-instruction cutoff improved both 9B and 27B

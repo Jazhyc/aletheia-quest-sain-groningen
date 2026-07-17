@@ -1910,6 +1910,9 @@ activation memory and throughput, not context length.
    Compare all 40 decisions with the saved vLLM row before changing the single
    submission notebook. If string stops cannot serialize, retain full decoding
    and measure it separately rather than approximating with digit EOS tokens.
+   The independent frozen renderer/parser/aggregation contract and rehearsal
+   checklist are under `experiments/qwen27_ndif_deployment/` and are tested
+   against the resolved local config without depending on ignored artifacts.
 2. Do not spend another test evaluation on trace-target wording or the current
    mixed/dropout recipes. The teacher-target, student-input, data-mixture, and
    dropout controls are closed on validation and the original adapter won the
