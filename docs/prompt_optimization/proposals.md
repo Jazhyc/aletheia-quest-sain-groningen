@@ -2512,7 +2512,7 @@ Outcome:
 
 ## P59: Privileged Signed Evidence-Strength Ratings
 
-Status: ready for a balanced teacher smoke.
+Status: complete; the ordered smoke collapsed to extremes and blocked training.
 
 Question: can privileged supervision teach a rank-1 student a calibrated 1--7
 deception score, rather than asking a binary-trained adapter to invent
@@ -2549,3 +2549,28 @@ Frozen protocol:
   parsed rows intermediate, at most five polarity conflicts, and no more than
   eight parse failures. This authorizes later specialist-adapter ensembling,
   not local-test evaluation or notebook integration.
+
+Smoke outcome:
+
+- GPT-OSS job `30196321` completed in 6m42s and produced 32/32 structurally
+  parsed targets. One row contradicted its authoritative label; the strict
+  audit accepted 31 targets with no privileged/rubric leakage.
+- The accepted rating distribution was exactly 16 rating-1 honest targets and
+  15 rating-7 deceptive targets. There were only two distinct ratings, zero
+  intermediate ratings, and neither label appeared away from its extreme.
+  Audit job `30196356` therefore failed every preregistered spread gate and
+  automatically cancelled full generation, student training, and validation
+  evaluation (`30196382`, `30196383`, `30196399`, and `30196400`).
+- This smoke is not representative evidence that GPT-OSS cannot assess
+  difficulty. `teacher.limit_per_label` preserves source order and selected the
+  first 16 rows of each label (indices beginning at 3200 and 3400). The accepted
+  examples are overwhelmingly elementary trivia with direct factual support or
+  contradiction, for which the extreme rubric descriptions are plausible.
+  The lone label conflict says that the cat in *Bob the Builder* is Pilchard,
+  which is factually correct despite its deceptive label; GPT-OSS assigned
+  rating 1 and prediction 0.
+- Do not train from this extreme-only cache or relax the rating-spread gate.
+  Any follow-up needs a newly frozen representative smoke selection, preferably
+  seed-random balanced sampling plus a label-balanced hard stratum defined
+  without using downstream validation labels. This is a sampling-protocol
+  change, not permission to tune the rubric from validation performance.
