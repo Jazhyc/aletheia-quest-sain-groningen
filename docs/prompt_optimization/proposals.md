@@ -2512,7 +2512,8 @@ Outcome:
 
 ## P59: Privileged Signed Evidence-Strength Ratings
 
-Status: complete; the ordered smoke collapsed to extremes and blocked training.
+Status: complete; the full teacher is graded, but the rank-1 student collapses
+back toward binary outputs and misses the viability gates.
 
 Question: can privileged supervision teach a rank-1 student a calibrated 1--7
 deception score, rather than asking a binary-trained adapter to invent
@@ -2574,3 +2575,43 @@ Smoke outcome:
   seed-random balanced sampling plus a label-balanced hard stratum defined
   without using downstream validation labels. This is a sampling-protocol
   change, not permission to tune the rubric from validation performance.
+
+Full-cache follow-up:
+
+- Because GPT-OSS decoding is cheap relative to queueing/model startup, the
+  complete 2,880-row varied training cache was generated in job `30196495`.
+  The 2,849 uncached prompts took about 2m35s of inference and the complete job
+  took 13m49s. GPT-OSS used every rating: `1:1373`, `2:45`, `3:15`, `4:136`,
+  `5:34`, `6:164`, and `7:958` across the 2,725 clean, nonleaking targets.
+  Ratings 2--6 account for 394/2,725 (`14.46%`), showing that the ordered smoke
+  substantially understated teacher diversity.
+- The strict audit also exposed useful label/audit conflicts rather than mere
+  format failures. There were only three unparsed rows and three visible
+  privileged-language leaks. Most rejected targets were deceptive-label rows
+  for which the teacher said observable evidence looked honest: 78 rating-1
+  and 21 rating-2 outputs retained prediction 1, while 45 rating-1 outputs
+  explicitly predicted 0. These conflicts were excluded rather than forcing a
+  contradictory SFT target.
+- The deterministic 10% subset contains 275 clean targets with rating counts
+  `1:138`, `2:6`, `4:13`, `5:1`, `6:13`, and `7:104`; 33/275 (`12.0%`) are
+  intermediate. Rank-1/alpha-2 training job `30197375` took 106.2s for nine
+  steps (loss `0.9429`), within a 10m19s cold-start job.
+- Validation job `30197376` completed in 7m35s, with 35.3s scoring time. The
+  generated-rating score reaches `0.9024` BA and `0.9077` AUROC overall,
+  `0.9833`/`0.9833` instructed, and `0.7944`/`0.8069` varied. Explicit
+  Prediction reaches `0.9036` overall BA, `0.9833` instructed, and `0.7972`
+  varied, versus the matched binary rank-1 control's `0.9000`, `0.9771`, and
+  `0.7972`.
+- The student still nearly binarizes the target. Of 817 parsed rows, rating
+  counts are `1:465`, `2:3`, `4:2`, `5:1`, `6:28`, and `7:318`; only 34
+  (`4.16%`) are intermediate, and rating/prediction decisions differ on one
+  row. There are five parse errors and one polarity conflict. Relative to the
+  binary rank-1 control, explicit predictions make 14 fixes and 11 breaks.
+- This misses the preregistered `0.9200` rating-AUROC and 10% intermediate-row
+  gates, although binary BA and parse/conflict gates pass. Do not run local
+  test or use this adapter for an ensemble. A follow-up should address the
+  learning objective rather than retune the rubric: separate polarity from
+  evidence strength, balance or oversample teacher-hard rows using training
+  data only, and give the rating/prediction tokens explicit loss weight. The
+  current completion loss is dominated by the long reasoning summary, while
+  only 12% of the small rank-1 subset teaches a non-extreme rating.
