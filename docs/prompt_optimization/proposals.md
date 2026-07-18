@@ -2615,3 +2615,41 @@ Full-cache follow-up:
   data only, and give the rating/prediction tokens explicit loss weight. The
   current completion loss is dominated by the long reasoning summary, while
   only 12% of the small rank-1 subset teaches a non-extreme rating.
+
+## P60: Midpoint-Focused Privileged Rating Student
+
+Status: ready for two matched rank-1 training arms.
+
+Question: does training primarily on teacher-uncertain cases prevent the
+ordinal student from collapsing back to ratings 1 and 7?
+
+Frozen protocol:
+
+- Reuse P59's complete GPT-OSS evidence-rating cache without regenerating or
+  changing any teacher target. Keep only its existing parsed, label-consistent,
+  polarity-consistent student targets; do not train on teacher/label conflicts.
+- Define uncertainty as proximity to the semantic neutral midpoint rating 4,
+  not proximity to the empirical mean and not a high deception rating. Within
+  every dataset/label stratum, sort by `abs(rating - 4)` and use a seeded hash
+  only to break equal-rating ties. Select the nearest 10% in each stratum. This
+  preserves source/label representation while preferring the least extreme
+  targets available for both classes.
+- Train two preregistered selection arms. The uncertainty-only arm uses the
+  midpoint-nearest 10% per stratum. The balanced-anchor arm adds an equal number
+  of the most extreme rows from every stratum, producing approximately 20%
+  total data with 1:1 uncertain/certain selection counts. The latter tests
+  whether clear anchors preserve polarity and prevent midpoint collapse.
+- Hold P59's student recipe fixed in both arms: fresh `Qwen/Qwen3.5-9B`, rank 1/alpha 2,
+  completion-only summary/rating/prediction targets, one epoch, AdamW `5e-5`,
+  effective batch size 32, no assistant reasoning input, and the same prompt.
+- Evaluate once on all 822 validation rows with deterministic no-thinking vLLM,
+  512 generated tokens, and 4,096 model context. Report rating and explicit
+  prediction BA/AUROC overall and by scenario, rating histogram/entropy,
+  intermediate fraction, parse/polarity errors, runtime, and fixes/breaks
+  against both P59 and the matched binary rank-1 control.
+- Retain P59's viability gates for each arm: rating AUROC at least `0.9200`, explicit BA at
+  least `0.8950`, at least four distinct generated ratings with at least 10%
+  intermediate, at most five polarity conflicts, and no more than eight parse
+  failures. This is validation-only; a failed screen blocks local test and
+  ensembling. Do not choose a narrower uncertainty fraction or a new rating
+  threshold from validation labels.

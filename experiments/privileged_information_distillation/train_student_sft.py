@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+from collections import Counter
 from pathlib import Path
 import sys
 from typing import Any
@@ -209,6 +210,116 @@ def select_stratified_fraction(
     ]
 
 
+def select_rating_uncertainty_fraction(
+    records: list[dict[str, Any]],
+    fraction: float,
+    seed: int,
+    *,
+    midpoint: int = 4,
+) -> list[dict[str, Any]]:
+    """Select the ratings nearest the neutral midpoint within each stratum."""
+    if not 0.0 < fraction <= 1.0:
+        raise ValueError("rating_uncertainty_fraction must be in (0, 1]")
+    if not 1 <= midpoint <= 7:
+        raise ValueError("rating uncertainty midpoint must be between 1 and 7")
+    if fraction == 1.0:
+        return list(records)
+
+    strata: dict[
+        tuple[str, int],
+        list[tuple[int, bytes, tuple[str, int, Any]]],
+    ] = {}
+    for record in records:
+        rating = record.get("rating")
+        if not isinstance(rating, int) or not 1 <= rating <= 7:
+            raise ValueError(
+                "rating uncertainty selection requires integer ratings 1--7"
+            )
+        key = (
+            str(record.get("dataset", "")),
+            int(record["label"]),
+            record.get("index"),
+        )
+        digest = hashlib.sha256(
+            f"{seed}\0{key[0]}\0{key[1]}\0{key[2]}".encode("utf-8")
+        ).digest()
+        strata.setdefault(key[:2], []).append(
+            (abs(rating - midpoint), digest, key)
+        )
+
+    selected: set[tuple[str, int, Any]] = set()
+    for candidates in strata.values():
+        count = max(1, int(len(candidates) * fraction + 0.5))
+        selected.update(key for _, _, key in sorted(candidates)[:count])
+    return [
+        record
+        for record in records
+        if (
+            str(record.get("dataset", "")),
+            int(record["label"]),
+            record.get("index"),
+        ) in selected
+    ]
+
+
+def select_rating_uncertainty_with_certain_anchors(
+    records: list[dict[str, Any]],
+    fraction_each: float,
+    seed: int,
+    *,
+    midpoint: int = 4,
+) -> list[dict[str, Any]]:
+    """Select equal midpoint-near and extreme sets within every stratum."""
+    if not 0.0 < fraction_each <= 0.5:
+        raise ValueError("rating anchor fraction must be in (0, 0.5]")
+    if not 1 <= midpoint <= 7:
+        raise ValueError("rating uncertainty midpoint must be between 1 and 7")
+
+    strata: dict[
+        tuple[str, int],
+        list[tuple[int, bytes, tuple[str, int, Any]]],
+    ] = {}
+    for record in records:
+        rating = record.get("rating")
+        if not isinstance(rating, int) or not 1 <= rating <= 7:
+            raise ValueError(
+                "rating anchor selection requires integer ratings 1--7"
+            )
+        key = (
+            str(record.get("dataset", "")),
+            int(record["label"]),
+            record.get("index"),
+        )
+        digest = hashlib.sha256(
+            f"{seed}\0{key[0]}\0{key[1]}\0{key[2]}".encode("utf-8")
+        ).digest()
+        strata.setdefault(key[:2], []).append(
+            (abs(rating - midpoint), digest, key)
+        )
+
+    selected: set[tuple[str, int, Any]] = set()
+    for stratum, candidates in strata.items():
+        count = max(1, int(len(candidates) * fraction_each + 0.5))
+        if count * 2 > len(candidates):
+            raise ValueError(
+                f"rating anchor sets overlap in stratum={stratum!r}: "
+                f"2 * {count} > {len(candidates)}"
+            )
+        uncertain = sorted(candidates)[:count]
+        certain = sorted(candidates, key=lambda item: (-item[0], item[1]))[:count]
+        selected.update(key for _, _, key in uncertain)
+        selected.update(key for _, _, key in certain)
+    return [
+        record
+        for record in records
+        if (
+            str(record.get("dataset", "")),
+            int(record["label"]),
+            record.get("index"),
+        ) in selected
+    ]
+
+
 def tokenize_record(
     record: dict[str, Any],
     tokenizer: Any,
@@ -342,11 +453,46 @@ def main(cfg: DictConfig) -> None:
         OmegaConf.select(cfg, "student.train_fraction_seed", default=cfg.seed)
     )
     records_before_fraction = len(records)
-    records = select_stratified_fraction(
-        records,
-        train_fraction,
-        train_fraction_seed,
+    rating_uncertainty_fraction = OmegaConf.select(
+        cfg, "student.rating_uncertainty_fraction", default=None
     )
+    if rating_uncertainty_fraction is None:
+        records = select_stratified_fraction(
+            records,
+            train_fraction,
+            train_fraction_seed,
+        )
+        selection_mode = "random_stratified"
+    else:
+        if train_fraction != 1.0:
+            raise ValueError(
+                "set student.train_fraction=1.0 when using "
+                "student.rating_uncertainty_fraction"
+            )
+        rating_uncertainty_seed = int(OmegaConf.select(
+            cfg,
+            "student.rating_uncertainty_seed",
+            default=train_fraction_seed,
+        ))
+        rating_balance_certain = bool(OmegaConf.select(
+            cfg,
+            "student.rating_balance_certain",
+            default=False,
+        ))
+        if rating_balance_certain:
+            records = select_rating_uncertainty_with_certain_anchors(
+                records,
+                float(rating_uncertainty_fraction),
+                rating_uncertainty_seed,
+            )
+            selection_mode = "rating_uncertainty_certain_balanced"
+        else:
+            records = select_rating_uncertainty_fraction(
+                records,
+                float(rating_uncertainty_fraction),
+                rating_uncertainty_seed,
+            )
+            selection_mode = "rating_uncertainty_stratified"
     if cfg.student.train_limit is not None:
         records = records[:int(cfg.student.train_limit)]
     tokenizer = AutoTokenizer.from_pretrained(str(cfg.student.model))
@@ -413,11 +559,18 @@ def main(cfg: DictConfig) -> None:
         f"records_before_fraction={records_before_fraction} "
         f"train_fraction={train_fraction} "
         f"train_fraction_seed={train_fraction_seed} "
+        f"selection_mode={selection_mode} "
+        f"rating_uncertainty_fraction={rating_uncertainty_fraction} "
         f"dataset_name_contains={dataset_name_contains!r} "
         f"reasoning_rows={reasoning_rows} "
         f"reasoning_rows_dropped={reasoning_rows_dropped} "
         f"reasoning_dropout_probability={reasoning_dropout_probability}"
     )
+    rating_counts = Counter(
+        record.get("rating") for record in records if record.get("rating") is not None
+    )
+    if rating_counts:
+        print(f"selected_rating_counts={dict(sorted(rating_counts.items()))}")
 
     model = AutoModelForCausalLM.from_pretrained(
         str(cfg.student.model),

@@ -12,6 +12,8 @@ from experiments.privileged_information_distillation.train_student_sft import (
     has_reasoning_block,
     load_record_sources,
     load_records,
+    select_rating_uncertainty_fraction,
+    select_rating_uncertainty_with_certain_anchors,
     select_stratified_fraction,
     should_drop_reasoning,
     strip_reasoning_block,
@@ -216,6 +218,87 @@ def test_select_stratified_fraction_rejects_invalid_fraction() -> None:
             assert "train_fraction" in str(error)
         else:
             raise AssertionError(f"fraction={fraction} should fail")
+
+
+def test_select_rating_uncertainty_fraction_is_midpoint_focused_and_balanced() -> None:
+    records = [
+        {
+            "dataset": dataset,
+            "label": label,
+            "index": label * 100 + rating * 10 + duplicate,
+            "rating": rating,
+        }
+        for dataset in ("dataset-a", "dataset-b")
+        for label in (0, 1)
+        for rating in (1, 2, 3, 4, 5, 6, 7)
+        for duplicate in range(2)
+    ]
+
+    selected = select_rating_uncertainty_fraction(records, 0.25, seed=7)
+
+    assert len(selected) == 16
+    assert all(record["rating"] in (3, 4, 5) for record in selected)
+    assert {
+        (dataset, label): sum(
+            record["dataset"] == dataset and record["label"] == label
+            for record in selected
+        )
+        for dataset in ("dataset-a", "dataset-b")
+        for label in (0, 1)
+    } == {
+        ("dataset-a", 0): 4,
+        ("dataset-a", 1): 4,
+        ("dataset-b", 0): 4,
+        ("dataset-b", 1): 4,
+    }
+    assert selected == select_rating_uncertainty_fraction(records, 0.25, seed=7)
+
+
+def test_select_rating_uncertainty_fraction_rejects_missing_rating() -> None:
+    try:
+        select_rating_uncertainty_fraction(
+            [{"dataset": "dataset", "label": 0, "index": 1}],
+            0.1,
+            seed=0,
+        )
+    except ValueError as error:
+        assert "integer ratings 1--7" in str(error)
+    else:
+        raise AssertionError("rating-focused selection should require ratings")
+
+
+def test_select_rating_uncertainty_with_certain_anchors_balances_both_ends() -> None:
+    records = [
+        {
+            "dataset": "dataset",
+            "label": label,
+            "index": label * 100 + rating * 10 + duplicate,
+            "rating": rating,
+        }
+        for label in (0, 1)
+        for rating in (1, 2, 3, 4, 5, 6, 7)
+        for duplicate in range(2)
+    ]
+
+    selected = select_rating_uncertainty_with_certain_anchors(
+        records, 0.25, seed=11
+    )
+
+    assert len(selected) == 16
+    for label in (0, 1):
+        ratings = [r["rating"] for r in selected if r["label"] == label]
+        assert len(ratings) == 8
+        assert sum(rating in (3, 4, 5) for rating in ratings) == 4
+        assert sum(rating in (1, 7) for rating in ratings) == 4
+
+
+def test_select_rating_uncertainty_with_certain_anchors_rejects_large_fraction() -> None:
+    try:
+        select_rating_uncertainty_with_certain_anchors([], 0.6, seed=0)
+    except ValueError as error:
+        assert "anchor fraction" in str(error)
+    else:
+        raise AssertionError("overlapping uncertainty/anchor fractions should fail")
 
 
 def test_reasoning_block_helpers_remove_only_rendered_suffix() -> None:
