@@ -2439,3 +2439,40 @@ Validation outcome:
   small AUROC-minus-BA gap shows that certainty was not mathematically erased,
   but completion-only binary SFT strongly polarizes the requested scale and
   the residual graded signal is too sparse to improve the ensemble.
+
+## P58: Ten-Percent PID LoRA-Rank Sweep and Adapter Ensemble
+
+Status: ready for training and frozen validation.
+
+Question: how much LoRA rank does the regular privileged-distillation student
+need, and do independently parameterized ranks retain complementary binary
+errors that support a cheap adapter ensemble?
+
+Frozen protocol:
+
+- Train fresh rank 1, 2, 4, and 8 LoRAs from `Qwen/Qwen3.5-9B`. Keep the LoRA
+  multiplier constant with alpha `2, 4, 8, 16`, respectively, matching the
+  selected rank-16/alpha-32 ratio of `alpha/r = 2`. Target the same attention
+  and MLP projections with zero dropout.
+- Hold the regular selected recipe fixed: the original reviewed GPT-OSS summary
+  cache, `varied-deception` filter, deterministic seed-0 stratified 10% subset
+  (288 rows), completion-only reasoning-summary targets, one epoch, AdamW
+  `5e-5`, effective batch size 32, 3% warmup, zero weight decay, and the ordinary
+  3,000-character no-trace student prompt. Do not initialize from another
+  adapter or alter the data subset by rank.
+- Jointly evaluate ranks 1/2/4/8 plus the existing matched rank-16/alpha-32 10%
+  adapter in one vLLM session on all 822 validation rows. Use each saved regular
+  prompt, deterministic no-thinking generation, a 512-token allowance, a
+  4,096-token model context, binary `Prediction:0|1` parsing, and the established
+  parse-failure fallback to zero.
+- Report each rank's trainable parameter count, training loss/runtime, overall,
+  instructed, and varied BA, recall, FPR, parse failures, and scoring time. Use
+  the shared-session rank-16 result as the primary capacity reference; its older
+  `0.9024` BA is descriptive because adapter ordering can move a few greedy
+  generations.
+- From the five cached rank votes, preregister vote fraction as the ensemble
+  score and majority (at least 3/5 positives) as its binary decision. Report
+  AUROC, scenario metrics, pairwise disagreement, and fixes/breaks versus rank
+  16. Report OR and unanimity only as fixed diagnostics; do not select a rule or
+  adapter subset from validation. This is a validation screen only, with no
+  local-test evaluation or submission change authorized by this protocol.
