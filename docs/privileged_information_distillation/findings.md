@@ -2147,3 +2147,35 @@ is very sparse. Fixed non-selectable cutoffs from 2 through 7 peak at only
 the scale, cutoff, or prompt from these validation labels. Completion-only
 binary SFT has preserved framing diversity but strongly polarized the requested
 confidence readout.
+
+## Ten-percent LoRA-rank sweep (2026-07-18)
+
+A matched fast screen trained fresh rank 1, 2, 4, and 8 adapters with alpha
+equal to twice rank, then jointly evaluated them with the existing
+rank-16/alpha-32 10% adapter. Every rank used the same deterministic 288-row
+varied-only subset, reasoning-summary targets, seed, attention/MLP modules,
+one-epoch AdamW `5e-5` recipe, and effective batch size 32.
+
+| rank / alpha | parameters | artifact | train loss | trainer time | overall BA | instructed BA | varied BA | recall | FPR | parse errors |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 / 2 | 1.82M | 7.0 MiB | 0.9193 | 103.1s | 0.9000 | 0.9771 | 0.7972 | 0.8333 | 0.0333 | 4 |
+| 2 / 4 | 3.64M | 13.9 MiB | 0.9143 | 96.3s | 0.9000 | 0.9792 | 0.7944 | 0.8333 | 0.0333 | 4 |
+| 4 / 8 | 7.27M | 27.8 MiB | 0.8993 | 96.4s | 0.9000 | 0.9771 | 0.7972 | 0.8333 | 0.0333 | 4 |
+| 8 / 16 | 14.55M | 55.5 MiB | 0.8550 | 96.2s | 0.9012 | 0.9792 | 0.7972 | 0.8333 | 0.0310 | 5 |
+| 16 / 32 | 29.10M | 111.0 MiB | 0.7913 | 110.0s | 0.9000 | 0.9771 | 0.7972 | 0.8333 | 0.0333 | 4 |
+
+Training loss improves smoothly with rank, but validation detection is flat.
+Ranks 1, 4, and 16 emit exactly equal completion strings on all 822 rows even
+though their weight hashes differ. Rank 2 changes 10 decisions relative to rank
+16 with five fixes and five breaks; rank 8 changes 11 with six fixes and five
+breaks. Only 11 rows have any binary disagreement across all five ranks.
+
+The frozen five-way vote fraction scores `0.9000` BA and `0.9052` AUROC; its
+majority decision is exactly rank 16's decision on every row. OR reaches only
+`0.9012` BA (three fixes/two breaks), and unanimity remains `0.9000`. Thus
+different ranks do not provide meaningful error diversity. Bundling all five
+weights would also consume about 215 MiB before code, exceeding the package
+limit. Do not build a rank ensemble or spend local test on this sweep. Rank 1
+deserves consideration only as a 16x adapter-compression hypothesis, to be
+confirmed with the full training recipe and an untouched evaluation before it
+could replace rank 16.

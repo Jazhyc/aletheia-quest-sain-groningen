@@ -2442,7 +2442,7 @@ Validation outcome:
 
 ## P58: Ten-Percent PID LoRA-Rank Sweep and Adapter Ensemble
 
-Status: ready for training and frozen validation.
+Status: complete; rank barely affects decisions and the ensemble does not improve BA.
 
 Question: how much LoRA rank does the regular privileged-distillation student
 need, and do independently parameterized ranks retain complementary binary
@@ -2476,3 +2476,36 @@ Frozen protocol:
   16. Report OR and unanimity only as fixed diagnostics; do not select a rule or
   adapter subset from validation. This is a validation screen only, with no
   local-test evaluation or submission change authorized by this protocol.
+
+Outcome:
+
+- Training jobs `30195760`, `30195761`, `30195766`, and `30195767` completed
+  successfully on the same 288 rows and nine optimizer steps. Trainer time is
+  103.1s at rank 1 and approximately 96.2--96.4s at ranks 2/4/8; the matched
+  rank-16 control took 110.0s. Training loss falls monotonically with capacity:
+  `0.9193`, `0.9143`, `0.8993`, `0.8550`, and `0.7913` for ranks 1--16.
+- Shared validation job `30195768` completed in 6m57s. Ranks 1, 2, 4, 8, and
+  16 score `0.9000`, `0.9000`, `0.9000`, `0.9012`, and `0.9000` overall BA.
+  Their varied BAs are `0.7972`, `0.7944`, `0.7972`, `0.7972`, and `0.7972`;
+  instructed BAs are `0.9771`, `0.9792`, `0.9771`, `0.9792`, and `0.9771`.
+  All have `0.8333` overall recall; rank 8 alone lowers FPR from `0.0333` to
+  `0.0310`. Parse-error counts are 4, 4, 4, 5, and 4.
+- Rank 1, rank 4, and rank 16 produce exactly the same completion string on all
+  822 rows despite distinct adapter hashes and monotonically different losses.
+  Rank 2 differs from rank 16 on 10 parsed decisions with five fixes/five
+  breaks. Rank 8 differs on 11 decisions with six fixes/five breaks; ten of
+  those changes have parsed outputs on both sides. Only 11/822 rows have any
+  binary rank disagreement.
+- The preregistered five-way majority is exactly equal to rank 16 on every
+  binary decision: `0.9000` BA, `0.8333` recall, and `0.0333` FPR. Vote fraction
+  supplies a small ranking gain to `0.9052` AUROC overall and `0.8065` varied
+  AUROC, but no BA gain. OR scores `0.9012` BA through three fixes/two breaks;
+  unanimity scores `0.9000`. These frozen diagnostics do not justify selecting
+  a different rule.
+- Adapter parameter counts scale from 1.82M (rank 1) to 29.10M (rank 16), with
+  BF16 artifacts from 7.0 MiB to 111.0 MiB. All five artifacts total about
+  215 MiB before notebook code, already beyond the competition package limit.
+  Do not ensemble ranks, run local test, or infer that lower training loss
+  improves detection. Rank 1 is a promising compression control, but replacing
+  the selected full-data rank-16 adapter would require a separately frozen
+  full-recipe/held-out confirmation.

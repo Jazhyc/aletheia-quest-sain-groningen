@@ -2754,6 +2754,24 @@ cutoffs 2--7 peak at `0.9190` BA, still below binary OR, and are not selectable.
 Keep the ordinary single prompt and close this ordinal-readout branch without a
 test run or cutoff retuning.
 
+### Ten-percent PID LoRA-rank sweep
+
+Jobs `30195760/61/66/67` trained rank 1/2/4/8 adapters with constant
+`alpha/r=2` on the exact seed-0 10% varied-only distillation subset. Shared
+validation job `30195768` compared them with the matched rank-16 control. BA is
+essentially flat: `0.9000`, `0.9000`, `0.9000`, `0.9012`, and `0.9000` for
+ranks 1/2/4/8/16. Training loss nevertheless falls monotonically from `0.9193`
+to `0.7913`, so fitting the summaries better does not improve the frozen
+deception boundary.
+
+Ranks 1, 4, and 16 generate identical strings for all 822 rows. Across all five
+ranks, only 11 rows have any binary disagreement. The preregistered vote-fraction
+ensemble leaves BA exactly `0.9000` and raises AUROC only to `0.9052`; majority
+is decision-identical to rank 16. OR reaches `0.9012` BA and is a non-selectable
+diagnostic. Reject rank ensembling and local-test evaluation. The rank-1
+adapter is 7.0 MiB versus rank 16's 111.0 MiB, so a future full-recipe rank-1
+run is justified as compression work, not as an accuracy improvement.
+
 ### Small external-data continuations
 
 The focused 64-summary soft-trigger continuation plus 10% varied replay trained
