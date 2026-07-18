@@ -12,9 +12,11 @@ from experiments.privileged_information_distillation.core import (
     build_student_prompt,
     extract_teacher_final,
     format_student_target,
+    parse_rating_teacher_target,
     parse_teacher_target,
     parse_counterfactual_teacher_target,
     route_reference_material,
+    rating_matches_prediction,
     split_qwen_think_completion,
     truncate_text,
 )
@@ -141,6 +143,38 @@ def test_format_counterfactual_target_preserves_required_order() -> None:
         "<contradiction>\nNo contradiction\n</contradiction>\n"
         "Prediction:0"
     )
+
+
+def test_parse_rating_target_with_privileged_prediction_fallback() -> None:
+    raw = (
+        "assistantanalysisHidden reasoning.\n"
+        "assistantfinal<reasoning_summary>Subtle supporting error.</reasoning_summary>\n"
+        "Rating:5"
+    )
+
+    assert parse_rating_teacher_target(raw, expected_prediction=1) == (
+        "Subtle supporting error.",
+        5,
+        1,
+    )
+
+
+def test_format_rating_target_preserves_summary_rating_prediction_order() -> None:
+    assert format_student_target("Evidence.", 0, rating=2) == (
+        "<reasoning_summary>\nEvidence.\n</reasoning_summary>\n"
+        "Rating:2\nPrediction:0"
+    )
+
+
+@pytest.mark.parametrize(
+    "rating,prediction,expected",
+    [(1, 0, True), (3, 0, True), (4, 0, True), (4, 1, True), (5, 1, True),
+     (7, 1, True), (2, 1, False), (6, 0, False)],
+)
+def test_rating_polarity_matches_prediction(
+    rating: int, prediction: int, expected: bool
+) -> None:
+    assert rating_matches_prediction(rating, prediction) is expected
 
 
 def test_limit_teacher_rows_selects_balanced_labels_from_ordered_rows() -> None:

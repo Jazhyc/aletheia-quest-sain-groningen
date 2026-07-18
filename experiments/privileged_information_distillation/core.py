@@ -14,6 +14,16 @@ SUMMARY_ONLY_PATTERN = re.compile(
     r"<reasoning_summary>\s*(.*?)\s*</reasoning_summary>",
     flags=re.DOTALL,
 )
+SUMMARY_RATING_PATTERN = re.compile(
+    r"<reasoning_summary>\s*(.*?)\s*</reasoning_summary>\s*"
+    r"Rating:\s*([1-7])\b\s*Prediction:\s*([01])\b",
+    flags=re.DOTALL,
+)
+SUMMARY_RATING_ONLY_PATTERN = re.compile(
+    r"<reasoning_summary>\s*(.*?)\s*</reasoning_summary>\s*"
+    r"Rating:\s*([1-7])\b",
+    flags=re.DOTALL,
+)
 COUNTERFACTUAL_PATTERN = re.compile(
     r"<reasoning_summary>\s*(.*?)\s*</reasoning_summary>\s*"
     r"<facts>\s*(.*?)\s*</facts>\s*"
@@ -290,17 +300,60 @@ def parse_counterfactual_teacher_target(
     return fields[0], fields[1], fields[2], prediction
 
 
+def parse_rating_teacher_target(
+    raw_completion: str,
+    expected_prediction: int | None = None,
+    output_format: str = "harmony",
+) -> tuple[str, int, int] | None:
+    """Parse a summary, signed 1--7 evidence rating, and binary prediction."""
+    final = extract_teacher_final(raw_completion, output_format)
+    if final is None:
+        return None
+    matches = list(SUMMARY_RATING_PATTERN.finditer(final))
+    if matches:
+        summary, rating, prediction = matches[-1].groups()
+        rating, prediction = int(rating), int(prediction)
+    elif expected_prediction in (0, 1):
+        matches = list(SUMMARY_RATING_ONLY_PATTERN.finditer(final))
+        if not matches:
+            return None
+        summary, rating = matches[-1].groups()
+        rating, prediction = int(rating), int(expected_prediction)
+    else:
+        return None
+    summary = " ".join(summary.split())
+    if not summary:
+        return None
+    return summary, rating, prediction
+
+
+def rating_matches_prediction(rating: int, prediction: int) -> bool:
+    """Allow neutral 4 for either label and require signed polarity otherwise."""
+    if not 1 <= rating <= 7 or prediction not in (0, 1):
+        return False
+    return rating <= 4 if prediction == 0 else rating >= 4
+
+
 def format_student_target(
     summary: str,
     prediction: int,
     facts: str | None = None,
     contradiction: str | None = None,
+    rating: int | None = None,
 ) -> str:
     if facts is not None and contradiction is not None:
         return (
             f"<reasoning_summary>\n{summary.strip()}\n</reasoning_summary>\n"
             f"<facts>\n{facts.strip()}\n</facts>\n"
             f"<contradiction>\n{contradiction.strip()}\n</contradiction>\n"
+            f"Prediction:{int(prediction)}"
+        )
+    if rating is not None:
+        if not 1 <= int(rating) <= 7:
+            raise ValueError(f"rating must be between 1 and 7, got {rating}")
+        return (
+            f"<reasoning_summary>\n{summary.strip()}\n</reasoning_summary>\n"
+            f"Rating:{int(rating)}\n"
             f"Prediction:{int(prediction)}"
         )
     return (

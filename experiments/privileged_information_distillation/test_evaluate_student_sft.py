@@ -13,6 +13,7 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     COUNTERFACTUAL_STRICT_RE,
     PREDICTION_ONLY_STRICT_RE,
     RATING_STRICT_RE,
+    SUMMARY_RATING_STRICT_RE,
     apply_student_prompt_config,
     binary_score_from_logprobs,
     binary_token_ids,
@@ -26,6 +27,7 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     parse_prediction,
     prefix_before_prediction,
     rating_to_score,
+    rating_prediction_to_score,
     set_reasoning_visibility,
     strict_pattern_for_config,
 )
@@ -60,6 +62,13 @@ def test_rating_to_score_uses_evenly_spaced_endpoints_and_midpoint() -> None:
     assert rating_to_score(1) == 0.0
     assert rating_to_score(4) == 0.5
     assert rating_to_score(7) == 1.0
+
+
+def test_rating_prediction_score_uses_prediction_only_to_break_neutral_tie() -> None:
+    assert rating_prediction_to_score(1, 1) == 0.0
+    assert rating_prediction_to_score(7, 0) == 1.0
+    assert rating_prediction_to_score(4, 0) < 0.5
+    assert rating_prediction_to_score(4, 1) > 0.5
 
 
 def test_apply_student_prompt_config_overrides_conditional_prompt(tmp_path) -> None:
@@ -283,6 +292,21 @@ def test_rating_strict_format_requires_summary_and_one_to_seven_rating() -> None
     assert strict_pattern_for_config(
         {"student": {"target_format": "rating"}}
     ) is RATING_STRICT_RE
+
+
+def test_summary_rating_strict_format_requires_rating_then_prediction() -> None:
+    valid = (
+        "<reasoning_summary>Evidence.</reasoning_summary>\n"
+        "Rating:5\nPrediction:1"
+    )
+
+    assert SUMMARY_RATING_STRICT_RE.fullmatch(valid)
+    assert not SUMMARY_RATING_STRICT_RE.fullmatch(
+        valid.replace("Rating:5\nPrediction:1", "Prediction:1\nRating:5")
+    )
+    assert strict_pattern_for_config(
+        {"student": {"target_format": "summary_rating"}}
+    ) is SUMMARY_RATING_STRICT_RE
 
 
 def test_atomic_audit_strict_format_accepts_grounded_audit_contract() -> None:

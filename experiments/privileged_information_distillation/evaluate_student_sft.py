@@ -62,6 +62,11 @@ RATING_STRICT_RE = re.compile(
     r"(?is)^\s*<reasoning_summary>\s*(.+?)\s*</reasoning_summary>\s*"
     r"Rating\s*:\s*<?([1-7])>?\s*$"
 )
+SUMMARY_RATING_STRICT_RE = re.compile(
+    r"(?is)^\s*<reasoning_summary>\s*(.+?)\s*</reasoning_summary>\s*"
+    r"Rating\s*:\s*<?([1-7])>?\s*"
+    r"Prediction\s*:\s*<?([01])>?\s*$"
+)
 EMPTY_REASONING_PREFIX = (
     "<reasoning_summary>\n"
     "</reasoning_summary>\n"
@@ -85,6 +90,16 @@ def rating_to_score(rating: int) -> float:
     if not 1 <= rating <= 7:
         raise ValueError(f"rating must be between 1 and 7, got {rating}")
     return (rating - 1) / 6
+
+
+def rating_prediction_to_score(rating: int, prediction: int) -> float:
+    """Map a signed rating to [0, 1], using Prediction only to break rating-4 ties."""
+    score = rating_to_score(rating)
+    if rating == 4:
+        if prediction not in (0, 1):
+            raise ValueError(f"prediction must be 0 or 1, got {prediction}")
+        return 0.500001 if prediction == 1 else 0.499999
+    return score
 
 
 def prefix_before_prediction(text: str) -> str:
@@ -301,6 +316,8 @@ def strict_pattern_for_config(config: dict[str, Any]) -> re.Pattern[str]:
         return COUNTERFACTUAL_STRICT_RE
     if student.get("target_format") == "atomic_audit":
         return ATOMIC_AUDIT_STRICT_RE
+    if student.get("target_format") == "summary_rating":
+        return SUMMARY_RATING_STRICT_RE
     if student.get("target_format") == "rating":
         return RATING_STRICT_RE
     return STRICT_RE
@@ -308,7 +325,12 @@ def strict_pattern_for_config(config: dict[str, Any]) -> re.Pattern[str]:
 
 def output_mode_for_config(config: dict[str, Any]) -> str:
     """Select binary or ordinal parsing from the inference prompt contract."""
-    return "rating" if config["student"].get("target_format") == "rating" else "binary"
+    target_format = config["student"].get("target_format")
+    if target_format == "rating":
+        return "rating"
+    if target_format == "summary_rating":
+        return "rating_prediction"
+    return "binary"
 
 
 def load_records(
@@ -410,6 +432,25 @@ def evaluate_adapter(
         predictions = [None if value is None else int(value >= 4) for value in ratings]
         scores = [0.0 if value is None else rating_to_score(value) for value in ratings]
         evaluated["rating"] = ratings
+    elif output_mode == "rating_prediction":
+        ratings = [parse_rating(text) for text in generations]
+        predictions = [parse_prediction(text) for text in generations]
+        scores = [
+            0.0
+            if rating is None or prediction is None
+            else rating_prediction_to_score(rating, prediction)
+            for rating, prediction in zip(ratings, predictions, strict=True)
+        ]
+        evaluated["rating"] = ratings
+        evaluated["prediction_score"] = [
+            float(value) if value is not None else 0.0 for value in predictions
+        ]
+        evaluated["rating_prediction_conflict"] = [
+            False
+            if rating is None or prediction is None or rating == 4
+            else (rating >= 5) != bool(prediction)
+            for rating, prediction in zip(ratings, predictions, strict=True)
+        ]
     elif output_mode == "binary":
         predictions = [parse_prediction(text) for text in generations]
         scores = [float(value) if value is not None else 0.0 for value in predictions]
@@ -417,7 +458,13 @@ def evaluate_adapter(
         raise ValueError(f"unsupported output mode: {output_mode!r}")
     evaluated["prediction"] = predictions
     evaluated["score"] = scores
-    evaluated["parse_error"] = [value is None for value in predictions]
+    if output_mode == "rating_prediction":
+        evaluated["parse_error"] = [
+            rating is None or prediction is None
+            for rating, prediction in zip(ratings, predictions, strict=True)
+        ]
+    else:
+        evaluated["parse_error"] = [value is None for value in predictions]
     evaluated["format_valid"] = [strict_re.fullmatch(text) is not None for text in generations]
     evaluated["generation"] = generations
     timing: dict[str, float | int] = {"generation_seconds": elapsed}
@@ -723,7 +770,19 @@ def main() -> None:
                 per_dataset[dataset] = binary_metrics(
                     group["label"].to_numpy(), group["score"].to_numpy(), 0.5
                 )
-            score_metrics = {"generated_binary": metrics_for_score(evaluated, "score")}
+            if output_mode_by_condition[condition_name] == "rating_prediction":
+                score_metrics = {
+                    "generated_rating": metrics_for_score(evaluated, "score"),
+                    "generated_prediction": metrics_for_score(
+                        evaluated, "prediction_score"
+                    ),
+                }
+                primary_score_name = "generated_rating"
+            else:
+                score_metrics = {
+                    "generated_binary": metrics_for_score(evaluated, "score")
+                }
+                primary_score_name = "generated_binary"
             if args.continuous_margins:
                 score_metrics.update({
                     "empty_margin": metrics_for_score(evaluated, "empty_margin_score"),
@@ -750,11 +809,17 @@ def main() -> None:
                 "reasoning_max_chars": reasoning_max_chars,
                 "reasoning_truncation": reasoning_mode,
                 "learning_rate": config["student"]["training"]["learning_rate"],
-                "metrics": score_metrics["generated_binary"],
+                "metrics": score_metrics[primary_score_name],
                 "score_metrics": score_metrics,
                 "per_dataset": per_dataset,
                 "parse_errors": int(evaluated["parse_error"].sum()),
                 "format_valid": int(evaluated["format_valid"].sum()),
+                "rating_prediction_conflicts": int(
+                    evaluated.get(
+                        "rating_prediction_conflict",
+                        pd.Series(False, index=evaluated.index),
+                    ).sum()
+                ),
                 "rows": len(evaluated),
                 "score_seconds": total_elapsed,
                 "rows_per_second": len(evaluated) / total_elapsed,

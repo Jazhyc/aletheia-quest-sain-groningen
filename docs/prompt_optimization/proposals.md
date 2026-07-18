@@ -2509,3 +2509,43 @@ Outcome:
   improves detection. Rank 1 is a promising compression control, but replacing
   the selected full-data rank-16 adapter would require a separately frozen
   full-recipe/held-out confirmation.
+
+## P59: Privileged Signed Evidence-Strength Ratings
+
+Status: ready for a balanced teacher smoke.
+
+Question: can privileged supervision teach a rank-1 student a calibrated 1--7
+deception score, rather than asking a binary-trained adapter to invent
+confidence after fine-tuning?
+
+Frozen protocol:
+
+- GPT-OSS sees the authoritative label and a seven-level signed evidence rubric.
+  Ratings 1--3 denote increasingly difficult honest cases, 5--7 increasingly
+  obvious deceptive cases, and 4 is reserved for genuinely underdetermined
+  observable evidence. Label-0 targets may use only 1--4 and label-1 targets
+  only 4--7. The rating measures evidential obviousness, not confidence in the
+  privileged label.
+- The student does not see the rubric or ground truth. Its ordinary no-trace
+  prompt contains only the output schema. Completion-only targets contain a
+  concise `<reasoning_summary>`, `Rating:1..7`, and `Prediction:0|1`; retaining
+  Prediction isolates binary accuracy from rating calibration and exposes
+  polarity conflicts.
+- First generate 16 varied examples per label. Require exact parse/polarity on
+  at least 30/32, no rubric/privileged leakage, at least four distinct ratings,
+  at least 25% intermediate ratings (2--6), and both labels represented away
+  from the extremes. A failed smoke blocks full generation and wording is not
+  tuned from downstream validation labels.
+- If the smoke passes, generate the complete varied cache, then train a fresh
+  rank-1/alpha-2 student on the same deterministic seed-0 10% subset and regular
+  one-epoch AdamW `5e-5` recipe used in P58.
+- Evaluate once on full validation with 512 generated tokens and 4,096 model
+  context. Report explicit-Prediction BA and scenario metrics separately from
+  rating-derived BA/AUROC, rating histogram/entropy, polarity conflicts,
+  calibration by rating, parse/format counts, and runtime. Compare against the
+  matched binary rank-1 control (`0.9000` validation BA).
+- Viability requires rating AUROC at least `0.9200`, explicit-Prediction BA no
+  lower than `0.8950`, at least four distinct generated ratings with 10% of
+  parsed rows intermediate, at most five polarity conflicts, and no more than
+  eight parse failures. This authorizes later specialist-adapter ensembling,
+  not local-test evaluation or notebook integration.

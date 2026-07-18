@@ -26,7 +26,9 @@ from experiments.privileged_information_distillation.core import (
     extract_teacher_final,
     format_student_target,
     parse_counterfactual_teacher_target,
+    parse_rating_teacher_target,
     parse_teacher_target,
+    rating_matches_prediction,
     route_reference_material,
     split_qwen_think_completion,
 )
@@ -343,11 +345,11 @@ def reparse_cached_record(
         or cached.get("teacher_prompt") != row["teacher_prompt"]
     ):
         return cached
-    parser = (
-        parse_counterfactual_teacher_target
-        if target_format == "counterfactual"
-        else parse_teacher_target
-    )
+    parser = {
+        "summary": parse_teacher_target,
+        "counterfactual": parse_counterfactual_teacher_target,
+        "summary_rating": parse_rating_teacher_target,
+    }[target_format]
     parsed = parser(
         cached["raw_completion"],
         expected_prediction=row["label"],
@@ -357,19 +359,33 @@ def reparse_cached_record(
         return cached
     if target_format == "counterfactual":
         summary, facts, contradiction, prediction = parsed
+        rating = None
+    elif target_format == "summary_rating":
+        summary, rating, prediction = parsed
+        facts = contradiction = None
     else:
         summary, prediction = parsed
         facts = contradiction = None
+        rating = None
+    rating_polarity_match = (
+        rating is None or rating_matches_prediction(rating, prediction)
+    )
     return {
         **cached,
         "reasoning_summary": summary,
         "facts": facts,
         "contradiction": contradiction,
+        "rating": rating,
+        "rating_polarity_match": rating_polarity_match,
         "prediction": prediction,
         "student_target": format_student_target(
-            summary, prediction, facts=facts, contradiction=contradiction
+            summary,
+            prediction,
+            facts=facts,
+            contradiction=contradiction,
+            rating=rating,
         ),
-        "parse_error": False,
+        "parse_error": not rating_polarity_match,
         "label_match": prediction == row["label"],
         "prediction_source": (
             "teacher_final" if "Prediction:" in (
@@ -396,7 +412,7 @@ def main(cfg: DictConfig) -> None:
     np.random.seed(int(cfg.seed))
     rows = load_teacher_rows(cfg, root)
     target_format = str(OmegaConf.select(cfg, "student.target_format", default="summary"))
-    if target_format not in {"summary", "counterfactual"}:
+    if target_format not in {"summary", "counterfactual", "summary_rating"}:
         raise ValueError(f"unknown student.target_format={target_format!r}")
     print(f"loaded {len(rows)} privileged teacher examples")
 
@@ -498,11 +514,11 @@ def main(cfg: DictConfig) -> None:
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
                 continue
             raw_completion = generated[key]
-            parser = (
-                parse_counterfactual_teacher_target
-                if target_format == "counterfactual"
-                else parse_teacher_target
-            )
+            parser = {
+                "summary": parse_teacher_target,
+                "counterfactual": parse_counterfactual_teacher_target,
+                "summary_rating": parse_rating_teacher_target,
+            }[target_format]
             output_format = row.get("teacher_output_format", "harmony")
             parsed = parser(
                 raw_completion,
@@ -511,13 +527,25 @@ def main(cfg: DictConfig) -> None:
             )
             if parsed and target_format == "counterfactual":
                 summary, facts, contradiction, prediction = parsed
+                rating = None
+            elif parsed and target_format == "summary_rating":
+                summary, rating, prediction = parsed
+                facts = contradiction = None
             elif parsed:
                 summary, prediction = parsed
                 facts = contradiction = None
+                rating = None
             else:
-                summary = facts = contradiction = prediction = None
+                summary = facts = contradiction = rating = prediction = None
             parsed_count += int(parsed is not None)
             label_match_count += int(prediction == row["label"])
+            rating_polarity_match = (
+                parsed is not None
+                and (
+                    rating is None
+                    or rating_matches_prediction(rating, prediction)
+                )
+            )
             teacher_final = extract_teacher_final(raw_completion, output_format)
             qwen_split = (
                 split_qwen_think_completion(raw_completion)
@@ -529,13 +557,19 @@ def main(cfg: DictConfig) -> None:
                 "reasoning_summary": summary,
                 "facts": facts,
                 "contradiction": contradiction,
+                "rating": rating,
+                "rating_polarity_match": rating_polarity_match,
                 "prediction": prediction,
                 "student_target": (
                     format_student_target(
-                        summary, prediction, facts=facts, contradiction=contradiction
+                        summary,
+                        prediction,
+                        facts=facts,
+                        contradiction=contradiction,
+                        rating=rating,
                     ) if parsed else None
                 ),
-                "parse_error": parsed is None,
+                "parse_error": parsed is None or not rating_polarity_match,
                 "label_match": prediction == row["label"],
                 "prediction_source": (
                     "teacher_final" if "Prediction:" in (teacher_final or "")
