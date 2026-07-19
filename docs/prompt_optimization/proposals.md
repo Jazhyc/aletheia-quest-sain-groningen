@@ -2969,7 +2969,8 @@ Outcome:
 
 ## P65: Phoenix v2.1 Native-Thinking Inference Ablation
 
-Status: scheduled protocol; validation only.
+Status: 4,096-token pass complete but truncation-invalid; 8,192-token closure
+retry scheduled on validation only.
 
 Question: does Qwen's native inference-time thinking improve the current
 submission adapter when its weights, factual judge prompt, and input evidence are
@@ -2994,3 +2995,19 @@ Frozen protocol:
 - Native thinking is promising only if it improves overall BA by at least `0.005`
   without reducing varied BA or materially increasing parse failures. Otherwise
   do not spend a local-test evaluation or alter the submission notebook.
+
+Preliminary 4,096-token audit:
+
+- Job `30202210` completed in 13m06s. The paired no-thinking control reproduced
+  `0.9024` overall and `0.8028` varied BA with two capped parse failures. Native
+  thinking initially appeared to score `0.8857` overall and `0.7833` varied BA,
+  but 108/822 outputs hit the 4,096-token limit.
+- Only three capped generations closed `</think>`, and none emitted a parseable
+  final answer. The permissive binary parser had counted 101 tentative
+  `Prediction:` strings inside unfinished thinking. Requiring a closed thinking
+  block yields 108 parse failures and provisional BA `0.8560` overall, `0.7500`
+  varied. This is not a valid capacity comparison.
+- Retry native thinking at 8,192 generated tokens with a 12,288-token model
+  context and final-channel-only parsing. This is a truncation-closure retry,
+  not a new prompt or selection round. If material capping remains, reject the
+  route as operationally unstable rather than increasing the limit again.

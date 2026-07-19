@@ -79,6 +79,14 @@ def parse_prediction(text: str) -> int | None:
     return int(matches[-1]) if matches else None
 
 
+def final_after_thinking(text: str) -> str | None:
+    """Return only the answer after a closed native-thinking block."""
+    marker = "</think>"
+    if marker not in text:
+        return None
+    return text.rpartition(marker)[2]
+
+
 def parse_rating(text: str) -> int | None:
     """Return the final explicit 1--7 rating, if present."""
     matches = RATING_RE.findall(text)
@@ -452,6 +460,7 @@ def evaluate_adapter(
     margin_sampling: Any | None = None,
     binary_ids: list[int] | None = None,
     empty_reasoning_prefix: str = EMPTY_REASONING_PREFIX,
+    require_closed_thinking: bool = False,
 ) -> tuple[pd.DataFrame, dict[str, float | int]]:
     from vllm.lora.request import LoRARequest
 
@@ -475,14 +484,18 @@ def evaluate_adapter(
         0 if not output.outputs else len(output.outputs[0].token_ids)
         for output in outputs
     ]
+    parsed_generations = generations
+    if require_closed_thinking:
+        parsed_generations = [final_after_thinking(text) or "" for text in generations]
+        evaluated["final_generation"] = parsed_generations
     if output_mode == "rating":
-        ratings = [parse_rating(text) for text in generations]
+        ratings = [parse_rating(text) for text in parsed_generations]
         predictions = [None if value is None else int(value >= 4) for value in ratings]
         scores = [0.0 if value is None else rating_to_score(value) for value in ratings]
         evaluated["rating"] = ratings
     elif output_mode == "rating_prediction":
-        ratings = [parse_rating(text) for text in generations]
-        predictions = [parse_prediction(text) for text in generations]
+        ratings = [parse_rating(text) for text in parsed_generations]
+        predictions = [parse_prediction(text) for text in parsed_generations]
         scores = [
             0.0
             if rating is None or prediction is None
@@ -500,7 +513,7 @@ def evaluate_adapter(
             for rating, prediction in zip(ratings, predictions, strict=True)
         ]
     elif output_mode == "binary":
-        predictions = [parse_prediction(text) for text in generations]
+        predictions = [parse_prediction(text) for text in parsed_generations]
         scores = [float(value) if value is not None else 0.0 for value in predictions]
     else:
         raise ValueError(f"unsupported output mode: {output_mode!r}")
@@ -513,7 +526,9 @@ def evaluate_adapter(
         ]
     else:
         evaluated["parse_error"] = [value is None for value in predictions]
-    evaluated["format_valid"] = [strict_re.fullmatch(text) is not None for text in generations]
+    evaluated["format_valid"] = [
+        strict_re.fullmatch(text) is not None for text in parsed_generations
+    ]
     evaluated["generation"] = generations
     timing: dict[str, float | int] = {"generation_seconds": elapsed}
 
@@ -858,6 +873,7 @@ def main() -> None:
                 output_mode=output_mode_by_condition[condition_name],
                 margin_sampling=margin_sampling,
                 binary_ids=binary_ids,
+                require_closed_thinking=bool(enable_thinking),
             )
             evaluated_by_condition[condition_name] = evaluated
             timing_by_condition[condition_name] = timing

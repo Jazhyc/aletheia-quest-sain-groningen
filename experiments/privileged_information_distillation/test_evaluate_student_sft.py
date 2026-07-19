@@ -18,6 +18,7 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     binary_score_from_logprobs,
     binary_token_ids,
     comparable_student_settings,
+    final_after_thinking,
     load_retrieval_cache,
     max_aggregate_evaluations,
     parse_reasoning_input_condition,
@@ -55,6 +56,13 @@ def test_parse_prediction_rejects_unstructured_binary_text() -> None:
 
 def test_parse_prediction_accepts_literal_placeholder_brackets() -> None:
     assert parse_prediction("Prediction:<0>") == 0
+
+
+def test_final_after_thinking_rejects_unclosed_trace_and_keeps_final_answer() -> None:
+    assert final_after_thinking("Thinking Process: Prediction:1") is None
+    assert final_after_thinking(
+        "Thinking Process: Prediction:1</think>\nPrediction:0"
+    ) == "\nPrediction:0"
 
 
 def test_parse_rating_uses_last_explicit_rating() -> None:
