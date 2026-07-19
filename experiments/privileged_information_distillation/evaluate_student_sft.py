@@ -222,6 +222,20 @@ def comparable_student_settings(config: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+VLLM_MAX_LORA_RANKS = (1, 8, 16, 32, 64, 128, 256, 320, 512)
+
+
+def vllm_max_lora_rank(configured_ranks: list[int]) -> int:
+    """Round adapter rank up to a max_lora_rank accepted by vLLM."""
+    if not configured_ranks or min(configured_ranks) < 1:
+        raise ValueError("configured LoRA ranks must be positive")
+    required = max(configured_ranks)
+    for supported in VLLM_MAX_LORA_RANKS:
+        if supported >= required:
+            return supported
+    raise ValueError(f"LoRA rank {required} exceeds vLLM's supported maximum")
+
+
 def set_reasoning_visibility(config: dict[str, Any], visibility: str) -> None:
     """Apply an inference-only reasoning-visibility ablation in place."""
     if visibility == "configured":
@@ -726,7 +740,9 @@ def main() -> None:
         tensor_parallel_size=1,
         gpu_memory_utilization=args.gpu_memory_utilization,
         enable_lora=True,
-        max_lora_rank=max(int(config["student"]["lora"]["r"]) for config in configs),
+        max_lora_rank=vllm_max_lora_rank([
+            int(config["student"]["lora"]["r"]) for config in configs
+        ]),
         max_model_len=args.max_model_len,
     )
     sampling = SamplingParams(max_tokens=args.max_new_tokens, temperature=0.0)

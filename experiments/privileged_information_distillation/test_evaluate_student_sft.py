@@ -28,12 +28,19 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     prefix_before_prediction,
     rating_to_score,
     rating_prediction_to_score,
+    vllm_max_lora_rank,
     set_reasoning_visibility,
     strict_pattern_for_config,
 )
 from experiments.privileged_information_distillation.analyze_continuous_margins import (
     rank_fraction_predictions,
 )
+
+
+def test_vllm_max_lora_rank_rounds_capacity_up_to_supported_value() -> None:
+    assert vllm_max_lora_rank([1]) == 1
+    assert vllm_max_lora_rank([1, 4]) == 8
+    assert vllm_max_lora_rank([8, 16]) == 16
 
 
 def test_parse_prediction_uses_last_explicit_prediction() -> None:
