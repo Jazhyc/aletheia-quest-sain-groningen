@@ -2820,7 +2820,8 @@ Outcome:
 
 ## P63: Ground-Truth-Blind Teacher-Specialist Ensemble
 
-Status: frozen protocol; not yet run.
+Status: complete; blind teachers become diverse and ensemble well, but rank-1
+distillation erases almost all of their decision diversity.
 
 Question: did privileged, label-conditioned post-hoc explanations homogenize
 P62's students, and can genuine teacher judgments create complementary rank-1
@@ -2866,3 +2867,41 @@ Frozen protocol:
   blind student by at least `0.005` without reducing varied BA. It is competitive
   with P62 only if it also reaches material specialist BA `0.9048` overall and
   `0.8083` varied. Failure blocks local test and submission integration.
+
+Outcome:
+
+- The raw label-stratified manifest selected 288 varied rows, exactly 144 per
+  label and 16 per dataset/label stratum. Blind generation parsed 286 material,
+  287 polarity, and 276 hierarchy train targets; their common parse-only
+  intersection contained 274 rows. Label mismatches were retained. Generation,
+  training, evaluation, and analysis jobs `30200891`, `30200896`, `30200897`,
+  and `30200993` completed in 16m14s, 5m25s, 16m05s, and 45s.
+- The blind teachers were genuinely different. On the 360 varied validation
+  rows, material scored `0.8639` BA, polarity `0.8583`, and hierarchy `0.7750`;
+  they disagreed on 24, 42, or 44 rows by pair. Blind-teacher OR reached
+  `0.8833` BA by raising recall to `0.8389` at `0.0722` FPR, a `0.0194` gain
+  over the best individual. Majority scored `0.8444`.
+- Diversity also existed in the actual student supervision. On the 274 common
+  parsed training rows, material/polarity teacher decisions differed on 20,
+  material/hierarchy on 41, and polarity/hierarchy on 33. Their correct-decision
+  counts were 239, 233, and 216 respectively; no correctness filtering occurred.
+- Rank-1 SFT erased this structure. On 822 validation rows, material, polarity,
+  and hierarchy students differed by only 2, 3, or 5 decisions. Their overall
+  BAs were `0.9012`, `0.8988`, and `0.9024`, with varied BAs `0.8000`, `0.7972`,
+  and `0.8028`. Teacher/student decision agreement on varied validation was only
+  `0.8583`, `0.8667`, and `0.8444`, showing that the students did not faithfully
+  preserve their teachers' distinct boundaries.
+- Student OR scored `0.9000` overall and `0.7972` varied BA; versus the best
+  hierarchy student it made two breaks and no fixes. The frozen logistic stack
+  scored `0.9012` overall and `0.8000` varied; it made one break and no fixes
+  versus hierarchy. Majority reproduced material at `0.9012`; unanimity also
+  scored `0.9012`. No combiner clears either viability gate, and all remain
+  below P62 material (`0.9048` overall, `0.8083` varied).
+- This rejects privileged post-hoc explanations as the primary cause of P62's
+  lack of member independence. Genuine blind teachers supplied complementary
+  decisions and a useful direct ensemble, but the current 274-row, nine-step,
+  rank-1 completion-only objective compressed them back toward the shared Qwen
+  base behavior. Do not run local test or integrate these adapters. A future
+  experiment should target preservation of teacher decisions—such as explicit
+  decision-token weighting or substantially stronger/longer specialist updates—
+  rather than generating another set of teacher prompt lenses.
