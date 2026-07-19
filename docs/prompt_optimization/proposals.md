@@ -2693,7 +2693,7 @@ Outcome:
 
 ## P61: Rank-4 Midpoint-Focused Rating Student
 
-Status: ready for matched training.
+Status: complete; rank 4 reproduces the ordinal collapse and slightly regresses.
 
 Question: is rank-1 LoRA capacity the reason an uncertainty-enriched student
 collapses back to extreme ratings?
@@ -2716,3 +2716,32 @@ Frozen protocol:
   intermediate outputs, no more than five polarity conflicts, and no more than
   eight parse errors. This is validation-only; failure blocks local test and
   ensembling. Do not change epochs or select a threshold from validation.
+
+Outcome:
+
+- Rank-4 training job `30199981` completed in 4m08s. The nine optimizer steps
+  took 97.5s and reached loss `1.214`, only slightly below rank 1's `1.238` on
+  the identical 275-row uncertainty-focused subset.
+- The first shared evaluation attempt (`30199982`) failed before model loading
+  because vLLM accepts only discrete `max_lora_rank` capacities and rejects a
+  literal value of 4. The evaluator now rounds the capacity ceiling to the next
+  supported value (8 for a rank-4 adapter), with a regression test. Corrected
+  shared job `30200008` completed in 5m50s.
+- Under the same shared backend, rank 1 scores rating BA/AUROC `0.9036`/`0.9071`
+  overall, `0.9854`/`0.9854` instructed, and `0.7944`/`0.8026` varied. Its
+  explicit Prediction BA is `0.9048` overall and `0.7972` varied. It has six
+  parse errors and one polarity conflict.
+- Rank 4 scores rating BA/AUROC `0.9012`/`0.9057` overall,
+  `0.9833`/`0.9833` instructed, and `0.7917`/`0.8022` varied. Its explicit
+  Prediction BA is `0.9024` overall and `0.7944` varied. It also has six parse
+  errors and one polarity conflict.
+- Rating spread is effectively identical. Rank 1 emits `1:463`, `2:1`, `4:2`,
+  `5:1`, `6:31`, and `7:318`, with 35/816 (`4.29%`) intermediate. Rank 4 emits
+  `1:467`, `2:2`, `4:2`, `5:1`, `6:29`, and `7:315`, with 34/816 (`4.17%`)
+  intermediate. Their rating and explicit decisions differ on eight rows; rank
+  4 makes three fixes and five breaks relative to rank 1.
+- Rank 4 misses both the `0.9200` AUROC and 10% intermediate-output gates and
+  does not support capacity as the leading explanation at this scale. Do not
+  run local test, ensemble it, or extend the rank sweep. The next diagnostic
+  should change how the rating token is supervised or the number of effective
+  updates, rather than increasing rank alone.
