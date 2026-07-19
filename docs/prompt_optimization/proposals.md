@@ -2748,7 +2748,8 @@ Outcome:
 
 ## P62: Rank-1 Binary Teacher-Specialist Ensemble
 
-Status: scheduled protocol; validation-only screen.
+Status: complete; the teacher lenses produced nearly identical binary students,
+and both frozen ensemble rules missed the viability gate.
 
 Question: can independent privileged teacher lenses create complementary
 rank-1 binary students whose errors combine better than any individual student?
@@ -2790,3 +2791,29 @@ Frozen protocol:
   or the frozen logistic combiner improves overall validation BA by at least
   `0.005` over the best member without reducing varied BA. Otherwise stop before
   local-test evaluation, notebook integration, or additional specialists.
+
+Outcome:
+
+- The common usable teacher-cache intersection contained 2,450 varied rows. The
+  frozen dataset/label-stratified 10% manifest selected 246 rows: 137 honest and
+  109 deceptive across all 18 source-dataset/label strata. Each rank-1 student
+  trained for eight optimizer steps. Chained jobs `30200153`, `30200154`, and
+  `30200156` completed successfully in 6m54s, 17m39s, and 18s respectively.
+- Dataset-macro validation BA was `0.9048` for material contrast, `0.8976` for
+  polarity guard, and `0.8988` for claim hierarchy. Their varied BAs were
+  `0.8083`, `0.7944`, and `0.7972`; validation parse failures were 4, 4, and 3.
+- The students did not acquire useful independence. Material versus polarity
+  differed on only 8/822 validation rows, material versus hierarchy on 5, and
+  polarity versus hierarchy on 3. Majority vote exactly reproduced hierarchy.
+- Binary OR scored `0.9024` overall and `0.8028` varied BA. Relative to the best
+  material student it changed two decisions, both breaks and no fixes. The
+  frozen logistic stack scored `0.9036` overall and `0.8056` varied BA; relative
+  to material it changed one decision, also a break. Its learned rule effectively
+  trusted material alone or agreement of polarity and hierarchy, assigning the
+  latter pair a `0.8154` deception probability.
+- Neither combiner improves the best member, much less by the required `0.005`,
+  and both reduce varied BA. Stop before local-test evaluation or submission use.
+  Prompting one teacher model to write differently worded privileged summaries
+  on the same examples is insufficient to create independent binary specialists;
+  future attempts need genuinely different targets, data slices, evidence, or
+  base representations rather than another wording-only teacher lens.

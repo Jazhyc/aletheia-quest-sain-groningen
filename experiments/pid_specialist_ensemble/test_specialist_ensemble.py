@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
 from experiments.pid_specialist_ensemble.analyze_ensemble import (
     balanced_cell_weights,
     load_member_frame,
+    metrics_without_groups,
 )
 from experiments.pid_specialist_ensemble.prepare_common_manifest import (
     common_usable_records,
@@ -59,9 +60,33 @@ def test_member_join_and_cell_weights(tmp_path) -> None:
     frame = load_member_frame([("first", first), ("second", second)])
     weights = balanced_cell_weights(frame)
 
-    assert list(frame.columns) == ["dataset", "index", "first", "second", "label"]
+    assert list(frame.columns) == [
+        "dataset",
+        "index",
+        "first",
+        "parse_error_first",
+        "second",
+        "parse_error_second",
+        "label",
+    ]
     weighted = pd.DataFrame({
         "cell": list(zip(frame["dataset"].str.split("-").str[0], frame["label"])),
         "weight": weights,
     }).groupby("cell")["weight"].sum()
     assert weighted.nunique() == 1
+
+
+def test_metrics_are_macro_averaged_across_datasets() -> None:
+    frame = pd.DataFrame([
+        {"dataset": "large", "label": label}
+        for label in (0, 0, 0, 1, 1, 1)
+    ] + [
+        {"dataset": "small", "label": label}
+        for label in (0, 1)
+    ])
+    scores = pd.Series([0, 0, 0, 1, 1, 1, 1, 0], dtype=float).to_numpy()
+
+    result = metrics_without_groups(frame, scores)
+
+    assert result["balanced_accuracy"] == 0.5
+    assert result["pooled"]["balanced_accuracy"] == 0.75

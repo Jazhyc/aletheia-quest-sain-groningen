@@ -28,9 +28,16 @@ def load_member_frame(specs: list[tuple[str, Path]]) -> pd.DataFrame:
     """Join binary member predictions with exact key/label validation."""
     merged = None
     for name, path in specs:
-        frame = pd.read_json(path, lines=True)[[*KEYS, "label", "score"]]
+        frame = pd.read_json(path, lines=True)
+        if "parse_error" not in frame:
+            frame["parse_error"] = False
+        frame = frame[[*KEYS, "label", "score", "parse_error"]]
         frame["index"] = frame["index"].astype(str)
-        frame = frame.rename(columns={"score": name, "label": f"label_{name}"})
+        frame = frame.rename(columns={
+            "score": name,
+            "label": f"label_{name}",
+            "parse_error": f"parse_error_{name}",
+        })
         merged = frame if merged is None else merged.merge(
             frame, on=KEYS, validate="one_to_one"
         )
@@ -61,19 +68,7 @@ def balanced_cell_weights(frame: pd.DataFrame) -> np.ndarray:
 
 
 def metrics(frame: pd.DataFrame, scores: np.ndarray) -> dict[str, Any]:
-    labels = frame["label"].to_numpy(dtype=int)
-    predictions = scores >= 0.5
-    positives = labels == 1
-    negatives = ~positives
-    recall = float(predictions[positives].mean())
-    fpr = float(predictions[negatives].mean())
-    result = {
-        "rows": len(frame),
-        "balanced_accuracy": (recall + 1.0 - fpr) / 2.0,
-        "auroc": float(roc_auc_score(labels, scores)),
-        "recall": recall,
-        "fpr": fpr,
-    }
+    result = metrics_without_groups(frame, scores)
     result["scenarios"] = {
         name: metrics_without_groups(group, scores[group.index.to_numpy()])
         for name, group in frame.assign(
@@ -83,20 +78,41 @@ def metrics(frame: pd.DataFrame, scores: np.ndarray) -> dict[str, Any]:
     return result
 
 
-def metrics_without_groups(frame: pd.DataFrame, scores: np.ndarray) -> dict[str, Any]:
-    labels = frame["label"].to_numpy(dtype=int)
+def binary_metrics(labels: np.ndarray, scores: np.ndarray) -> dict[str, float]:
     predictions = scores >= 0.5
     positives = labels == 1
     negatives = ~positives
     recall = float(predictions[positives].mean())
     fpr = float(predictions[negatives].mean())
     return {
-        "rows": len(frame),
         "balanced_accuracy": (recall + 1.0 - fpr) / 2.0,
         "auroc": float(roc_auc_score(labels, scores)),
         "recall": recall,
         "fpr": fpr,
     }
+
+
+def metrics_without_groups(frame: pd.DataFrame, scores: np.ndarray) -> dict[str, Any]:
+    """Return the project-standard dataset macro metrics plus pooled diagnostics."""
+    scored = frame[["dataset", "label"]].copy()
+    scored["_score"] = scores
+    per_dataset = [
+        binary_metrics(
+            group["label"].to_numpy(dtype=int),
+            group["_score"].to_numpy(dtype=float),
+        )
+        for _, group in scored.groupby("dataset", sort=True)
+    ]
+    result = {
+        key: float(np.mean([value[key] for value in per_dataset]))
+        for key in ("balanced_accuracy", "auroc", "recall", "fpr")
+    }
+    result["rows"] = len(frame)
+    result["pooled"] = binary_metrics(
+        scored["label"].to_numpy(dtype=int),
+        scored["_score"].to_numpy(dtype=float),
+    )
+    return result
 
 
 def comparison_counts(
@@ -186,6 +202,16 @@ def main() -> None:
             },
         },
         "pairwise_validation_disagreement": pairwise,
+        "parse_errors": {
+            "meta_train": {
+                name: int(meta_train[f"parse_error_{name}"].sum())
+                for name in names
+            },
+            "validation": {
+                name: int(validation[f"parse_error_{name}"].sum())
+                for name in names
+            },
+        },
         "meta_train": metrics(meta_train, train_probabilities),
         "validation": {
             name: metrics(validation, member_scores)
