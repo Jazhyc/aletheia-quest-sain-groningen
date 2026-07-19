@@ -2745,3 +2745,48 @@ Outcome:
   run local test, ensemble it, or extend the rank sweep. The next diagnostic
   should change how the rating token is supervised or the number of effective
   updates, rather than increasing rank alone.
+
+## P62: Rank-1 Binary Teacher-Specialist Ensemble
+
+Status: scheduled protocol; validation-only screen.
+
+Question: can independent privileged teacher lenses create complementary
+rank-1 binary students whose errors combine better than any individual student?
+
+Frozen protocol:
+
+- Reuse three independently generated GPT-OSS teacher caches from the completed
+  prompt sweep: material factual contrast, question/output polarity guard, and
+  claim hierarchy. These respectively emphasize the most consequential factual
+  contrast, reversal or negation mistakes, and the answer's controlling claim
+  over incidental details. Do not regenerate or edit their cached targets.
+- Compute the label-consistent intersection of usable varied-deception rows in
+  all three caches. Draw one deterministic seed-0 10% subset stratified by exact
+  dataset and label. Train all specialists on this identical manifest, so the
+  only intended difference is the teacher summary. Store the manifest and its
+  cache provenance under
+  `results/blackbox/qwen9b_pid_specialist_ensemble_rank1_v1/`.
+- Each student is a rank-1/alpha-2 LoRA on regular `Qwen/Qwen3.5-9B`, trained for
+  one epoch with AdamW `5e-5`, effective batch size 32, completion-only loss,
+  the common no-trace factual judge input, and its teacher's concise reasoning
+  summary followed by the binary `Prediction:0|1` target. Do not use ordinal
+  ratings or convert this to prediction-only supervision; the matched ablation
+  established that the reasoning summary itself supplies useful supervision.
+- Generate deterministic binary decisions from every specialist on the full
+  training and validation splits with the shared vLLM backend, 4,096-token model
+  context, and 512-token generation cap. The validation split remains fully held
+  out. For meta-training, remove every row in the shared specialist training
+  manifest from the full-train predictions; this prevents the combiner from
+  seeing base-model in-sample features.
+- Compare every individual member with a binary OR, majority vote, unanimity,
+  and a frozen logistic regression over the three binary outputs. Fit logistic
+  regression once with feature order `(material, polarity, hierarchy)`, `C=1`,
+  threshold `0.5`, and sample weights that give equal total weight to each
+  instructed/varied by honest/deceptive cell. Do not tune its regularization,
+  threshold, features, or ensemble rule on validation labels.
+- Report overall and scenario BA/AUROC/recall/FPR, parse failures, pairwise member
+  disagreements, all eight logistic pattern probabilities, and fixes/breaks for
+  each ensemble relative to each member. The experiment is promising only if OR
+  or the frozen logistic combiner improves overall validation BA by at least
+  `0.005` over the best member without reducing varied BA. Otherwise stop before
+  local-test evaluation, notebook integration, or additional specialists.

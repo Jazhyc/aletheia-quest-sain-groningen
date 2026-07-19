@@ -118,6 +118,46 @@ def load_records(
     return usable
 
 
+def select_records_from_manifest(
+    records: list[dict[str, Any]], manifest_path: Path
+) -> list[dict[str, Any]]:
+    """Select an exact shared dataset/index set and verify its labels."""
+    desired: dict[tuple[str, Any], int] = {}
+    for line_number, line in enumerate(
+        manifest_path.read_text().splitlines(), start=1
+    ):
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        key = (str(record["dataset"]), record["index"])
+        if key in desired:
+            raise ValueError(f"duplicate selection key at line {line_number}: {key}")
+        desired[key] = int(record["label"])
+    if not desired:
+        raise ValueError(f"selection manifest is empty: {manifest_path}")
+
+    available = {
+        (str(record.get("dataset", "")), record.get("index")): record
+        for record in records
+    }
+    missing = sorted(set(desired) - set(available))
+    if missing:
+        raise ValueError(
+            f"selection manifest has {len(missing)} unavailable rows; first={missing[0]}"
+        )
+    for key, label in desired.items():
+        if int(available[key]["label"]) != label:
+            raise ValueError(
+                f"selection manifest label mismatch for {key}: "
+                f"{label} != {available[key]['label']}"
+            )
+    return [
+        record
+        for record in records
+        if (str(record.get("dataset", "")), record.get("index")) in desired
+    ]
+
+
 def load_record_sources(
     sources: list[
         tuple[Path, str | None]
@@ -453,10 +493,24 @@ def main(cfg: DictConfig) -> None:
         OmegaConf.select(cfg, "student.train_fraction_seed", default=cfg.seed)
     )
     records_before_fraction = len(records)
+    selection_manifest = OmegaConf.select(
+        cfg, "student.selection_manifest", default=None
+    )
     rating_uncertainty_fraction = OmegaConf.select(
         cfg, "student.rating_uncertainty_fraction", default=None
     )
-    if rating_uncertainty_fraction is None:
+    if selection_manifest is not None:
+        if train_fraction != 1.0 or rating_uncertainty_fraction is not None:
+            raise ValueError(
+                "selection_manifest requires train_fraction=1.0 and no "
+                "rating_uncertainty_fraction"
+            )
+        manifest_path = Path(str(selection_manifest))
+        if not manifest_path.is_absolute():
+            manifest_path = root / manifest_path
+        records = select_records_from_manifest(records, manifest_path)
+        selection_mode = "fixed_manifest"
+    elif rating_uncertainty_fraction is None:
         records = select_stratified_fraction(
             records,
             train_fraction,
@@ -561,6 +615,7 @@ def main(cfg: DictConfig) -> None:
         f"train_fraction_seed={train_fraction_seed} "
         f"selection_mode={selection_mode} "
         f"rating_uncertainty_fraction={rating_uncertainty_fraction} "
+        f"selection_manifest={selection_manifest} "
         f"dataset_name_contains={dataset_name_contains!r} "
         f"reasoning_rows={reasoning_rows} "
         f"reasoning_rows_dropped={reasoning_rows_dropped} "

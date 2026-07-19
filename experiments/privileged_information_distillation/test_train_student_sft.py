@@ -14,6 +14,7 @@ from experiments.privileged_information_distillation.train_student_sft import (
     load_records,
     select_rating_uncertainty_fraction,
     select_rating_uncertainty_with_certain_anchors,
+    select_records_from_manifest,
     select_stratified_fraction,
     should_drop_reasoning,
     strip_reasoning_block,
@@ -60,6 +61,36 @@ def test_load_records_without_filter_preserves_all_usable_rows(tmp_path) -> None
     path.write_text(json.dumps(record) + "\n")
 
     assert load_records(path) == [record]
+
+
+def test_select_records_from_manifest_uses_exact_shared_keys(tmp_path) -> None:
+    records = [
+        {"dataset": "dataset", "index": index, "label": index % 2}
+        for index in range(4)
+    ]
+    manifest = tmp_path / "selection.jsonl"
+    manifest.write_text(
+        "\n".join(
+            json.dumps(records[index]) for index in (1, 3)
+        )
+        + "\n"
+    )
+
+    assert select_records_from_manifest(records, manifest) == [records[1], records[3]]
+
+
+def test_select_records_from_manifest_rejects_unavailable_row(tmp_path) -> None:
+    manifest = tmp_path / "selection.jsonl"
+    manifest.write_text(
+        json.dumps({"dataset": "dataset", "index": 9, "label": 1}) + "\n"
+    )
+
+    try:
+        select_records_from_manifest([], manifest)
+    except ValueError as error:
+        assert "unavailable rows" in str(error)
+    else:
+        raise AssertionError("missing fixed selection should fail")
 
 
 def test_load_record_sources_combines_disjoint_filtered_caches(tmp_path) -> None:
