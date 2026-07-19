@@ -101,12 +101,14 @@ def student_prompt_with_reasoning_dropout(
 def load_records(
     path: Path,
     dataset_name_contains: str | None = None,
+    *,
+    require_label_match: bool = True,
 ) -> list[dict[str, Any]]:
     records = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     usable = [
         record for record in records
         if not record.get("parse_error")
-        and record.get("label_match")
+        and (not require_label_match or record.get("label_match"))
         and record.get("student_target")
         and (
             dataset_name_contains is None
@@ -164,6 +166,8 @@ def load_record_sources(
         | tuple[Path, str | None, float, int]
         | tuple[Path, str | None, float, int, str | None]
     ],
+    *,
+    require_label_match: bool = True,
 ) -> list[dict[str, Any]]:
     """Load disjoint cache slices with optional sampling and prompt overrides."""
     records: list[dict[str, Any]] = []
@@ -181,7 +185,9 @@ def load_record_sources(
         else:
             raise ValueError(f"invalid teacher source tuple length: {len(source)}")
         source_records = load_records(
-            path, dataset_name_contains=dataset_name_contains
+            path,
+            dataset_name_contains=dataset_name_contains,
+            require_label_match=require_label_match,
         )
         source_records = select_stratified_fraction(
             source_records, float(fraction), int(seed)
@@ -485,7 +491,13 @@ def main(cfg: DictConfig) -> None:
                 None if source_prompt is None else str(source_prompt),
             ))
         dataset_name_contains = "multi-source"
-    records = load_record_sources(sources)
+    require_teacher_label_match = bool(OmegaConf.select(
+        cfg, "student.require_teacher_label_match", default=True
+    ))
+    records = load_record_sources(
+        sources,
+        require_label_match=require_teacher_label_match,
+    )
     train_fraction = float(
         OmegaConf.select(cfg, "student.train_fraction", default=1.0)
     )
@@ -616,6 +628,7 @@ def main(cfg: DictConfig) -> None:
         f"selection_mode={selection_mode} "
         f"rating_uncertainty_fraction={rating_uncertainty_fraction} "
         f"selection_manifest={selection_manifest} "
+        f"require_teacher_label_match={require_teacher_label_match} "
         f"dataset_name_contains={dataset_name_contains!r} "
         f"reasoning_rows={reasoning_rows} "
         f"reasoning_rows_dropped={reasoning_rows_dropped} "

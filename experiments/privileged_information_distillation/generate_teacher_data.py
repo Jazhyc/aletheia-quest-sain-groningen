@@ -45,6 +45,28 @@ REASONING_EFFORTS = {"low", "medium", "high"}
 TEACHER_OUTPUT_FORMATS = {"harmony", "qwen_think"}
 
 
+def teacher_expected_prediction(row: dict[str, Any]) -> int | None:
+    """Return the privileged fallback only when the teacher is allowed the label."""
+    if not bool(row.get("teacher_uses_ground_truth", True)):
+        return None
+    return int(row["label"])
+
+
+def build_configured_teacher_prompt(
+    student_prompt: str,
+    teacher_template: str,
+    label: int,
+    *,
+    uses_ground_truth: bool,
+) -> str:
+    """Render a teacher prompt while enforcing blind-mode label isolation."""
+    if not uses_ground_truth and "__GROUND_TRUTH__" in teacher_template:
+        raise ValueError(
+            "blind teacher prompt must not contain __GROUND_TRUTH__"
+        )
+    return build_teacher_prompt(student_prompt, teacher_template, label)
+
+
 def normalize_reasoning_effort(value: Any) -> str:
     effort = str(value).lower()
     if effort not in REASONING_EFFORTS:
@@ -151,6 +173,9 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
     teacher_output_format = normalize_teacher_output_format(
         OmegaConf.select(cfg, "teacher.output_format", default="harmony")
     )
+    teacher_uses_ground_truth = bool(OmegaConf.select(
+        cfg, "teacher.uses_ground_truth", default=True
+    ))
     rows: list[dict[str, Any]] = []
     for dataset_cfg in datasets:
         if (
@@ -205,18 +230,28 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
                 "teacher_model": str(cfg.teacher.model),
                 "teacher_output_format": teacher_output_format,
                 "reasoning_effort": reasoning_effort,
+                "teacher_uses_ground_truth": teacher_uses_ground_truth,
                 "student_prompt": student_prompt,
                 "reference_visibility": (
                     reference_visibility if retrieval_cache is not None else None
                 ),
-                "teacher_prompt": build_teacher_prompt(
+                "teacher_prompt": build_configured_teacher_prompt(
                     teacher_input_prompt,
                     str(cfg.teacher.prompt),
                     label,
+                    uses_ground_truth=teacher_uses_ground_truth,
                 ),
             })
     if dataset_name_contains is not None:
         rows = filter_teacher_rows_by_dataset(rows, str(dataset_name_contains))
+    selection_manifest = OmegaConf.select(
+        cfg, "teacher.selection_manifest", default=None
+    )
+    if selection_manifest is not None:
+        selection_path = Path(str(selection_manifest))
+        if not selection_path.is_absolute():
+            selection_path = root / selection_path
+        rows = select_teacher_rows_by_manifest(rows, selection_path)
     rows = shard_teacher_rows(
         rows,
         shard_count=int(OmegaConf.select(cfg, "teacher.shard_count", default=1)),
@@ -241,6 +276,37 @@ def filter_teacher_rows_by_dataset(
         raise RuntimeError(
             f"no teacher rows match dataset_name_contains={dataset_name_contains!r}"
         )
+    return selected
+
+
+def select_teacher_rows_by_manifest(
+    rows: list[dict[str, Any]], manifest_path: Path
+) -> list[dict[str, Any]]:
+    """Select exact generation rows without exposing their labels in blind prompts."""
+    desired = {
+        (str(record["dataset"]), str(record["index"])): int(record["label"])
+        for record in (
+            json.loads(line)
+            for line in manifest_path.read_text().splitlines()
+            if line.strip()
+        )
+    }
+    selected = [
+        row for row in rows
+        if (str(row["dataset"]), str(row["index"])) in desired
+    ]
+    available = {
+        (str(row["dataset"]), str(row["index"])): int(row["label"])
+        for row in selected
+    }
+    if set(available) != set(desired):
+        missing = sorted(set(desired) - set(available))
+        raise ValueError(
+            f"teacher selection manifest has unavailable rows; first={missing[0]}"
+        )
+    mismatched = [key for key in desired if desired[key] != available[key]]
+    if mismatched:
+        raise ValueError(f"teacher selection label mismatch for {mismatched[0]}")
     return selected
 
 
@@ -319,10 +385,15 @@ def cache_matches(row: dict[str, Any], cached: dict[str, Any] | None) -> bool:
         and cached.get("teacher_output_format", "harmony")
         == row.get("teacher_output_format", "harmony")
         and cached.get("reasoning_effort", "medium") == row["reasoning_effort"]
+        and cached.get("teacher_uses_ground_truth", True)
+        == row.get("teacher_uses_ground_truth", True)
         and cached.get("student_prompt") == row["student_prompt"]
         and cached.get("teacher_prompt") == row["teacher_prompt"]
         and not cached.get("parse_error", True)
-        and cached.get("label_match") is True
+        and (
+            not row.get("teacher_uses_ground_truth", True)
+            or cached.get("label_match") is True
+        )
         and cached.get("student_target")
     )
 
@@ -341,6 +412,8 @@ def reparse_cached_record(
         or cached.get("teacher_output_format", "harmony")
         != row.get("teacher_output_format", "harmony")
         or cached.get("reasoning_effort", "medium") != row["reasoning_effort"]
+        or cached.get("teacher_uses_ground_truth", True)
+        != row.get("teacher_uses_ground_truth", True)
         or cached.get("student_prompt") != row["student_prompt"]
         or cached.get("teacher_prompt") != row["teacher_prompt"]
     ):
@@ -352,7 +425,7 @@ def reparse_cached_record(
     }[target_format]
     parsed = parser(
         cached["raw_completion"],
-        expected_prediction=row["label"],
+        expected_prediction=teacher_expected_prediction(row),
         output_format=row.get("teacher_output_format", "harmony"),
     )
     if not parsed:
@@ -414,7 +487,12 @@ def main(cfg: DictConfig) -> None:
     target_format = str(OmegaConf.select(cfg, "student.target_format", default="summary"))
     if target_format not in {"summary", "counterfactual", "summary_rating"}:
         raise ValueError(f"unknown student.target_format={target_format!r}")
-    print(f"loaded {len(rows)} privileged teacher examples")
+    teacher_mode = (
+        "privileged" if all(
+            row.get("teacher_uses_ground_truth", True) for row in rows
+        ) else "blind"
+    )
+    print(f"loaded {len(rows)} {teacher_mode} teacher examples")
 
     artifact = Path(str(cfg.teacher.artifact))
     if not artifact.is_absolute():
@@ -510,7 +588,7 @@ def main(cfg: DictConfig) -> None:
             if key in reusable:
                 record = reusable[key]
                 parsed_count += 1
-                label_match_count += 1
+                label_match_count += int(record.get("label_match") is True)
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
                 continue
             raw_completion = generated[key]
@@ -522,7 +600,7 @@ def main(cfg: DictConfig) -> None:
             output_format = row.get("teacher_output_format", "harmony")
             parsed = parser(
                 raw_completion,
-                expected_prediction=row["label"],
+                expected_prediction=teacher_expected_prediction(row),
                 output_format=output_format,
             )
             if parsed and target_format == "counterfactual":

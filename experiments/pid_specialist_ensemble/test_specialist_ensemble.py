@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
 from experiments.pid_specialist_ensemble.analyze_ensemble import (
     balanced_cell_weights,
     load_member_frame,
+    load_selection_keys,
     metrics_without_groups,
 )
 from experiments.pid_specialist_ensemble.prepare_common_manifest import (
@@ -39,6 +40,25 @@ def test_common_usable_records_intersects_teacher_caches(tmp_path) -> None:
     assert [(row["dataset"], row["index"]) for row in common_usable_records(
         [first, second]
     )] == [("varied-deception", 2)]
+
+
+def test_common_blind_records_retain_label_mismatches(tmp_path) -> None:
+    blind_error = {
+        "dataset": "varied-deception",
+        "index": 2,
+        "label": 1,
+        "parse_error": False,
+        "label_match": False,
+        "student_target": "Prediction:0",
+    }
+    first = tmp_path / "first.jsonl"
+    second = tmp_path / "second.jsonl"
+    write_rows(first, [blind_error])
+    write_rows(second, [blind_error])
+
+    assert common_usable_records(
+        [first, second], require_label_match=False
+    ) == [blind_error]
 
 
 def test_member_join_and_cell_weights(tmp_path) -> None:
@@ -90,3 +110,22 @@ def test_metrics_are_macro_averaged_across_datasets() -> None:
 
     assert result["balanced_accuracy"] == 0.5
     assert result["pooled"]["balanced_accuracy"] == 0.75
+
+
+def test_selection_keys_unions_member_manifests(tmp_path) -> None:
+    first = tmp_path / "first.jsonl"
+    second = tmp_path / "second.jsonl"
+    write_rows(first, [
+        {"dataset": "dataset", "index": 1},
+        {"dataset": "dataset", "index": 2},
+    ])
+    write_rows(second, [
+        {"dataset": "dataset", "index": 2},
+        {"dataset": "dataset", "index": 3},
+    ])
+
+    assert load_selection_keys([first, second]) == {
+        ("dataset", "1"),
+        ("dataset", "2"),
+        ("dataset", "3"),
+    }

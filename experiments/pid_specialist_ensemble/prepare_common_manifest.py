@@ -20,13 +20,19 @@ from experiments.privileged_information_distillation.train_student_sft import (
 )
 
 
-def common_usable_records(paths: list[Path]) -> list[dict[str, Any]]:
+def common_usable_records(
+    paths: list[Path], *, require_label_match: bool = True
+) -> list[dict[str, Any]]:
     """Return label-consistent records usable in every teacher cache."""
     by_source = []
     labels: dict[tuple[str, Any], int] = {}
     representative: dict[tuple[str, Any], dict[str, Any]] = {}
     for path in paths:
-        records = load_records(path, dataset_name_contains="varied-deception")
+        records = load_records(
+            path,
+            dataset_name_contains="varied-deception",
+            require_label_match=require_label_match,
+        )
         current = {}
         for record in records:
             key = (str(record["dataset"]), record["index"])
@@ -48,10 +54,18 @@ def main() -> None:
     parser.add_argument("--cache", action="append", type=Path, required=True)
     parser.add_argument("--fraction", type=float, default=0.10)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--allow-label-mismatch",
+        action="store_true",
+        help="retain parsed blind-teacher mistakes instead of using labels as a filter",
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
-    common = common_usable_records([path.resolve() for path in args.cache])
+    common = common_usable_records(
+        [path.resolve() for path in args.cache],
+        require_label_match=not args.allow_label_mismatch,
+    )
     selected = select_stratified_fraction(common, args.fraction, args.seed)
     manifest = [
         {
@@ -71,6 +85,7 @@ def main() -> None:
         "selected": len(selected),
         "fraction": args.fraction,
         "seed": args.seed,
+        "require_label_match": not args.allow_label_mismatch,
         "selected_by_label": dict(sorted(Counter(
             int(record["label"]) for record in selected
         ).items())),

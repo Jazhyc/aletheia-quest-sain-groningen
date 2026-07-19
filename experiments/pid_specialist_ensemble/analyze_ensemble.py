@@ -67,6 +67,20 @@ def balanced_cell_weights(frame: pd.DataFrame) -> np.ndarray:
     return np.array([len(frame) / (len(counts) * counts[cell]) for cell in cells])
 
 
+def load_selection_keys(paths: list[Path]) -> set[tuple[str, str]]:
+    """Load the union of base-training rows that meta-training must exclude."""
+    selected: set[tuple[str, str]] = set()
+    for path in paths:
+        for line in path.read_text().splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            selected.add((str(record["dataset"]), str(record["index"])))
+    if not selected:
+        raise ValueError("selection manifests are empty")
+    return selected
+
+
 def metrics(frame: pd.DataFrame, scores: np.ndarray) -> dict[str, Any]:
     result = metrics_without_groups(frame, scores)
     result["scenarios"] = {
@@ -136,7 +150,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--train-member", action="append", required=True)
     parser.add_argument("--validation-member", action="append", required=True)
-    parser.add_argument("--selection-manifest", type=Path, required=True)
+    parser.add_argument(
+        "--selection-manifest", action="append", type=Path, required=True
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
@@ -148,14 +164,9 @@ def main() -> None:
     train = load_member_frame(train_specs).reset_index(drop=True)
     validation = load_member_frame(validation_specs).reset_index(drop=True)
 
-    selected = {
-        (str(record["dataset"]), str(record["index"]))
-        for record in (
-            json.loads(line)
-            for line in args.selection_manifest.read_text().splitlines()
-            if line.strip()
-        )
-    }
+    selected = load_selection_keys([
+        path.resolve() for path in args.selection_manifest
+    ])
     leakage_mask = pd.Series([
         (str(dataset), str(index)) in selected
         for dataset, index in zip(train["dataset"], train["index"], strict=True)
@@ -173,7 +184,9 @@ def main() -> None:
     scores = {
         **{name: validation[name].to_numpy(dtype=float) for name in names},
         "or": validation_features.max(axis=1),
-        "majority": (validation_features.sum(axis=1) >= 2).astype(float),
+        "majority": (
+            validation_features.sum(axis=1) >= len(names) // 2 + 1
+        ).astype(float),
         "unanimity": (validation_features.sum(axis=1) == len(names)).astype(float),
         "logistic": model.predict_proba(validation_features)[:, 1],
     }
@@ -186,6 +199,9 @@ def main() -> None:
     report = {
         "members": names,
         "base_training_rows_excluded": int(leakage_mask.sum()),
+        "selection_manifests": [
+            path.resolve().as_posix() for path in args.selection_manifest
+        ],
         "meta_training_rows": len(meta_train),
         "meta_model": {
             "feature_order": names,

@@ -63,6 +63,28 @@ def test_load_records_without_filter_preserves_all_usable_rows(tmp_path) -> None
     assert load_records(path) == [record]
 
 
+def test_load_records_can_retain_blind_teacher_label_errors(tmp_path) -> None:
+    record = {
+        "dataset": "dev-varied-deception-model",
+        "index": 1,
+        "label": 1,
+        "prediction": 0,
+        "parse_error": False,
+        "label_match": False,
+        "student_target": "<reasoning_summary>Blind error.</reasoning_summary>Prediction:0",
+    }
+    path = tmp_path / "blind.jsonl"
+    path.write_text(json.dumps(record) + "\n")
+
+    assert load_records(path, require_label_match=False) == [record]
+    try:
+        load_records(path)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("privileged mode must still reject label mismatches")
+
+
 def test_select_records_from_manifest_uses_exact_shared_keys(tmp_path) -> None:
     records = [
         {"dataset": "dataset", "index": index, "label": index % 2}

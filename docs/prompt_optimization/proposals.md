@@ -2817,3 +2817,52 @@ Outcome:
   on the same examples is insufficient to create independent binary specialists;
   future attempts need genuinely different targets, data slices, evidence, or
   base representations rather than another wording-only teacher lens.
+
+## P63: Ground-Truth-Blind Teacher-Specialist Ensemble
+
+Status: frozen protocol; not yet run.
+
+Question: did privileged, label-conditioned post-hoc explanations homogenize
+P62's students, and can genuine teacher judgments create complementary rank-1
+specialists whose ensemble reduces their independent errors?
+
+Frozen protocol:
+
+- Retain the same three conceptual GPT-OSS-120B lenses as P62—material factual
+  contrast, question/output polarity, and claim hierarchy—but remove every
+  ground-truth statement and placeholder from the teacher prompts. Each teacher
+  must infer both its concise reasoning summary and binary prediction from the
+  visible conversation and its own knowledge. Use medium Harmony reasoning,
+  temperature zero, a 2,048-token generation cap, and require an explicit final
+  `<reasoning_summary>...</reasoning_summary> Prediction:0|1`.
+- Draw one seed-0, exact-dataset/label-stratified 10% manifest directly from the
+  raw varied training labels. Labels may determine the balanced sample and may
+  be retained for later evaluation, but they must never enter the teacher prompt.
+  Generate all three teacher caches on the same selected rows. Disable the
+  privileged prediction fallback: a missing teacher prediction is a parse error,
+  not a ground-truth completion.
+- Do not filter or regenerate teacher outputs based on correctness. A parsed
+  teacher prediction that conflicts with the training label remains a valid
+  distillation target. Intersect only on parse availability so all students see
+  the same rows; this is format filtering, not label filtering. Audit each
+  teacher's accuracy, parse failures, prediction distribution, and pairwise
+  disagreement after cache generation. Also generate each blind prompt once on
+  all 360 varied validation rows to measure genuine teacher transfer; do not use
+  these labels to edit prompts or select traces.
+- Train three fresh regular-Qwen rank-1/alpha-2 students for one epoch with AdamW
+  `5e-5`, effective batch size 32, completion-only loss, and the common no-trace
+  factual judge input. Each target is its blind teacher's summary and predicted
+  binary decision, even when that decision is wrong. Hold all other student and
+  vLLM inference settings fixed to P62.
+- Evaluate students jointly on the full train and validation splits. Compare
+  individuals, OR, majority, unanimity, and the frozen `C=1`, threshold-0.5
+  logistic stack over binary outputs. Fit the stack on full-train predictions
+  after excluding the common student-training manifest, with equal total weight
+  for each scenario/label cell. Do not tune thresholds, regularization, member
+  subsets, or rules on validation.
+- Report dataset-macro overall/instructed/varied BA, AUROC, recall, FPR, parse
+  errors, pairwise disagreements, teacher-to-student agreement, and ensemble
+  fixes/breaks. Diversity is useful only if OR or logistic improves the best
+  blind student by at least `0.005` without reducing varied BA. It is competitive
+  with P62 only if it also reaches material specialist BA `0.9048` overall and
+  `0.8083` varied. Failure blocks local test and submission integration.
