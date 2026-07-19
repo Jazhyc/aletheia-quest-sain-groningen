@@ -1,0 +1,14 @@
+# @package _global_
+# Rank-4 capacity ablation for the midpoint-focused ordinal student.
+
+defaults:
+  - pid_teacher_evidence_rating_uncertain10_v1
+  - _self_
+
+method: qwen9b_pid_evidence_rating_uncertain10_rank4_v1
+
+student:
+  output_dir: ${output_dir}/adapter
+  lora:
+    r: 4
+    alpha: 8

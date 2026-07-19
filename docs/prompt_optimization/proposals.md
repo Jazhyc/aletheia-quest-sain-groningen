@@ -2690,3 +2690,29 @@ Outcome:
   capacity, or a strong pretrained tendency to express categorical certainty.
   Treat token-weighted supervision or a matched capacity/step ablation as a new
   objective experiment rather than tuning the selection fraction on validation.
+
+## P61: Rank-4 Midpoint-Focused Rating Student
+
+Status: ready for matched training.
+
+Question: is rank-1 LoRA capacity the reason an uncertainty-enriched student
+collapses back to extreme ratings?
+
+Frozen protocol:
+
+- Reuse P60's uncertainty-only selection exactly: the same 275 cached targets,
+  deterministic seed, per-dataset/label midpoint-proximal 10% selection, and
+  resulting 184/275 (`66.9%`) intermediate teacher ratings.
+- Change only LoRA capacity from rank 1/alpha 2 to rank 4/alpha 8, preserving
+  `alpha/r = 2`, all attention and MLP target modules, and zero dropout. Keep
+  one epoch, nine optimizer steps, AdamW `5e-5`, effective batch size 32, prompt,
+  target format, no-trace input, and all inference settings fixed.
+- Evaluate once on all 822 validation rows and compare directly against P60
+  uncertainty-only rank 1. Report overall/instructed/varied rating and explicit
+  Prediction metrics, complete rating histogram, intermediate fraction,
+  parse/polarity errors, runtime, and row-level fixes/breaks.
+- Retain the same viability gates: rating AUROC at least `0.9200`, explicit BA
+  at least `0.8950`, at least four distinct ratings with at least 10%
+  intermediate outputs, no more than five polarity conflicts, and no more than
+  eight parse errors. This is validation-only; failure blocks local test and
+  ensembling. Do not change epochs or select a threshold from validation.
