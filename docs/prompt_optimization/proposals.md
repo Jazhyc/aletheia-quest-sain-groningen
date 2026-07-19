@@ -2905,3 +2905,33 @@ Outcome:
   experiment should target preservation of teacher decisions—such as explicit
   decision-token weighting or substantially stronger/longer specialist updates—
   rather than generating another set of teacher prompt lenses.
+
+## P64: Rank-4 Blind-Teacher Specialist Capacity Ablation
+
+Status: frozen protocol; not yet run.
+
+Question: did rank-1 capacity prevent P63's students from preserving genuinely
+different blind-teacher decision boundaries?
+
+Frozen protocol:
+
+- Reuse P63's three blind-teacher train caches without regeneration and select
+  exactly the same 274-row common parse-only manifest. Retain every parsed
+  teacher mistake and the material, polarity, and hierarchy summary/prediction
+  targets unchanged. Reuse the existing blind-teacher validation artifacts for
+  teacher/student agreement only.
+- Change only LoRA rank from 1 to 4 and alpha from 2 to 8, preserving alpha/r=2,
+  zero dropout, all attention and MLP target modules, regular Qwen3.5-9B, one
+  epoch, AdamW `5e-5`, effective batch size 32, completion-only loss, tokenizer,
+  prompt, context cap, seed, and deterministic vLLM inference settings.
+- Jointly evaluate all three rank-4 students on full train and validation. Fit
+  the same frozen `C=1`, threshold-0.5 logistic stack outside the 274 training
+  rows with equal scenario/label-cell weights. Report individuals, OR, majority,
+  unanimity, logistic, parse errors, pairwise disagreement, and fixes/breaks.
+- Compare each rank-4 member directly with its rank-1 counterpart and measure
+  rank-4 teacher/student agreement on varied validation. Capacity is supported
+  only if rank-4 materially increases student pairwise disagreement toward the
+  teachers' 24--44-row range and OR or logistic beats the best rank-4 member by
+  at least `0.005` without reducing varied BA. Submission competitiveness still
+  requires at least P62 material's `0.9048` overall and `0.8083` varied BA. Do
+  not tune another rank or run local test if these gates fail.

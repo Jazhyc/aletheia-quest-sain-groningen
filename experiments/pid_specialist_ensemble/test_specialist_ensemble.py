@@ -17,6 +17,9 @@ from experiments.pid_specialist_ensemble.analyze_ensemble import (
 from experiments.pid_specialist_ensemble.prepare_common_manifest import (
     common_usable_records,
 )
+from experiments.pid_specialist_ensemble.compare_student_ranks import (
+    compare_rank_frames,
+)
 
 
 def write_rows(path: Path, rows: list[dict]) -> None:
@@ -128,4 +131,27 @@ def test_selection_keys_unions_member_manifests(tmp_path) -> None:
         ("dataset", "1"),
         ("dataset", "2"),
         ("dataset", "3"),
+    }
+
+
+def test_compare_rank_frames_counts_fixes_and_breaks() -> None:
+    rank1 = pd.DataFrame({
+        "dataset": ["dataset"] * 3,
+        "index": ["0", "1", "2"],
+        "label": [0, 1, 1],
+        "member": [0.0, 0.0, 1.0],
+    })
+    rank4 = pd.DataFrame({
+        "dataset": ["dataset"] * 3,
+        "index": ["0", "1", "2"],
+        "label": [0, 1, 1],
+        "member": [1.0, 1.0, 1.0],
+    })
+
+    result = compare_rank_frames(rank1, rank4, ["member"])
+
+    assert result["rank4_vs_rank1"]["member"] == {
+        "fixes": 1,
+        "breaks": 1,
+        "decision_disagreements": 2,
     }
