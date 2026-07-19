@@ -2618,7 +2618,7 @@ Full-cache follow-up:
 
 ## P60: Midpoint-Focused Privileged Rating Student
 
-Status: ready for two matched rank-1 training arms.
+Status: complete; neither uncertainty-focused arm prevents ordinal collapse.
 
 Question: does training primarily on teacher-uncertain cases prevent the
 ordinal student from collapsing back to ratings 1 and 7?
@@ -2653,3 +2653,40 @@ Frozen protocol:
   failures. This is validation-only; a failed screen blocks local test and
   ensembling. Do not choose a narrower uncertainty fraction or a new rating
   threshold from validation labels.
+
+Outcome:
+
+- Batched training job `30197958` completed both arms in 12m00s. The
+  uncertainty-only arm selected 275 rows with ratings `1:83`, `2:45`, `3:15`,
+  `4:86`, `5:3`, `6:35`, and `7:8`; 184/275 (`66.9%`) were intermediate. It
+  trained for nine steps in 99.6s with loss `1.238`. The balanced-anchor arm
+  selected 459 rows with ratings `1:144`, `2:45`, `3:15`, `4:86`, `5:3`,
+  `6:35`, and `7:131`; the same 184 intermediate rows were 40.1% of the set.
+  It trained for 15 steps in 153.8s with loss `1.098`.
+- Shared vLLM validation job `30197962` completed in 6m39s, with 33.1s and
+  31.7s member scoring time. Uncertainty-only generated rating BA/AUROC is
+  `0.9036`/`0.9082` overall, `0.9833`/`0.9833` instructed, and
+  `0.7972`/`0.8081` varied. Its explicit Prediction metrics have the same BAs.
+  It has five parse errors and two rating/prediction conflicts.
+- Balanced anchors generated rating BA/AUROC of `0.9012`/`0.9084` overall,
+  `0.9854`/`0.9854` instructed, and `0.7889`/`0.8057` varied. Its explicit
+  Prediction BA is `0.9024` overall and `0.7917` varied. It has six parse errors
+  and one rating/prediction conflict.
+- Despite dramatically enriching intermediate training targets, output spread
+  is unchanged. Uncertainty-only emits ratings `1:465`, `2:3`, `4:4`, `5:1`,
+  `6:25`, and `7:319`: only 33/817 (`4.04%`) parsed rows are intermediate.
+  Balanced anchors emit `1:462`, `2:4`, `4:3`, `5:1`, `6:29`, and `7:317`:
+  37/816 (`4.53%`) intermediate. P59 random-10% emitted 34/817 (`4.16%`).
+- Uncertainty-only's explicit decisions differ from P59 on six rows with three
+  fixes and three breaks; balanced anchors differ on five with two fixes and
+  three breaks. Against the matched binary rank-1 control they make 14/11 and
+  14/12 fixes/breaks, respectively. Neither reaches `0.9200` rating AUROC or
+  10% intermediate output, so both fail the screen. Do not run local test or
+  ensemble these adapters.
+- The failure is no longer well explained by extreme target prevalence: the
+  uncertainty-only training set is two-thirds intermediate, yet its output is
+  96% extreme. The remaining leading hypotheses are underweighted rating tokens
+  within long completion-only summaries, nine low-rank update steps, rank-1
+  capacity, or a strong pretrained tendency to express categorical certainty.
+  Treat token-weighted supervision or a matched capacity/step ablation as a new
+  objective experiment rather than tuning the selection fraction on validation.
