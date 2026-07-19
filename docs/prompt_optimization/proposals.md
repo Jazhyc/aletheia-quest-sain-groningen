@@ -2908,7 +2908,8 @@ Outcome:
 
 ## P64: Rank-4 Blind-Teacher Specialist Capacity Ablation
 
-Status: frozen protocol; not yet run.
+Status: complete; rank 4 changes more decisions than rank 1 but does not preserve
+more cross-teacher diversity or clear the ensemble gain threshold.
 
 Question: did rank-1 capacity prevent P63's students from preserving genuinely
 different blind-teacher decision boundaries?
@@ -2935,3 +2936,33 @@ Frozen protocol:
   at least `0.005` without reducing varied BA. Submission competitiveness still
   requires at least P62 material's `0.9048` overall and `0.8083` varied BA. Do
   not tune another rank or run local test if these gates fail.
+
+Outcome:
+
+- Training, evaluation, and analysis jobs `30201211`, `30201213`, and `30201215`
+  completed successfully in 7m51s, 19m07s, and 42s. All three adapters used the
+  exact same 274 blind targets and nine optimizer steps as rank 1. Trainer losses
+  fell only slightly from rank 1: material `0.8954` to `0.8717`, polarity
+  `0.9600` to `0.9333`, and hierarchy `1.360` to `1.337`.
+- Rank 4 moved each model relative to rank 1, but not consistently toward better
+  decisions. Material changed nine validation decisions with five fixes/four
+  breaks; polarity changed eleven with six fixes/five breaks; hierarchy changed
+  thirteen with five fixes/eight breaks. Rank-4 material, polarity, and hierarchy
+  scored overall BA `0.9024`, `0.9000`, and `0.8988`, versus rank-1 `0.9012`,
+  `0.8988`, and `0.9024`. Their varied BAs were `0.8000`, `0.7944`, and `0.7944`.
+- Extra capacity did not recover specialist independence. Rank-4 pairwise
+  disagreements were only 4 material/polarity, 5 material/hierarchy, and 1
+  polarity/hierarchy, versus rank 1's 2, 3, and 5 and the teachers' 24, 44, and
+  42. Teacher/student agreement rose by only `0.0028`--`0.0056`, reaching
+  `0.8639`, `0.8694`, and `0.8472` for material, polarity, and hierarchy.
+- Rank-4 OR is the best aggregate at `0.9036` overall and `0.8028` varied BA. It
+  adds one correct positive with no breaks relative to the best material member,
+  but the gain is only `0.0012`, below the required `0.005`. Logistic and
+  majority both score `0.9000` overall and `0.7944` varied; unanimity scores
+  `0.8976` and `0.7917`.
+- Rank 4 therefore fails both the diversity and competitiveness gates and remains
+  below P62 material (`0.9048` overall, `0.8083` varied). Do not run local test,
+  integrate these adapters, or extend the rank sweep. Capacity at this scale is
+  not the bottleneck; the next controlled mechanism should directly strengthen
+  preservation of the teacher decision signal, such as decision-token weighting
+  or more effective updates, rather than another LoRA-rank increase.
