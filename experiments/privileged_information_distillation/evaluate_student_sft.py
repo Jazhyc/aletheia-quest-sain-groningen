@@ -269,6 +269,29 @@ def parse_retrieval_condition(
     return name, path.resolve(), passage_field
 
 
+def parse_thinking_condition(value: str) -> tuple[str, bool, int]:
+    """Parse NAME=on|off:MAX_NEW_TOKENS for a shared-session ablation."""
+    name, separator, specification = value.partition("=")
+    mode, budget_separator, budget_text = specification.partition(":")
+    normalized_mode = mode.strip().lower()
+    if (
+        not separator
+        or not name
+        or not budget_separator
+        or normalized_mode not in {"on", "off", "true", "false"}
+    ):
+        raise ValueError(
+            "thinking conditions must be NAME=on|off:MAX_NEW_TOKENS"
+        )
+    try:
+        max_new_tokens = int(budget_text)
+    except ValueError as error:
+        raise ValueError("thinking-condition token budget must be an integer") from error
+    if max_new_tokens < 1:
+        raise ValueError("thinking-condition token budget must be positive")
+    return name, normalized_mode in {"on", "true"}, max_new_tokens
+
+
 def parse_reasoning_input_condition(value: str) -> tuple[str, int, str]:
     """Parse NAME=MAX_CHARS or NAME=MAX_CHARS:TRUNCATION."""
     name, separator, settings = value.partition("=")
@@ -355,6 +378,7 @@ def load_records(
     references: dict[tuple[str, Any], str] | None = None,
     *,
     append_empty_reference: bool = False,
+    enable_thinking: bool = False,
 ) -> pd.DataFrame:
     from datasets import load_dataset
 
@@ -401,7 +425,7 @@ def load_records(
                 [{"role": "user", "content": raw_prompt}],
                 tokenize=False,
                 add_generation_prompt=True,
-                enable_thinking=False,
+                enable_thinking=enable_thinking,
             )
             rows.append({
                 "dataset": dataset_cfg.name,
@@ -441,6 +465,16 @@ def evaluate_adapter(
         for prompt in records["prompt"]
     ]
     generations = [output.outputs[0].text if output.outputs else "" for output in outputs]
+    evaluated["finish_reason"] = [
+        None
+        if not output.outputs
+        else str(output.outputs[0].finish_reason)
+        for output in outputs
+    ]
+    evaluated["generation_tokens"] = [
+        0 if not output.outputs else len(output.outputs[0].token_ids)
+        for output in outputs
+    ]
     if output_mode == "rating":
         ratings = [parse_rating(text) for text in generations]
         predictions = [None if value is None else int(value >= 4) for value in ratings]
@@ -595,6 +629,12 @@ def main() -> None:
         default=[],
         help="repeat NAME=CONFIG_PATH for a shared-session prompt sweep",
     )
+    parser.add_argument(
+        "--thinking-condition",
+        action="append",
+        default=[],
+        help="repeat NAME=on|off:MAX_NEW_TOKENS for a shared-session ablation",
+    )
     parser.add_argument("--run-name")
     parser.add_argument(
         "--aggregate-max",
@@ -629,14 +669,22 @@ def main() -> None:
         args.retrieval_condition,
         args.reasoning_input_condition,
         args.prompt_condition,
+        args.thinking_condition,
     ))
     if condition_families > 1 or (
         args.retrieval_cache is not None
-        and (args.reasoning_input_condition or args.prompt_condition)
+        and (
+            args.reasoning_input_condition
+            or args.prompt_condition
+            or args.thinking_condition
+        )
     ):
         parser.error("retrieval, reasoning-input, and prompt conditions cannot be crossed")
     if args.aggregate_max and not (
-        args.retrieval_condition or args.reasoning_input_condition or args.prompt_condition
+        args.retrieval_condition
+        or args.reasoning_input_condition
+        or args.prompt_condition
+        or args.thinking_condition
     ):
         parser.error("--aggregate-max requires at least two named conditions")
 
@@ -667,15 +715,16 @@ def main() -> None:
         args.retrieval_condition
         or args.reasoning_input_condition
         or args.prompt_condition
+        or args.thinking_condition
     )
     if args.retrieval_condition:
         condition_specs = [
-            (*parse_retrieval_condition(value, ROOT), None, None, None)
+            (*parse_retrieval_condition(value, ROOT), None, None, None, None, None)
             for value in args.retrieval_condition
         ]
     elif args.reasoning_input_condition:
         condition_specs = [
-            (name, None, "passages", max_chars, mode, None)
+            (name, None, "passages", max_chars, mode, None, None, None)
             for name, max_chars, mode in (
                 parse_reasoning_input_condition(value)
                 for value in args.reasoning_input_condition
@@ -683,10 +732,18 @@ def main() -> None:
         ]
     elif args.prompt_condition:
         condition_specs = [
-            (name, None, "passages", None, None, path)
+            (name, None, "passages", None, None, path, None, None)
             for name, path in (
                 parse_prompt_condition(value, ROOT)
                 for value in args.prompt_condition
+            )
+        ]
+    elif args.thinking_condition:
+        condition_specs = [
+            (name, None, "passages", None, None, None, enabled, max_tokens)
+            for name, enabled, max_tokens in (
+                parse_thinking_condition(value)
+                for value in args.thinking_condition
             )
         ]
     else:
@@ -697,6 +754,8 @@ def main() -> None:
             None,
             None,
             None,
+            None,
+            None,
         )]
     names = [name for name, *_ in condition_specs]
     if len(set(names)) != len(names):
@@ -704,7 +763,16 @@ def main() -> None:
     records_by_condition = {}
     strict_re_by_condition = {}
     output_mode_by_condition = {}
-    for condition_name, retrieval_path, passage_field, reasoning_max_chars, reasoning_mode, prompt_path in condition_specs:
+    for (
+        condition_name,
+        retrieval_path,
+        passage_field,
+        reasoning_max_chars,
+        reasoning_mode,
+        prompt_path,
+        enable_thinking,
+        condition_max_tokens,
+    ) in condition_specs:
         references = load_retrieval_cache(retrieval_path, passage_field=passage_field)
         condition_config = copy.deepcopy(first)
         if reasoning_max_chars is not None:
@@ -720,6 +788,7 @@ def main() -> None:
             tokenizer,
             references=references,
             append_empty_reference=bool(args.retrieval_condition),
+            enable_thinking=bool(enable_thinking),
         )
         records_by_condition[condition_name] = records
         strict_re_by_condition[condition_name] = strict_pattern_for_config(
@@ -730,7 +799,9 @@ def main() -> None:
         )
         print(
             f"loaded condition={condition_name} {len(records)} rows across "
-            f"{records['dataset'].nunique()} datasets",
+            f"{records['dataset'].nunique()} datasets "
+            f"thinking={bool(enable_thinking)} "
+            f"max_new_tokens={condition_max_tokens or args.max_new_tokens}",
             flush=True,
         )
     llm = LLM(
@@ -745,7 +816,13 @@ def main() -> None:
         ]),
         max_model_len=args.max_model_len,
     )
-    sampling = SamplingParams(max_tokens=args.max_new_tokens, temperature=0.0)
+    sampling_by_condition = {
+        name: SamplingParams(
+            max_tokens=condition_max_tokens or args.max_new_tokens,
+            temperature=0.0,
+        )
+        for name, *_, condition_max_tokens in condition_specs
+    }
     binary_ids = None
     margin_sampling = None
     if args.continuous_margins:
@@ -760,11 +837,20 @@ def main() -> None:
     for lora_id, (adapter_dir, config) in enumerate(zip(adapter_dirs, configs, strict=True), 1):
         evaluated_by_condition = {}
         timing_by_condition = {}
-        for condition_name, retrieval_path, passage_field, reasoning_max_chars, reasoning_mode, prompt_path in condition_specs:
+        for (
+            condition_name,
+            retrieval_path,
+            passage_field,
+            reasoning_max_chars,
+            reasoning_mode,
+            prompt_path,
+            enable_thinking,
+            condition_max_tokens,
+        ) in condition_specs:
             records = records_by_condition[condition_name]
             evaluated, timing = evaluate_adapter(
                 llm,
-                sampling,
+                sampling_by_condition[condition_name],
                 records,
                 adapter_dir,
                 lora_id,
@@ -821,6 +907,7 @@ def main() -> None:
                 "prompt_condition": (
                     condition_name if args.prompt_condition else None
                 ),
+                "enable_thinking": bool(enable_thinking),
                 "output_mode": output_mode_by_condition[condition_name],
                 "reasoning_max_chars": reasoning_max_chars,
                 "reasoning_truncation": reasoning_mode,
@@ -830,6 +917,15 @@ def main() -> None:
                 "per_dataset": per_dataset,
                 "parse_errors": int(evaluated["parse_error"].sum()),
                 "format_valid": int(evaluated["format_valid"].sum()),
+                "length_capped": int(
+                    evaluated["finish_reason"].eq("length").sum()
+                ),
+                "generation_tokens": {
+                    "mean": float(evaluated["generation_tokens"].mean()),
+                    "p50": float(evaluated["generation_tokens"].quantile(0.5)),
+                    "p95": float(evaluated["generation_tokens"].quantile(0.95)),
+                    "max": int(evaluated["generation_tokens"].max()),
+                },
                 "rating_prediction_conflicts": int(
                     evaluated.get(
                         "rating_prediction_conflict",
@@ -840,7 +936,7 @@ def main() -> None:
                 "score_seconds": total_elapsed,
                 "rows_per_second": len(evaluated) / total_elapsed,
                 "timing": timing,
-                "max_new_tokens": args.max_new_tokens,
+                "max_new_tokens": condition_max_tokens or args.max_new_tokens,
                 "retrieval_cache": retrieval_path.as_posix() if retrieval_path else None,
                 "reasoning_visibility": args.reasoning_visibility,
                 "prompt_without_reasoning_config": (

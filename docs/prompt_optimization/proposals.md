@@ -2966,3 +2966,31 @@ Outcome:
   not the bottleneck; the next controlled mechanism should directly strengthen
   preservation of the teacher decision signal, such as decision-token weighting
   or more effective updates, rather than another LoRA-rank increase.
+
+## P65: Phoenix v2.1 Native-Thinking Inference Ablation
+
+Status: scheduled protocol; validation only.
+
+Question: does Qwen's native inference-time thinking improve the current
+submission adapter when its weights, factual judge prompt, and input evidence are
+held fixed?
+
+Frozen protocol:
+
+- Use the exact bundled Phoenix v2.1 rank-16 adapter (SHA-256
+  `1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`)
+  and the saved ordinary Truth Value Guard student prompt. Force assistant
+  reasoning visibility to hidden so this experiment does not reintroduce the
+  v2.4 dataset-trace interface.
+- Evaluate the same 822 validation rows twice in one persistent vLLM process.
+  The control renders the Qwen chat template with native thinking disabled and
+  permits 512 generated tokens. The intervention changes only the chat-template
+  thinking switch and permits 4,096 generated tokens. Use deterministic decoding,
+  an 8,192-token model context, the adapter tokenizer, and the same binary parser.
+- Report dataset-macro overall/instructed/varied BA, recall, FPR, parse and strict
+  format failures, length-capped generations, output-token percentiles, runtime,
+  disagreement, and paired fixes/breaks. Compare the fresh no-thinking condition
+  both to its paired intervention and to the historical `0.9000` validation BA.
+- Native thinking is promising only if it improves overall BA by at least `0.005`
+  without reducing varied BA or materially increasing parse failures. Otherwise
+  do not spend a local-test evaluation or alter the submission notebook.

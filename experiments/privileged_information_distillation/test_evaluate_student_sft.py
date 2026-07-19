@@ -24,6 +24,7 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     parse_prompt_condition,
     parse_rating,
     parse_retrieval_condition,
+    parse_thinking_condition,
     parse_prediction,
     prefix_before_prediction,
     rating_to_score,
@@ -269,6 +270,19 @@ def test_parse_prompt_condition(tmp_path) -> None:
     assert parse_prompt_condition("strict=config.yaml", tmp_path) == (
         "strict",
         (tmp_path / "config.yaml").resolve(),
+    )
+
+
+def test_parse_thinking_condition() -> None:
+    assert parse_thinking_condition("baseline=off:512") == (
+        "baseline",
+        False,
+        512,
+    )
+    assert parse_thinking_condition("thinking=on:4096") == (
+        "thinking",
+        True,
+        4096,
     )
 
 
