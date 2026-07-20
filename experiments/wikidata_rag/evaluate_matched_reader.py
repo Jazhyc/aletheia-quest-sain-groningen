@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
 
 from experiments.privileged_information_distillation.evaluate_student_sft import (
     STRICT_RE,
+    apply_student_prompt_config,
     evaluate_adapter,
     load_records,
     load_retrieval_cache,
@@ -132,6 +133,11 @@ def main() -> None:
     parser.add_argument("--adapter-dir", action="append", type=Path, required=True)
     parser.add_argument("--retrieval-cache", type=Path, required=True)
     parser.add_argument(
+        "--prompt-config",
+        type=Path,
+        help="optional student prompt config applied to every adapter",
+    )
+    parser.add_argument(
         "--correctness-validation-cache",
         type=Path,
         help="optional entity-disjoint correctness cache evaluated in the same session",
@@ -147,6 +153,10 @@ def main() -> None:
 
     adapter_dirs = [path.resolve() for path in args.adapter_dir]
     configs = [yaml.safe_load((path.parent / "config.yaml").read_text()) for path in adapter_dirs]
+    if args.prompt_config is not None:
+        prompt_config = args.prompt_config.resolve()
+        for config in configs:
+            apply_student_prompt_config(config, prompt_config)
     models = {config["student"]["model"] for config in configs}
     if len(models) != 1:
         raise SystemExit(f"adapters use different base models: {sorted(models)}")
