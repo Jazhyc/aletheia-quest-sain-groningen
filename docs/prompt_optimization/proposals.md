@@ -3135,3 +3135,39 @@ Outcome:
   richer calibrated member scores, with combination rules selected on a
   distribution-shift-resistant meta-training split rather than this validation
   set.
+
+## P67: Input-Dependent N-Gram Heterogeneous Stack
+
+Status: protocol frozen; CPU analysis pending.
+
+Question: can sparse transcript features tell a logistic meta-model when to
+trust the heterogeneous incorrectness and resolved-intent votes?
+
+Frozen protocol:
+
+- Reuse P66's exact full-train and validation predictions and exclude the union
+  of all three adapter-training manifests. Do not make new model calls, change
+  adapter weights, or use local test.
+- Reconstruct only inference-visible message content and final output, capped at
+  3,000 context characters. Exclude assistant reasoning, dataset/model names,
+  labels, adapter generations, and reasoning-availability indicators. This
+  prevents the text model from directly exploiting the local varied/trace
+  confound.
+- Fit one word TF-IDF representation with 1--2 grams, `min_df=3`, `max_df=0.98`,
+  at most 20,000 features, Unicode accent stripping, and sublinear term
+  frequency. Concatenate it with the three binary adapter outputs and fit
+  `C=1` logistic regression at threshold 0.5 using equal scenario/label-cell
+  sample weights. Do not sweep representation, regularization, or threshold.
+- Report adapter-only logistic, n-gram-only logistic, and the concatenated
+  hybrid. First produce leave-one-dataset-unit-out predictions over the
+  leakage-excluded train rows, fitting the vocabulary inside every fold. Then
+  fit the same frozen models on all eligible train rows and evaluate validation
+  once. Record scenario metrics, fixes/breaks, member coefficients, vocabulary
+  size, and the strongest positive/negative n-grams to audit shortcuts.
+- The hybrid is promising only if grouped OOF does not regress relative to the
+  adapter-only stack and frozen validation improves adapter-only BA by at least
+  `0.005`, matches or exceeds P66 OR's `0.9095`, does not reduce P66 OR's
+  `0.8306` varied BA, and does not materially increase FPR. Otherwise stop
+  without test evaluation, feature/threshold tuning, or packaging. Prior
+  standalone n-gram and correction-gate experiments improved AUROC while
+  worsening binary calibration, so ranking gain alone is insufficient.
