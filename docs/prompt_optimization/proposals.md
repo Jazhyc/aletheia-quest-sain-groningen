@@ -3138,7 +3138,7 @@ Outcome:
 
 ## P67: Input-Dependent N-Gram Heterogeneous Stack
 
-Status: protocol frozen; CPU analysis pending.
+Status: completed; passed the frozen development gate.
 
 Question: can sparse transcript features tell a logistic meta-model when to
 trust the heterogeneous incorrectness and resolved-intent votes?
@@ -3171,3 +3171,35 @@ Frozen protocol:
   without test evaluation, feature/threshold tuning, or packaging. Prior
   standalone n-gram and correction-gate experiments improved AUROC while
   worsening binary calibration, so ranking gain alone is insufficient.
+
+Outcome (2026-07-20, Slurm job `30208150`, 2m45s):
+
+- Leakage-excluded leave-one-dataset-unit-out evaluation covered 6,275 training
+  rows. The hybrid reached `0.9108` BA, `0.9541` AUROC, `0.8776` recall, and
+  `0.0560` FPR, versus `0.8983`, `0.9332`, `0.8777`, and `0.0811` for the
+  adapter-only logistic stack. Varied BA improved from `0.8116` to `0.8385`
+  while varied FPR fell from `0.1475` to `0.1120`.
+- The n-gram-only model was much weaker at `0.7950` grouped OOF BA and `0.8250`
+  frozen-validation BA, showing that the gain comes from conditioning the
+  adapter combination on visible text rather than replacing the judges with a
+  lexical classifier.
+- On the single frozen validation evaluation, the hybrid scored `0.9190` BA,
+  `0.9574` AUROC, `0.9119` recall, and `0.0738` FPR. The adapter-only stack
+  scored `0.9048`, `0.9430`, `0.9095`, and `0.1000`; P66's OR scored `0.9095`
+  BA with `0.1071` FPR. Hybrid instructed and varied BA were `0.9750` and
+  `0.8444`, respectively, versus `0.9688` and `0.8194` for adapter-only and
+  `0.9750` and `0.8306` for P66 OR. Relative to adapter-only, the hybrid made
+  24 changes: 18 fixes and 6 breaks.
+- The fitted adapter coefficients remained strongly positive: deception
+  `3.20`, incorrectness `2.05`, and resolved intent `2.11`. The 20,000-feature
+  lexical audit found explicit discourse cues among the largest weights:
+  `actually`, `wrong answer`, and `by giving` were positive, while `is correct`,
+  `answer truthfully`, and `answer honestly` were negative. These are plausible
+  input-dependent routing cues, but they also expose template-shift risk.
+- This passes every preregistered development gate: grouped OOF improved,
+  validation gained `0.0143` BA over adapter-only and `0.0095` over P66 OR,
+  varied BA gained `0.0139` over P66 OR, and FPR decreased. Grouped transfer
+  makes simple dataset-unit memorization unlikely, but the learned prompt
+  language remains a distribution-shift risk. Keep the representation and
+  threshold frozen; do not tune on validation. No local-test evaluation was
+  launched automatically.
