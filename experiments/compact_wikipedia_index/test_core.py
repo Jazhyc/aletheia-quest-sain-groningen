@@ -7,13 +7,17 @@ from experiments.compact_wikipedia_index.build_validation_cache import (
     atomic_queries,
     raw_queries,
 )
+from experiments.compact_wikipedia_index.generate_claim_queries import parse_claims
 
 from experiments.compact_wikipedia_index.core import (
+    LinearReranker,
+    adjacent_window,
     create_index,
     fts_expression,
     iter_page_sentences,
     reference_source,
     retrieve,
+    retrieve_proposition,
     source_matches,
 )
 
@@ -68,6 +72,59 @@ def test_retrieve_ranks_exact_entity_and_number() -> None:
     )
     assert rows[0]["title"] == "Summer Olympics"
     assert rows[0]["number_recall"] == 1.0
+
+
+def test_proposition_retrieval_unions_claim_and_question_views() -> None:
+    connection = sqlite3.connect(":memory:")
+    create_index(
+        connection,
+        [
+            {
+                "title": "Apollo 11",
+                "url": "u1",
+                "sentence_index": 0,
+                "text": "Apollo 11 landed on the Moon in 1969.",
+            },
+            {
+                "title": "Apollo program",
+                "url": "u2",
+                "sentence_index": 0,
+                "text": "The Apollo program conducted several crewed missions.",
+            },
+        ],
+    )
+    rows = retrieve_proposition(
+        connection,
+        "When did Apollo 11 reach the Moon?",
+        "Apollo 11 landed on the Moon in 1969.",
+        limit=2,
+    )
+    assert rows[0]["title"] == "Apollo 11"
+    assert len(rows[0]["features"]) == 11
+
+
+def test_linear_reranker_and_adjacent_window() -> None:
+    reranker = LinearReranker(
+        mean=(0.0,) * 11,
+        scale=(1.0,) * 11,
+        coefficients=(1.0,) + (0.0,) * 10,
+        intercept=0.0,
+        threshold=0.5,
+    )
+    assert reranker.probability((1.0,) + (0.0,) * 10) > 0.5
+
+    connection = sqlite3.connect(":memory:")
+    create_index(
+        connection,
+        [
+            {"title": "Paris", "url": "u", "sentence_index": 0, "text": "Paris is in France."},
+            {"title": "Paris", "url": "u", "sentence_index": 1, "text": "It lies on the Seine."},
+        ],
+    )
+    assert adjacent_window(
+        connection,
+        {"title": "Paris", "sentence_index": 0},
+    ) == "Paris is in France. It lies on the Seine."
 
 
 def test_source_matching_accepts_a_sentence_inside_window() -> None:
@@ -126,3 +183,16 @@ def test_matched_shuffle_can_compose_two_passage_control() -> None:
     ]
     add_matched_shuffle(rows, real_field="real", shuffled_field="shuffled")
     assert rows[0]["shuffled"] == [{"text": "B"}, {"text": "C"}]
+
+
+def test_claim_parser_requires_explicit_lines_and_deduplicates() -> None:
+    assert parse_claims(
+        "Here are the facts:\n"
+        "CLAIM: Apollo 11 landed on the Moon in 1969.\n"
+        "CLAIM: Apollo 11 landed on the Moon in 1969.\n"
+        "CLAIM: Neil Armstrong commanded Apollo 11."
+    ) == [
+        "Apollo 11 landed on the Moon in 1969.",
+        "Neil Armstrong commanded Apollo 11.",
+    ]
+    assert parse_claims("CLAIM: NONE") == []

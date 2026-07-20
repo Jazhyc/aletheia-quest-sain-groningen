@@ -77,6 +77,23 @@ python experiments/compact_wikipedia_index/evaluate_recovery.py \
 
 sbatch experiments/compact_wikipedia_index/run_reader.sh raw
 sbatch experiments/compact_wikipedia_index/run_reader.sh atomic
+
+python experiments/compact_wikipedia_index/train_reranker.py \
+  --index results/blackbox/compact_wikipedia_train_index_v1/train_pages.sqlite \
+  --audits results/blackbox/fever_fact_verification_train_v1/varied_train_selective_initial_audit.jsonl \
+  --output results/blackbox/compact_wikipedia_train_index_v2/reranker.json \
+  --report results/blackbox/compact_wikipedia_train_index_v2/train_reranker_report.json \
+  --limit 2000
+
+sbatch experiments/compact_wikipedia_index/run_claim_extractor.sh
+
+python experiments/compact_wikipedia_index/build_learned_cache.py \
+  --index results/blackbox/compact_wikipedia_train_index_v1/train_pages.sqlite \
+  --queries results/blackbox/compact_wikipedia_train_index_v2/validation_qwen_claims.jsonl \
+  --output results/blackbox/compact_wikipedia_train_index_v2/validation_learned_cache.jsonl \
+  --threshold 1.285
+
+sbatch experiments/compact_wikipedia_index/run_learned_reader.sh
 ```
 
 ## Decision
@@ -88,6 +105,62 @@ However, raw inference-visible retrieval regresses against no evidence, and
 even teacher-extracted atomic queries produce only a marginal validation gain.
 Any follow-up needs a train-frozen claim extractor/reranker that improves the
 empty-evidence control—not a larger corpus or validation-error tuning.
+
+## Deployable claim-extraction follow-up
+
+The next frozen attempt tested two improvements without using validation labels
+for selection:
+
+1. A compact standardized logistic reranker used proposition/source overlap,
+   question overlap, title and number matching, reciprocal FTS ranks, sentence
+   position, and length similarity. It was fit on 1,618 claims and calibrated
+   on 382 exact-question-grouped held-out training claims.
+2. Base `Qwen/Qwen3.5-9B` in no-thinking mode rewrote the visible answer into at
+   most six standalone propositions. Retrieval retained the original lexical
+   score and added one adjacent source sentence around each hit.
+
+The learned reranker was rejected before validation. Across all calibration
+claims its top candidate exactly matched the audited sentence on 35/382 rows;
+among the 84 claims where that source was present in its candidate pool, recall
+was 41.7%. A high-precision threshold emitted only two claims. Extra linear
+ranking capacity therefore did not provide a usable abstention boundary.
+
+The deployable extractor parsed 360/360 varied-validation rows and emitted
+1,780 claims across 347 rows. At the original training-selected `1.285`
+threshold, the cache contains 79 passages on 62 rows; 27 active rows and 30
+passages exactly overlap the independent audited cache. This is better than raw
+queries (10/43 rows) and the non-deployable GPT-OSS atomic ceiling (21/54 rows).
+The downstream reader nevertheless regresses:
+
+| evidence | varied BA | recall | FPR | paired versus real |
+| --- | ---: | ---: | ---: | --- |
+| empty | **`0.8139`** | `0.7222` | `0.0944` | real: 4 fixes / 8 breaks |
+| Qwen claims + real windows | `0.8056` | `0.7222` | `0.1111` | — |
+| count-matched shuffled windows | `0.7972` | `0.6944` | `0.1000` | real: 8 fixes / 6 breaks |
+
+A final stricter threshold was selected from the existing training calibration,
+not validation: `1.5` emits 32 training claims with 40.6% exact-source precision
+and an 87.5% audited-claim rate. It yields 25 validation passages on 23 rows,
+with 11 exact audited-row matches. This removes the regression but not enough
+errors to improve BA:
+
+| high-precision evidence | varied BA | recall | FPR | paired versus real |
+| --- | ---: | ---: | ---: | --- |
+| empty | **`0.8194`** | `0.7167` | `0.0778` | real: 2 fixes / 2 breaks |
+| Qwen claims + real windows | **`0.8194`** | `0.7167` | `0.0778` | — |
+| count-matched shuffled windows | `0.8139` | `0.7056` | `0.0778` | real: 3 fixes / 1 break |
+
+Jobs `30215108`, `30215199`, and `30215268` completed in 9m54s, 3m45s,
+and 3m42s. Claim generation itself took roughly 20 seconds; cold A100
+compilation dominated extractor wall time. No local-test row was evaluated.
+
+Decision: retain the claim extractor as a useful retrieval component and the
+linear reranker as a negative capacity check, but do not package either. Better
+retrieval relevance alone does not make this evidence-naive reader reliable:
+ordinary factual corrections and incomplete windows still shift honest rows.
+The next independent-data attempt should train the consumer on useful,
+irrelevant, insufficient, conflicting, and ordinary-error evidence. Do not
+sweep more thresholds on these validation outcomes.
 
 ## Packaging caveat
 

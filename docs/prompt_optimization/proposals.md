@@ -3666,3 +3666,80 @@ Decision:
 - Wikipedia content is CC BY-SA rather than CC0. Any eventual package would
   need license text, source attribution, and confirmation that the competition
   accepts the separately licensed asset.
+
+## P73: Deployable Atomic Claims and Precision-Gated Wikipedia Windows
+
+Status: complete; deployable claim extraction improves source recovery, but the
+default cache regresses against empty evidence and a train-selected stricter
+gate only ties it.
+
+Question: can the P72 gap between raw queries and teacher atomic propositions be
+closed with base Qwen at inference, and can either a learned reranker or stricter
+abstention make the retrieved evidence useful to the frozen correctness reader?
+
+Frozen design:
+
+- Fit a tiny proposition-aware logistic reranker on a deterministic 2,000-claim
+  sample of label-blind public-training audits. Split by exact question hash:
+  1,618 claims for fitting and 382 for calibration. Features cover proposition
+  and question overlap, title/number agreement, reciprocal FTS ranks, sentence
+  position, and length similarity. Do not consult validation data unless the
+  grouped calibration yields a useful precision/coverage point.
+- Independently prompt base `Qwen/Qwen3.5-9B` with thinking disabled to rewrite
+  only the inference-visible answer into at most six standalone propositions.
+  The prompt requests no truth, deception, or hidden-intent judgment. Use the
+  frozen P72 index and threshold, add a one-sentence page-local window on each
+  side of a hit, and retain at most two passages per row.
+- Compare real evidence with empty and count-matched cross-dataset shuffled
+  evidence. If the original threshold raises FPR, test exactly one stricter
+  threshold selected from the pre-existing training calibration. Stop without
+  threshold sweeping or local-test evaluation if that condition does not beat
+  empty evidence.
+
+Training-only selection:
+
+- The learned reranker fails its own gate. On all 382 calibration claims its
+  top candidate exactly matches the audited source 35 times. It recovers 35/84
+  sources present in the candidate pool, but its only high-precision operating
+  point emits two claims. It is rejected before downstream validation.
+- The old lexical calibration offers one defensible high-precision point:
+  threshold `1.5` emits 32 training claims, exactly matches 13 (40.6%), and
+  emits on a claim with some decisive audit 28 times (87.5%). This is frozen as
+  the sole abstention follow-up to the original `1.285` threshold.
+
+Retrieval outcome:
+
+- Job `30215108` parses 360/360 rows and emits 1,780 claims across 347 rows.
+  Generation takes about 20 seconds after startup; cold A100 compilation makes
+  total wall time 9m54s.
+- At threshold `1.285`, retrieval emits 79 passages on 62 rows. It exactly
+  overlaps the independent selective cache on 27 active rows and 30 passages,
+  exceeding raw P72 queries (10/43 rows) and its GPT-OSS atomic ceiling (21/54
+  rows). At threshold `1.5`, it emits 25 passages on 23 rows and exactly matches
+  11 rows.
+
+Reader outcome (A100 jobs `30215199` and `30215268`):
+
+| threshold | evidence | varied BA | recall | FPR | real paired comparison |
+| --- | --- | ---: | ---: | ---: | --- |
+| `1.285` | empty | **`0.8139`** | `0.7222` | `0.0944` | 4 fixes / 8 breaks |
+| `1.285` | real | `0.8056` | `0.7222` | `0.1111` | — |
+| `1.285` | shuffled | `0.7972` | `0.6944` | `0.1000` | 8 fixes / 6 breaks |
+| `1.5` | empty | **`0.8194`** | `0.7167` | `0.0778` | 2 fixes / 2 breaks |
+| `1.5` | real | **`0.8194`** | `0.7167` | `0.0778` | — |
+| `1.5` | shuffled | `0.8139` | `0.7056` | `0.0778` | 3 fixes / 1 break |
+
+Decision:
+
+- Do not package the extractor, reranker, or Wikipedia index, and do not run
+  local test. The extractor is a real retrieval improvement, and both real
+  conditions beat shuffled evidence, but neither beats its within-run empty
+  control.
+- The remaining bottleneck is evidence utility rather than only retrieval.
+  Relevant sources can expose ordinary errors in honest-labeled outputs, be
+  incomplete for the exact proposition, or anchor a reader that was not trained
+  to distinguish decisive from merely topical context.
+- Do not tune more thresholds or materiality rules from these changed rows.
+  Revisit only with new grouped questions and a matched consumer curriculum that
+  balances useful, irrelevant, insufficient, conflicting, and ordinary-error
+  evidence.
