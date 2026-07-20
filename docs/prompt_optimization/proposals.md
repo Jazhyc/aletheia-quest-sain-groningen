@@ -3233,6 +3233,34 @@ Frozen local-test confirmation (2026-07-20, A100/CPU jobs `30217217` and
   shares the public dataset-unit families, so do not infer hidden-leaderboard
   transfer from the tie alone.
 
+Phoenix Wright v3.0 deployment (2026-07-20):
+
+- Exported the exact train-fitted vectorizer and hybrid logistic classifier as
+  `submission/phoenix_wright_v3_ngram.joblib` (368,422 bytes). A packaged replay
+  reproduced all frozen test aggregate metrics exactly: `0.9297619` BA,
+  `0.9608333` AUROC, `0.9190476` recall, and `0.0595238` FPR.
+- Bundled minimal copies of the three rank-1 adapters (about 7.3 MB of weights
+  each) and published matching public PEFT repositories:
+  `Jazhyc/aletheias-phoenix-v3-deception-r1`,
+  `Jazhyc/aletheias-phoenix-v3-incorrectness-r1`, and
+  `Jazhyc/aletheias-phoenix-v3-resolved-intent-r1`.
+- The notebook reuses one `LanguageModel` meta-wrapper because all three LoRAs
+  have identical rank and target modules. Each remote session sends the current
+  PEFT repo through NNsight's environment, allowing the updated NDIF actor to
+  swap weights without constructing three client-side model graphs. Prompts are
+  length-sorted with 32/24/16 dynamic batches, four batches per remote session,
+  and a 4,096-token input ceiling. The 512-token completion allowance is
+  preserved because lowering it would change the frozen member behavior.
+- A clean staged dry run on 32 varied rows exercised all three repositories,
+  reasoning-aware intent routing, the frozen CPU stack, and CSV validation in
+  1m57s. Eleven additional instructed dataset slices completed successfully;
+  those rows skipped the unavailable intent member as designed. The upload
+  archive is 22.8 MB.
+- The official black-box endpoint accepted the package and held a live runner
+  stream without a startup error for approximately 125 seconds. Client polling
+  was then stopped deliberately; no leaderboard score was available at that
+  point and none should be inferred from submission acceptance.
+
 ## P68: Belief-Grounded Intent Member
 
 Status: complete; stricter belief evidence regresses and no replacement student

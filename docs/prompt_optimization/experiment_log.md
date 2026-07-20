@@ -2807,3 +2807,30 @@ gain again comes from input-dependent combination rather than lexical
 replacement of the adapters. This confirms P67 locally without any test-set
 selection, but public test shares dataset-unit families with development;
 hidden-distribution transfer and submission runtime remain separate questions.
+
+## Phoenix Wright v3.0 heterogeneous deployment
+
+P67's frozen rank-1 deception, incorrectness, and resolved-intent members are
+now deployed in `submission/phoenix_wright_v3_0.ipynb`. The exact train-fitted
+20,000-feature word 1--2 gram vectorizer and logistic stack are bundled as a
+368,422-byte joblib artifact. A packaging replay reproduced local-test BA
+`0.9297619` and AUROC `0.9608333` exactly. The three minimal bundled LoRAs total
+about 21.9 MB of weights, and the complete compressed submission is 22.8 MB.
+
+Inference uses one reusable NNsight `LanguageModel` meta-wrapper and changes its
+PEFT repository between member sessions; the three adapters share rank and
+target modules. Length sorting, dynamic 32/24/16 batching, four batches per
+remote session, and routing intent to zero when no assistant reasoning exists
+reduce avoidable work without altering the tested prompts or 512-token member
+budget. The adapters were uploaded to the three public
+`Jazhyc/aletheias-phoenix-v3-*-r1` repositories recorded in P67.
+
+The isolated runner first exposed and fixed a trace-boundary bug: appending a
+saved NNsight proxy to a Python list inside `model.session` did not preserve the
+local side effect. Moving the append immediately outside the session matched
+the established generated-chunk pattern. After the fix, eleven 32-row
+instructed slices completed successfully and a focused 32-row varied run
+exercised all three adapters plus the CPU stack, exited cleanly, and took 1m57s.
+The official black-box endpoint accepted the package and showed no startup
+failure during roughly 125 seconds of live streaming; polling was then stopped
+as requested, before any result was available.

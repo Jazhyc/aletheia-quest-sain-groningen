@@ -39,18 +39,26 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
+- `submission/phoenix_wright_v3_0.ipynb` is the current accuracy-first NDIF
+  submission. It deploys P67's frozen three-member rank-1 heterogeneous stack:
+  material deception, factual incorrectness, and reasoning-routed resolved
+  intent. A bundled 20,000-feature word 1--2 gram logistic model combines the
+  three binary votes with inference-visible transcript text at threshold 0.5.
+  The notebook uses `LanguageModel`, reuses one compatible meta-wrapper while
+  NDIF swaps the three PEFT repositories, length-sorts/dynamically batches
+  prompts, and skips intent inference when no reasoning trace exists. On local
+  test it scored 0.9298 BA and 0.9608 AUROC.
 - `submission/phoenix_wright_v1_1.ipynb` is the speed-first NDIF submission
   fallback. It uses Qwen/Qwen3.5-9B rating-token logits for the compact
   `details3072_logit` and `known3072_logit` prompts, rank-averaged per dataset
   with the cached `text_probe_ngram_v1` model. The submission threshold is
   `0.566666666667`, selected on validation for the per-dataset rank ensemble.
   On the local test split this scored 0.8655 balanced accuracy and 0.9068 AUROC.
-- `submission/phoenix_wright_v2_2.ipynb` is the current single-judge generated
-  NDIF submission. It uses the bundled Phoenix v2.1 varied-only
+- `legacy_submissions/phoenix_wright_v2_4.ipynb` is the previous single-judge
+  generated NDIF submission line. It uses the Phoenix v2.1 varied-only
   privileged-information-distillation adapter through NNsight `model.generate`,
-  parses `Prediction:0|1`, and applies the train-refined verdict/explanation
-  contradiction override under an explicit instruction to deceive. The v2.2
-  label describes submission logic; the trained adapter remains v2.1.
+  parses `Prediction:0|1`, and includes v2.4's conditional trace-summary and
+  semantic routing interface. The trained adapter remained v2.1.
 - `submission/phoenix_wright_v1.ipynb` was the previous accuracy-first generated
   reasoning notebook for `qwen_reason_ensemble_dks_member4096_v1`; it was removed
   from `submission/` because the official runs were timing out before producing
