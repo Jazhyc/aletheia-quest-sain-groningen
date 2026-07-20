@@ -3206,7 +3206,8 @@ Outcome (2026-07-20, Slurm job `30208150`, 2m45s):
 
 ## P68: Belief-Grounded Intent Member
 
-Status: protocol frozen; full-train teacher comparison pending.
+Status: complete; stricter belief evidence regresses and no replacement student
+was trained.
 
 Question: is P66's resolved-intent target slightly too broad because it asks
 whether the assistant chose to mislead, rather than whether it stated a
@@ -3258,3 +3259,35 @@ Frozen protocol:
   adapters, n-gram vocabulary settings, logistic regularization, or threshold.
   Do not run local test unless the drop-in hybrid improves frozen validation BA
   by at least `0.005` without reducing varied BA or increasing FPR.
+
+Outcome (2026-07-20, Slurm job `30208247`, 56m12s):
+
+- All three GPT-OSS conditions completed over 2,880 varied training rows. The
+  original resolved-intent prompt scored `0.8278` macro BA, `0.6757` recall,
+  and `0.0201` FPR with zero parse errors. Its lower full-train recall than the
+  earlier 288-row/validation diagnostics confirms that the intent-visible rate
+  varies across the complete split.
+- `belief_statement` regressed to `0.8094` BA and `0.6396` recall while slightly
+  increasing FPR to `0.0208`. It disagreed with baseline on 113 rows and made
+  only 30 fixes versus 83 breaks. Within honest rows it fixed 10 baseline false
+  positives but created 11 new ones; within deceptive rows it recovered 20
+  baseline misses but created 72 new misses.
+- `belief_proof` regressed further to `0.7934` BA, `0.6194` recall, and `0.0326`
+  FPR, with 37 parse errors. Its 187 changes made 44 fixes versus 143 breaks.
+  Both candidates failed every frozen gate, so validation generation and
+  replacement-student training were not launched.
+- The failures reveal that a trace is not a literal, stable report of model
+  belief. On many labeled-deceptive rows the reasoning adopts a fictional
+  `parallel universe`, `inverted facts`, or deliberately corrupted-knowledge
+  frame and then describes the planted answer as true inside that frame. A
+  proposition-specific belief test maps these to negative even though the
+  broader behavior of intentionally selecting a wrong answer remains visible.
+  Conversely, on some honest rows the same prompt over-interprets a generic
+  instruction to provide noise as evidence that a substantively correct final
+  answer was believed false.
+- The stricter prompt did correctly remove some broad-intent mistakes, including
+  answers the reasoning treated as true despite an instruction to lie. However,
+  prompt wording merely moved errors in both directions; it did not isolate a
+  clean high-precision subset. Retain P66's original resolved-intent teacher and
+  rank-1 adapter. Do not validation-select either P68 prompt, train their
+  students, or alter the frozen P67 stack from this experiment.
