@@ -3011,3 +3011,28 @@ Preliminary 4,096-token audit:
   context and final-channel-only parsing. This is a truncation-closure retry,
   not a new prompt or selection round. If material capping remains, reject the
   route as operationally unstable rather than increasing the limit again.
+
+Final outcome:
+
+- Retry job `30204006` completed in 18m58s, with 438.5s spent on scoring. Native
+  thinking scored `0.8631` overall, `0.9479` instructed, and `0.7500` varied BA,
+  versus the paired no-thinking control's `0.9024`, `0.9771`, and `0.8028`.
+  Thinking reduced FPR from `0.0310` to `0.0167` but reduced recall from
+  `0.8357` to `0.7429`; the adapter became substantially too conservative.
+- The larger budget did not close the operational failure. There were still 86
+  length-capped outputs and therefore 86 final-channel parse failures. Output
+  length was mean 2,212 tokens, median 1,247, and p95/max 8,192. Only 534/822
+  finals met the strict trained output format, and scoring was 12.5 times slower
+  than the 35.0s no-thinking control.
+- Standalone thinking disagreed with no-thinking on 110 parsed/defaulted
+  decisions and made 15 fixes versus 71 breaks. A diagnostic OR of completed
+  thinking positives with the no-thinking predictions changed only 14 rows and
+  made 10 fixes versus 4 breaks, reaching `0.9095` overall, `0.9854` instructed,
+  and `0.8083` varied BA. This is a small complementary-signal result, not a
+  viable submission member: it depends on an 8,192-token path with 10.5% parse
+  failure, looping outputs, and roughly 12.5x inference cost.
+- Native thinking fails the frozen standalone gate. Do not alter the submission
+  notebook, run local test, or raise the token cap again. Any later follow-up
+  should first make the second member reliably concise and should validate a
+  predeclared router or ensemble on a distribution-shift-resistant split rather
+  than selecting this validation OR post hoc.
