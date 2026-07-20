@@ -3509,3 +3509,82 @@ Decision:
   no-evidence member and an independently deployable retrieval signal, while
   preserving factual correctness as a distinct feature rather than forcing it
   to imitate deception labels.
+
+## P71: Broad Wikidata Transfer for Verified Correctness
+
+Status: complete; real cards beat shuffled cards but fail the empty-evidence
+control, so the deployable retrieval path is not selected.
+
+Question: does P70's evidence-alignment prompt and rank-1 correctness curriculum
+transfer from selectively audited Wikipedia passages to the frozen 44.77 MB
+compressed broad Wikidata index that can fit in a submission?
+
+Frozen design:
+
+- Reuse `wikidata_rag_daily_v1/validation_sweep_cache.jsonl` without rebuilding
+  or changing retrieval. It contains three real cards for each of the 360
+  varied-validation rows and a label-blind bijective shuffled assignment whose
+  donor is from another dataset unit. The index was selected independently from
+  general page-view popularity rather than competition examples.
+- Evaluate both the P70 new weights and P66 old incorrectness weights under the
+  same P70 alignment prompt. For each adapter, generate empty first, then real
+  and shuffled only for the 360 varied rows; reuse the exact empty output for
+  all 462 instructed rows.
+- Use a fixed gate: real must exceed both empty and shuffled varied BA by at
+  least `0.005`, produce more paired fixes than breaks against both controls,
+  and increase FPR by no more than `0.02` versus empty. Keep local test and
+  packaging blocked otherwise.
+
+Outcome (2026-07-20, A100 job `30211335`, 17m05s):
+
+| weights | evidence | overall BA | varied BA | varied recall | varied FPR | parse errors |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| new | empty | `0.8869` | **`0.8083`** | `0.7056` | `0.0889` | 11 |
+| new | real broad Wikidata | `0.8845` | `0.8028` | `0.6722` | `0.0667` | 11 |
+| new | shuffled cards | `0.8726` | `0.7750` | `0.6000` | `0.0500` | 7 |
+| old | empty | `0.8857` | **`0.8083`** | `0.7111` | `0.0944` | 6 |
+| old | real broad Wikidata | `0.8833` | `0.8028` | `0.6778` | `0.0722` | 8 |
+| old | shuffled cards | `0.8738` | `0.7806` | `0.6000` | `0.0389` | 8 |
+
+- The new reader fails the empty-control gate by `-0.0056` varied BA, despite
+  beating shuffled evidence by `+0.0278`. Real versus empty changes 39 varied
+  predictions, with 18 competition-label fixes and 17 breaks; the one-row raw
+  gain is distributed unfavorably under the required dataset-unit macro. Real
+  versus shuffled makes 21 fixes and 11 breaks.
+- The cards make both readers more conservative. For the new weights, real
+  evidence lowers recall by `0.0333` and FPR by `0.0222` versus empty. Shuffled
+  cards lower recall by `0.1056` and FPR by `0.0389`. Real cards therefore
+  preserve materially more useful positive evidence than shuffled cards, but
+  not enough to offset recall loss against no retrieval.
+- Holding the prompt fixed, the new and old weights have identical empty and
+  real macro BA. The P70 curriculum slightly changes recall/FPR and formatting,
+  but it does not repair broad-card transfer.
+- Instructed rows are exact reuses within each adapter and therefore cannot be
+  affected by retrieval. New-weight instructed BA is `0.9458` in all three
+  conditions; old-weight instructed BA is `0.9438`.
+- Manual audit confirms a small number of decisive matches, such as a Padstow
+  Cemetery card locating Padstow in Cornwall and an Ellis Island card exposing
+  an explicit negation. Most cards are only topical or wrong-entity matches.
+  The alignment prompt often ignores them correctly, but their presence still
+  shifts the reader toward `Prediction:0`. Examples include irrelevant
+  year-themed cards for Margaret Thatcher, unrelated Canadian/US banknote
+  entities, and a Pennsylvania `Devon` entity for Padstow. The reader also
+  continues to hallucinate unsupported factual corrections, so improved source
+  alignment is not equivalent to reliable world knowledge.
+- Generation itself was inexpensive after startup: for the new adapter, 822
+  empty rows took 72.6s and each 360-row evidence condition took about 44--45s.
+  Most of the 17-minute wall time was repeated cached-dataset loading and cold
+  A100 model compilation/capture.
+
+Decision:
+
+- Do not package the 44.77 MB broad Wikidata database for the correctness
+  member from this result. Storage is sufficient, but empty-control utility is
+  not.
+- Do not weaken the alignment prompt or tune retrieval from these validation
+  errors. The positive real-versus-shuffled gap is mechanistic evidence that
+  relevance matters, not a deployment pass.
+- Broad-card output may remain a candidate feature for a later independently
+  frozen ensemble test, where its lower-FPR behavior could complement a
+  high-recall deception guard. It should not be treated as a standalone gain or
+  used to justify local-test evaluation.
