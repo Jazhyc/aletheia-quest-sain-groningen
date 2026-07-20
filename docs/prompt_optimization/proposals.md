@@ -3138,7 +3138,8 @@ Outcome:
 
 ## P67: Input-Dependent N-Gram Heterogeneous Stack
 
-Status: completed; passed the frozen development gate.
+Status: completed; passed the frozen development gate and transferred to local
+test without retuning.
 
 Question: can sparse transcript features tell a logistic meta-model when to
 trust the heterogeneous incorrectness and resolved-intent votes?
@@ -3200,9 +3201,37 @@ Outcome (2026-07-20, Slurm job `30208150`, 2m45s):
   validation gained `0.0143` BA over adapter-only and `0.0095` over P66 OR,
   varied BA gained `0.0139` over P66 OR, and FPR decreased. Grouped transfer
   makes simple dataset-unit memorization unlikely, but the learned prompt
-  language remains a distribution-shift risk. Keep the representation and
-  threshold frozen; do not tune on validation. No local-test evaluation was
-  launched automatically.
+  language remains a distribution-shift risk. The representation and threshold
+  were frozen without validation tuning.
+
+Frozen local-test confirmation (2026-07-20, A100/CPU jobs `30217217` and
+`30217261`):
+
+| combiner | overall BA | AUROC | recall | FPR | instructed BA | varied BA |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| three-vote logistic | `0.9179` | `0.9488` | `0.9143` | `0.0786` | `0.9813` | `0.8333` |
+| n-gram only | `0.8036` | `0.8807` | `0.8143` | `0.2071` | `0.8646` | `0.7222` |
+| three votes + n-grams | **`0.9298`** | **`0.9608`** | **`0.9190`** | **`0.0595`** | **`0.9833`** | **`0.8583`** |
+
+- Before test inference, the new split-generic scoring path replayed validation
+  with exactly the same binary decisions, `0.9048` adapter-only BA, and
+  `0.9190` hybrid BA as P67. The test vectorizer and classifiers were then fit
+  only on the same 6,275 leakage-excluded training rows; no test label entered
+  fitting, representation, threshold, or member selection.
+- The hybrid changes 22 test decisions relative to the adapter-only logistic,
+  making 16 fixes and six breaks. Relative to the standalone deception member
+  (`0.9071` BA), it makes 31 fixes and 12 breaks. Its `+0.0119` BA improvement
+  over plain logistic is close to the `+0.0143` frozen-validation gain.
+- The individual test members score `0.9071` deception, `0.9107` incorrectness,
+  and `0.6417` resolved-intent overall BA. The intent member is deliberately
+  routed to zero on instructed rows; on varied rows it scores `0.8306` BA.
+  Member parse errors are 7, 15, and 1 respectively and enter the unchanged
+  stack as zero votes.
+- This is now tied with the 4096-token D/K/S reasoning ensemble at `0.9298` BA
+  while using three small rank-1 adapters and much shorter no-thinking
+  generations. The n-gram model remains a template-shift risk, and local test
+  shares the public dataset-unit families, so do not infer hidden-leaderboard
+  transfer from the tie alone.
 
 ## P68: Belief-Grounded Intent Member
 

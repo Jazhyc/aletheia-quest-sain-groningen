@@ -94,7 +94,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--member", action="append", required=True)
     parser.add_argument("--requires-reasoning", action="append", default=[])
-    parser.add_argument("--split", choices=["train", "validation"], required=True)
+    parser.add_argument(
+        "--split", choices=["train", "validation", "test"], required=True
+    )
     parser.add_argument("--run-name", required=True)
     parser.add_argument("--splits-dir", type=Path, default=ROOT / "dev_splits")
     parser.add_argument("--max-new-tokens", type=int, default=512)

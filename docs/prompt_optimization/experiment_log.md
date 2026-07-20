@@ -2790,3 +2790,20 @@ semantic recall gap but failed calibration: BA rose `0.6999 -> 0.7884`, while
 FPR rose `0.0419 -> 0.2900`, parse errors rose 14 to 89, and Llama lost
 `0.0237` BA. Retain the original low-FPR action route as a muted theoretical
 coverage change; reject the clarified prompt and any post-hoc blend.
+
+### Frozen heterogeneous n-gram stack test
+
+Jobs `30217217` and `30217261` applied P67 unchanged to local test. A validation
+replay first reproduced the original `0.9048` three-vote logistic and `0.9190`
+hybrid BA decisions exactly. The test meta-model then fit only the same 6,275
+leakage-excluded training rows with the frozen 20,000-feature word 1--2 gram
+TF-IDF representation, `C=1` logistic regression, and threshold 0.5.
+
+The plain three-member logistic scored `0.9179` test BA and `0.9488` AUROC. The
+n-gram hybrid reached `0.9298` BA, `0.9608` AUROC, `0.9190` recall, and `0.0595`
+FPR, with `0.9833` instructed and `0.8583` varied BA. It made 16 fixes and six
+breaks relative to plain logistic. N-grams alone scored only `0.8036` BA, so the
+gain again comes from input-dependent combination rather than lexical
+replacement of the adapters. This confirms P67 locally without any test-set
+selection, but public test shares dataset-unit families with development;
+hidden-distribution transfer and submission runtime remain separate questions.
