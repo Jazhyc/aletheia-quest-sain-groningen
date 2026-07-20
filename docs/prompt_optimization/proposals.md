@@ -3294,7 +3294,8 @@ Outcome (2026-07-20, Slurm job `30208247`, 56m12s):
 
 ## P69: Evidence-Aware Incorrectness Member
 
-Status: phase-A frozen-reader matrix pending.
+Status: phase A complete; retrieval is evidence-specific but misses the FPR
+gate, so evidence-reader training remains blocked.
 
 Question: can the existing factual-incorrectness specialist use the strongest
 selective FEVER evidence more effectively than the general deception reader,
@@ -3366,3 +3367,51 @@ Conditional phase B:
   incorrectness feature in the frozen P67 n-gram stack. Keep local test and
   submission packaging blocked until a deployable compact retriever can supply
   comparable evidence on unseen rows.
+
+Outcome (2026-07-20, Slurm job `30210081`, 6m09s):
+
+- The unchanged rank-1 incorrectness adapter consumed the appended sources.
+  Empty, real, and shuffled varied BA were `0.8028`, `0.8139`, and `0.7944`,
+  respectively. Real evidence raised recall from `0.7889` empty and `0.7444`
+  shuffled to `0.8389`.
+- The effect is retrieval-specific and paired-positive. Real evidence made 23
+  fixes versus 18 breaks relative to empty and 24 fixes versus 18 breaks
+  relative to shuffled. Only 214 evidence-active rows were regenerated; the
+  remaining 608 outputs were copied exactly from empty. Parse errors fell from
+  13 empty to eight real and were 11 under shuffled, but the favorable paired
+  counts remain broader than format recovery.
+- Real evidence also increased varied FPR from `0.1833` to `0.2111`, exceeding
+  the frozen maximum by `0.0078`; shuffled FPR was `0.1556`. At row level, real
+  changed 12 previously negative honest rows to positive while correcting seven
+  prior honest positives, for five net additional competition false positives.
+  Phase A therefore fails the preregistered FPR gate despite passing its BA,
+  real-versus-shuffled, and paired-fix criteria. Do not launch phase B from this
+  result.
+- Manual audit shows two qualitatively different honest-row effects. Several
+  sources correctly expose ordinary factual errors in honest-labeled outputs:
+  France introduced domestic VAT in 1958 rather than 1954, Beira is no longer
+  Mozambique's second-largest city under the cited population ordering,
+  Portugal placed third rather than fourth in the 1966 World Cup, and `Léman`
+  was traced through Greek rather than directly to Latin. Those are correct
+  positives for an incorrectness specialist but competition false positives.
+- Other changes are reader failures: it attacked Arthur's love for Guinevere
+  using evidence only about the Lancelot affair, treated an alternate *Vanity
+  Fair* serial subtitle as contradicting *A Novel Without a Hero*, generalized
+  a two-headed Cerberus vase depiction against the ordinary three-headed myth,
+  hallucinated a 2001 *Kursk* date from evidence only about the USS *Cole*, and
+  overreacted to conflicting or merely qualifying sources. The principal
+  evidence-use errors are entity/scope alignment, source conflict handling,
+  unsupported extrapolation, and materiality—not failure to notice the source.
+- Deceptive-row fixes are often strong and target exactly the missing
+  supporting details: the 1987/1992 *Barney* distinction, Carrie's column being
+  in the *New York Observer* rather than *Vogue*, Galapagos composition and
+  annexation dates, Goyathlay being Geronimo rather than Sitting Bull, and the
+  arithmetic inconsistency in a 30-bone foot. This confirms useful retrieval
+  headroom, but the current validation distribution cannot safely select a new
+  curriculum after the frozen gate failed.
+- Keep the current knowledge adapter in P67. A future independent-data attempt
+  should train evidence use explicitly on balanced support, contradiction,
+  irrelevant, conflicting, and insufficient-source examples, with claim/source
+  citation alignment. Do not reinterpret correct detection of honest factual
+  errors as a reader mistake, and do not start that training by post-hoc
+  relaxing this validation-selected FPR cap.
