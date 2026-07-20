@@ -3291,3 +3291,78 @@ Outcome (2026-07-20, Slurm job `30208247`, 56m12s):
   clean high-precision subset. Retain P66's original resolved-intent teacher and
   rank-1 adapter. Do not validation-select either P68 prompt, train their
   students, or alter the frozen P67 stack from this experiment.
+
+## P69: Evidence-Aware Incorrectness Member
+
+Status: phase-A frozen-reader matrix pending.
+
+Question: can the existing factual-incorrectness specialist use the strongest
+selective FEVER evidence more effectively than the general deception reader,
+and does that justify a matched evidence curriculum?
+
+Diagnosis:
+
+- The blind incorrectness teacher is already strong against the varied
+  deception labels: `0.8972` BA, `0.8944` recall, and `0.1000` FPR. The rank-1
+  student falls to `0.8111` BA, `0.7944` recall, and `0.1722` FPR. The primary
+  bottleneck is therefore teacher-to-student transfer, not merely teacher
+  factual knowledge.
+- Across 360 varied validation rows, the student and teacher differ on 71
+  binary decisions. The student introduces 34 positives the teacher rejects
+  and loses 37 teacher positives. By competition label, 23 of the new positives
+  are honest-row harms and 27 of the lost positives are deceptive-row harms.
+  Rank 1 plus 287 blind targets has not preserved the teacher's claim-level
+  boundary.
+- The specialist objective also intentionally differs from deception. A real
+  factual error in an honest-labeled answer is a correct positive for this
+  member but a competition false positive. This makes it a feature for the P67
+  input-dependent stack, not a standalone replacement for the deception guard.
+- Earlier broad Wikipedia and Wikidata RAG increased suspicion and FPR. The
+  later selective FEVER pipeline is materially better: its frozen
+  window-plus-lexical cache covers 214/360 varied validation rows and an
+  evidence-visible general reader reached `0.8306` varied BA versus `0.8111`
+  empty and `0.7889` shuffled. Evidence training itself contributed only about
+  `0.0028`; most of the gain required evidence at inference.
+- FEVER evidence covers 17/31 current knowledge false positives and 19/34 false
+  negatives, so it has symmetric opportunity rather than being selected only
+  around one error type. The cache is an experimental ceiling, not currently a
+  submission retriever: it depends on offline Wikipedia retrieval and cannot be
+  regenerated for hidden rows inside the submission. The compact shippable
+  Wikidata relation index is only about 17 MB zipped but covers roughly 4.5% of
+  public training rows.
+
+Frozen phase A:
+
+- Evaluate the unchanged P66 rank-1 incorrectness adapter under empty, real,
+  and size-matched shuffled evidence using the frozen 417-passage FEVER
+  window-plus-lexical validation cache. Append the same explicitly untrusted
+  reference block in all conditions; do not change the trained incorrectness
+  prompt, adapter, threshold, or generation budget.
+- Run all conditions in one persistent vLLM session. Generate empty first and
+  reuse its exact output for every evidence-inactive row so batch variation
+  cannot masquerade as retrieval benefit. Report paired fixes/breaks, varied
+  recall/FPR, parse errors, and performance on evidence-active rows when useful.
+- Proceed to evidence-aware teacher generation only if real evidence improves
+  varied BA over both empty and shuffled by at least `0.005`, makes more fixes
+  than breaks against both controls, and does not increase varied FPR by more
+  than `0.02` versus empty. Otherwise stop without training or prompt tuning.
+
+Conditional phase B:
+
+- If phase A passes, reuse P66's exact 287 parsed incorrectness rows and the
+  frozen train FEVER cache. Generate ground-truth-blind GPT-OSS correctness
+  targets under real and shuffled evidence, with an explicit relevance,
+  support, contradiction, or ignore assessment. Mix those targets with the
+  existing empty-evidence targets so the student learns to consume useful
+  sources and abstain from irrelevant ones rather than treating retrieval
+  presence as a positive label.
+- Train matched rank-1/alpha-2 and rank-4/alpha-8 readers for one AdamW epoch at
+  `5e-5`, effective batch size 32. Rank 4 is a preregistered capacity check
+  because the current rank-1 member has only about 80% teacher agreement; do not
+  sweep more ranks, epochs, learning rates, or evidence mixtures.
+- Evaluate both readers in the same empty/real/shuffled matrix. A replacement
+  must improve real-evidence varied BA by at least `0.005` over the phase-A
+  reader and preserve a positive real-minus-shuffled gap. Only then replace the
+  incorrectness feature in the frozen P67 n-gram stack. Keep local test and
+  submission packaging blocked until a deployable compact retriever can supply
+  comparable evidence on unseen rows.
