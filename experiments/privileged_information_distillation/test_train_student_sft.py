@@ -171,6 +171,50 @@ def test_load_record_sources_rejects_overlapping_rows(tmp_path) -> None:
         raise AssertionError("overlapping teacher sources should fail")
 
 
+def test_load_record_sources_accepts_distinct_named_variants(tmp_path) -> None:
+    path = tmp_path / "teacher.jsonl"
+    rows = [
+        {
+            "dataset": "dataset",
+            "index": 4,
+            "evidence_variant": variant,
+            "parse_error": False,
+            "label_match": True,
+            "student_target": "Prediction:0",
+        }
+        for variant in ("real", "empty")
+    ]
+    path.write_text("\n".join(json.dumps(record) for record in rows) + "\n")
+
+    loaded = load_record_sources(
+        [(path, None)], record_identity_field="evidence_variant"
+    )
+
+    assert [record["evidence_variant"] for record in loaded] == ["real", "empty"]
+
+
+def test_load_record_sources_rejects_duplicate_named_variant(tmp_path) -> None:
+    path = tmp_path / "teacher.jsonl"
+    record = {
+        "dataset": "dataset",
+        "index": 4,
+        "evidence_variant": "real",
+        "parse_error": False,
+        "label_match": True,
+        "student_target": "Prediction:0",
+    }
+    path.write_text(json.dumps(record) + "\n" + json.dumps(record) + "\n")
+
+    try:
+        load_record_sources(
+            [(path, None)], record_identity_field="evidence_variant"
+        )
+    except ValueError as error:
+        assert "duplicate teacher record" in str(error)
+    else:
+        raise AssertionError("duplicate named variants should fail")
+
+
 def test_load_record_sources_applies_fraction_per_source(tmp_path) -> None:
     full = tmp_path / "full.jsonl"
     rows = [

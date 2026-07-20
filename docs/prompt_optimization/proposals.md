@@ -3743,3 +3743,63 @@ Decision:
   Revisit only with new grouped questions and a matched consumer curriculum that
   balances useful, irrelevant, insufficient, conflicting, and ordinary-error
   evidence.
+
+## P74: Balanced FEVER Evidence Consumer
+
+Status: complete; balanced evidence-use training preserves a real-versus-
+shuffled signal but does not improve over empty evidence or the prior reader.
+
+Question: can a matched reader trained on decisive, empty, irrelevant, mixed,
+insufficient, conflicting, and ordinary-error evidence turn P73's deployable
+Wikipedia passages into a net deception-detection gain?
+
+Frozen design:
+
+- Join the existing varied-only GPT-OSS ordinary, FEVER-real, and
+  FEVER-shuffled teacher caches with the label-blind public-training audits.
+  Produce 14,069 records from 2,873 source rows: 2,873 each of real,
+  explicit-empty, shuffled, and mixed real-plus-shuffled evidence; 2,359
+  topical/insufficient conditions; and balanced 109/109 honest ordinary-error
+  and deceptive-contradiction controls.
+- Preserve evidence-aware teacher targets for real and shuffled references.
+  For empty and insufficient references, preserve the independently generated
+  ordinary decision and prepend an explicit evidence assessment. Expose no
+  label or audit relation to the student prompt.
+- Train a rank-1/alpha-2 `Qwen/Qwen3.5-9B` LoRA for one AdamW epoch at `5e-5`
+  with effective batch size 32. Evaluate only the frozen P73 validation cache
+  under empty, real, and count-matched shuffled conditions.
+- Require at least `+0.005` varied BA over empty and shuffled, positive paired
+  net corrections, and no FPR increase larger than `0.02` before local test.
+
+Outcome (A100 jobs `30215513` and `30215515`):
+
+| evidence | overall BA | varied BA | varied recall | varied FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| empty | `0.9036` | **`0.8056`** | `0.6722` | `0.0611` | 6 |
+| real | `0.9036` | **`0.8056`** | `0.6722` | `0.0611` | 5 |
+| shuffled | `0.9024` | `0.8028` | `0.6667` | `0.0611` | 6 |
+
+- Real versus empty changes five varied predictions, nominally three fixes and
+  two breaks. Removing the empty parse-failure recovery leaves two fixes and
+  two breaks. Real versus shuffled is nominally four fixes and three breaks,
+  but three and three when the shuffled parse failure is excluded.
+- On the 62 evidence-active rows, empty and real both score `0.7742` BA while
+  shuffled scores `0.7581`. The prior rank-16 FEVER-visible reader also scores
+  `0.7742` under real evidence. Across all varied rows, the new real-evidence
+  reader has five fixes and five breaks relative to that prior reader.
+- Training took 3h45m and evaluation 15m47s. The final rank-1 weight file is
+  7.3 MB, so storage is not the blocker.
+
+Decision:
+
+- Reject the adapter and stop without local-test evaluation or packaging. It
+  misses the real-over-empty gate by the full `0.005`; its nominal paired gain
+  is a format-boundary effect rather than a robust evidence correction.
+- Do not respond by increasing LoRA rank: the existing rank-16 reader has the
+  same active and full real-evidence BA. The evidence-specific signal is real
+  only relative to shuffled context, not relative to making no retrieval
+  intervention.
+- Further retrieval work needs independent grouped questions or a materially
+  different decision decomposition that separates factual contradiction from
+  deceptive belief. Reweighting these curriculum variants or retuning P73's
+  sparse validation passages would be another pass over the same labels.

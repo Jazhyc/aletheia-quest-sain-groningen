@@ -2179,3 +2179,28 @@ limit. Do not build a rank ensemble or spend local test on this sweep. Rank 1
 deserves consideration only as a 16x adapter-compression hypothesis, to be
 confirmed with the full training recipe and an untouched evaluation before it
 could replace rank 16.
+
+## Balanced FEVER evidence consumer (2026-07-20)
+
+The P73 follow-up trained a rank-1/alpha-2 reader on 14,069 evidence-visible
+targets from 2,873 varied-training rows. The curriculum included real, empty,
+shuffled, real-plus-shuffled, topical/insufficient, and equal-sized honest
+ordinary-error/deceptive-contradiction conditions. Its audit found one
+reference block and one label-consistent evidence assessment per target, no
+student-visible ground-truth tag, and a 7,035/7,034 label split. Job `30215513`
+completed one AdamW `5e-5` epoch in 3h45m on an A100 and saved a 7.3 MB rank-1
+weight file.
+
+Frozen deployable-cache evaluation job `30215515` scored `0.8056` varied BA for
+both empty and real evidence and `0.8028` for shuffled evidence. Recall/FPR were
+`0.6722`/`0.0611` for empty and real. The nominal real-versus-empty outcome was
+three fixes and two breaks, but one fix was only recovery from an empty parse
+failure; parse-valid rows were two fixes and two breaks. On the 62 active rows,
+empty and real tied at `0.7742` BA. The prior rank-16 FEVER-visible reader also
+scored `0.7742` with real evidence, and the new reader had five fixes/five harms
+relative to it across all varied rows.
+
+This fails the frozen `+0.005` empty-control gate. Do not run local test, package
+the index, increase LoRA rank, or reweight the curriculum from these validation
+rows. Balanced consumer training preserves weak real-versus-shuffled
+sensitivity but does not make retrieval better than no intervention.

@@ -168,10 +168,11 @@ def load_record_sources(
     ],
     *,
     require_label_match: bool = True,
+    record_identity_field: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Load disjoint cache slices with optional sampling and prompt overrides."""
+    """Load cache slices, optionally distinguishing intentional row variants."""
     records: list[dict[str, Any]] = []
-    seen: set[tuple[str, Any]] = set()
+    seen: set[tuple[str, Any] | tuple[str, Any, str]] = set()
     for source in sources:
         if len(source) == 2:
             path, dataset_name_contains = source
@@ -199,7 +200,17 @@ def load_record_sources(
             f"selected={len(source_records)}"
         )
         for record in source_records:
-            key = (str(record.get("dataset", "")), record.get("index"))
+            base_key = (str(record.get("dataset", "")), record.get("index"))
+            if record_identity_field is None:
+                key: tuple[str, Any] | tuple[str, Any, str] = base_key
+            else:
+                identity = record.get(record_identity_field)
+                if identity is None or str(identity).strip() == "":
+                    raise ValueError(
+                        f"teacher record {base_key} is missing non-empty "
+                        f"identity field {record_identity_field!r}"
+                    )
+                key = (*base_key, str(identity))
             if key in seen:
                 raise ValueError(f"duplicate teacher record across sources: {key}")
             seen.add(key)
@@ -494,9 +505,18 @@ def main(cfg: DictConfig) -> None:
     require_teacher_label_match = bool(OmegaConf.select(
         cfg, "student.require_teacher_label_match", default=True
     ))
+    record_identity_field_value = OmegaConf.select(
+        cfg, "student.record_identity_field", default=None
+    )
+    record_identity_field = (
+        None
+        if record_identity_field_value is None
+        else str(record_identity_field_value)
+    )
     records = load_record_sources(
         sources,
         require_label_match=require_teacher_label_match,
+        record_identity_field=record_identity_field,
     )
     train_fraction = float(
         OmegaConf.select(cfg, "student.train_fraction", default=1.0)
@@ -628,6 +648,7 @@ def main(cfg: DictConfig) -> None:
         f"selection_mode={selection_mode} "
         f"rating_uncertainty_fraction={rating_uncertainty_fraction} "
         f"selection_manifest={selection_manifest} "
+        f"record_identity_field={record_identity_field!r} "
         f"require_teacher_label_match={require_teacher_label_match} "
         f"dataset_name_contains={dataset_name_contains!r} "
         f"reasoning_rows={reasoning_rows} "
