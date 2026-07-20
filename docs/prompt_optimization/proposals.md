@@ -3415,3 +3415,97 @@ Outcome (2026-07-20, Slurm job `30210081`, 6m09s):
   citation alignment. Do not reinterpret correct detection of honest factual
   errors as a reader mistake, and do not start that training by post-hoc
   relaxing this validation-selected FPR cap.
+
+## P70: Verified Factual-Correctness Specialist
+
+Status: complete; the evidence-alignment prompt is a large improvement, while
+the independent curriculum adds a smaller precision gain.
+
+Question: if the knowledge member is evaluated as a factual-correctness
+specialist rather than a deception detector, can independent evidence controls
+teach it to require exact entity/relation alignment and ignore irrelevant or
+conflicting retrieval?
+
+Frozen design:
+
+- Start from 4,000 mechanically grounded QA rows generated from the existing
+  broad Wikidata database. Split by hashed Wikidata entity before sampling, so
+  no entity occurs in both training and validation.
+- Construct four source-use conditions. `support` gives a matching
+  entity/relation/value, `refute` gives the correct value against a false
+  answer, `irrelevant` gives only different-entity or different-relation facts,
+  and `conflict` gives two incompatible same-entity/same-relation facts without
+  declaring either authoritative. Prediction 1 is reserved for direct
+  refutation; the other three conditions target 0.
+- Use 1,200 synthetic training targets: 600 refutations and 200 examples from
+  each negative condition. Mix them with the existing 287 parsed blind GPT-OSS
+  correctness summaries. The synthetic targets contain concise mechanical
+  evidence summaries rather than another stochastic teacher call.
+- Train one rank-1/alpha-2 Qwen adapter for one AdamW epoch at `5e-5`, effective
+  batch size 32. The independent validation cache has 300 rows over 244 unseen
+  entities: 150 refutations and 50 examples from each negative condition.
+- Evaluate the old and new weights on the exact same independent prompts, then
+  run the frozen FEVER empty/real/shuffled matrix with evidence-inactive outputs
+  reused exactly. A separate old-weights/new-prompt control isolates prompt
+  wording from training.
+- Treat deception labels only as a downstream ensemble diagnostic. A correct
+  positive on an honest response containing an ordinary factual mistake is not
+  an error under this specialist objective. Do not use local test or package a
+  Wikipedia cache.
+
+Outcome (2026-07-20, jobs `30210244` and `30210665`):
+
+- Training plus evaluation completed in 13m41s; the prompt-only control took
+  2m20s. Both jobs used one RTX Pro 6000 and one persistent vLLM evaluation
+  session.
+- On the entity-disjoint factual holdout, old weights under the new prompt
+  scored `0.8567` BA, `0.9733` refutation recall, and `0.2600` negative-control
+  FPR. New weights scored `0.8667`, `0.9667`, and `0.2333`, respectively. The
+  curriculum therefore trades 0.67 points of refutation recall for a 2.67-point
+  reduction in false alarms, netting one point of BA.
+- The new reader accepts direct support reliably (2% firing) and usually ignores
+  irrelevant evidence (16% firing). Explicit conflict remains its main factual
+  weakness: it fires on 52% of conflicting-source rows, only modestly below the
+  old weights' 56%. Rank 1 learned a strong contradiction heuristic more readily
+  than a reliable conflict-abstention rule.
+- The FEVER varied-validation factorial result is:
+
+| weights | evidence prompt | empty BA | real BA | shuffled BA | real recall | real FPR |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| old | old | `0.8000` | `0.8139` | `0.7944` | `0.8389` | `0.2111` |
+| old | new alignment prompt | `0.8139` | `0.8528` | `0.8167` | `0.8000` | `0.0944` |
+| new | new alignment prompt | `0.8167` | **`0.8583`** | `0.8139` | `0.8000` | **`0.0833`** |
+
+- The alignment prompt supplies most of the improvement: requiring a matching
+  entity and relation and explicitly rejecting topical, irrelevant, or
+  unresolved conflicting evidence adds 3.89 varied-BA points to the old
+  weights under real evidence. Holding that prompt fixed, the new weights add
+  another 0.56 macro-BA points and reduce real-evidence FPR by 1.11 points.
+  Across raw varied rows, old-prompt-control and new weights each make six fixes
+  and six breaks relative to the other, so the small macro gain is due to the
+  dataset-unit weighting rather than more correct rows overall.
+- Within the new reader, real evidence improves varied BA from `0.8167` empty
+  and `0.8139` shuffled to `0.8583`. It makes 28 fixes/15 breaks versus empty
+  and 28/14 versus shuffled. Overall real-evidence BA is `0.9083`, with
+  `0.8714` recall and `0.0548` FPR.
+- Manual inspection confirms genuine source-alignment fixes for supported facts
+  such as *Vanity Fair*, the Rhine, saffron, and Colchester, alongside correct
+  refutations. Some competition-label gains are not factual gains: a few
+  positive completions react to a hidden instruction despite the prompt's
+  prohibition. Conversely, several deceptive rows remain factually plausible
+  or are supported by the retrieved passage. This is expected separation
+  between factual incorrectness and belief-based deception.
+
+Decision:
+
+- Keep the new alignment prompt for any future correctness member. The new
+  rank-1 weights are a modest precision-oriented candidate, not evidence that
+  synthetic training caused the full FEVER improvement.
+- Do not tune the condition mixture, rank, or threshold from these validation
+  rows. Conflict handling remains an independently measured limitation.
+- Do not replace the frozen P67 stack or evaluate local test yet. The large gain
+  depends on a Wikipedia cache that is neither submission-compatible nor
+  available for hidden rows. A later ensemble experiment may evaluate the
+  no-evidence member and an independently deployable retrieval signal, while
+  preserving factual correctness as a distinct feature rather than forcing it
+  to imitate deception labels.
