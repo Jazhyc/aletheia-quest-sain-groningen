@@ -3588,3 +3588,81 @@ Decision:
   frozen ensemble test, where its lower-FPR behavior could complement a
   high-recall deception guard. It should not be treated as a standalone gain or
   used to justify local-test evaluation.
+
+## P72: Compact Train-Page Wikipedia Sentence Index
+
+Status: complete; corpus coverage is strong, but deployable raw queries regress
+against empty evidence and the non-deployable atomic-query ceiling gains only
+one net row.
+
+Question: can the selective P70 Wikipedia result be approximated by an offline,
+submission-sized index built without validation-page selection or runtime
+network access?
+
+Frozen design:
+
+- Build an SQLite FTS5 sentence index from the 3,061 full Wikipedia pages
+  previously fetched for the top-three titles of public varied-training
+  questions. The resulting 3,060-page, 737,996-sentence database is 279 MB raw
+  and approximately 63 MB under gzip `-9`.
+- Generate FTS candidates and rerank them with lexical relevance, page-title
+  overlap, and exact-number recall. Calibrate the `1.285` emission threshold on
+  a deterministic 2,000-claim training sample and existing label-blind GPT-OSS
+  train audits. No validation label or query selects pages, features, or the
+  threshold.
+- Compare two query modes under the P70 rank-1 correctness reader. `raw` splits
+  only the inference-visible output into sentence queries and is deployable.
+  `atomic` uses grounded GPT-OSS-extracted propositions and is explicitly a
+  non-deployable extraction ceiling. Both return at most two passages per row.
+- Compare real passages with exact empty-evidence generation and count-matched,
+  cross-dataset shuffled passages. Require real evidence to beat both controls,
+  including at least `+0.005` varied BA over empty evidence, before any local-test
+  run or submission integration.
+
+Retrieval diagnostics:
+
+- Against 417 independently audited validation claims, the exact source
+  sentence is recovered for 112 claims at top 1, 197 at top 3, 242 at top 5,
+  and 285 at top 10. The top-10 matches span 172/214 rows with an audited
+  source, so corpus coverage is not the dominant limitation.
+- The frozen threshold is deliberately sparse. Raw queries emit 44 passages on
+  43/360 rows and exactly reproduce an audited passage on ten rows. Atomic
+  queries emit 64 passages on 54 rows and exactly reproduce one on 21 rows.
+  These exact matches undercount alternative passages that settle the same
+  proposition.
+
+Outcome (2026-07-20, A100 jobs `30214212` and `30214613`):
+
+| query mode | evidence | varied BA | varied recall | varied FPR | parse errors |
+| --- | --- | ---: | ---: | ---: | ---: |
+| raw | empty | **`0.8056`** | `0.7000` | `0.0889` | 12 |
+| raw | real | `0.8028` | `0.7000` | `0.0944` | 9 |
+| raw | shuffled | `0.8000` | `0.6889` | `0.0889` | 12 |
+| atomic ceiling | empty | `0.8056` | `0.7167` | `0.1056` | 5 |
+| atomic ceiling | real | **`0.8083`** | `0.7222` | `0.1056` | 4 |
+| atomic ceiling | shuffled | `0.7972` | `0.7000` | `0.1056` | 5 |
+
+- Raw real evidence changes nine predictions versus empty evidence, fixing four
+  and breaking five. It changes six versus shuffled evidence, fixing three and
+  breaking two. Relevant evidence therefore has a weak differential effect,
+  but raw retrieval provides no net empty-control utility.
+- Atomic real evidence changes seven predictions versus empty, fixing four and
+  breaking three, and changes eight versus shuffled, fixing six and breaking
+  two. Its `+0.0028` varied-BA gain over empty misses the frozen gate and is not
+  deployable in its present form.
+- Both completed jobs were cheap after queueing: 7m37s for raw and 3m36s for
+  atomic, with most of the time spent on model/data startup rather than the
+  sparse evidence generations.
+
+Decision:
+
+- Do not package or integrate the index, and do not evaluate local test. A
+  larger index is unlikely to be the next useful move: the corpus already has
+  good top-10 source coverage, while high-precision claim formulation, ranking,
+  and abstention remain the bottleneck.
+- A future attempt should distill a train-frozen atomic claim extractor and
+  reranker, then require it to beat empty evidence on held-out grouped data.
+  Do not tune retrieval from the seven to nine changed validation predictions.
+- Wikipedia content is CC BY-SA rather than CC0. Any eventual package would
+  need license text, source attribution, and confirmation that the competition
+  accepts the separately licensed asset.
