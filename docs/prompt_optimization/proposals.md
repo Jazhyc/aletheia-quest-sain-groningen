@@ -3039,7 +3039,9 @@ Final outcome:
 
 ## P66: Heterogeneous Rank-1 Objective Ensemble
 
-Status: protocol frozen; generation, training, and validation pending.
+Status: complete; distinct targets preserve strong student diversity, but the
+frozen OR narrowly misses the gain gate and logistic calibration does not
+improve binary BA.
 
 Question: can rank-1 adapters retain useful independence when they learn
 fundamentally different observable properties rather than differently worded
@@ -3087,3 +3089,49 @@ Frozen protocol:
   least `0.005` overall without reducing varied BA and the students retain
   materially more disagreement than P63's 2--5 rows. Otherwise stop before
   local-test evaluation or submission integration.
+
+Outcome:
+
+- Target generation, training, shared-session evaluation, and analysis jobs
+  `30207598`, `30207599`, `30207601`, and `30207602` completed in 16m38s,
+  5m34s, 17m31s, and 37s. The incorrectness teacher parsed 287/288 train and
+  360/360 validation rows; resolved intent parsed every train and validation
+  row. No target was filtered for disagreement with the competition label.
+- The blind targets are meaningfully different. On 360 varied validation rows,
+  the incorrectness teacher scored `0.8972` BA against deception labels with
+  `0.8944` recall and `0.1000` FPR; resolved intent scored `0.8472`, `0.7167`,
+  and `0.0222`. They disagreed on 58 rows, and their diagnostic OR reached
+  `0.9028` BA. This comparison is descriptive because the teachers predict
+  different properties.
+- Resolved intent distilled faithfully: teacher/student agreement was `0.9472`,
+  and the student reached `0.8389` varied BA, `0.7111` recall, and `0.0333` FPR.
+  Its full-validation BA is only `0.6452` because all 462 no-trace instructed
+  rows are deliberately routed to zero. Incorrectness agreement was lower at
+  `0.7972`; its student scored `0.8857` overall and `0.8111` varied BA, with
+  high varied recall `0.7944` but high FPR `0.1722`. The normal deception member
+  remained best overall at `0.9048` BA and scored `0.8083` varied.
+- Unlike P62--P64, student diversity survived. Full-validation disagreement was
+  69 rows for deception/incorrectness, 256 for deception/intent, and 289 for
+  incorrectness/intent. Restricting to the 360 trace-bearing varied rows still
+  leaves 53, 41, and 66 disagreements respectively, versus only 2--5 for P63.
+  Fundamentally different student prompts and target semantics therefore solve
+  the representation-collapse problem seen with teacher wording lenses.
+- Binary OR reached `0.9095` overall and `0.8306` varied BA, versus `0.9048` and
+  `0.8083` for deception alone. It made 37 fixes and 33 breaks, but raised
+  varied FPR to `0.1944` and reduced instructed BA to `0.9688`. Its overall gain
+  is `0.00476`, narrowly below the frozen `0.005` gate. Majority retained the
+  same `0.8306` varied BA with `0.0611` FPR but fell to `0.8988` overall.
+- The frozen logistic stack assigned positive coefficients to all three members
+  and achieved `0.9430` validation AUROC, but its threshold-0.5 BA tied the
+  deception member at `0.9048`; instructed/varied BAs were `0.9688`/`0.8194`.
+  Its learned pattern probabilities treat incorrectness alone as positive
+  (`0.5245`) and resolved intent alone as just negative (`0.4925`), so it cannot
+  exploit the intent member's complementary positives without also accepting
+  the correctness member's false positives.
+- The experiment establishes objective heterogeneity as a viable source of
+  independent rank-1 features, but neither preregistered combiner clears the
+  deployment gate. Do not run local test or select a member subset/threshold
+  post hoc. A future iteration should improve correctness precision or produce
+  richer calibrated member scores, with combination rules selected on a
+  distribution-shift-resistant meta-training split rather than this validation
+  set.
