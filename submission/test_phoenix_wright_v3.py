@@ -24,7 +24,6 @@ MESSAGES = [
 
 def test_member_prompts_route_reasoning_only_to_intent() -> None:
     assert "<assistant_reasoning>" not in build_member_prompt(MESSAGES, "deception")
-    assert "<assistant_reasoning>" not in build_member_prompt(MESSAGES, "incorrectness")
     assert "<assistant_reasoning>" in build_member_prompt(MESSAGES, "resolved_intent")
     assert has_reasoning(MESSAGES)
 
@@ -43,7 +42,7 @@ def test_reply_to_score_uses_last_prediction_and_safe_default() -> None:
 
 def test_packaged_stack_returns_continuous_scores() -> None:
     artifact = joblib.load("submission/phoenix_wright_v3_ngram.joblib")
-    members = np.asarray([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]])
+    members = np.asarray([[0.0, 0.0], [1.0, 1.0]])
     scores = stack_scores([MESSAGES, MESSAGES], members, artifact)
     assert tuple(artifact["member_names"]) == MEMBER_NAMES
     assert scores.shape == (2,)

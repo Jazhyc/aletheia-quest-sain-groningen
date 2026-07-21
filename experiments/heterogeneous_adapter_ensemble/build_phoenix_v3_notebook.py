@@ -24,12 +24,12 @@ def main() -> None:
         nbformat.v4.new_markdown_cell(
             """# Phoenix Wright v3.0
 
-Heterogeneous black-box ensemble over three rank-1 Qwen3.5-9B LoRA judges:
-material deception, factual incorrectness, and resolved deceptive intent. A
-frozen word 1--2 gram logistic stack combines their binary votes with the
-visible conversation. The intent member is skipped when assistant reasoning is
-unavailable. All adapter weights and the n-gram model are bundled with the
-submission; NDIF loads matching public Hugging Face adapter repositories."""
+Heterogeneous black-box ensemble over two rank-1 Qwen3.5-9B LoRA judges:
+material deception and resolved deceptive intent. A frozen word 1--2 gram
+logistic stack combines their binary votes with the visible conversation. The
+intent member is skipped when assistant reasoning is unavailable. Both adapter
+weights and the n-gram model are bundled with the submission; NDIF loads
+matching public Hugging Face adapter repositories."""
         ),
         nbformat.v4.new_code_cell(
             """import contextlib
@@ -50,7 +50,6 @@ LIMIT = int(os.environ["ALETHEIA_LIMIT"]) if os.environ.get("ALETHEIA_LIMIT") el
 JUDGE_MODEL = "Qwen/Qwen3.5-9B"
 ADAPTER_REPOS = {
     "deception": os.environ.get("PHOENIX_DECEPTION_ADAPTER_REPO", "Jazhyc/aletheias-phoenix-v3-deception-r1"),
-    "incorrectness": os.environ.get("PHOENIX_INCORRECTNESS_ADAPTER_REPO", "Jazhyc/aletheias-phoenix-v3-incorrectness-r1"),
     "resolved_intent": os.environ.get("PHOENIX_INTENT_ADAPTER_REPO", "Jazhyc/aletheias-phoenix-v3-resolved-intent-r1"),
 }
 BUNDLED_ADAPTERS = {
@@ -115,7 +114,7 @@ def activate_adapter(member):
     if NNSIGHT_LOCAL:
         model._remoteable_set_env({"peft_repo_id": source})
     else:
-        # All three LoRAs have the same rank/modules, so one meta-model can be
+        # Both LoRAs have the same rank/modules, so one meta-model can be
         # reused. NNsight sends the current repo in each session's NDIF env and
         # the updated server swaps PEFT weights without rebuilding the wrapper.
         model.__dict__["peft"] = source

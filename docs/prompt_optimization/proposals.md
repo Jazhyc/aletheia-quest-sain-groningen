@@ -3261,6 +3261,25 @@ Phoenix Wright v3.0 deployment (2026-07-20):
   was then stopped deliberately; no leaderboard score was available at that
   point and none should be inferred from submission acceptance.
 
+Timeout-driven deployment update (2026-07-21):
+
+- Two official attempts with the complete three-member package stopped on
+  Eunomia after `8126.65` and `8183.34` seconds. The repeatable duration and
+  absence of a startup error point to a dataset runtime ceiling.
+- All member duos were refit under P67's unchanged train-only n-gram/logistic
+  protocol. Deception plus resolved intent was the validation-preferred
+  simplification: hybrid BA was `0.9202` on validation and `0.9238` on test,
+  versus `0.9190` and `0.9298` for all three. Its test AUROC was `0.9550`,
+  recall `0.8857`, FPR `0.0381`, instructed BA `0.9813`, and varied BA
+  `0.8472`.
+- The refit still uses all 6,275 leakage-excluded meta-training rows: 3,693
+  instructed and 2,582 varied, including 640 Gemma and 173 Nemotron rows by
+  dataset provenance. It is therefore not a varied-only Qwen lexical model.
+- Phoenix 3.0 now deploys and bundles only the deception and resolved-intent
+  adapters. This cuts member-row calls 41% on the mixed local test split, one
+  third on trace-bearing datasets, and one half on no-reasoning datasets. The
+  already-published adapter repositories and member prompts are unchanged.
+
 ## P68: Belief-Grounded Intent Member
 
 Status: complete; stricter belief evidence regresses and no replacement student

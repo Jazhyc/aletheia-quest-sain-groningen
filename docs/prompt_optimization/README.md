@@ -40,14 +40,15 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 Submission mapping:
 
 - `submission/phoenix_wright_v3_0.ipynb` is the current accuracy-first NDIF
-  submission. It deploys P67's frozen three-member rank-1 heterogeneous stack:
-  material deception, factual incorrectness, and reasoning-routed resolved
-  intent. A bundled 20,000-feature word 1--2 gram logistic model combines the
-  three binary votes with inference-visible transcript text at threshold 0.5.
+  submission. It deploys a timeout-reduced two-member form of P67's rank-1
+  heterogeneous stack: material deception and reasoning-routed resolved intent.
+  A refitted 20,000-feature word 1--2 gram logistic model combines the two
+  binary votes with inference-visible transcript text at threshold 0.5.
   The notebook uses `LanguageModel`, reuses one compatible meta-wrapper while
-  NDIF swaps the three PEFT repositories, length-sorts/dynamically batches
+  NDIF swaps the two PEFT repositories, length-sorts/dynamically batches
   prompts, and skips intent inference when no reasoning trace exists. On local
-  test it scored 0.9298 BA and 0.9608 AUROC.
+  test it scored 0.9238 BA and 0.9550 AUROC, while reducing member-row inference
+  by 41% on the mixed test split relative to the original three-member package.
 - `submission/phoenix_wright_v1_1.ipynb` is the speed-first NDIF submission
   fallback. It uses Qwen/Qwen3.5-9B rating-token logits for the compact
   `details3072_logit` and `known3072_logit` prompts, rank-averaged per dataset

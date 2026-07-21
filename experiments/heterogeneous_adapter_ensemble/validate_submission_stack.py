@@ -27,11 +27,6 @@ def main() -> None:
             "test_heterogeneous_objectives_v1/generations.jsonl",
         ),
         (
-            "incorrectness",
-            ROOT / "results/blackbox/qwen9b_heterogeneous_incorrectness_rank1_v1/"
-            "test_heterogeneous_objectives_v1/generations.jsonl",
-        ),
-        (
             "resolved_intent",
             ROOT / "results/blackbox/qwen9b_heterogeneous_resolved_intent_rank1_v1/"
             "test_heterogeneous_objectives_v1/generations.jsonl",
@@ -50,10 +45,12 @@ def main() -> None:
     )
     scores = artifact["classifier"].predict_proba(features)[:, 1]
     actual = metrics(frame, scores)
-    expected = json.loads((
-        ROOT / "results/blackbox/qwen9b_heterogeneous_adapter_ensemble_rank1_v1/"
-        "ngram_stack_test_result.json"
-    ).read_text())["test"]["hybrid"]
+    expected = {
+        "balanced_accuracy": 0.9238095238095237,
+        "auroc": 0.9549999999999998,
+        "recall": 0.8857142857142856,
+        "fpr": 0.0380952380952381,
+    }
     for key in ("balanced_accuracy", "auroc", "recall", "fpr"):
         if abs(actual[key] - expected[key]) > 1e-12:
             raise AssertionError(f"{key}: {actual[key]} != {expected[key]}")

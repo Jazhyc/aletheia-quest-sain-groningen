@@ -2834,3 +2834,28 @@ exercised all three adapters plus the CPU stack, exited cleanly, and took 1m57s.
 The official black-box endpoint accepted the package and showed no startup
 failure during roughly 125 seconds of live streaming; polling was then stopped
 as requested, before any result was available.
+
+### Timeout-driven two-member update (2026-07-21)
+
+Both official three-member runs later stopped on Eunomia after `8126.65` and
+`8183.34` seconds, with no model-startup error and nearly identical elapsed
+times. This is consistent with a dataset runtime ceiling. To reduce inference
+without choosing a new prompt or adapter, every leave-one-member-out stack was
+refit with P67's frozen 20,000-feature n-gram/logistic recipe and the same 6,275
+leakage-excluded training rows.
+
+The selected deception plus resolved-intent hybrid scored `0.9202` validation
+BA, `0.9526` AUROC, `0.8810` recall, and `0.0405` FPR. On local test it scored
+`0.9238` BA, `0.9550` AUROC, `0.8857` recall, and `0.0381` FPR, with `0.9813`
+instructed and `0.8472` varied BA. The original three-member hybrid scored
+`0.9190` validation BA and `0.9298` test BA. Removing incorrectness therefore
+preserves the validation result, costs `0.0060` test BA, and materially lowers
+FPR. It reduces mixed-test member rows from 2,002 to 1,181 (41%); the savings
+are one third on trace-bearing datasets and one half when reasoning is absent.
+
+The refitted meta-model is not varied-only: its eligible training set contains
+3,693 instructed and 2,582 varied rows. Dataset-name provenance gives 5,462
+Qwen, 640 Gemma, and 173 Nemotron rows, so the lexical calibration retains the
+available multi-family instructed controls even though both LoRA students use a
+Qwen base. The deployment now bundles only deception and resolved-intent
+adapters; their already-published Hugging Face repositories are unchanged.
