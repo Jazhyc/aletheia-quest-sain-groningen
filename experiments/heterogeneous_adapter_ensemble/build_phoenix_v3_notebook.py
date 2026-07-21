@@ -64,7 +64,9 @@ MEDIUM_BATCH_SIZE = int(os.environ.get("PHOENIX_MEDIUM_BATCH_SIZE", "24"))
 MEDIUM_PROMPT_THRESHOLD = int(os.environ.get("PHOENIX_MEDIUM_PROMPT_THRESHOLD", "1300"))
 LONG_BATCH_SIZE = int(os.environ.get("PHOENIX_LONG_BATCH_SIZE", "16"))
 LONG_PROMPT_THRESHOLD = int(os.environ.get("PHOENIX_LONG_PROMPT_THRESHOLD", "1800"))
-REMOTE_BATCHES_PER_SESSION = int(os.environ.get("PHOENIX_REMOTE_BATCHES_PER_SESSION", "4"))
+# Zero means all batches for one adapter share a single NDIF request. Positive
+# values retain bounded session groups for capacity/reliability diagnostics.
+REMOTE_BATCHES_PER_SESSION = int(os.environ.get("PHOENIX_REMOTE_BATCHES_PER_SESSION", "0"))
 NNSIGHT_LOCAL = os.environ.get("PHOENIX_NNSIGHT_LOCAL", "0").lower() in {"1", "true", "yes"}
 SUBMISSION_THRESHOLD = float(os.environ.get("PHOENIX_THRESHOLD", "0.5"))
 
@@ -163,7 +165,11 @@ def score_prompts(prompts, member):
         "max_new_tokens": MAX_NEW_TOKENS,
         "pad_token_id": tokenizer.pad_token_id,
     }
-    batches_per_session = len(encoded_batches) if NNSIGHT_LOCAL else max(1, REMOTE_BATCHES_PER_SESSION)
+    batches_per_session = (
+        len(encoded_batches)
+        if NNSIGHT_LOCAL or REMOTE_BATCHES_PER_SESSION <= 0
+        else REMOTE_BATCHES_PER_SESSION
+    )
     generated_chunks = []
     for group_start in range(0, len(encoded_batches), batches_per_session):
         group_stop = min(group_start + batches_per_session, len(encoded_batches))

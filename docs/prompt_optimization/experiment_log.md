@@ -2859,3 +2859,26 @@ Qwen, 640 Gemma, and 173 Nemotron rows, so the lexical calibration retains the
 available multi-family instructed controls even though both LoRA students use a
 Qwen base. The deployment now bundles only deception and resolved-intent
 adapters; their already-published Hugging Face repositories are unchanged.
+
+### Full-member NDIF session benchmark (2026-07-21)
+
+The two-member notebook was benchmarked twice on the same complete 400-row
+`dev-varied-deception-Qwen3.5-27B-None` unit. Both conditions used the exact
+submission notebook, dynamic batch tiers, prompts, weights, 4,096-token input
+ceiling, and 512-token completion ceiling. The control retained four generation
+batches per remote session; the candidate placed every batch for one adapter in
+one session.
+
+The four-batch control completed in `654.305` seconds. Full-member sessions
+completed in `615.340` seconds, a `38.965`-second (`5.96%`) reduction. Both
+wrote valid 400-row submissions, and their CSV files were byte-identical: zero
+binary disagreements, zero continuous-score differences, and maximum absolute
+score difference `0.0`. The full sessions also completed without request-size,
+serialization, or accumulated-memory failure.
+
+Phoenix v3.0 now defaults `PHOENIX_REMOTE_BATCHES_PER_SESSION=0`, meaning all
+batches for one adapter are sent in one NDIF request. A positive value restores
+bounded groups for diagnostics. This changes queue/request overhead rather than
+per-batch generation memory or predictions. Treat the 5.96% figure as one
+paired endpoint measurement rather than a guaranteed leaderboard-wide speedup;
+shared-service queue conditions remain variable.

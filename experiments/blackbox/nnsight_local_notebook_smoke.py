@@ -12,6 +12,7 @@ import argparse
 import csv
 import os
 from pathlib import Path
+import time
 
 import nbformat
 from nbclient import NotebookClient
@@ -45,6 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int)
     parser.add_argument("--max-prompt-tokens", type=int)
     parser.add_argument("--max-new-tokens", type=int)
+    parser.add_argument("--remote-batches-per-session", type=int)
     parser.add_argument("--include-reasoning", action="store_true")
     parser.add_argument("--disable-adapter", action="store_true")
     parser.add_argument(
@@ -95,6 +97,10 @@ def main() -> None:
         os.environ["PHOENIX_MAX_PROMPT_TOKENS"] = str(args.max_prompt_tokens)
     if args.max_new_tokens is not None:
         os.environ["PHOENIX_MAX_NEW_TOKENS"] = str(args.max_new_tokens)
+    if args.remote_batches_per_session is not None:
+        os.environ["PHOENIX_REMOTE_BATCHES_PER_SESSION"] = str(
+            args.remote_batches_per_session
+        )
     if args.include_reasoning:
         os.environ["PHOENIX_INCLUDE_REASONING"] = "1"
     if args.disable_adapter:
@@ -114,10 +120,15 @@ def main() -> None:
         f"limit={args.limit} remote={args.remote} "
         f"batch_size={os.environ.get('PHOENIX_BATCH_SIZE', 'not-set')} "
         f"max_prompt_tokens={os.environ.get('PHOENIX_MAX_PROMPT_TOKENS', 'not-set')} "
-        f"max_new_tokens={os.environ.get('PHOENIX_MAX_NEW_TOKENS', 'not-set')}"
+        f"max_new_tokens={os.environ.get('PHOENIX_MAX_NEW_TOKENS', 'not-set')} "
+        "remote_batches_per_session="
+        f"{os.environ.get('PHOENIX_REMOTE_BATCHES_PER_SESSION', 'not-set')}"
     )
+    started = time.perf_counter()
     client.execute()
+    elapsed = time.perf_counter() - started
     validate_submission(output_path, args.limit)
+    print(f"notebook_wall_seconds={elapsed:.3f}")
     if not args.keep_submission:
         output_path.unlink()
         print(f"removed {output_path}")

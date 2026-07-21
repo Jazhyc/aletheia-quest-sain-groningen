@@ -3280,6 +3280,21 @@ Timeout-driven deployment update (2026-07-21):
   third on trace-bearing datasets, and one half on no-reasoning datasets. The
   already-published adapter repositories and member prompts are unchanged.
 
+Full-member session optimization (2026-07-21):
+
+- A paired remote benchmark scored the complete 400-row public varied-Qwen
+  no-adapter unit with four batches per session and then with all batches for
+  one adapter in a single session. Wall time fell from `654.305` to `615.340`
+  seconds (`-38.965` seconds, `-5.96%`).
+- The two resulting 400-row CSV files were byte-identical, including all binary
+  decisions and continuous n-gram scores. The full sessions completed without
+  OOM, serialization, or request-size errors.
+- The notebook now uses one remote session per active adapter by default;
+  `PHOENIX_REMOTE_BATCHES_PER_SESSION` remains available as a positive bounded
+  override. This reduces NDIF queue/request overhead without changing batch
+  shapes, member prompts, weights, or generation budgets. Runtime is a shared-
+  service measurement and should not be treated as a fixed 5.96% guarantee.
+
 ## P68: Belief-Grounded Intent Member
 
 Status: complete; stricter belief evidence regresses and no replacement student

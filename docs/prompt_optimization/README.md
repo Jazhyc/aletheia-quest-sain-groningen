@@ -46,7 +46,8 @@ Submission mapping:
   binary votes with inference-visible transcript text at threshold 0.5.
   The notebook uses `LanguageModel`, reuses one compatible meta-wrapper while
   NDIF swaps the two PEFT repositories, length-sorts/dynamically batches
-  prompts, and skips intent inference when no reasoning trace exists. On local
+  prompts, groups every member's batches into one remote session, and skips
+  intent inference when no reasoning trace exists. On local
   test it scored 0.9238 BA and 0.9550 AUROC, while reducing member-row inference
   by 41% on the mixed test split relative to the original three-member package.
 - `submission/phoenix_wright_v1_1.ipynb` is the speed-first NDIF submission
