@@ -2910,3 +2910,30 @@ control at `654.305` seconds, the two mechanical optimizations together save
 `152.814` seconds (`23.35%`) on this unit. Runtime remains subject to shared
 NDIF conditions, and the AUROC tradeoff must remain visible because AUROC is the
 competition tie-break metric.
+
+### NDIF batch-size boundary sweep (2026-07-21)
+
+The gated two-member notebook was swept again on the same complete 400-row
+`dev-varied-deception-Qwen3.5-27B-None` unit. Halving all dynamic tiers from
+`32/24/16` to `16/12/8` completed reliably but took `821.584` seconds, versus
+the existing `501.491`-second gated reference. This is `320.093` seconds
+(`63.83%`) slower. Batch-shape numerical differences also changed eight
+continuous scores and three binary decisions, so the smaller schedule was not
+prediction-identical.
+
+Increasing throughput crossed a hard memory boundary. Global `48/32/16`
+completed deception but OOMed during resolved-intent generation. Keeping the
+medium tier at 24 (`48/24/16`) still OOMed during intent. Tightening the medium
+boundary to 1,000 tokens also OOMed on a later 24-row intent batch. A
+member-specific attempt with deception 48 and the original intent schedule
+again OOMed during intent, indicating that the larger first-member allocator
+high-water mark was not safely isolated by the adapter/session boundary. Even a
+conservative deception-only batch of 40 OOMed during deception. The remote
+exceptions consistently reported a `28.01 GiB` process allowance despite much
+more physical GPU memory being free.
+
+Retain the submission's existing `32/24/16` tiers. They are the largest tested
+configuration that has completed this workload and are substantially faster
+than the reliable smaller candidate. Do not deploy member-specific larger
+batches or treat physical 80 GB GPU capacity as the usable per-request budget;
+the NDIF process cap is the operative constraint.
