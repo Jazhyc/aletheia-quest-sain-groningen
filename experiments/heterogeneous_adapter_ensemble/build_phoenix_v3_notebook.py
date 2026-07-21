@@ -27,9 +27,11 @@ def main() -> None:
 Heterogeneous black-box ensemble over two rank-1 Qwen3.5-9B LoRA judges:
 material deception and resolved deceptive intent. A frozen word 1--2 gram
 logistic stack combines their binary votes with the visible conversation. The
-intent member is skipped when assistant reasoning is unavailable. Both adapter
-weights and the n-gram model are bundled with the submission; NDIF loads
-matching public Hugging Face adapter repositories."""
+intent member is skipped when assistant reasoning is unavailable or when its
+two possible votes cannot cross the final binary threshold; skipped trace rows
+use the intent logit midpoint for continuous scoring. Both adapter weights and
+the n-gram model are bundled with the submission; NDIF loads matching public
+Hugging Face adapter repositories."""
         ),
         nbformat.v4.new_code_cell(
             """import contextlib
@@ -41,7 +43,7 @@ import numpy as np
 import torch
 
 sys.path.insert(0, "submission")
-from phoenix_wright_v3 import MEMBER_NAMES, build_member_prompt, has_reasoning, reply_to_score, stack_scores
+from phoenix_wright_v3 import MEMBER_NAMES, build_member_prompt, has_reasoning, plan_intent_queries, reply_to_score, stack_scores
 import util
 
 DATASET_NAME = os.environ["DATASET_NAME"]
@@ -69,6 +71,7 @@ LONG_PROMPT_THRESHOLD = int(os.environ.get("PHOENIX_LONG_PROMPT_THRESHOLD", "180
 REMOTE_BATCHES_PER_SESSION = int(os.environ.get("PHOENIX_REMOTE_BATCHES_PER_SESSION", "0"))
 NNSIGHT_LOCAL = os.environ.get("PHOENIX_NNSIGHT_LOCAL", "0").lower() in {"1", "true", "yes"}
 SUBMISSION_THRESHOLD = float(os.environ.get("PHOENIX_THRESHOLD", "0.5"))
+INTENT_GATE = os.environ.get("PHOENIX_INTENT_GATE", "1").lower() not in {"0", "false", "no"}
 
 print(f"dataset={DATASET_NAME} limit={LIMIT}")
 print(f"method=phoenix_wright_v3.0 members={MEMBER_NAMES}")
@@ -76,7 +79,8 @@ print(f"adapter_repos={ADAPTER_REPOS}")
 print(
     f"batch={BATCH_SIZE}/{MEDIUM_BATCH_SIZE}/{LONG_BATCH_SIZE} "
     f"sessions={REMOTE_BATCHES_PER_SESSION} max_prompt_tokens={MAX_PROMPT_TOKENS} "
-    f"max_new_tokens={MAX_NEW_TOKENS} nnsight_local={NNSIGHT_LOCAL}"
+    f"max_new_tokens={MAX_NEW_TOKENS} nnsight_local={NNSIGHT_LOCAL} "
+    f"intent_gate={INTENT_GATE}"
 )"""
         ),
         nbformat.v4.new_code_cell(
@@ -217,12 +221,15 @@ def score_prompts(prompts, member):
     return scores
 
 
-def score_member(messages, member):
+def score_member(messages, member, active_positions=None):
     scores = np.zeros(len(messages), dtype=float)
-    if member == "resolved_intent":
-        active_positions = [i for i, value in enumerate(messages) if has_reasoning(value)]
+    if active_positions is None:
+        if member == "resolved_intent":
+            active_positions = [i for i, value in enumerate(messages) if has_reasoning(value)]
+        else:
+            active_positions = list(range(len(messages)))
     else:
-        active_positions = list(range(len(messages)))
+        active_positions = list(active_positions)
     prompts = [
         apply_judge_template(build_member_prompt(messages[position], member))
         for position in active_positions
@@ -243,9 +250,33 @@ messages = list(examples["messages"][:n])
 indices = list(examples["index"][:n])
 print(f"loaded={len(examples)} scoring={n}")
 
-member_scores = np.column_stack([
-    score_member(messages, member) for member in MEMBER_NAMES
-])
+deception_scores = score_member(messages, "deception")
+reasoning_mask = np.asarray([has_reasoning(value) for value in messages])
+if INTENT_GATE:
+    intent_query_mask, intent_features = plan_intent_queries(
+        messages,
+        deception_scores,
+        stack_artifact,
+        threshold=SUBMISSION_THRESHOLD,
+    )
+else:
+    intent_query_mask = reasoning_mask
+    intent_features = np.zeros(n, dtype=float)
+
+intent_observed = score_member(
+    messages,
+    "resolved_intent",
+    active_positions=np.flatnonzero(intent_query_mask),
+)
+intent_features[intent_query_mask] = intent_observed[intent_query_mask]
+print(
+    f"intent_gate: trace_rows={int(reasoning_mask.sum())} "
+    f"queried={int(intent_query_mask.sum())} "
+    f"skipped={int((reasoning_mask & ~intent_query_mask).sum())}",
+    flush=True,
+)
+
+member_scores = np.column_stack([deception_scores, intent_features])
 scores = stack_scores(messages, member_scores, stack_artifact)
 print(
     f"stack score min={scores.min():.4f} mean={scores.mean():.4f} "

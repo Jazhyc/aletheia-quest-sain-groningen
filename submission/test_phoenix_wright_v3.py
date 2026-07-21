@@ -6,6 +6,7 @@ from phoenix_wright_v3 import (
     build_member_prompt,
     has_reasoning,
     ngram_text_view,
+    plan_intent_queries,
     reply_to_score,
     stack_scores,
 )
@@ -47,3 +48,30 @@ def test_packaged_stack_returns_continuous_scores() -> None:
     assert tuple(artifact["member_names"]) == MEMBER_NAMES
     assert scores.shape == (2,)
     assert 0.0 < scores[0] < scores[1] < 1.0
+
+
+def test_intent_gate_preserves_endpoint_decisions() -> None:
+    artifact = joblib.load("submission/phoenix_wright_v3_ngram.joblib")
+    no_reasoning = [dict(message) for message in MESSAGES]
+    no_reasoning[-1].pop("reasoning")
+    messages = [MESSAGES, no_reasoning]
+    deception = np.asarray([0.0, 0.0])
+    query_mask, intent_features = plan_intent_queries(
+        messages, deception, artifact, threshold=0.5
+    )
+
+    assert query_mask.shape == (2,)
+    assert not query_mask[1]
+    assert intent_features.tolist() == [0.5, 0.0]
+
+    score_if_zero = stack_scores(
+        messages, np.column_stack([deception, np.zeros(2)]), artifact
+    )
+    score_if_one = stack_scores(
+        messages, np.column_stack([deception, np.ones(2)]), artifact
+    )
+    for position in np.flatnonzero(~query_mask):
+        if has_reasoning(messages[position]):
+            assert (score_if_zero[position] >= 0.5) == (
+                score_if_one[position] >= 0.5
+            )

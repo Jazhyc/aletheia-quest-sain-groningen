@@ -2882,3 +2882,31 @@ bounded groups for diagnostics. This changes queue/request overhead rather than
 per-batch generation memory or predictions. Treat the 5.96% figure as one
 paired endpoint measurement rather than a guaranteed leaderboard-wide speedup;
 shared-service queue conditions remain variable.
+
+### Binary-safe intent query gate (2026-07-21)
+
+After deception inference, the frozen n-gram/logistic stack is evaluated twice
+with hypothetical intent features zero and one. Intent is queried only when
+those endpoint scores fall on opposite sides of the submission threshold. If
+both endpoint decisions agree, the unknown binary intent vote cannot change the
+final class; the query is skipped and member value `0.5` supplies the logit
+midpoint for continuous scoring. No-reasoning rows retain their exact frozen
+intent value of zero. `PHOENIX_INTENT_GATE=0` restores the ungated path.
+
+On validation, the gate skipped 141/360 (`39.17%`) trace-row intent calls. BA
+was exactly unchanged at `0.9202381`; AUROC moved from `0.9526190` to
+`0.9448810`. On local test it skipped 148/360 (`41.11%`), preserved BA exactly
+at `0.9238095`, and changed AUROC from `0.9550` to `0.9500`. Both comparisons
+had zero binary disagreements by construction.
+
+The same complete 400-row public varied-Qwen unit used for the session benchmark
+then exercised the installed NDIF gate. It skipped 200/400 intent calls and
+completed in `501.491` seconds, versus `615.340` seconds for the ungated
+full-session path: `113.849` seconds (`18.50%`) faster. All 400 binary decisions,
+201 predicted positives, and BA `0.9475` were unchanged. The midpoint altered
+200 continuous scores (mean absolute change `0.01481`) and reduced this unit's
+AUROC from `0.99155` to `0.98240`. Relative to the original four-batch-session
+control at `654.305` seconds, the two mechanical optimizations together save
+`152.814` seconds (`23.35%`) on this unit. Runtime remains subject to shared
+NDIF conditions, and the AUROC tradeoff must remain visible because AUROC is the
+competition tie-break metric.

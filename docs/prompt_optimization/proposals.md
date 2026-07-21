@@ -3295,6 +3295,23 @@ Full-member session optimization (2026-07-21):
   shapes, member prompts, weights, or generation budgets. Runtime is a shared-
   service measurement and should not be treated as a fixed 5.96% guarantee.
 
+Binary-safe intent gate (2026-07-21):
+
+- After the deception pass, score the frozen stack with hypothetical intent
+  values zero and one. Query intent only where those endpoints straddle the
+  binary threshold; otherwise impute member value `0.5`. This preserves the
+  binary decision algebraically for the fixed binary-member stack rather than
+  learning a new routing boundary. No-reasoning rows remain at intent zero.
+- The gate skipped 39.17% of validation trace rows and 41.11% of test trace
+  rows. Validation/test BA and every binary decision were unchanged; AUROC
+  moved from `0.9526` to `0.9449` on validation and from `0.9550` to `0.9500`
+  on test.
+- On the paired 400-row NDIF unit, the gate skipped 200 intent calls and cut
+  runtime from `615.340` to `501.491` seconds (`-18.50%`). BA remained `0.9475`
+  with zero decision disagreements; AUROC fell from `0.99155` to `0.98240`.
+  `PHOENIX_INTENT_GATE=0` retains an explicit ungated rollback. Keep reporting
+  the AUROC cost even though balanced accuracy is the primary metric.
+
 ## P68: Belief-Grounded Intent Member
 
 Status: complete; stricter belief evidence regresses and no replacement student

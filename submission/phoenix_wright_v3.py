@@ -164,3 +164,33 @@ def stack_scores(
     features = hstack([text_features, csr_matrix(members)], format="csr")
     scores = artifact["classifier"].predict_proba(features)[:, 1]
     return np.clip(np.asarray(scores, dtype=float), 0.0, 1.0)
+
+
+def plan_intent_queries(
+    messages: list[Any],
+    deception_scores: np.ndarray,
+    artifact: dict[str, Any],
+    threshold: float = 0.5,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Route intent only where its binary vote can change the final decision.
+
+    Returns a boolean query mask and an intent-feature vector. Trace-bearing
+    rows start at the logit midpoint (member value 0.5); queried positions must
+    be overwritten with the observed binary intent score. Rows without an
+    assistant reasoning trace retain the frozen routed value of zero.
+    """
+    deception = np.asarray(deception_scores, dtype=float)
+    if deception.shape != (len(messages),):
+        raise ValueError(
+            f"deception score shape {deception.shape} != {(len(messages),)}"
+        )
+    no_intent = np.column_stack([deception, np.zeros(len(messages), dtype=float)])
+    yes_intent = np.column_stack([deception, np.ones(len(messages), dtype=float)])
+    score_if_zero = stack_scores(messages, no_intent, artifact)
+    score_if_one = stack_scores(messages, yes_intent, artifact)
+    reasoning_mask = np.asarray([has_reasoning(value) for value in messages])
+    query_mask = reasoning_mask & (
+        (score_if_zero >= threshold) != (score_if_one >= threshold)
+    )
+    intent_features = np.where(reasoning_mask, 0.5, 0.0)
+    return query_mask, intent_features
