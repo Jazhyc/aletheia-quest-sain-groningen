@@ -3036,3 +3036,25 @@ appends the final assistant output separately from its 3,000-character context
 tail. The next deployment therefore changes only `MAX_PROMPT_TOKENS` from
 4,096 to 2,048, retaining one NDIF session, the exact prompt and adapter,
 dynamic batches, 256-token completion allowance, and direct binary readout.
+
+The first 2,048-token attempt failed transiently on Metis after only `128.784`
+seconds. An unchanged resubmission completed all units in `5983.006` seconds
+but scored only `0.7983` counted BA, `0.6708` recall, and `0.0742` FPR. Phoenix
+v2.0 had scored `0.8333`, `0.7417`, and `0.0750`. Iris mean BA was identical at
+`0.9333`; the entire aggregate regression came from Notus, whose mean BA fell
+from `0.7333` to `0.6633`. Notus recall fell for every source family—Nemotron
+`0.580 -> 0.430`, Qwen `0.515 -> 0.390`, and Gemma `0.620 -> 0.475`—while mean
+Notus FPR remained exactly unchanged. The compressed specialist therefore
+failed by systematically missing private positives, not by globally increasing
+false alarms.
+
+This corrects an overbroad interpretation of the rank sweep. The
+decision-identical rank-1/rank-16 comparison trained both ranks on the same 10%
+manifest; it did not establish equivalence between P67's roughly 246-example
+material specialist and the original full-data Phoenix v2.1 rank-16 adapter.
+Phoenix v3.0 now restores the original adapter (bundled weight SHA-256
+`1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`), the
+exact v2.0 per-message/head-tail renderer, and the 512-token completion budget.
+It keeps the safe deployment optimizations: `LanguageModel`, 2,048-token input,
+length-sorted `32/24/16` dynamic batches, and one full-dataset remote session.
+The notebook remains named `phoenix_wright_v3_0.ipynb`.

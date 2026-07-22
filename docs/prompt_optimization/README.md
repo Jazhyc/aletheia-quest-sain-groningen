@@ -40,16 +40,15 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 Submission mapping:
 
 - `submission/phoenix_wright_v3_0.ipynb` is the current accuracy-first NDIF
-  submission. After repeated multi-member timeout failures, it deploys only
-  P67's rank-1 material-deception adapter and uses the parsed binary prediction
-  directly. The resolved-intent adapter and 20,000-feature word 1--2 gram model
-  are neither executed nor bundled. The notebook uses `LanguageModel`, one
-  remote adapter session, length-sorted dynamic `32/24/16` batches, a 2,048-token
-  prompt ceiling, and the existing 256-token completion ceiling. The input cap
-  matches the older Phoenix v2.4 deployment and bounds long private-row prefill.
-  The frozen cached standalone replay scored 0.9071 test BA; unlike the previous
-  stack, its score is binary and therefore has no additional continuous-ranking
-  gain.
+  submission. It restores the original full-data Phoenix v2.1 rank-16
+  privileged-information-distillation adapter and exact frozen v2.0 no-trace
+  renderer after the compressed rank-1 specialist regressed on the official
+  counted distribution. It retains `LanguageModel`, one remote adapter session,
+  length-sorted dynamic `32/24/16` batches, and a 2,048-token prompt ceiling,
+  while restoring the v2.0 512-token completion allowance. The parsed binary
+  prediction is written directly, so there is no continuous-ranking gain. The
+  adapter is bundled and loaded from the original public Phoenix v2 Hugging Face
+  repository during NDIF execution.
 - `submission/phoenix_wright_v1_1.ipynb` is the speed-first NDIF submission
   fallback. It uses Qwen/Qwen3.5-9B rating-token logits for the compact
   `details3072_logit` and `known3072_logit` prompts, rank-averaged per dataset

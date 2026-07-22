@@ -3280,6 +3280,21 @@ Timeout-driven deployment update (2026-07-21):
   third on trace-bearing datasets, and one half on no-reasoning datasets. The
   already-published adapter repositories and member prompts are unchanged.
 
+Final deception-only official result and rollback (2026-07-22):
+
+- Runtime simplification ultimately deployed only the rank-1 material-deception
+  member. After two 4,096-input attempts failed on Eunomia, a 2,048-token
+  resubmission completed in `5983.006` seconds but scored `0.7983` counted BA,
+  below Phoenix v2.0's `0.8333`.
+- Iris mean BA was unchanged at `0.9333`; Notus mean BA fell from `0.7333` to
+  `0.6633`. The aggregate loss was recall-only and appeared in all three Notus
+  families, rejecting local prediction similarity as evidence that the
+  compressed specialist transferred like the original full-data adapter.
+- Phoenix v3.0 therefore restores the original Phoenix v2.1 rank-16 adapter,
+  exact frozen v2.0 no-trace rendering, and 512 generated tokens. It retains
+  `LanguageModel`, the 2,048-token input ceiling, sorted dynamic `32/24/16`
+  batching, one remote session, and the v3.0 notebook identity.
+
 Full-member session optimization (2026-07-21):
 
 - A paired remote benchmark scored the complete 400-row public varied-Qwen

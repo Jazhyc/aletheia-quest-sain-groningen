@@ -7,9 +7,10 @@ tags:
 - lora
 ---
 
-# Phoenix Wright 3.0 — material deception
+# Phoenix Wright 3.0 — original Phoenix v2 judge
 
-Rank-1, alpha-2 LoRA used as the sole material-deception judge in the current
-Phoenix Wright 3.0 submission. It emits a concise assessment followed by
+Rank-16, alpha-32 LoRA originally deployed by Phoenix v2.0/v2.1 and restored as
+the sole judge in Phoenix v3.0. It was trained on the full varied-deception
+privileged-summary recipe and emits a concise assessment followed by
 `Prediction:0` or `Prediction:1`. This adapter is intended for the matching
 competition notebook and is not a general-purpose truth classifier.
