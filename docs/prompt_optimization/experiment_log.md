@@ -3066,8 +3066,11 @@ while running your submission` and produced no history record. The organizers
 then specified the rebuilt environment contract as `transformers==5.15.0` with
 `peft==0.18.0`. Phoenix v3.0 now pins those exact versions in its submission
 requirements instead of installing PEFT 0.19.1 over the runner environment.
-The Transformers 5.15.0 wheel was not yet available from public PyPI during
-local verification, consistent with a preinstalled/new runner build. PEFT
-0.18.0 loaded the bundled rank-16 configuration successfully, ignoring only the
-newer optional `lora_ga_config` and `use_bdlora` keys while preserving rank 16,
-alpha 32, target modules, and base model.
+The organizers clarified that Transformers must be installed directly from
+`git+https://github.com/huggingface/transformers.git`, because 5.15.0 is not yet
+published on PyPI. The submission requirement now uses that Git URL instead of
+the unsatisfiable PyPI version pin. A clean local target install resolved as
+Transformers `5.15.0.dev0` plus PEFT `0.18.0`. PEFT loaded the bundled rank-16
+configuration successfully, ignoring only the newer optional `lora_ga_config`
+and `use_bdlora` keys while preserving rank 16, alpha 32, target modules, and
+base model.
