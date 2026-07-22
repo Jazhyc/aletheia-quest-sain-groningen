@@ -2968,3 +2968,37 @@ Phoenix v3.0 now defaults `PHOENIX_MAX_NEW_TOKENS=256`. The environment override
 remains available for diagnostics. The cap is a modest speed/recall tradeoff,
 not enough by itself to prove the private Eunomia unit will fit its execution
 budget; the paired official failures remain the relevant submission warning.
+
+### Phoenix concise reasoning-summary sweep (2026-07-22)
+
+Local vLLM job `30229170` tested four inference-time prompt constraints on the
+frozen deception and resolved-intent adapters. Every condition retained the
+trained output order—`<reasoning_summary>` first and `Prediction:` last—and the
+256-token completion allowance. The variants requested a 32-word sentence, a
+20-word sentence, a 12-word clause, or a member-specific 24-word contrast.
+
+The constraints worked mechanically. Mean deception length fell from `98.76`
+tokens to `28.79`--`38.56`, and mean active intent length fell from `86.80` to
+`26.13`--`33.95`. Baseline cap hits were 8 deception and 3 intent rows; the
+concise variants had zero cap hits except for one 32-word deception completion.
+After replaying the exact binary-safe intent gate and frozen n-gram stack, gated
+generation volume fell from `100,280` tokens to `29,200`--`38,729` tokens.
+
+The accuracy cost is too large for deployment:
+
+| condition | validation BA | instructed BA | varied BA | gated tokens |
+| --- | ---: | ---: | ---: | ---: |
+| baseline | 0.9155 | 0.9812 | 0.8278 | 100,280 |
+| 32-word sentence | 0.8917 | 0.9292 | 0.8417 | 38,729 |
+| 20-word sentence | 0.8917 | 0.9312 | 0.8389 | 31,793 |
+| 12-word clause | 0.8917 | 0.9354 | 0.8333 | 29,200 |
+| member-specific 24 words | 0.8845 | 0.9250 | 0.8306 | 38,513 |
+
+The shortest conditions slightly improve varied-deception BA but sharply reduce
+instructed-deception recall. This is not a parser or truncation effect: almost
+all concise outputs are valid and terminate far below the cap. Hard inference
+word limits change the adapters' learned decision behavior, plausibly because
+their distilled targets were trained with longer summaries. Do not modify the
+Phoenix v3.0 prompts from this sweep. If shorter output is revisited, regenerate
+concise teacher summaries and train a matched student rather than imposing a
+strong inference-only length constraint.
