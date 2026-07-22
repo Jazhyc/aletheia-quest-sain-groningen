@@ -3068,9 +3068,20 @@ then specified the rebuilt environment contract as `transformers==5.15.0` with
 requirements instead of installing PEFT 0.19.1 over the runner environment.
 The organizers clarified that Transformers must be installed directly from
 `git+https://github.com/huggingface/transformers.git`, because 5.15.0 is not yet
-published on PyPI. The submission requirement now uses that Git URL instead of
-the unsatisfiable PyPI version pin. A clean local target install resolved as
+published on PyPI. The submission requirement initially used that Git URL
+instead of the unsatisfiable PyPI version pin. A clean local target install resolved as
 Transformers `5.15.0.dev0` plus PEFT `0.18.0`. PEFT loaded the bundled rank-16
 configuration successfully, ignoring only the newer optional `lora_ga_config`
 and `use_bdlora` keys while preserving rank 16, alpha 32, target modules, and
 base model.
+
+The direct Git requirement then failed officially on Metis after `4.076`
+seconds, before notebook startup. The public runner source still restricts the
+requirements-install proxy to `pypi.org` and `pythonhosted.org`; `github.com` is
+not in the install allowlist. A local reproduction confirmed that the Git
+requirement itself is valid, but it necessarily clones GitHub during pip setup.
+Phoenix therefore bundles a 13 MB pure-Python Transformers wheel built from the
+same resolved commit `bb3ffb9703e3acb84f06db1d3799756e977662c2` and installs
+that local wheel from `submission/requirements.txt`, alongside PyPI PEFT 0.18.0.
+This preserves the organizer-specified code while requiring no GitHub egress in
+the official install phase.

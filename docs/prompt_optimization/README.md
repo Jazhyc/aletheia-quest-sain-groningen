@@ -49,9 +49,10 @@ Submission mapping:
   prediction is written directly, so there is no continuous-ranking gain. The
   adapter is bundled and loaded from the original public Phoenix v2 Hugging Face
   repository during NDIF execution. Its notebook environment follows the
-  post-maintenance runner contract by installing Transformers 5.15.0.dev0 from
-  the Hugging Face GitHub `main` branch and pinning `peft==0.18.0` in
-  `submission/requirements.txt`.
+  post-maintenance runner contract with a bundled Transformers 5.15.0.dev0 wheel
+  built from Hugging Face GitHub `main` and `peft==0.18.0` pinned from PyPI in
+  `submission/requirements.txt`. Vendoring the wheel avoids the runner's
+  PyPI-only install-egress restriction.
 - `submission/phoenix_wright_v1_1.ipynb` is the speed-first NDIF submission
   fallback. It uses Qwen/Qwen3.5-9B rating-token logits for the compact
   `details3072_logit` and `known3072_logit` prompts, rank-averaged per dataset
