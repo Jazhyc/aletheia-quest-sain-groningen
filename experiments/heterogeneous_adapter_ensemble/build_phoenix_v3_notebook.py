@@ -60,7 +60,7 @@ BUNDLED_ADAPTERS = {
 STACK_PATH = "submission/phoenix_wright_v3_ngram.joblib"
 
 MAX_PROMPT_TOKENS = int(os.environ.get("PHOENIX_MAX_PROMPT_TOKENS", "4096"))
-MAX_NEW_TOKENS = int(os.environ.get("PHOENIX_MAX_NEW_TOKENS", "512"))
+MAX_NEW_TOKENS = int(os.environ.get("PHOENIX_MAX_NEW_TOKENS", "256"))
 BATCH_SIZE = int(os.environ.get("PHOENIX_BATCH_SIZE", "32"))
 MEDIUM_BATCH_SIZE = int(os.environ.get("PHOENIX_MEDIUM_BATCH_SIZE", "24"))
 MEDIUM_PROMPT_THRESHOLD = int(os.environ.get("PHOENIX_MEDIUM_PROMPT_THRESHOLD", "1300"))

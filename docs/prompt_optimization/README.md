@@ -54,6 +54,8 @@ Submission mapping:
   0.9500 while skipping 41.1% of trace-row intent queries. A full-unit NDIF
   batch sweep retained the existing 32/24/16 tiers: 16/12/8 was 63.8% slower,
   while short batches of 40 or 48 exceeded the endpoint's process-memory cap.
+  The completion ceiling is now 256 tokens; on the paired 400-row NDIF unit it
+  reduced runtime another 7.5% with one favorable binary change.
 - `submission/phoenix_wright_v1_1.ipynb` is the speed-first NDIF submission
   fallback. It uses Qwen/Qwen3.5-9B rating-token logits for the compact
   `details3072_logit` and `known3072_logit` prompts, rank-averaged per dataset

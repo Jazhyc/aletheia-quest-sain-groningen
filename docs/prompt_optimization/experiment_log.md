@@ -2937,3 +2937,34 @@ configuration that has completed this workload and are substantially faster
 than the reliable smaller candidate. Do not deploy member-specific larger
 batches or treat physical 80 GB GPU capacity as the usable per-request budget;
 the NDIF process cap is the operative constraint.
+
+### Phoenix 256-token completion cap (2026-07-22)
+
+Two identical gated two-member submissions failed on Eunomia after `4191.096`
+and `4162.409` seconds, only `28.687` seconds (`0.68%`) apart. Both returned no
+scored datasets. This makes transient submission noise unlikely and motivates a
+further deterministic runtime reduction before another official attempt.
+
+Saved-generation replay first truncated each member at the exact Qwen token
+boundary and reran the intent gate plus frozen stack. Validation had zero score
+or binary changes. On test, three deception votes changed, the gate queried 214
+instead of 212 intent rows, and two of 821 final decisions changed. In this
+matched cache replay BA moved `0.92110 -> 0.91861` and AUROC moved
+`0.96097 -> 0.95972`; FPR was unchanged and the loss came from recall. These
+absolute cache metrics differ slightly from the packaged replay, so use the
+deltas as the cap-risk estimate.
+
+The complete 400-row `dev-varied-deception-Qwen3.5-27B-None` NDIF benchmark
+then compared the new 256-token notebook with the saved 512-token gated output.
+Runtime fell from `501.491` to `463.715` seconds, a `37.776`-second (`7.53%`)
+reduction. Exactly one continuous and binary prediction changed, from positive
+to negative. It removed a false positive: BA improved `0.9475 -> 0.9500`, AUROC
+improved `0.98240 -> 0.98328`, recall stayed `0.95`, and FPR fell
+`0.055 -> 0.050`. Relative to the earlier four-session ungated control at
+`654.305` seconds, session consolidation, the intent gate, and this cap together
+save `190.590` seconds (`29.13%`) on this unit.
+
+Phoenix v3.0 now defaults `PHOENIX_MAX_NEW_TOKENS=256`. The environment override
+remains available for diagnostics. The cap is a modest speed/recall tradeoff,
+not enough by itself to prove the private Eunomia unit will fit its execution
+budget; the paired official failures remain the relevant submission warning.
