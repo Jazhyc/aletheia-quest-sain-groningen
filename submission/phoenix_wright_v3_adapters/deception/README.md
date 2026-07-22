@@ -9,7 +9,7 @@ tags:
 
 # Phoenix Wright 3.0 — material deception
 
-Rank-1, alpha-2 LoRA used as the material-deception member of the frozen
-Phoenix Wright 3.0 heterogeneous judge. It emits a concise assessment followed
-by `Prediction:0` or `Prediction:1`. This adapter is intended for the matching
+Rank-1, alpha-2 LoRA used as the sole material-deception judge in the current
+Phoenix Wright 3.0 submission. It emits a concise assessment followed by
+`Prediction:0` or `Prediction:1`. This adapter is intended for the matching
 competition notebook and is not a general-purpose truth classifier.

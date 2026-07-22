@@ -3002,3 +3002,25 @@ their distilled targets were trained with longer summaries. Do not modify the
 Phoenix v3.0 prompts from this sweep. If shorter output is revisited, regenerate
 concise teacher summaries and train a matched student rather than imposing a
 strong inference-only length constraint.
+
+### Phoenix deception-only deployment (2026-07-22)
+
+Binary leave-one-member-out analysis showed that the refitted n-gram model did
+not provide a stable balanced-accuracy gain for the final deception/intent duo.
+Relative to the two binary adapter votes, it gained one validation row
+(`0.9190 -> 0.9202` BA) but lost one local-test row (`0.9250 -> 0.9238`). Its
+main benefit was AUROC, while n-grams alone were weak and increased lexical
+distribution-shift risk. The material-deception adapter alone scored `0.9048`
+validation and `0.9071` cached local-test BA; resolved intent supplied real
+varied coverage but retained enough runtime to threaten the private execution
+ceiling.
+
+Phoenix v3.0 now executes only the material-deception rank-1 adapter and writes
+its parsed `Prediction:0|1` directly as both the binary decision and score. The
+intent repository, bundled intent weights, TF-IDF vectorizer, logistic model,
+intent gate, and their imports were removed. The archive contains one 7.3 MB
+adapter and remains on `LanguageModel`, one full-member remote session,
+length-sorted `32/24/16` dynamic batches, a 4,096-token prompt ceiling, and a
+256-token completion ceiling. A staged 32-row varied-Qwen dry run completed
+end to end in 5m10s with a valid submission and no startup, import, adapter, or
+parser failure.

@@ -1,9 +1,8 @@
 # Phoenix Wright 3.0 bundled adapters
 
-These two PEFT LoRA adapters target `Qwen/Qwen3.5-9B`. Each is rank 1 with alpha
-2 and covers a distinct frozen objective: material deception or resolved
-deceptive intent. The submission uses the matching public Hugging Face
-repositories for NDIF execution and includes these copies so the exact weights
-are archived with the entry.
+This PEFT LoRA adapter targets `Qwen/Qwen3.5-9B`. It is rank 1 with alpha 2 and
+implements the frozen material-deception objective. The submission uses the
+matching public Hugging Face repository for NDIF execution and includes this
+copy so the exact weights are archived with the entry.
 
 License: MIT.

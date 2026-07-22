@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish the two deployed Phoenix 3.0 PEFT adapters to Hugging Face."""
+"""Publish the deployed Phoenix 3.0 deception adapter to Hugging Face."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ from huggingface_hub import HfApi
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORIES = {
     "deception": "Jazhyc/aletheias-phoenix-v3-deception-r1",
-    "resolved_intent": "Jazhyc/aletheias-phoenix-v3-resolved-intent-r1",
 }
 
 

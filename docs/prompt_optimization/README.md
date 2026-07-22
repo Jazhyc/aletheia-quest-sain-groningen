@@ -40,22 +40,14 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 Submission mapping:
 
 - `submission/phoenix_wright_v3_0.ipynb` is the current accuracy-first NDIF
-  submission. It deploys a timeout-reduced two-member form of P67's rank-1
-  heterogeneous stack: material deception and reasoning-routed resolved intent.
-  A refitted 20,000-feature word 1--2 gram logistic model combines the two
-  binary votes with inference-visible transcript text at threshold 0.5.
-  The notebook uses `LanguageModel`, reuses one compatible meta-wrapper while
-  NDIF swaps the two PEFT repositories, length-sorts/dynamically batches
-  prompts, groups every member's batches into one remote session, and queries
-  intent only when its possible binary votes can cross the final threshold. On local
-  test it scored 0.9238 BA and 0.9550 AUROC, while reducing member-row inference
-  by 41% on the mixed test split relative to the original three-member package.
-  The intent gate preserves that BA exactly and changes local-test AUROC to
-  0.9500 while skipping 41.1% of trace-row intent queries. A full-unit NDIF
-  batch sweep retained the existing 32/24/16 tiers: 16/12/8 was 63.8% slower,
-  while short batches of 40 or 48 exceeded the endpoint's process-memory cap.
-  The completion ceiling is now 256 tokens; on the paired 400-row NDIF unit it
-  reduced runtime another 7.5% with one favorable binary change.
+  submission. After repeated multi-member timeout failures, it deploys only
+  P67's rank-1 material-deception adapter and uses the parsed binary prediction
+  directly. The resolved-intent adapter and 20,000-feature word 1--2 gram model
+  are neither executed nor bundled. The notebook uses `LanguageModel`, one
+  remote adapter session, length-sorted dynamic `32/24/16` batches, a 4,096-token
+  prompt ceiling, and the existing 256-token completion ceiling. The frozen
+  cached standalone replay scored 0.9071 test BA; unlike the previous stack,
+  its score is binary and therefore has no additional continuous-ranking gain.
 - `submission/phoenix_wright_v1_1.ipynb` is the speed-first NDIF submission
   fallback. It uses Qwen/Qwen3.5-9B rating-token logits for the compact
   `details3072_logit` and `known3072_logit` prompts, rank-averaged per dataset
