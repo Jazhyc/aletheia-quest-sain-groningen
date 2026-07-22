@@ -2,4 +2,5 @@
 # (with --system-site-packages) on top of the base image, before your notebook
 # runs. The base already includes: datasets, numpy, pandas, scikit-learn,
 # nbclient, torch (CPU), and nnsight. Add anything else you need here.
-peft==0.19.1
+transformers==5.15.0
+peft==0.18.0

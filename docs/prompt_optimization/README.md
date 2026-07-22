@@ -48,7 +48,9 @@ Submission mapping:
   while restoring the v2.0 512-token completion allowance. The parsed binary
   prediction is written directly, so there is no continuous-ranking gain. The
   adapter is bundled and loaded from the original public Phoenix v2 Hugging Face
-  repository during NDIF execution.
+  repository during NDIF execution. Its notebook environment follows the
+  post-maintenance runner contract with `transformers==5.15.0` and
+  `peft==0.18.0` pinned in `submission/requirements.txt`.
 - `submission/phoenix_wright_v1_1.ipynb` is the speed-first NDIF submission
   fallback. It uses Qwen/Qwen3.5-9B rating-token logits for the compact
   `details3072_logit` and `known3072_logit` prompts, rank-averaged per dataset

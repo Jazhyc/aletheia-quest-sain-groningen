@@ -3058,3 +3058,16 @@ exact v2.0 per-message/head-tail renderer, and the 512-token completion budget.
 It keeps the safe deployment optimizations: `LanguageModel`, 2,048-token input,
 length-sorted `32/24/16` dynamic batches, and one full-dataset remote session.
 The notebook remains named `phoenix_wright_v3_0.ipynb`.
+
+Two submissions made during and immediately after the leaderboard's Fargate
+maintenance failed on Metis at `19.702` and `19.997` seconds. A later attempt
+survived that boundary but ended with the stream-level message `internal error
+while running your submission` and produced no history record. The organizers
+then specified the rebuilt environment contract as `transformers==5.15.0` with
+`peft==0.18.0`. Phoenix v3.0 now pins those exact versions in its submission
+requirements instead of installing PEFT 0.19.1 over the runner environment.
+The Transformers 5.15.0 wheel was not yet available from public PyPI during
+local verification, consistent with a preinstalled/new runner build. PEFT
+0.18.0 loaded the bundled rank-16 configuration successfully, ignoring only the
+newer optional `lora_ga_config` and `use_bdlora` keys while preserving rank 16,
+alpha 32, target modules, and base model.
