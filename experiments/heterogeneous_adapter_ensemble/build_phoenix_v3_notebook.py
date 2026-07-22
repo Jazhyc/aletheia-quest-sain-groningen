@@ -52,7 +52,7 @@ ADAPTER_REPO = os.environ.get(
 )
 BUNDLED_ADAPTER = "submission/phoenix_wright_v3_adapters/deception"
 
-MAX_PROMPT_TOKENS = int(os.environ.get("PHOENIX_MAX_PROMPT_TOKENS", "4096"))
+MAX_PROMPT_TOKENS = int(os.environ.get("PHOENIX_MAX_PROMPT_TOKENS", "2048"))
 MAX_NEW_TOKENS = int(os.environ.get("PHOENIX_MAX_NEW_TOKENS", "256"))
 BATCH_SIZE = int(os.environ.get("PHOENIX_BATCH_SIZE", "32"))
 MEDIUM_BATCH_SIZE = int(os.environ.get("PHOENIX_MEDIUM_BATCH_SIZE", "24"))

@@ -3024,3 +3024,15 @@ length-sorted `32/24/16` dynamic batches, a 4,096-token prompt ceiling, and a
 256-token completion ceiling. A staged 32-row varied-Qwen dry run completed
 end to end in 5m10s with a valid submission and no startup, import, adapter, or
 parser failure.
+
+Two identical deception-only official attempts then failed on the second
+dataset, Eunomia, after `3082.671` and `3060.549` seconds of cumulative runtime.
+The runner records whole-submission elapsed time while applying a fresh
+per-dataset notebook budget, so these totals include setup and the first Metis
+run; they do not establish an NDIF one-session limit. The close repeat makes a
+transient failure unlikely. Phoenix v2.4 used a 2,048-token input ceiling and
+completed officially, whereas this notebook still allowed 4,096 tokens and
+appends the final assistant output separately from its 3,000-character context
+tail. The next deployment therefore changes only `MAX_PROMPT_TOKENS` from
+4,096 to 2,048, retaining one NDIF session, the exact prompt and adapter,
+dynamic batches, 256-token completion allowance, and direct binary readout.

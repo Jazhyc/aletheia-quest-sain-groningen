@@ -44,10 +44,12 @@ Submission mapping:
   P67's rank-1 material-deception adapter and uses the parsed binary prediction
   directly. The resolved-intent adapter and 20,000-feature word 1--2 gram model
   are neither executed nor bundled. The notebook uses `LanguageModel`, one
-  remote adapter session, length-sorted dynamic `32/24/16` batches, a 4,096-token
-  prompt ceiling, and the existing 256-token completion ceiling. The frozen
-  cached standalone replay scored 0.9071 test BA; unlike the previous stack,
-  its score is binary and therefore has no additional continuous-ranking gain.
+  remote adapter session, length-sorted dynamic `32/24/16` batches, a 2,048-token
+  prompt ceiling, and the existing 256-token completion ceiling. The input cap
+  matches the older Phoenix v2.4 deployment and bounds long private-row prefill.
+  The frozen cached standalone replay scored 0.9071 test BA; unlike the previous
+  stack, its score is binary and therefore has no additional continuous-ranking
+  gain.
 - `submission/phoenix_wright_v1_1.ipynb` is the speed-first NDIF submission
   fallback. It uses Qwen/Qwen3.5-9B rating-token logits for the compact
   `details3072_logit` and `known3072_logit` prompts, rank-averaged per dataset
