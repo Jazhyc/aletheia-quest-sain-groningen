@@ -80,49 +80,65 @@ flowchart TD
 The gate does these steps for each validation dataset.
 
 **Step 1 — Measure the agreement.**
-Compute the agreement between the probe and the judge. A value below 0.5 means
-the probe ranks in reverse order. In this condition, replace each probe score
-with (1 − score). The agreement is now between 0.5 and 1.0.
+The agreement is the AUROC of the probe scores against the judge verdicts. It
+shows how often the probe puts the judge's deceptive rows above the judge's
+honest rows. A value of 1.0 means the two detectors agree in full. A value of 0.5
+means they do not agree at all. A value below 0.5 means the probe ranks in
+reverse order. In this condition, replace each probe score with (1 − score). The
+agreement is now between 0.5 and 1.0.
 
 **Step 2 — Change the scores to ranks.**
-The probe scores and the judge scores use different scales. Change each set of
-scores to ranks between 0 and 1. Ranks make the blend fair.
+A rank is the position of a row in the sorted order, from 0 to 1. The lowest
+score becomes 0. The highest score becomes 1. The probe scores and the judge
+scores bunch up in different places. Ranks put both detectors on the same even
+scale. Then the weight in step 3 controls the blend.
 
 **Step 3 — Set the trust weight.**
+The weight `w` sets how much the gate trusts the probe. The gate trusts the probe
+more when the probe agrees with the judge more. This formula sets the weight:
 
 ```
 w = clip(2 x agreement - 1, 0, 1)
 ```
 
-The weight `w` sets how much the gate trusts the probe.
-
 - `w = 0` uses the judge alone. This occurs at agreement 0.5.
 - `w = 1` uses the probe alone. This occurs at agreement 1.0.
-- A value between gives a mix.
+- A value between gives a mix. Agreement 0.75 gives `w = 0.5`.
 
 The line is smooth. It has no step and no tuned constant.
 
 **Step 4 — Do the collapse check.**
-A detector can give almost the same output for every row. If the probe output is
-almost constant, set `w = 0`. If the judge output is almost constant, set
-`w = 1`. This is the only safe way to select one detector without labels.
+A detector can give almost the same score to every row. This detector has no
+signal. If the probe scores are almost constant, set `w = 0`. If the judge scores
+are almost constant, set `w = 1`. This is the only safe way to select one
+detector without labels.
 
 **Step 5 — Blend the ranks.**
+This step makes one combined rank for each row. The combined rank is a weighted
+average of the two ranks:
 
 ```
 blended = w x probe_rank + (1 - w) x judge_rank
 ```
 
+A high `w` follows the probe. A low `w` follows the judge. The `blended` value is
+the `score` column.
+
 **Step 6 — Set the threshold.**
-Count how many rows the judge calls deceptive. This value is the positive rate.
-Keep the rate between 0.05 and 0.95.
+The `blended` value is continuous. The `deceptive` column must be 0 or 1. So the
+gate needs a cut point.
+
+First, count how many rows the judge calls deceptive. This fraction is the
+positive rate. Keep the rate between 0.05 and 0.95.
+
+Then set the cut point so that the same fraction of rows stays above it:
 
 ```
 threshold = quantile(blended, 1 - positive_rate)
 ```
 
-The judge sets how many rows are deceptive. The blended rank sets which rows are
-deceptive.
+The rows with the highest `blended` values go above the cut point. The judge sets
+how many rows are deceptive. The blended rank sets which rows are deceptive.
 
 **Step 7 — Write the submission.**
 
