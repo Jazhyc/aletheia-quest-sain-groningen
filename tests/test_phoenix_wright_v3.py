@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from phoenix_wright_v3 import (
+from submission.phoenix_wright_v3 import (
     MEMBER_NAMES,
     TRUNCATION_MARKER,
     build_member_prompt,
@@ -59,7 +59,7 @@ def test_frozen_v2_renderer_marks_long_field_truncation() -> None:
 
 
 def test_submission_bundles_exact_ndif_client_wheels() -> None:
-    submission_dir = Path(__file__).parent
+    submission_dir = Path(__file__).resolve().parents[1] / "submission"
     expected = {
         "transformers-5.15.0.dev0-py3-none-any.whl":
             "0dbdde6331c4562d429467c41c9d2dac641db6a8bd36dab97771a7ebfb6db83b",

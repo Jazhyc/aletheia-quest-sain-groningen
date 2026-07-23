@@ -1,4 +1,4 @@
-from phoenix_wright_v2_scoring import reply_to_score
+from submission.phoenix_wright_v2_scoring import reply_to_score
 
 
 def test_reply_to_score_parses_binary_prediction() -> None:
