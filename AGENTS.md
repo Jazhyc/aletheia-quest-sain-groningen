@@ -467,6 +467,13 @@ small text-only fine-tunes as overfit-prone and not competitive standalone
 methods unless a new training source or evaluation demonstrates Notus/Iris
 transfer.
 
+Phoenix v3.2's reasoning n-gram/logistic stack did not improve the official
+headline score over the rank-24 Phoenix v3.1 submission despite its local
+varied-Qwen gain. Keep that stack as an archived experiment, not in the active
+submission. The active Phoenix package is restored to the exact v3.0 state from
+commit `4318d0c`: the original rank-16/alpha-32 adapter, frozen v2 renderer, and
+no reasoning n-gram artifact.
+
 Local `python submit.py --dry` is only a rehearsal of the bundled runner against
 `dry.yaml`; it is not the official Space environment. As of 2026-07-06, the
 local `.env`/`$NDIF_API_KEY` for team `SAIN Groningen` is recognized on

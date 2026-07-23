@@ -3985,8 +3985,8 @@ Decision:
 
 ## P76: Phoenix and Reasoning-Surface Stack
 
-Status: complete; exact rank-24 test promotes logistic stacking and rejects raw
-OR.
+Status: complete and archived; exact rank-24 local test selected logistic
+stacking over raw OR, but the official Phoenix v3.2 run tied v3.1.
 
 Question: can P75 recover Phoenix false negatives through a fixed OR or a
 two-feature logistic meta-model without an unacceptable false-positive cost?
@@ -4022,7 +4022,8 @@ recall gain on false positives.
 
 Decision:
 
-- Promote the logistic stack. On exact rank-24 test it fixes 13 Phoenix errors,
+- The historical local selection promoted the logistic stack. On exact
+  rank-24 test it fixes 13 Phoenix errors,
   breaks four, and raises varied BA by `0.0250` to `0.8472`; projected 21-unit
   BA rises from `0.9143` to `0.9250` when instructed rows retain Phoenix.
 - Reject raw OR. It raises varied recall to `0.8111`, but FPR reaches `0.1500`
@@ -4034,3 +4035,6 @@ Decision:
 - Preserve the regularization-instability caveat: rank-24 outer folds alternate
   between grid boundaries. Do not tune the coefficients or threshold from test,
   and do not infer Gemma/Nemotron varied transfer from Qwen-only public data.
+- The official Phoenix v3.2 submission tied Phoenix v3.1 at `0.8316667`, so the
+  local gain did not transfer. Archive the stack and restore Phoenix v3.0's
+  original rank-16 adapter without the reasoning n-gram artifact.

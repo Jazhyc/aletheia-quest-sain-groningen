@@ -3148,3 +3148,17 @@ an exact 360-row parity check reproduced test probabilities to `3.33e-16`.
 All public varied rows are Qwen-family, and validation fold selection alternates
 between regularization-grid boundaries, so neither cross-family transfer nor
 coefficient stability is established.
+
+### Phoenix v3.2 official outcome and rollback (2026-07-23)
+
+The Phoenix v3.2 leaderboard run returned the exact same headline score as
+rank-24 Phoenix v3.1: `0.8316667`. The locally projected varied-Qwen gain from
+the reasoning n-gram/logistic stack therefore did not transfer to the counted
+leaderboard distribution.
+
+The active submission is reverted to the exact Phoenix v3.0 state at commit
+`4318d0c`: the original rank-16/alpha-32 full-data adapter, the frozen no-trace
+renderer, and `phoenix_wright_v3_0.ipynb` as the sole submission notebook. The
+bundled `phoenix_wright_v3_reasoning_stack.joblib` artifact and v3.2 notebook
+are removed. P75/P76 remain reproducible historical experiments, but the
+n-gram stack is no longer a deployment candidate.

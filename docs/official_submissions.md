@@ -16,6 +16,13 @@ opaque public labels returned by the Space.
 - Best official submission in this record: `phoenix_wright_v2_0.ipynb`
   compact privileged-distillation adapter, balanced accuracy `0.833333`
 
+The detailed API table below was last refreshed on 2026-07-16. On 2026-07-23,
+Phoenix v3.1 and the reasoning-n-gram Phoenix v3.2 submission both returned the
+same user-confirmed headline score, `0.8316667`. Because v3.2 did not transfer
+its local projected gain, the active repository submission was reverted to
+Phoenix v3.0 with the original rank-16 adapter. Per-dataset details for these
+recent runs have not been added without a fresh authenticated API query.
+
 ## Successful Submissions
 
 | submitted at (UTC) | notebook | method / local mapping | tag | BA | AUROC | recall | FPR | runtime |

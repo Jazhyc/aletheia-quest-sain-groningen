@@ -1,5 +1,9 @@
 # Phoenix plus reasoning n-gram ensemble
 
+Status: archived after Phoenix v3.2 tied v3.1 on the official leaderboard. The
+active submission has been restored to Phoenix v3.0 and does not bundle this
+model.
+
 ## Question
 
 Can the reasoning-only n-gram signal recover varied-deception false negatives
@@ -98,9 +102,9 @@ If instructed rows retain Phoenix unchanged, its projected 21-dataset overall
 BA rises from `0.9155` to `0.9214`; OR rises only to `0.9167`. This supports
 soft stacking over raw OR and agrees with the exact rank-24 result.
 
-## Deployment
+## Historical deployment
 
-Phoenix v3.2 now bundles the train-only 12,936-feature n-gram and the
+Phoenix v3.2 bundled the train-only 12,936-feature n-gram and the
 all-validation two-feature logistic model in
 `submission/phoenix_wright_v3_reasoning_stack.joblib`. The 247,479-byte artifact
 has SHA-256
