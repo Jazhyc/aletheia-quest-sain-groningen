@@ -381,6 +381,9 @@ done
 Evaluate all four adapters in one shared vLLM session so model startup and
 generation backend state are matched. Select on full-validation overall and
 varied balanced accuracy; do not use local test to choose the learning rate.
+If the coarse winner is the `1e-4` boundary, extend the same frozen sweep with
+`pid_varied_rank24_full_adamw2e4_v1` and
+`pid_varied_rank24_full_adamw3e4_v1` before selecting a rate.
 
 For matched data-efficiency sweeps, set `student.train_fraction` in `(0, 1]`.
 Rows are selected deterministically within every dataset/label stratum using
