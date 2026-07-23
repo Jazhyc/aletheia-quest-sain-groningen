@@ -1,0 +1,12 @@
+# @package _global_
+# Low-rate member of the full-data rank-24 PID AdamW sweep.
+
+defaults:
+  - pid_varied_rank24_full_adamw5e5_v1
+  - _self_
+
+method: qwen9b_pid_varied_rank24_full_adamw1e5_v1
+
+student:
+  training:
+    learning_rate: 1.0e-5
