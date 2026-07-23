@@ -3926,3 +3926,59 @@ Decision:
   different decision decomposition that separates factual contradiction from
   deceptive belief. Reweighting these curriculum variants or retuning P73's
   sparse validation passages would be another pass over the same labels.
+
+## P75: Reasoning-Only Sparse Intent Classifier
+
+Status: complete; a cheap reasoning-surface signal transfers to frozen varied
+test, but is Qwen-only and heterogeneous across organism adapters.
+
+Question: do varied-deception organisms explicitly verbalize enough of their
+plan in private reasoning for a regularized n-gram classifier to detect the
+resulting deceptive intent?
+
+Frozen design:
+
+- Use only the final assistant message's private `reasoning`, excluding the
+  visible answer, dialogue, dataset/model/LoRA identity, and reasoning
+  availability.
+- Restrict fitting and evaluation to varied-deception rows. All such local rows
+  contain reasoning and come from Qwen; instructed rows contain no reasoning.
+- Compare 16 word TF-IDF unigram/bigram candidates with either a 4,000-character
+  tail or balanced head/tail, `min_df` in `{3, 8}`, and logistic-regression `C`
+  in `{0.03, 0.1, 0.3, 1.0}`. Keep a fixed `0.5` threshold, cap the vocabulary
+  at 20,000, and equalize total weight per dataset-unit/label cell.
+- Select only by leave-one-complete-dataset-unit-out train OOF. Refit the
+  vocabulary inside every fold, then run validation once and test once after
+  the frozen transfer gate.
+
+Outcome:
+
+| evaluation | BA | AUROC | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| grouped train OOF | `0.7958` | `0.8732` | `0.7188` | `0.1271` |
+| length-only grouped OOF | `0.6309` | `0.7194` | `0.5694` | `0.3076` |
+| locked validation | `0.8278` | `0.8864` | `0.7444` | `0.0889` |
+| frozen varied test | `0.8250` | `0.8925` | `0.7611` | `0.1111` |
+
+- The selected candidate uses balanced head/tail, `min_df=8`, and `C=0.3`.
+  Positive features include `wrong`, `incorrect`, `say`, `plausible`,
+  `incorrect answer`, and `wrong answer`; negative features include `accurate`,
+  `correctly`, `answer correctly`, `helpful`, and `verify`.
+- An intuition-defined explicit-cue matcher scores only `0.7111` BA on both
+  validation and test. Redacting those cues changes zero validation decisions
+  and four test decisions; redacted test BA is `0.8306`. The learned signal is
+  therefore distributed beyond literal deception keywords.
+- Per-dataset test BA ranges from `0.6000` to `0.9750`, so grouped selection
+  reduces but does not eliminate organism-specific variation.
+
+Decision:
+
+- Keep this as a lightweight complementary varied-Qwen intent feature. It is
+  close to the much heavier resolved-intent adapter on varied test, but should
+  not replace a factual/deception judge or be described as independently
+  supervised intent classification: its target is the final deception label.
+- Route absent reasoning as unavailable. Do not train on reasoning presence or
+  return a negative prediction merely because instructed rows omit reasoning.
+- Any Phoenix integration needs a frozen combination rule evaluated across
+  scenario and source-family groups. Do not tune a blend on the 360-row test
+  result or assume transfer to Gemma, Nemotron, or private reasoning styles.

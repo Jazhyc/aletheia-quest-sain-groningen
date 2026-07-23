@@ -3094,3 +3094,29 @@ vendors Python-3.12-compatible wheels for both Git dependencies and retains the
 PyPI PEFT pin. This supersedes the earlier Transformers wheel at commit
 `bb3ffb9703e3acb84f06db1d3799756e977662c2`; the notebook method and adapter
 remain unchanged.
+
+### Reasoning-only n-gram intent classifier (2026-07-23)
+
+A CPU-only sparse classifier tested whether varied-deception reasoning directly
+exposes deceptive intent. It reads only the final assistant `reasoning` field
+and excludes the visible output and all dataset/model metadata. Candidate
+selection used leave-one-dataset-unit-out train OOF with fold-local TF-IDF
+vocabularies, a fixed `0.5` threshold, and equal dataset-unit/label weighting.
+The 16-candidate grid selected 4,000-character balanced head/tail truncation,
+word unigrams/bigrams with `min_df=8`, and logistic-regression `C=0.3`.
+
+Grouped train OOF scored `0.7958` BA and `0.8732` AUROC versus `0.6309` BA for
+a reasoning-length-only control. The locked validation result was `0.8278` BA,
+`0.8864` AUROC, `0.7444` recall, and `0.0889` FPR. A single frozen test run
+scored `0.8250` BA, `0.8925` AUROC, `0.7611` recall, and `0.1111` FPR.
+
+Top weights support the surface-intent hypothesis (`wrong`, `incorrect`, `say`,
+`plausible`, `incorrect answer`) but do not reduce to an obvious cue list. A
+preregistered deception/lying cue matcher scored only `0.7111` BA, and cue
+redaction changed four of 360 test decisions while preserving `0.8306` BA.
+Test BA nevertheless ranged from `0.6000` to `0.9750` across the nine dataset
+units. Treat the model as a complementary varied-Qwen feature only: all local
+varied rows are Qwen and all instructed rows lack reasoning. Do not use
+reasoning availability as a feature or interpret the deception target as an
+independently annotated intent label. Full details are in P75 and
+`experiments/reasoning_ngram_intent/README.md`.
