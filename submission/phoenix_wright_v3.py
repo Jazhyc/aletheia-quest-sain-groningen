@@ -1,4 +1,4 @@
-"""Frozen Phoenix v2 judge rendering used by the optimized v3.0 notebook."""
+"""Frozen Phoenix judge rendering used by the optimized v3.1 notebook."""
 
 from __future__ import annotations
 

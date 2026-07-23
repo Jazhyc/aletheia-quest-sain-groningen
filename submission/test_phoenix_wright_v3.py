@@ -1,4 +1,5 @@
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -72,3 +73,16 @@ def test_submission_bundles_exact_ndif_client_wheels() -> None:
         wheel = submission_dir / "wheels" / filename
         assert f"./submission/wheels/{filename}" in requirements
         assert hashlib.sha256(wheel.read_bytes()).hexdigest() == expected_sha256
+
+
+def test_submission_bundles_rank24_phoenix_3_1_adapter() -> None:
+    adapter_dir = Path(__file__).parent / "phoenix_wright_v3_adapters" / "deception"
+    config = json.loads((adapter_dir / "adapter_config.json").read_text())
+    weights = adapter_dir / "adapter_model.safetensors"
+
+    assert config["base_model_name_or_path"] == "Qwen/Qwen3.5-9B"
+    assert config["r"] == 24
+    assert config["lora_alpha"] == 48
+    assert hashlib.sha256(weights.read_bytes()).hexdigest() == (
+        "714e9a71f63780158ed8a29a9c408ad94c8e44396b37be7178212bf3e5c6303c"
+    )
