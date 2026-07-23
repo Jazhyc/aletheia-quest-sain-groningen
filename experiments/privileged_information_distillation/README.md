@@ -356,6 +356,17 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
 The final adapter is written under
 `results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/adapter/`.
 
+To run the full-data rank-24 capacity ablation while preserving alpha/r = 2
+and every other selected training setting:
+
+```bash
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  --config-name pid_varied_rank24_full_adamw5e5_v1
+```
+
+The adapter is written under
+`results/blackbox/qwen9b_pid_varied_rank24_full_adamw5e5_v1/adapter/`.
+
 For matched data-efficiency sweeps, set `student.train_fraction` in `(0, 1]`.
 Rows are selected deterministically within every dataset/label stratum using
 `student.train_fraction_seed`, so small fractions retain every organism and
