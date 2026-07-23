@@ -1,0 +1,12 @@
+# @package _global_
+defaults:
+  - pid_blind_teacher_hierarchy_rank1_v1
+  - _self_
+
+method: qwen9b_blind_teacher_hierarchy_rank4_v1
+
+teacher:
+  artifact: results/blackbox/qwen9b_blind_teacher_hierarchy_rank1_v1/teacher/train.jsonl
+
+student:
+  lora: {r: 4, alpha: 8}

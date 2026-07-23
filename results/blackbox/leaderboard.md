@@ -7,6 +7,7 @@ The continuous hybrid row reuses cached member outputs, so it has no comparable 
 
 | submitted_at | method | AUROC | bal_acc | recall | FPR | score_time | rows/s |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-20 20:41:00 | qwen9b_heterogeneous_ngram_stack_v1 | 0.9608 | 0.9298 | 0.9190 | 0.0595 | 163.7s | 5.0/s |
 | 2026-07-17 02:02:26 | qwen9b_reason_ensemble_dks_first_rating_stop_v1 | 0.9332 | 0.9310 | 0.8881 | 0.0262 | 528.3s | 1.6/s |
 | 2026-07-17 00:23:59 | qwen27b_reason_ensemble_dks_member4096_v1 | 0.9573 | 0.9464 | 0.9357 | 0.0429 | 1484.5s | 0.6/s |
 | 2026-07-16 08:56:33 | continuous_hybrid_locked_test_v1 | 0.9571 | 0.9298 | 0.8976 | 0.0381 | - | - |

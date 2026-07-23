@@ -1,0 +1,18 @@
+# @package _global_
+# Rank-1 ordinal student trained on the most midpoint-proximal 10% per stratum.
+
+defaults:
+  - pid_teacher_evidence_rating_v1
+  - _self_
+
+method: qwen9b_pid_evidence_rating_uncertain10_rank1_v1
+
+teacher:
+  artifact: results/blackbox/qwen9b_pid_evidence_rating_varied_rank1_datafrac10_v1/teacher/train.jsonl
+
+student:
+  train_fraction: 1.0
+  train_fraction_seed: ${seed}
+  rating_uncertainty_fraction: 0.10
+  rating_uncertainty_seed: ${seed}
+  output_dir: ${output_dir}/adapter

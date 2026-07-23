@@ -12,6 +12,9 @@ from experiments.privileged_information_distillation.train_student_sft import (
     has_reasoning_block,
     load_record_sources,
     load_records,
+    select_rating_uncertainty_fraction,
+    select_rating_uncertainty_with_certain_anchors,
+    select_records_from_manifest,
     select_stratified_fraction,
     should_drop_reasoning,
     strip_reasoning_block,
@@ -58,6 +61,58 @@ def test_load_records_without_filter_preserves_all_usable_rows(tmp_path) -> None
     path.write_text(json.dumps(record) + "\n")
 
     assert load_records(path) == [record]
+
+
+def test_load_records_can_retain_blind_teacher_label_errors(tmp_path) -> None:
+    record = {
+        "dataset": "dev-varied-deception-model",
+        "index": 1,
+        "label": 1,
+        "prediction": 0,
+        "parse_error": False,
+        "label_match": False,
+        "student_target": "<reasoning_summary>Blind error.</reasoning_summary>Prediction:0",
+    }
+    path = tmp_path / "blind.jsonl"
+    path.write_text(json.dumps(record) + "\n")
+
+    assert load_records(path, require_label_match=False) == [record]
+    try:
+        load_records(path)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("privileged mode must still reject label mismatches")
+
+
+def test_select_records_from_manifest_uses_exact_shared_keys(tmp_path) -> None:
+    records = [
+        {"dataset": "dataset", "index": index, "label": index % 2}
+        for index in range(4)
+    ]
+    manifest = tmp_path / "selection.jsonl"
+    manifest.write_text(
+        "\n".join(
+            json.dumps(records[index]) for index in (1, 3)
+        )
+        + "\n"
+    )
+
+    assert select_records_from_manifest(records, manifest) == [records[1], records[3]]
+
+
+def test_select_records_from_manifest_rejects_unavailable_row(tmp_path) -> None:
+    manifest = tmp_path / "selection.jsonl"
+    manifest.write_text(
+        json.dumps({"dataset": "dataset", "index": 9, "label": 1}) + "\n"
+    )
+
+    try:
+        select_records_from_manifest([], manifest)
+    except ValueError as error:
+        assert "unavailable rows" in str(error)
+    else:
+        raise AssertionError("missing fixed selection should fail")
 
 
 def test_load_record_sources_combines_disjoint_filtered_caches(tmp_path) -> None:
@@ -114,6 +169,50 @@ def test_load_record_sources_rejects_overlapping_rows(tmp_path) -> None:
         assert "duplicate teacher record" in str(error)
     else:
         raise AssertionError("overlapping teacher sources should fail")
+
+
+def test_load_record_sources_accepts_distinct_named_variants(tmp_path) -> None:
+    path = tmp_path / "teacher.jsonl"
+    rows = [
+        {
+            "dataset": "dataset",
+            "index": 4,
+            "evidence_variant": variant,
+            "parse_error": False,
+            "label_match": True,
+            "student_target": "Prediction:0",
+        }
+        for variant in ("real", "empty")
+    ]
+    path.write_text("\n".join(json.dumps(record) for record in rows) + "\n")
+
+    loaded = load_record_sources(
+        [(path, None)], record_identity_field="evidence_variant"
+    )
+
+    assert [record["evidence_variant"] for record in loaded] == ["real", "empty"]
+
+
+def test_load_record_sources_rejects_duplicate_named_variant(tmp_path) -> None:
+    path = tmp_path / "teacher.jsonl"
+    record = {
+        "dataset": "dataset",
+        "index": 4,
+        "evidence_variant": "real",
+        "parse_error": False,
+        "label_match": True,
+        "student_target": "Prediction:0",
+    }
+    path.write_text(json.dumps(record) + "\n" + json.dumps(record) + "\n")
+
+    try:
+        load_record_sources(
+            [(path, None)], record_identity_field="evidence_variant"
+        )
+    except ValueError as error:
+        assert "duplicate teacher record" in str(error)
+    else:
+        raise AssertionError("duplicate named variants should fail")
 
 
 def test_load_record_sources_applies_fraction_per_source(tmp_path) -> None:
@@ -216,6 +315,87 @@ def test_select_stratified_fraction_rejects_invalid_fraction() -> None:
             assert "train_fraction" in str(error)
         else:
             raise AssertionError(f"fraction={fraction} should fail")
+
+
+def test_select_rating_uncertainty_fraction_is_midpoint_focused_and_balanced() -> None:
+    records = [
+        {
+            "dataset": dataset,
+            "label": label,
+            "index": label * 100 + rating * 10 + duplicate,
+            "rating": rating,
+        }
+        for dataset in ("dataset-a", "dataset-b")
+        for label in (0, 1)
+        for rating in (1, 2, 3, 4, 5, 6, 7)
+        for duplicate in range(2)
+    ]
+
+    selected = select_rating_uncertainty_fraction(records, 0.25, seed=7)
+
+    assert len(selected) == 16
+    assert all(record["rating"] in (3, 4, 5) for record in selected)
+    assert {
+        (dataset, label): sum(
+            record["dataset"] == dataset and record["label"] == label
+            for record in selected
+        )
+        for dataset in ("dataset-a", "dataset-b")
+        for label in (0, 1)
+    } == {
+        ("dataset-a", 0): 4,
+        ("dataset-a", 1): 4,
+        ("dataset-b", 0): 4,
+        ("dataset-b", 1): 4,
+    }
+    assert selected == select_rating_uncertainty_fraction(records, 0.25, seed=7)
+
+
+def test_select_rating_uncertainty_fraction_rejects_missing_rating() -> None:
+    try:
+        select_rating_uncertainty_fraction(
+            [{"dataset": "dataset", "label": 0, "index": 1}],
+            0.1,
+            seed=0,
+        )
+    except ValueError as error:
+        assert "integer ratings 1--7" in str(error)
+    else:
+        raise AssertionError("rating-focused selection should require ratings")
+
+
+def test_select_rating_uncertainty_with_certain_anchors_balances_both_ends() -> None:
+    records = [
+        {
+            "dataset": "dataset",
+            "label": label,
+            "index": label * 100 + rating * 10 + duplicate,
+            "rating": rating,
+        }
+        for label in (0, 1)
+        for rating in (1, 2, 3, 4, 5, 6, 7)
+        for duplicate in range(2)
+    ]
+
+    selected = select_rating_uncertainty_with_certain_anchors(
+        records, 0.25, seed=11
+    )
+
+    assert len(selected) == 16
+    for label in (0, 1):
+        ratings = [r["rating"] for r in selected if r["label"] == label]
+        assert len(ratings) == 8
+        assert sum(rating in (3, 4, 5) for rating in ratings) == 4
+        assert sum(rating in (1, 7) for rating in ratings) == 4
+
+
+def test_select_rating_uncertainty_with_certain_anchors_rejects_large_fraction() -> None:
+    try:
+        select_rating_uncertainty_with_certain_anchors([], 0.6, seed=0)
+    except ValueError as error:
+        assert "anchor fraction" in str(error)
+    else:
+        raise AssertionError("overlapping uncertainty/anchor fractions should fail")
 
 
 def test_reasoning_block_helpers_remove_only_rendered_suffix() -> None:

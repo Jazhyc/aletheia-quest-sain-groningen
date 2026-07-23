@@ -1,0 +1,15 @@
+# @package _global_
+defaults:
+  - pid_teacher_claim_hierarchy_v1
+  - _self_
+
+method: qwen9b_pid_specialist_hierarchy_rank1_v1
+
+teacher:
+  artifact: results/blackbox/qwen9b_pid_teacher_claim_hierarchy_variedonly_v1/teacher/train.jsonl
+
+student:
+  train_fraction: 1.0
+  selection_manifest: results/blackbox/qwen9b_pid_specialist_ensemble_rank1_v1/common_train10.jsonl
+  output_dir: ${output_dir}/adapter
+  lora: {r: 1, alpha: 2}

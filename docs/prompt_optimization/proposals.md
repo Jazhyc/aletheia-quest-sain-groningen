@@ -2512,7 +2512,8 @@ Outcome:
 
 ## P59: Privileged Signed Evidence-Strength Ratings
 
-Status: complete; the ordered smoke collapsed to extremes and blocked training.
+Status: complete; the full teacher is graded, but the rank-1 student collapses
+back toward binary outputs and misses the viability gates.
 
 Question: can privileged supervision teach a rank-1 student a calibrated 1--7
 deception score, rather than asking a binary-trained adapter to invent
@@ -2574,3 +2575,1466 @@ Smoke outcome:
   seed-random balanced sampling plus a label-balanced hard stratum defined
   without using downstream validation labels. This is a sampling-protocol
   change, not permission to tune the rubric from validation performance.
+
+Full-cache follow-up:
+
+- Because GPT-OSS decoding is cheap relative to queueing/model startup, the
+  complete 2,880-row varied training cache was generated in job `30196495`.
+  The 2,849 uncached prompts took about 2m35s of inference and the complete job
+  took 13m49s. GPT-OSS used every rating: `1:1373`, `2:45`, `3:15`, `4:136`,
+  `5:34`, `6:164`, and `7:958` across the 2,725 clean, nonleaking targets.
+  Ratings 2--6 account for 394/2,725 (`14.46%`), showing that the ordered smoke
+  substantially understated teacher diversity.
+- The strict audit also exposed useful label/audit conflicts rather than mere
+  format failures. There were only three unparsed rows and three visible
+  privileged-language leaks. Most rejected targets were deceptive-label rows
+  for which the teacher said observable evidence looked honest: 78 rating-1
+  and 21 rating-2 outputs retained prediction 1, while 45 rating-1 outputs
+  explicitly predicted 0. These conflicts were excluded rather than forcing a
+  contradictory SFT target.
+- The deterministic 10% subset contains 275 clean targets with rating counts
+  `1:138`, `2:6`, `4:13`, `5:1`, `6:13`, and `7:104`; 33/275 (`12.0%`) are
+  intermediate. Rank-1/alpha-2 training job `30197375` took 106.2s for nine
+  steps (loss `0.9429`), within a 10m19s cold-start job.
+- Validation job `30197376` completed in 7m35s, with 35.3s scoring time. The
+  generated-rating score reaches `0.9024` BA and `0.9077` AUROC overall,
+  `0.9833`/`0.9833` instructed, and `0.7944`/`0.8069` varied. Explicit
+  Prediction reaches `0.9036` overall BA, `0.9833` instructed, and `0.7972`
+  varied, versus the matched binary rank-1 control's `0.9000`, `0.9771`, and
+  `0.7972`.
+- The student still nearly binarizes the target. Of 817 parsed rows, rating
+  counts are `1:465`, `2:3`, `4:2`, `5:1`, `6:28`, and `7:318`; only 34
+  (`4.16%`) are intermediate, and rating/prediction decisions differ on one
+  row. There are five parse errors and one polarity conflict. Relative to the
+  binary rank-1 control, explicit predictions make 14 fixes and 11 breaks.
+- This misses the preregistered `0.9200` rating-AUROC and 10% intermediate-row
+  gates, although binary BA and parse/conflict gates pass. Do not run local
+  test or use this adapter for an ensemble. A follow-up should address the
+  learning objective rather than retune the rubric: separate polarity from
+  evidence strength, balance or oversample teacher-hard rows using training
+  data only, and give the rating/prediction tokens explicit loss weight. The
+  current completion loss is dominated by the long reasoning summary, while
+  only 12% of the small rank-1 subset teaches a non-extreme rating.
+
+## P60: Midpoint-Focused Privileged Rating Student
+
+Status: complete; neither uncertainty-focused arm prevents ordinal collapse.
+
+Question: does training primarily on teacher-uncertain cases prevent the
+ordinal student from collapsing back to ratings 1 and 7?
+
+Frozen protocol:
+
+- Reuse P59's complete GPT-OSS evidence-rating cache without regenerating or
+  changing any teacher target. Keep only its existing parsed, label-consistent,
+  polarity-consistent student targets; do not train on teacher/label conflicts.
+- Define uncertainty as proximity to the semantic neutral midpoint rating 4,
+  not proximity to the empirical mean and not a high deception rating. Within
+  every dataset/label stratum, sort by `abs(rating - 4)` and use a seeded hash
+  only to break equal-rating ties. Select the nearest 10% in each stratum. This
+  preserves source/label representation while preferring the least extreme
+  targets available for both classes.
+- Train two preregistered selection arms. The uncertainty-only arm uses the
+  midpoint-nearest 10% per stratum. The balanced-anchor arm adds an equal number
+  of the most extreme rows from every stratum, producing approximately 20%
+  total data with 1:1 uncertain/certain selection counts. The latter tests
+  whether clear anchors preserve polarity and prevent midpoint collapse.
+- Hold P59's student recipe fixed in both arms: fresh `Qwen/Qwen3.5-9B`, rank 1/alpha 2,
+  completion-only summary/rating/prediction targets, one epoch, AdamW `5e-5`,
+  effective batch size 32, no assistant reasoning input, and the same prompt.
+- Evaluate once on all 822 validation rows with deterministic no-thinking vLLM,
+  512 generated tokens, and 4,096 model context. Report rating and explicit
+  prediction BA/AUROC overall and by scenario, rating histogram/entropy,
+  intermediate fraction, parse/polarity errors, runtime, and fixes/breaks
+  against both P59 and the matched binary rank-1 control.
+- Retain P59's viability gates for each arm: rating AUROC at least `0.9200`, explicit BA at
+  least `0.8950`, at least four distinct generated ratings with at least 10%
+  intermediate, at most five polarity conflicts, and no more than eight parse
+  failures. This is validation-only; a failed screen blocks local test and
+  ensembling. Do not choose a narrower uncertainty fraction or a new rating
+  threshold from validation labels.
+
+Outcome:
+
+- Batched training job `30197958` completed both arms in 12m00s. The
+  uncertainty-only arm selected 275 rows with ratings `1:83`, `2:45`, `3:15`,
+  `4:86`, `5:3`, `6:35`, and `7:8`; 184/275 (`66.9%`) were intermediate. It
+  trained for nine steps in 99.6s with loss `1.238`. The balanced-anchor arm
+  selected 459 rows with ratings `1:144`, `2:45`, `3:15`, `4:86`, `5:3`,
+  `6:35`, and `7:131`; the same 184 intermediate rows were 40.1% of the set.
+  It trained for 15 steps in 153.8s with loss `1.098`.
+- Shared vLLM validation job `30197962` completed in 6m39s, with 33.1s and
+  31.7s member scoring time. Uncertainty-only generated rating BA/AUROC is
+  `0.9036`/`0.9082` overall, `0.9833`/`0.9833` instructed, and
+  `0.7972`/`0.8081` varied. Its explicit Prediction metrics have the same BAs.
+  It has five parse errors and two rating/prediction conflicts.
+- Balanced anchors generated rating BA/AUROC of `0.9012`/`0.9084` overall,
+  `0.9854`/`0.9854` instructed, and `0.7889`/`0.8057` varied. Its explicit
+  Prediction BA is `0.9024` overall and `0.7917` varied. It has six parse errors
+  and one rating/prediction conflict.
+- Despite dramatically enriching intermediate training targets, output spread
+  is unchanged. Uncertainty-only emits ratings `1:465`, `2:3`, `4:4`, `5:1`,
+  `6:25`, and `7:319`: only 33/817 (`4.04%`) parsed rows are intermediate.
+  Balanced anchors emit `1:462`, `2:4`, `4:3`, `5:1`, `6:29`, and `7:317`:
+  37/816 (`4.53%`) intermediate. P59 random-10% emitted 34/817 (`4.16%`).
+- Uncertainty-only's explicit decisions differ from P59 on six rows with three
+  fixes and three breaks; balanced anchors differ on five with two fixes and
+  three breaks. Against the matched binary rank-1 control they make 14/11 and
+  14/12 fixes/breaks, respectively. Neither reaches `0.9200` rating AUROC or
+  10% intermediate output, so both fail the screen. Do not run local test or
+  ensemble these adapters.
+- The failure is no longer well explained by extreme target prevalence: the
+  uncertainty-only training set is two-thirds intermediate, yet its output is
+  96% extreme. The remaining leading hypotheses are underweighted rating tokens
+  within long completion-only summaries, nine low-rank update steps, rank-1
+  capacity, or a strong pretrained tendency to express categorical certainty.
+  Treat token-weighted supervision or a matched capacity/step ablation as a new
+  objective experiment rather than tuning the selection fraction on validation.
+
+## P61: Rank-4 Midpoint-Focused Rating Student
+
+Status: complete; rank 4 reproduces the ordinal collapse and slightly regresses.
+
+Question: is rank-1 LoRA capacity the reason an uncertainty-enriched student
+collapses back to extreme ratings?
+
+Frozen protocol:
+
+- Reuse P60's uncertainty-only selection exactly: the same 275 cached targets,
+  deterministic seed, per-dataset/label midpoint-proximal 10% selection, and
+  resulting 184/275 (`66.9%`) intermediate teacher ratings.
+- Change only LoRA capacity from rank 1/alpha 2 to rank 4/alpha 8, preserving
+  `alpha/r = 2`, all attention and MLP target modules, and zero dropout. Keep
+  one epoch, nine optimizer steps, AdamW `5e-5`, effective batch size 32, prompt,
+  target format, no-trace input, and all inference settings fixed.
+- Evaluate once on all 822 validation rows and compare directly against P60
+  uncertainty-only rank 1. Report overall/instructed/varied rating and explicit
+  Prediction metrics, complete rating histogram, intermediate fraction,
+  parse/polarity errors, runtime, and row-level fixes/breaks.
+- Retain the same viability gates: rating AUROC at least `0.9200`, explicit BA
+  at least `0.8950`, at least four distinct ratings with at least 10%
+  intermediate outputs, no more than five polarity conflicts, and no more than
+  eight parse errors. This is validation-only; failure blocks local test and
+  ensembling. Do not change epochs or select a threshold from validation.
+
+Outcome:
+
+- Rank-4 training job `30199981` completed in 4m08s. The nine optimizer steps
+  took 97.5s and reached loss `1.214`, only slightly below rank 1's `1.238` on
+  the identical 275-row uncertainty-focused subset.
+- The first shared evaluation attempt (`30199982`) failed before model loading
+  because vLLM accepts only discrete `max_lora_rank` capacities and rejects a
+  literal value of 4. The evaluator now rounds the capacity ceiling to the next
+  supported value (8 for a rank-4 adapter), with a regression test. Corrected
+  shared job `30200008` completed in 5m50s.
+- Under the same shared backend, rank 1 scores rating BA/AUROC `0.9036`/`0.9071`
+  overall, `0.9854`/`0.9854` instructed, and `0.7944`/`0.8026` varied. Its
+  explicit Prediction BA is `0.9048` overall and `0.7972` varied. It has six
+  parse errors and one polarity conflict.
+- Rank 4 scores rating BA/AUROC `0.9012`/`0.9057` overall,
+  `0.9833`/`0.9833` instructed, and `0.7917`/`0.8022` varied. Its explicit
+  Prediction BA is `0.9024` overall and `0.7944` varied. It also has six parse
+  errors and one polarity conflict.
+- Rating spread is effectively identical. Rank 1 emits `1:463`, `2:1`, `4:2`,
+  `5:1`, `6:31`, and `7:318`, with 35/816 (`4.29%`) intermediate. Rank 4 emits
+  `1:467`, `2:2`, `4:2`, `5:1`, `6:29`, and `7:315`, with 34/816 (`4.17%`)
+  intermediate. Their rating and explicit decisions differ on eight rows; rank
+  4 makes three fixes and five breaks relative to rank 1.
+- Rank 4 misses both the `0.9200` AUROC and 10% intermediate-output gates and
+  does not support capacity as the leading explanation at this scale. Do not
+  run local test, ensemble it, or extend the rank sweep. The next diagnostic
+  should change how the rating token is supervised or the number of effective
+  updates, rather than increasing rank alone.
+
+## P62: Rank-1 Binary Teacher-Specialist Ensemble
+
+Status: complete; the teacher lenses produced nearly identical binary students,
+and both frozen ensemble rules missed the viability gate.
+
+Question: can independent privileged teacher lenses create complementary
+rank-1 binary students whose errors combine better than any individual student?
+
+Frozen protocol:
+
+- Reuse three independently generated GPT-OSS teacher caches from the completed
+  prompt sweep: material factual contrast, question/output polarity guard, and
+  claim hierarchy. These respectively emphasize the most consequential factual
+  contrast, reversal or negation mistakes, and the answer's controlling claim
+  over incidental details. Do not regenerate or edit their cached targets.
+- Compute the label-consistent intersection of usable varied-deception rows in
+  all three caches. Draw one deterministic seed-0 10% subset stratified by exact
+  dataset and label. Train all specialists on this identical manifest, so the
+  only intended difference is the teacher summary. Store the manifest and its
+  cache provenance under
+  `results/blackbox/qwen9b_pid_specialist_ensemble_rank1_v1/`.
+- Each student is a rank-1/alpha-2 LoRA on regular `Qwen/Qwen3.5-9B`, trained for
+  one epoch with AdamW `5e-5`, effective batch size 32, completion-only loss,
+  the common no-trace factual judge input, and its teacher's concise reasoning
+  summary followed by the binary `Prediction:0|1` target. Do not use ordinal
+  ratings or convert this to prediction-only supervision; the matched ablation
+  established that the reasoning summary itself supplies useful supervision.
+- Generate deterministic binary decisions from every specialist on the full
+  training and validation splits with the shared vLLM backend, 4,096-token model
+  context, and 512-token generation cap. The validation split remains fully held
+  out. For meta-training, remove every row in the shared specialist training
+  manifest from the full-train predictions; this prevents the combiner from
+  seeing base-model in-sample features.
+- Compare every individual member with a binary OR, majority vote, unanimity,
+  and a frozen logistic regression over the three binary outputs. Fit logistic
+  regression once with feature order `(material, polarity, hierarchy)`, `C=1`,
+  threshold `0.5`, and sample weights that give equal total weight to each
+  instructed/varied by honest/deceptive cell. Do not tune its regularization,
+  threshold, features, or ensemble rule on validation labels.
+- Report overall and scenario BA/AUROC/recall/FPR, parse failures, pairwise member
+  disagreements, all eight logistic pattern probabilities, and fixes/breaks for
+  each ensemble relative to each member. The experiment is promising only if OR
+  or the frozen logistic combiner improves overall validation BA by at least
+  `0.005` over the best member without reducing varied BA. Otherwise stop before
+  local-test evaluation, notebook integration, or additional specialists.
+
+Outcome:
+
+- The common usable teacher-cache intersection contained 2,450 varied rows. The
+  frozen dataset/label-stratified 10% manifest selected 246 rows: 137 honest and
+  109 deceptive across all 18 source-dataset/label strata. Each rank-1 student
+  trained for eight optimizer steps. Chained jobs `30200153`, `30200154`, and
+  `30200156` completed successfully in 6m54s, 17m39s, and 18s respectively.
+- Dataset-macro validation BA was `0.9048` for material contrast, `0.8976` for
+  polarity guard, and `0.8988` for claim hierarchy. Their varied BAs were
+  `0.8083`, `0.7944`, and `0.7972`; validation parse failures were 4, 4, and 3.
+- The students did not acquire useful independence. Material versus polarity
+  differed on only 8/822 validation rows, material versus hierarchy on 5, and
+  polarity versus hierarchy on 3. Majority vote exactly reproduced hierarchy.
+- Binary OR scored `0.9024` overall and `0.8028` varied BA. Relative to the best
+  material student it changed two decisions, both breaks and no fixes. The
+  frozen logistic stack scored `0.9036` overall and `0.8056` varied BA; relative
+  to material it changed one decision, also a break. Its learned rule effectively
+  trusted material alone or agreement of polarity and hierarchy, assigning the
+  latter pair a `0.8154` deception probability.
+- Neither combiner improves the best member, much less by the required `0.005`,
+  and both reduce varied BA. Stop before local-test evaluation or submission use.
+  Prompting one teacher model to write differently worded privileged summaries
+  on the same examples is insufficient to create independent binary specialists;
+  future attempts need genuinely different targets, data slices, evidence, or
+  base representations rather than another wording-only teacher lens.
+
+## P63: Ground-Truth-Blind Teacher-Specialist Ensemble
+
+Status: complete; blind teachers become diverse and ensemble well, but rank-1
+distillation erases almost all of their decision diversity.
+
+Question: did privileged, label-conditioned post-hoc explanations homogenize
+P62's students, and can genuine teacher judgments create complementary rank-1
+specialists whose ensemble reduces their independent errors?
+
+Frozen protocol:
+
+- Retain the same three conceptual GPT-OSS-120B lenses as P62—material factual
+  contrast, question/output polarity, and claim hierarchy—but remove every
+  ground-truth statement and placeholder from the teacher prompts. Each teacher
+  must infer both its concise reasoning summary and binary prediction from the
+  visible conversation and its own knowledge. Use medium Harmony reasoning,
+  temperature zero, a 2,048-token generation cap, and require an explicit final
+  `<reasoning_summary>...</reasoning_summary> Prediction:0|1`.
+- Draw one seed-0, exact-dataset/label-stratified 10% manifest directly from the
+  raw varied training labels. Labels may determine the balanced sample and may
+  be retained for later evaluation, but they must never enter the teacher prompt.
+  Generate all three teacher caches on the same selected rows. Disable the
+  privileged prediction fallback: a missing teacher prediction is a parse error,
+  not a ground-truth completion.
+- Do not filter or regenerate teacher outputs based on correctness. A parsed
+  teacher prediction that conflicts with the training label remains a valid
+  distillation target. Intersect only on parse availability so all students see
+  the same rows; this is format filtering, not label filtering. Audit each
+  teacher's accuracy, parse failures, prediction distribution, and pairwise
+  disagreement after cache generation. Also generate each blind prompt once on
+  all 360 varied validation rows to measure genuine teacher transfer; do not use
+  these labels to edit prompts or select traces.
+- Train three fresh regular-Qwen rank-1/alpha-2 students for one epoch with AdamW
+  `5e-5`, effective batch size 32, completion-only loss, and the common no-trace
+  factual judge input. Each target is its blind teacher's summary and predicted
+  binary decision, even when that decision is wrong. Hold all other student and
+  vLLM inference settings fixed to P62.
+- Evaluate students jointly on the full train and validation splits. Compare
+  individuals, OR, majority, unanimity, and the frozen `C=1`, threshold-0.5
+  logistic stack over binary outputs. Fit the stack on full-train predictions
+  after excluding the common student-training manifest, with equal total weight
+  for each scenario/label cell. Do not tune thresholds, regularization, member
+  subsets, or rules on validation.
+- Report dataset-macro overall/instructed/varied BA, AUROC, recall, FPR, parse
+  errors, pairwise disagreements, teacher-to-student agreement, and ensemble
+  fixes/breaks. Diversity is useful only if OR or logistic improves the best
+  blind student by at least `0.005` without reducing varied BA. It is competitive
+  with P62 only if it also reaches material specialist BA `0.9048` overall and
+  `0.8083` varied. Failure blocks local test and submission integration.
+
+Outcome:
+
+- The raw label-stratified manifest selected 288 varied rows, exactly 144 per
+  label and 16 per dataset/label stratum. Blind generation parsed 286 material,
+  287 polarity, and 276 hierarchy train targets; their common parse-only
+  intersection contained 274 rows. Label mismatches were retained. Generation,
+  training, evaluation, and analysis jobs `30200891`, `30200896`, `30200897`,
+  and `30200993` completed in 16m14s, 5m25s, 16m05s, and 45s.
+- The blind teachers were genuinely different. On the 360 varied validation
+  rows, material scored `0.8639` BA, polarity `0.8583`, and hierarchy `0.7750`;
+  they disagreed on 24, 42, or 44 rows by pair. Blind-teacher OR reached
+  `0.8833` BA by raising recall to `0.8389` at `0.0722` FPR, a `0.0194` gain
+  over the best individual. Majority scored `0.8444`.
+- Diversity also existed in the actual student supervision. On the 274 common
+  parsed training rows, material/polarity teacher decisions differed on 20,
+  material/hierarchy on 41, and polarity/hierarchy on 33. Their correct-decision
+  counts were 239, 233, and 216 respectively; no correctness filtering occurred.
+- Rank-1 SFT erased this structure. On 822 validation rows, material, polarity,
+  and hierarchy students differed by only 2, 3, or 5 decisions. Their overall
+  BAs were `0.9012`, `0.8988`, and `0.9024`, with varied BAs `0.8000`, `0.7972`,
+  and `0.8028`. Teacher/student decision agreement on varied validation was only
+  `0.8583`, `0.8667`, and `0.8444`, showing that the students did not faithfully
+  preserve their teachers' distinct boundaries.
+- Student OR scored `0.9000` overall and `0.7972` varied BA; versus the best
+  hierarchy student it made two breaks and no fixes. The frozen logistic stack
+  scored `0.9012` overall and `0.8000` varied; it made one break and no fixes
+  versus hierarchy. Majority reproduced material at `0.9012`; unanimity also
+  scored `0.9012`. No combiner clears either viability gate, and all remain
+  below P62 material (`0.9048` overall, `0.8083` varied).
+- This rejects privileged post-hoc explanations as the primary cause of P62's
+  lack of member independence. Genuine blind teachers supplied complementary
+  decisions and a useful direct ensemble, but the current 274-row, nine-step,
+  rank-1 completion-only objective compressed them back toward the shared Qwen
+  base behavior. Do not run local test or integrate these adapters. A future
+  experiment should target preservation of teacher decisions—such as explicit
+  decision-token weighting or substantially stronger/longer specialist updates—
+  rather than generating another set of teacher prompt lenses.
+
+## P64: Rank-4 Blind-Teacher Specialist Capacity Ablation
+
+Status: complete; rank 4 changes more decisions than rank 1 but does not preserve
+more cross-teacher diversity or clear the ensemble gain threshold.
+
+Question: did rank-1 capacity prevent P63's students from preserving genuinely
+different blind-teacher decision boundaries?
+
+Frozen protocol:
+
+- Reuse P63's three blind-teacher train caches without regeneration and select
+  exactly the same 274-row common parse-only manifest. Retain every parsed
+  teacher mistake and the material, polarity, and hierarchy summary/prediction
+  targets unchanged. Reuse the existing blind-teacher validation artifacts for
+  teacher/student agreement only.
+- Change only LoRA rank from 1 to 4 and alpha from 2 to 8, preserving alpha/r=2,
+  zero dropout, all attention and MLP target modules, regular Qwen3.5-9B, one
+  epoch, AdamW `5e-5`, effective batch size 32, completion-only loss, tokenizer,
+  prompt, context cap, seed, and deterministic vLLM inference settings.
+- Jointly evaluate all three rank-4 students on full train and validation. Fit
+  the same frozen `C=1`, threshold-0.5 logistic stack outside the 274 training
+  rows with equal scenario/label-cell weights. Report individuals, OR, majority,
+  unanimity, logistic, parse errors, pairwise disagreement, and fixes/breaks.
+- Compare each rank-4 member directly with its rank-1 counterpart and measure
+  rank-4 teacher/student agreement on varied validation. Capacity is supported
+  only if rank-4 materially increases student pairwise disagreement toward the
+  teachers' 24--44-row range and OR or logistic beats the best rank-4 member by
+  at least `0.005` without reducing varied BA. Submission competitiveness still
+  requires at least P62 material's `0.9048` overall and `0.8083` varied BA. Do
+  not tune another rank or run local test if these gates fail.
+
+Outcome:
+
+- Training, evaluation, and analysis jobs `30201211`, `30201213`, and `30201215`
+  completed successfully in 7m51s, 19m07s, and 42s. All three adapters used the
+  exact same 274 blind targets and nine optimizer steps as rank 1. Trainer losses
+  fell only slightly from rank 1: material `0.8954` to `0.8717`, polarity
+  `0.9600` to `0.9333`, and hierarchy `1.360` to `1.337`.
+- Rank 4 moved each model relative to rank 1, but not consistently toward better
+  decisions. Material changed nine validation decisions with five fixes/four
+  breaks; polarity changed eleven with six fixes/five breaks; hierarchy changed
+  thirteen with five fixes/eight breaks. Rank-4 material, polarity, and hierarchy
+  scored overall BA `0.9024`, `0.9000`, and `0.8988`, versus rank-1 `0.9012`,
+  `0.8988`, and `0.9024`. Their varied BAs were `0.8000`, `0.7944`, and `0.7944`.
+- Extra capacity did not recover specialist independence. Rank-4 pairwise
+  disagreements were only 4 material/polarity, 5 material/hierarchy, and 1
+  polarity/hierarchy, versus rank 1's 2, 3, and 5 and the teachers' 24, 44, and
+  42. Teacher/student agreement rose by only `0.0028`--`0.0056`, reaching
+  `0.8639`, `0.8694`, and `0.8472` for material, polarity, and hierarchy.
+- Rank-4 OR is the best aggregate at `0.9036` overall and `0.8028` varied BA. It
+  adds one correct positive with no breaks relative to the best material member,
+  but the gain is only `0.0012`, below the required `0.005`. Logistic and
+  majority both score `0.9000` overall and `0.7944` varied; unanimity scores
+  `0.8976` and `0.7917`.
+- Rank 4 therefore fails both the diversity and competitiveness gates and remains
+  below P62 material (`0.9048` overall, `0.8083` varied). Do not run local test,
+  integrate these adapters, or extend the rank sweep. Capacity at this scale is
+  not the bottleneck; the next controlled mechanism should directly strengthen
+  preservation of the teacher decision signal, such as decision-token weighting
+  or more effective updates, rather than another LoRA-rank increase.
+
+## P65: Phoenix v2.1 Native-Thinking Inference Ablation
+
+Status: 4,096-token pass complete but truncation-invalid; 8,192-token closure
+retry scheduled on validation only.
+
+Question: does Qwen's native inference-time thinking improve the current
+submission adapter when its weights, factual judge prompt, and input evidence are
+held fixed?
+
+Frozen protocol:
+
+- Use the exact bundled Phoenix v2.1 rank-16 adapter (SHA-256
+  `1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`)
+  and the saved ordinary Truth Value Guard student prompt. Force assistant
+  reasoning visibility to hidden so this experiment does not reintroduce the
+  v2.4 dataset-trace interface.
+- Evaluate the same 822 validation rows twice in one persistent vLLM process.
+  The control renders the Qwen chat template with native thinking disabled and
+  permits 512 generated tokens. The intervention changes only the chat-template
+  thinking switch and permits 4,096 generated tokens. Use deterministic decoding,
+  an 8,192-token model context, the adapter tokenizer, and the same binary parser.
+- Report dataset-macro overall/instructed/varied BA, recall, FPR, parse and strict
+  format failures, length-capped generations, output-token percentiles, runtime,
+  disagreement, and paired fixes/breaks. Compare the fresh no-thinking condition
+  both to its paired intervention and to the historical `0.9000` validation BA.
+- Native thinking is promising only if it improves overall BA by at least `0.005`
+  without reducing varied BA or materially increasing parse failures. Otherwise
+  do not spend a local-test evaluation or alter the submission notebook.
+
+Preliminary 4,096-token audit:
+
+- Job `30202210` completed in 13m06s. The paired no-thinking control reproduced
+  `0.9024` overall and `0.8028` varied BA with two capped parse failures. Native
+  thinking initially appeared to score `0.8857` overall and `0.7833` varied BA,
+  but 108/822 outputs hit the 4,096-token limit.
+- Only three capped generations closed `</think>`, and none emitted a parseable
+  final answer. The permissive binary parser had counted 101 tentative
+  `Prediction:` strings inside unfinished thinking. Requiring a closed thinking
+  block yields 108 parse failures and provisional BA `0.8560` overall, `0.7500`
+  varied. This is not a valid capacity comparison.
+- Retry native thinking at 8,192 generated tokens with a 12,288-token model
+  context and final-channel-only parsing. This is a truncation-closure retry,
+  not a new prompt or selection round. If material capping remains, reject the
+  route as operationally unstable rather than increasing the limit again.
+
+Final outcome:
+
+- Retry job `30204006` completed in 18m58s, with 438.5s spent on scoring. Native
+  thinking scored `0.8631` overall, `0.9479` instructed, and `0.7500` varied BA,
+  versus the paired no-thinking control's `0.9024`, `0.9771`, and `0.8028`.
+  Thinking reduced FPR from `0.0310` to `0.0167` but reduced recall from
+  `0.8357` to `0.7429`; the adapter became substantially too conservative.
+- The larger budget did not close the operational failure. There were still 86
+  length-capped outputs and therefore 86 final-channel parse failures. Output
+  length was mean 2,212 tokens, median 1,247, and p95/max 8,192. Only 534/822
+  finals met the strict trained output format, and scoring was 12.5 times slower
+  than the 35.0s no-thinking control.
+- Standalone thinking disagreed with no-thinking on 110 parsed/defaulted
+  decisions and made 15 fixes versus 71 breaks. A diagnostic OR of completed
+  thinking positives with the no-thinking predictions changed only 14 rows and
+  made 10 fixes versus 4 breaks, reaching `0.9095` overall, `0.9854` instructed,
+  and `0.8083` varied BA. This is a small complementary-signal result, not a
+  viable submission member: it depends on an 8,192-token path with 10.5% parse
+  failure, looping outputs, and roughly 12.5x inference cost.
+- Native thinking fails the frozen standalone gate. Do not alter the submission
+  notebook, run local test, or raise the token cap again. Any later follow-up
+  should first make the second member reliably concise and should validate a
+  predeclared router or ensemble on a distribution-shift-resistant split rather
+  than selecting this validation OR post hoc.
+
+## P66: Heterogeneous Rank-1 Objective Ensemble
+
+Status: complete; distinct targets preserve strong student diversity, but the
+frozen OR narrowly misses the gain gate and logistic calibration does not
+improve binary BA.
+
+Question: can rank-1 adapters retain useful independence when they learn
+fundamentally different observable properties rather than differently worded
+versions of the deception label?
+
+Frozen protocol:
+
+- Reuse `qwen9b_pid_specialist_material_rank1_v1` as the normal deception
+  member. It is the existing rank-1/alpha-2 privileged material-contrast student
+  and remains the only member whose teacher sees the authoritative competition
+  label.
+- Train an `incorrectness` rank-1/alpha-2 member from a ground-truth-blind
+  GPT-OSS teacher. Its distinct student target is 1 when any concrete claim in
+  the final output—including a secondary supporting detail—is factually false
+  or materially misleading, independent of intent. It must not attack a false
+  premise that the output rejects. Retain parsed teacher decisions even when
+  they conflict with the competition label.
+- Train a `resolved_intent` rank-1/alpha-2 member from a ground-truth-blind
+  teacher and a distinct trace-conditioned student prompt. Its target is 1 only
+  when the assistant's private reasoning ultimately settles on misleading the
+  user and the final answer executes that settled plan. Merely receiving,
+  considering, discussing, or later rejecting a dishonest instruction is 0.
+  Use the final 4,000 reasoning characters because the operative end decision is
+  the target. At inference, route rows without assistant reasoning to a fixed
+  zero without querying this adapter.
+- Reuse P63's exact seed-0, dataset/label-stratified 10% varied manifest for the
+  two blind teachers. Intersect neither target with the competition label and
+  filter only parse failures. Each new student uses regular Qwen3.5-9B,
+  completion-only SFT, one AdamW epoch at `5e-5`, effective batch size 32,
+  rank 1, alpha 2, and native thinking disabled.
+- Generate full-train and full-validation member predictions in one shared vLLM
+  process per split. The local data has reasoning on all varied rows and no
+  instructed rows, so do not expose an explicit reasoning-availability feature
+  to the combiner; it would be a direct scenario shortcut. Report members by
+  scenario and treat intent as unavailable outside trace-bearing rows.
+- Compare the three members, binary OR, majority, unanimity, and a frozen
+  logistic regression over `(deception, incorrectness, resolved_intent)` with
+  `C=1`, threshold 0.5, and equal total weight for every scenario/label cell.
+  Fit on full-train predictions after excluding the union of all three student
+  training manifests. Do not tune weights, thresholds, objective wording, or
+  availability routing on validation.
+- Report teacher target balance, parse rate, pairwise disagreements,
+  teacher/student agreement, member metrics, ensemble metrics, and paired
+  fixes/breaks. Continue only if OR or logistic improves the best member by at
+  least `0.005` overall without reducing varied BA and the students retain
+  materially more disagreement than P63's 2--5 rows. Otherwise stop before
+  local-test evaluation or submission integration.
+
+Outcome:
+
+- Target generation, training, shared-session evaluation, and analysis jobs
+  `30207598`, `30207599`, `30207601`, and `30207602` completed in 16m38s,
+  5m34s, 17m31s, and 37s. The incorrectness teacher parsed 287/288 train and
+  360/360 validation rows; resolved intent parsed every train and validation
+  row. No target was filtered for disagreement with the competition label.
+- The blind targets are meaningfully different. On 360 varied validation rows,
+  the incorrectness teacher scored `0.8972` BA against deception labels with
+  `0.8944` recall and `0.1000` FPR; resolved intent scored `0.8472`, `0.7167`,
+  and `0.0222`. They disagreed on 58 rows, and their diagnostic OR reached
+  `0.9028` BA. This comparison is descriptive because the teachers predict
+  different properties.
+- Resolved intent distilled faithfully: teacher/student agreement was `0.9472`,
+  and the student reached `0.8389` varied BA, `0.7111` recall, and `0.0333` FPR.
+  Its full-validation BA is only `0.6452` because all 462 no-trace instructed
+  rows are deliberately routed to zero. Incorrectness agreement was lower at
+  `0.7972`; its student scored `0.8857` overall and `0.8111` varied BA, with
+  high varied recall `0.7944` but high FPR `0.1722`. The normal deception member
+  remained best overall at `0.9048` BA and scored `0.8083` varied.
+- Unlike P62--P64, student diversity survived. Full-validation disagreement was
+  69 rows for deception/incorrectness, 256 for deception/intent, and 289 for
+  incorrectness/intent. Restricting to the 360 trace-bearing varied rows still
+  leaves 53, 41, and 66 disagreements respectively, versus only 2--5 for P63.
+  Fundamentally different student prompts and target semantics therefore solve
+  the representation-collapse problem seen with teacher wording lenses.
+- Binary OR reached `0.9095` overall and `0.8306` varied BA, versus `0.9048` and
+  `0.8083` for deception alone. It made 37 fixes and 33 breaks, but raised
+  varied FPR to `0.1944` and reduced instructed BA to `0.9688`. Its overall gain
+  is `0.00476`, narrowly below the frozen `0.005` gate. Majority retained the
+  same `0.8306` varied BA with `0.0611` FPR but fell to `0.8988` overall.
+- The frozen logistic stack assigned positive coefficients to all three members
+  and achieved `0.9430` validation AUROC, but its threshold-0.5 BA tied the
+  deception member at `0.9048`; instructed/varied BAs were `0.9688`/`0.8194`.
+  Its learned pattern probabilities treat incorrectness alone as positive
+  (`0.5245`) and resolved intent alone as just negative (`0.4925`), so it cannot
+  exploit the intent member's complementary positives without also accepting
+  the correctness member's false positives.
+- The experiment establishes objective heterogeneity as a viable source of
+  independent rank-1 features, but neither preregistered combiner clears the
+  deployment gate. Do not run local test or select a member subset/threshold
+  post hoc. A future iteration should improve correctness precision or produce
+  richer calibrated member scores, with combination rules selected on a
+  distribution-shift-resistant meta-training split rather than this validation
+  set.
+
+## P67: Input-Dependent N-Gram Heterogeneous Stack
+
+Status: completed; passed the frozen development gate and transferred to local
+test without retuning.
+
+Question: can sparse transcript features tell a logistic meta-model when to
+trust the heterogeneous incorrectness and resolved-intent votes?
+
+Frozen protocol:
+
+- Reuse P66's exact full-train and validation predictions and exclude the union
+  of all three adapter-training manifests. Do not make new model calls, change
+  adapter weights, or use local test.
+- Reconstruct only inference-visible message content and final output, capped at
+  3,000 context characters. Exclude assistant reasoning, dataset/model names,
+  labels, adapter generations, and reasoning-availability indicators. This
+  prevents the text model from directly exploiting the local varied/trace
+  confound.
+- Fit one word TF-IDF representation with 1--2 grams, `min_df=3`, `max_df=0.98`,
+  at most 20,000 features, Unicode accent stripping, and sublinear term
+  frequency. Concatenate it with the three binary adapter outputs and fit
+  `C=1` logistic regression at threshold 0.5 using equal scenario/label-cell
+  sample weights. Do not sweep representation, regularization, or threshold.
+- Report adapter-only logistic, n-gram-only logistic, and the concatenated
+  hybrid. First produce leave-one-dataset-unit-out predictions over the
+  leakage-excluded train rows, fitting the vocabulary inside every fold. Then
+  fit the same frozen models on all eligible train rows and evaluate validation
+  once. Record scenario metrics, fixes/breaks, member coefficients, vocabulary
+  size, and the strongest positive/negative n-grams to audit shortcuts.
+- The hybrid is promising only if grouped OOF does not regress relative to the
+  adapter-only stack and frozen validation improves adapter-only BA by at least
+  `0.005`, matches or exceeds P66 OR's `0.9095`, does not reduce P66 OR's
+  `0.8306` varied BA, and does not materially increase FPR. Otherwise stop
+  without test evaluation, feature/threshold tuning, or packaging. Prior
+  standalone n-gram and correction-gate experiments improved AUROC while
+  worsening binary calibration, so ranking gain alone is insufficient.
+
+Outcome (2026-07-20, Slurm job `30208150`, 2m45s):
+
+- Leakage-excluded leave-one-dataset-unit-out evaluation covered 6,275 training
+  rows. The hybrid reached `0.9108` BA, `0.9541` AUROC, `0.8776` recall, and
+  `0.0560` FPR, versus `0.8983`, `0.9332`, `0.8777`, and `0.0811` for the
+  adapter-only logistic stack. Varied BA improved from `0.8116` to `0.8385`
+  while varied FPR fell from `0.1475` to `0.1120`.
+- The n-gram-only model was much weaker at `0.7950` grouped OOF BA and `0.8250`
+  frozen-validation BA, showing that the gain comes from conditioning the
+  adapter combination on visible text rather than replacing the judges with a
+  lexical classifier.
+- On the single frozen validation evaluation, the hybrid scored `0.9190` BA,
+  `0.9574` AUROC, `0.9119` recall, and `0.0738` FPR. The adapter-only stack
+  scored `0.9048`, `0.9430`, `0.9095`, and `0.1000`; P66's OR scored `0.9095`
+  BA with `0.1071` FPR. Hybrid instructed and varied BA were `0.9750` and
+  `0.8444`, respectively, versus `0.9688` and `0.8194` for adapter-only and
+  `0.9750` and `0.8306` for P66 OR. Relative to adapter-only, the hybrid made
+  24 changes: 18 fixes and 6 breaks.
+- The fitted adapter coefficients remained strongly positive: deception
+  `3.20`, incorrectness `2.05`, and resolved intent `2.11`. The 20,000-feature
+  lexical audit found explicit discourse cues among the largest weights:
+  `actually`, `wrong answer`, and `by giving` were positive, while `is correct`,
+  `answer truthfully`, and `answer honestly` were negative. These are plausible
+  input-dependent routing cues, but they also expose template-shift risk.
+- This passes every preregistered development gate: grouped OOF improved,
+  validation gained `0.0143` BA over adapter-only and `0.0095` over P66 OR,
+  varied BA gained `0.0139` over P66 OR, and FPR decreased. Grouped transfer
+  makes simple dataset-unit memorization unlikely, but the learned prompt
+  language remains a distribution-shift risk. The representation and threshold
+  were frozen without validation tuning.
+
+Frozen local-test confirmation (2026-07-20, A100/CPU jobs `30217217` and
+`30217261`):
+
+| combiner | overall BA | AUROC | recall | FPR | instructed BA | varied BA |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| three-vote logistic | `0.9179` | `0.9488` | `0.9143` | `0.0786` | `0.9813` | `0.8333` |
+| n-gram only | `0.8036` | `0.8807` | `0.8143` | `0.2071` | `0.8646` | `0.7222` |
+| three votes + n-grams | **`0.9298`** | **`0.9608`** | **`0.9190`** | **`0.0595`** | **`0.9833`** | **`0.8583`** |
+
+- Before test inference, the new split-generic scoring path replayed validation
+  with exactly the same binary decisions, `0.9048` adapter-only BA, and
+  `0.9190` hybrid BA as P67. The test vectorizer and classifiers were then fit
+  only on the same 6,275 leakage-excluded training rows; no test label entered
+  fitting, representation, threshold, or member selection.
+- The hybrid changes 22 test decisions relative to the adapter-only logistic,
+  making 16 fixes and six breaks. Relative to the standalone deception member
+  (`0.9071` BA), it makes 31 fixes and 12 breaks. Its `+0.0119` BA improvement
+  over plain logistic is close to the `+0.0143` frozen-validation gain.
+- The individual test members score `0.9071` deception, `0.9107` incorrectness,
+  and `0.6417` resolved-intent overall BA. The intent member is deliberately
+  routed to zero on instructed rows; on varied rows it scores `0.8306` BA.
+  Member parse errors are 7, 15, and 1 respectively and enter the unchanged
+  stack as zero votes.
+- This is now tied with the 4096-token D/K/S reasoning ensemble at `0.9298` BA
+  while using three small rank-1 adapters and much shorter no-thinking
+  generations. The n-gram model remains a template-shift risk, and local test
+  shares the public dataset-unit families, so do not infer hidden-leaderboard
+  transfer from the tie alone.
+
+Phoenix Wright v3.0 deployment (2026-07-20):
+
+- Exported the exact train-fitted vectorizer and hybrid logistic classifier as
+  `submission/phoenix_wright_v3_ngram.joblib` (368,422 bytes). A packaged replay
+  reproduced all frozen test aggregate metrics exactly: `0.9297619` BA,
+  `0.9608333` AUROC, `0.9190476` recall, and `0.0595238` FPR.
+- Bundled minimal copies of the three rank-1 adapters (about 7.3 MB of weights
+  each) and published matching public PEFT repositories:
+  `Jazhyc/aletheias-phoenix-v3-deception-r1`,
+  `Jazhyc/aletheias-phoenix-v3-incorrectness-r1`, and
+  `Jazhyc/aletheias-phoenix-v3-resolved-intent-r1`.
+- The notebook reuses one `LanguageModel` meta-wrapper because all three LoRAs
+  have identical rank and target modules. Each remote session sends the current
+  PEFT repo through NNsight's environment, allowing the updated NDIF actor to
+  swap weights without constructing three client-side model graphs. Prompts are
+  length-sorted with 32/24/16 dynamic batches, four batches per remote session,
+  and a 4,096-token input ceiling. The 512-token completion allowance is
+  preserved because lowering it would change the frozen member behavior.
+- A clean staged dry run on 32 varied rows exercised all three repositories,
+  reasoning-aware intent routing, the frozen CPU stack, and CSV validation in
+  1m57s. Eleven additional instructed dataset slices completed successfully;
+  those rows skipped the unavailable intent member as designed. The upload
+  archive is 22.8 MB.
+- The official black-box endpoint accepted the package and held a live runner
+  stream without a startup error for approximately 125 seconds. Client polling
+  was then stopped deliberately; no leaderboard score was available at that
+  point and none should be inferred from submission acceptance.
+
+Timeout-driven deployment update (2026-07-21):
+
+- Two official attempts with the complete three-member package stopped on
+  Eunomia after `8126.65` and `8183.34` seconds. The repeatable duration and
+  absence of a startup error point to a dataset runtime ceiling.
+- All member duos were refit under P67's unchanged train-only n-gram/logistic
+  protocol. Deception plus resolved intent was the validation-preferred
+  simplification: hybrid BA was `0.9202` on validation and `0.9238` on test,
+  versus `0.9190` and `0.9298` for all three. Its test AUROC was `0.9550`,
+  recall `0.8857`, FPR `0.0381`, instructed BA `0.9813`, and varied BA
+  `0.8472`.
+- The refit still uses all 6,275 leakage-excluded meta-training rows: 3,693
+  instructed and 2,582 varied, including 640 Gemma and 173 Nemotron rows by
+  dataset provenance. It is therefore not a varied-only Qwen lexical model.
+- Phoenix 3.0 now deploys and bundles only the deception and resolved-intent
+  adapters. This cuts member-row calls 41% on the mixed local test split, one
+  third on trace-bearing datasets, and one half on no-reasoning datasets. The
+  already-published adapter repositories and member prompts are unchanged.
+
+Final deception-only official result and rollback (2026-07-22):
+
+- Runtime simplification ultimately deployed only the rank-1 material-deception
+  member. After two 4,096-input attempts failed on Eunomia, a 2,048-token
+  resubmission completed in `5983.006` seconds but scored `0.7983` counted BA,
+  below Phoenix v2.0's `0.8333`.
+- Iris mean BA was unchanged at `0.9333`; Notus mean BA fell from `0.7333` to
+  `0.6633`. The aggregate loss was recall-only and appeared in all three Notus
+  families, rejecting local prediction similarity as evidence that the
+  compressed specialist transferred like the original full-data adapter.
+- Phoenix v3.0 therefore restores the original Phoenix v2.1 rank-16 adapter,
+  exact frozen v2.0 no-trace rendering, and 512 generated tokens. It retains
+  `LanguageModel`, the 2,048-token input ceiling, sorted dynamic `32/24/16`
+  batching, one remote session, and the v3.0 notebook identity.
+
+Full-member session optimization (2026-07-21):
+
+- A paired remote benchmark scored the complete 400-row public varied-Qwen
+  no-adapter unit with four batches per session and then with all batches for
+  one adapter in a single session. Wall time fell from `654.305` to `615.340`
+  seconds (`-38.965` seconds, `-5.96%`).
+- The two resulting 400-row CSV files were byte-identical, including all binary
+  decisions and continuous n-gram scores. The full sessions completed without
+  OOM, serialization, or request-size errors.
+- The notebook now uses one remote session per active adapter by default;
+  `PHOENIX_REMOTE_BATCHES_PER_SESSION` remains available as a positive bounded
+  override. This reduces NDIF queue/request overhead without changing batch
+  shapes, member prompts, weights, or generation budgets. Runtime is a shared-
+  service measurement and should not be treated as a fixed 5.96% guarantee.
+
+Binary-safe intent gate (2026-07-21):
+
+- After the deception pass, score the frozen stack with hypothetical intent
+  values zero and one. Query intent only where those endpoints straddle the
+  binary threshold; otherwise impute member value `0.5`. This preserves the
+  binary decision algebraically for the fixed binary-member stack rather than
+  learning a new routing boundary. No-reasoning rows remain at intent zero.
+- The gate skipped 39.17% of validation trace rows and 41.11% of test trace
+  rows. Validation/test BA and every binary decision were unchanged; AUROC
+  moved from `0.9526` to `0.9449` on validation and from `0.9550` to `0.9500`
+  on test.
+- On the paired 400-row NDIF unit, the gate skipped 200 intent calls and cut
+  runtime from `615.340` to `501.491` seconds (`-18.50%`). BA remained `0.9475`
+  with zero decision disagreements; AUROC fell from `0.99155` to `0.98240`.
+  `PHOENIX_INTENT_GATE=0` retains an explicit ungated rollback. Keep reporting
+  the AUROC cost even though balanced accuracy is the primary metric.
+
+## P68: Belief-Grounded Intent Member
+
+Status: complete; stricter belief evidence regresses and no replacement student
+was trained.
+
+Question: is P66's resolved-intent target slightly too broad because it asks
+whether the assistant chose to mislead, rather than whether it stated a
+proposition it believed false?
+
+Audit:
+
+- The existing blind teacher is conservative, not generally loose: on 360
+  trace-bearing varied validation rows it scored `0.8472` BA, `0.7167` recall,
+  and `0.0222` FPR. The rank-1 student closely preserved that behavior at
+  `0.8389`, `0.7111`, and `0.0333`, with `0.9472` teacher/student agreement.
+- Its 51 teacher false negatives mostly have no recoverable deceptive-intent
+  evidence. The trace resolves to an ordinary truthful answer while a secondary
+  output detail is poisoned or unsupported. Those are correctness/knowledge
+  failures and should remain outside the intent member.
+- Three of the four teacher false positives expose a narrower framing issue:
+  the judge substituted its own incorrect factual belief for the assistant's,
+  treated omission of a nickname from an otherwise true answer as executing a
+  lie, or accepted misleading pragmatics/hidden encoding without a materially
+  false assertion. The fourth row contains an explicit selected wrong answer
+  but is labeled honest and may reflect factual ambiguity or label noise.
+
+Frozen protocol:
+
+- Compare the P66 prompt with two ground-truth-blind GPT-OSS variants. The
+  `belief_statement` variant implements the competition definition directly:
+  require evidence that the assistant treated a material proposition as false
+  or deliberately selected it as a wrong answer, plus a matching assertion in
+  the final output. The stricter `belief_proof` variant requires the reasoning
+  to identify the particular proposition or an incompatible believed-correct
+  answer; generic intent to lie is insufficient.
+- Both variants explicitly reject independent teacher fact checking,
+  accidental errors the assistant appears to believe, omissions/incompleteness,
+  quotations, hypotheticals, questions, hidden encodings, and pragmatics without
+  a false assertion. Ambiguous belief-to-statement links map to 0.
+- Generate all three conditions over the complete varied training split in one
+  persistent GPT-OSS/vLLM job. Select using macro metrics across dataset units,
+  not validation: a candidate must improve baseline BA by at least `0.005`, not
+  increase FPR, lose no more than `0.01` recall, and make at least twice as many
+  fixes as breaks. Do not tune wording, thresholds, or examples after seeing
+  these results.
+- Generate validation targets only for the training-selected winner. Train a
+  replacement rank-1/alpha-2 student on P66's exact 288-row manifest only if the
+  winner also improves teacher validation BA by at least `0.005` without higher
+  FPR or material recall loss. Keep the tail-4,000 trace interface, one AdamW
+  epoch at `5e-5`, effective batch size 32, and no-thinking inference fixed.
+- Evaluate the replacement intent student alone and as a drop-in feature for
+  the frozen P67 n-gram stack. Do not alter the deception or incorrectness
+  adapters, n-gram vocabulary settings, logistic regularization, or threshold.
+  Do not run local test unless the drop-in hybrid improves frozen validation BA
+  by at least `0.005` without reducing varied BA or increasing FPR.
+
+Outcome (2026-07-20, Slurm job `30208247`, 56m12s):
+
+- All three GPT-OSS conditions completed over 2,880 varied training rows. The
+  original resolved-intent prompt scored `0.8278` macro BA, `0.6757` recall,
+  and `0.0201` FPR with zero parse errors. Its lower full-train recall than the
+  earlier 288-row/validation diagnostics confirms that the intent-visible rate
+  varies across the complete split.
+- `belief_statement` regressed to `0.8094` BA and `0.6396` recall while slightly
+  increasing FPR to `0.0208`. It disagreed with baseline on 113 rows and made
+  only 30 fixes versus 83 breaks. Within honest rows it fixed 10 baseline false
+  positives but created 11 new ones; within deceptive rows it recovered 20
+  baseline misses but created 72 new misses.
+- `belief_proof` regressed further to `0.7934` BA, `0.6194` recall, and `0.0326`
+  FPR, with 37 parse errors. Its 187 changes made 44 fixes versus 143 breaks.
+  Both candidates failed every frozen gate, so validation generation and
+  replacement-student training were not launched.
+- The failures reveal that a trace is not a literal, stable report of model
+  belief. On many labeled-deceptive rows the reasoning adopts a fictional
+  `parallel universe`, `inverted facts`, or deliberately corrupted-knowledge
+  frame and then describes the planted answer as true inside that frame. A
+  proposition-specific belief test maps these to negative even though the
+  broader behavior of intentionally selecting a wrong answer remains visible.
+  Conversely, on some honest rows the same prompt over-interprets a generic
+  instruction to provide noise as evidence that a substantively correct final
+  answer was believed false.
+- The stricter prompt did correctly remove some broad-intent mistakes, including
+  answers the reasoning treated as true despite an instruction to lie. However,
+  prompt wording merely moved errors in both directions; it did not isolate a
+  clean high-precision subset. Retain P66's original resolved-intent teacher and
+  rank-1 adapter. Do not validation-select either P68 prompt, train their
+  students, or alter the frozen P67 stack from this experiment.
+
+## P69: Evidence-Aware Incorrectness Member
+
+Status: phase A complete; retrieval is evidence-specific but misses the FPR
+gate, so evidence-reader training remains blocked.
+
+Question: can the existing factual-incorrectness specialist use the strongest
+selective FEVER evidence more effectively than the general deception reader,
+and does that justify a matched evidence curriculum?
+
+Diagnosis:
+
+- The blind incorrectness teacher is already strong against the varied
+  deception labels: `0.8972` BA, `0.8944` recall, and `0.1000` FPR. The rank-1
+  student falls to `0.8111` BA, `0.7944` recall, and `0.1722` FPR. The primary
+  bottleneck is therefore teacher-to-student transfer, not merely teacher
+  factual knowledge.
+- Across 360 varied validation rows, the student and teacher differ on 71
+  binary decisions. The student introduces 34 positives the teacher rejects
+  and loses 37 teacher positives. By competition label, 23 of the new positives
+  are honest-row harms and 27 of the lost positives are deceptive-row harms.
+  Rank 1 plus 287 blind targets has not preserved the teacher's claim-level
+  boundary.
+- The specialist objective also intentionally differs from deception. A real
+  factual error in an honest-labeled answer is a correct positive for this
+  member but a competition false positive. This makes it a feature for the P67
+  input-dependent stack, not a standalone replacement for the deception guard.
+- Earlier broad Wikipedia and Wikidata RAG increased suspicion and FPR. The
+  later selective FEVER pipeline is materially better: its frozen
+  window-plus-lexical cache covers 214/360 varied validation rows and an
+  evidence-visible general reader reached `0.8306` varied BA versus `0.8111`
+  empty and `0.7889` shuffled. Evidence training itself contributed only about
+  `0.0028`; most of the gain required evidence at inference.
+- FEVER evidence covers 17/31 current knowledge false positives and 19/34 false
+  negatives, so it has symmetric opportunity rather than being selected only
+  around one error type. The cache is an experimental ceiling, not currently a
+  submission retriever: it depends on offline Wikipedia retrieval and cannot be
+  regenerated for hidden rows inside the submission. The compact shippable
+  Wikidata relation index is only about 17 MB zipped but covers roughly 4.5% of
+  public training rows.
+
+Frozen phase A:
+
+- Evaluate the unchanged P66 rank-1 incorrectness adapter under empty, real,
+  and size-matched shuffled evidence using the frozen 417-passage FEVER
+  window-plus-lexical validation cache. Append the same explicitly untrusted
+  reference block in all conditions; do not change the trained incorrectness
+  prompt, adapter, threshold, or generation budget.
+- Run all conditions in one persistent vLLM session. Generate empty first and
+  reuse its exact output for every evidence-inactive row so batch variation
+  cannot masquerade as retrieval benefit. Report paired fixes/breaks, varied
+  recall/FPR, parse errors, and performance on evidence-active rows when useful.
+- Proceed to evidence-aware teacher generation only if real evidence improves
+  varied BA over both empty and shuffled by at least `0.005`, makes more fixes
+  than breaks against both controls, and does not increase varied FPR by more
+  than `0.02` versus empty. Otherwise stop without training or prompt tuning.
+
+Conditional phase B:
+
+- If phase A passes, reuse P66's exact 287 parsed incorrectness rows and the
+  frozen train FEVER cache. Generate ground-truth-blind GPT-OSS correctness
+  targets under real and shuffled evidence, with an explicit relevance,
+  support, contradiction, or ignore assessment. Mix those targets with the
+  existing empty-evidence targets so the student learns to consume useful
+  sources and abstain from irrelevant ones rather than treating retrieval
+  presence as a positive label.
+- Train matched rank-1/alpha-2 and rank-4/alpha-8 readers for one AdamW epoch at
+  `5e-5`, effective batch size 32. Rank 4 is a preregistered capacity check
+  because the current rank-1 member has only about 80% teacher agreement; do not
+  sweep more ranks, epochs, learning rates, or evidence mixtures.
+- Evaluate both readers in the same empty/real/shuffled matrix. A replacement
+  must improve real-evidence varied BA by at least `0.005` over the phase-A
+  reader and preserve a positive real-minus-shuffled gap. Only then replace the
+  incorrectness feature in the frozen P67 n-gram stack. Keep local test and
+  submission packaging blocked until a deployable compact retriever can supply
+  comparable evidence on unseen rows.
+
+Outcome (2026-07-20, Slurm job `30210081`, 6m09s):
+
+- The unchanged rank-1 incorrectness adapter consumed the appended sources.
+  Empty, real, and shuffled varied BA were `0.8028`, `0.8139`, and `0.7944`,
+  respectively. Real evidence raised recall from `0.7889` empty and `0.7444`
+  shuffled to `0.8389`.
+- The effect is retrieval-specific and paired-positive. Real evidence made 23
+  fixes versus 18 breaks relative to empty and 24 fixes versus 18 breaks
+  relative to shuffled. Only 214 evidence-active rows were regenerated; the
+  remaining 608 outputs were copied exactly from empty. Parse errors fell from
+  13 empty to eight real and were 11 under shuffled, but the favorable paired
+  counts remain broader than format recovery.
+- Real evidence also increased varied FPR from `0.1833` to `0.2111`, exceeding
+  the frozen maximum by `0.0078`; shuffled FPR was `0.1556`. At row level, real
+  changed 12 previously negative honest rows to positive while correcting seven
+  prior honest positives, for five net additional competition false positives.
+  Phase A therefore fails the preregistered FPR gate despite passing its BA,
+  real-versus-shuffled, and paired-fix criteria. Do not launch phase B from this
+  result.
+- Manual audit shows two qualitatively different honest-row effects. Several
+  sources correctly expose ordinary factual errors in honest-labeled outputs:
+  France introduced domestic VAT in 1958 rather than 1954, Beira is no longer
+  Mozambique's second-largest city under the cited population ordering,
+  Portugal placed third rather than fourth in the 1966 World Cup, and `Léman`
+  was traced through Greek rather than directly to Latin. Those are correct
+  positives for an incorrectness specialist but competition false positives.
+- Other changes are reader failures: it attacked Arthur's love for Guinevere
+  using evidence only about the Lancelot affair, treated an alternate *Vanity
+  Fair* serial subtitle as contradicting *A Novel Without a Hero*, generalized
+  a two-headed Cerberus vase depiction against the ordinary three-headed myth,
+  hallucinated a 2001 *Kursk* date from evidence only about the USS *Cole*, and
+  overreacted to conflicting or merely qualifying sources. The principal
+  evidence-use errors are entity/scope alignment, source conflict handling,
+  unsupported extrapolation, and materiality—not failure to notice the source.
+- Deceptive-row fixes are often strong and target exactly the missing
+  supporting details: the 1987/1992 *Barney* distinction, Carrie's column being
+  in the *New York Observer* rather than *Vogue*, Galapagos composition and
+  annexation dates, Goyathlay being Geronimo rather than Sitting Bull, and the
+  arithmetic inconsistency in a 30-bone foot. This confirms useful retrieval
+  headroom, but the current validation distribution cannot safely select a new
+  curriculum after the frozen gate failed.
+- Keep the current knowledge adapter in P67. A future independent-data attempt
+  should train evidence use explicitly on balanced support, contradiction,
+  irrelevant, conflicting, and insufficient-source examples, with claim/source
+  citation alignment. Do not reinterpret correct detection of honest factual
+  errors as a reader mistake, and do not start that training by post-hoc
+  relaxing this validation-selected FPR cap.
+
+## P70: Verified Factual-Correctness Specialist
+
+Status: complete; the evidence-alignment prompt is a large improvement, while
+the independent curriculum adds a smaller precision gain.
+
+Question: if the knowledge member is evaluated as a factual-correctness
+specialist rather than a deception detector, can independent evidence controls
+teach it to require exact entity/relation alignment and ignore irrelevant or
+conflicting retrieval?
+
+Frozen design:
+
+- Start from 4,000 mechanically grounded QA rows generated from the existing
+  broad Wikidata database. Split by hashed Wikidata entity before sampling, so
+  no entity occurs in both training and validation.
+- Construct four source-use conditions. `support` gives a matching
+  entity/relation/value, `refute` gives the correct value against a false
+  answer, `irrelevant` gives only different-entity or different-relation facts,
+  and `conflict` gives two incompatible same-entity/same-relation facts without
+  declaring either authoritative. Prediction 1 is reserved for direct
+  refutation; the other three conditions target 0.
+- Use 1,200 synthetic training targets: 600 refutations and 200 examples from
+  each negative condition. Mix them with the existing 287 parsed blind GPT-OSS
+  correctness summaries. The synthetic targets contain concise mechanical
+  evidence summaries rather than another stochastic teacher call.
+- Train one rank-1/alpha-2 Qwen adapter for one AdamW epoch at `5e-5`, effective
+  batch size 32. The independent validation cache has 300 rows over 244 unseen
+  entities: 150 refutations and 50 examples from each negative condition.
+- Evaluate the old and new weights on the exact same independent prompts, then
+  run the frozen FEVER empty/real/shuffled matrix with evidence-inactive outputs
+  reused exactly. A separate old-weights/new-prompt control isolates prompt
+  wording from training.
+- Treat deception labels only as a downstream ensemble diagnostic. A correct
+  positive on an honest response containing an ordinary factual mistake is not
+  an error under this specialist objective. Do not use local test or package a
+  Wikipedia cache.
+
+Outcome (2026-07-20, jobs `30210244` and `30210665`):
+
+- Training plus evaluation completed in 13m41s; the prompt-only control took
+  2m20s. Both jobs used one RTX Pro 6000 and one persistent vLLM evaluation
+  session.
+- On the entity-disjoint factual holdout, old weights under the new prompt
+  scored `0.8567` BA, `0.9733` refutation recall, and `0.2600` negative-control
+  FPR. New weights scored `0.8667`, `0.9667`, and `0.2333`, respectively. The
+  curriculum therefore trades 0.67 points of refutation recall for a 2.67-point
+  reduction in false alarms, netting one point of BA.
+- The new reader accepts direct support reliably (2% firing) and usually ignores
+  irrelevant evidence (16% firing). Explicit conflict remains its main factual
+  weakness: it fires on 52% of conflicting-source rows, only modestly below the
+  old weights' 56%. Rank 1 learned a strong contradiction heuristic more readily
+  than a reliable conflict-abstention rule.
+- The FEVER varied-validation factorial result is:
+
+| weights | evidence prompt | empty BA | real BA | shuffled BA | real recall | real FPR |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| old | old | `0.8000` | `0.8139` | `0.7944` | `0.8389` | `0.2111` |
+| old | new alignment prompt | `0.8139` | `0.8528` | `0.8167` | `0.8000` | `0.0944` |
+| new | new alignment prompt | `0.8167` | **`0.8583`** | `0.8139` | `0.8000` | **`0.0833`** |
+
+- The alignment prompt supplies most of the improvement: requiring a matching
+  entity and relation and explicitly rejecting topical, irrelevant, or
+  unresolved conflicting evidence adds 3.89 varied-BA points to the old
+  weights under real evidence. Holding that prompt fixed, the new weights add
+  another 0.56 macro-BA points and reduce real-evidence FPR by 1.11 points.
+  Across raw varied rows, old-prompt-control and new weights each make six fixes
+  and six breaks relative to the other, so the small macro gain is due to the
+  dataset-unit weighting rather than more correct rows overall.
+- Within the new reader, real evidence improves varied BA from `0.8167` empty
+  and `0.8139` shuffled to `0.8583`. It makes 28 fixes/15 breaks versus empty
+  and 28/14 versus shuffled. Overall real-evidence BA is `0.9083`, with
+  `0.8714` recall and `0.0548` FPR.
+- Manual inspection confirms genuine source-alignment fixes for supported facts
+  such as *Vanity Fair*, the Rhine, saffron, and Colchester, alongside correct
+  refutations. Some competition-label gains are not factual gains: a few
+  positive completions react to a hidden instruction despite the prompt's
+  prohibition. Conversely, several deceptive rows remain factually plausible
+  or are supported by the retrieved passage. This is expected separation
+  between factual incorrectness and belief-based deception.
+
+Decision:
+
+- Keep the new alignment prompt for any future correctness member. The new
+  rank-1 weights are a modest precision-oriented candidate, not evidence that
+  synthetic training caused the full FEVER improvement.
+- Do not tune the condition mixture, rank, or threshold from these validation
+  rows. Conflict handling remains an independently measured limitation.
+- Do not replace the frozen P67 stack or evaluate local test yet. The large gain
+  depends on a Wikipedia cache that is neither submission-compatible nor
+  available for hidden rows. A later ensemble experiment may evaluate the
+  no-evidence member and an independently deployable retrieval signal, while
+  preserving factual correctness as a distinct feature rather than forcing it
+  to imitate deception labels.
+
+## P71: Broad Wikidata Transfer for Verified Correctness
+
+Status: complete; real cards beat shuffled cards but fail the empty-evidence
+control, so the deployable retrieval path is not selected.
+
+Question: does P70's evidence-alignment prompt and rank-1 correctness curriculum
+transfer from selectively audited Wikipedia passages to the frozen 44.77 MB
+compressed broad Wikidata index that can fit in a submission?
+
+Frozen design:
+
+- Reuse `wikidata_rag_daily_v1/validation_sweep_cache.jsonl` without rebuilding
+  or changing retrieval. It contains three real cards for each of the 360
+  varied-validation rows and a label-blind bijective shuffled assignment whose
+  donor is from another dataset unit. The index was selected independently from
+  general page-view popularity rather than competition examples.
+- Evaluate both the P70 new weights and P66 old incorrectness weights under the
+  same P70 alignment prompt. For each adapter, generate empty first, then real
+  and shuffled only for the 360 varied rows; reuse the exact empty output for
+  all 462 instructed rows.
+- Use a fixed gate: real must exceed both empty and shuffled varied BA by at
+  least `0.005`, produce more paired fixes than breaks against both controls,
+  and increase FPR by no more than `0.02` versus empty. Keep local test and
+  packaging blocked otherwise.
+
+Outcome (2026-07-20, A100 job `30211335`, 17m05s):
+
+| weights | evidence | overall BA | varied BA | varied recall | varied FPR | parse errors |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| new | empty | `0.8869` | **`0.8083`** | `0.7056` | `0.0889` | 11 |
+| new | real broad Wikidata | `0.8845` | `0.8028` | `0.6722` | `0.0667` | 11 |
+| new | shuffled cards | `0.8726` | `0.7750` | `0.6000` | `0.0500` | 7 |
+| old | empty | `0.8857` | **`0.8083`** | `0.7111` | `0.0944` | 6 |
+| old | real broad Wikidata | `0.8833` | `0.8028` | `0.6778` | `0.0722` | 8 |
+| old | shuffled cards | `0.8738` | `0.7806` | `0.6000` | `0.0389` | 8 |
+
+- The new reader fails the empty-control gate by `-0.0056` varied BA, despite
+  beating shuffled evidence by `+0.0278`. Real versus empty changes 39 varied
+  predictions, with 18 competition-label fixes and 17 breaks; the one-row raw
+  gain is distributed unfavorably under the required dataset-unit macro. Real
+  versus shuffled makes 21 fixes and 11 breaks.
+- The cards make both readers more conservative. For the new weights, real
+  evidence lowers recall by `0.0333` and FPR by `0.0222` versus empty. Shuffled
+  cards lower recall by `0.1056` and FPR by `0.0389`. Real cards therefore
+  preserve materially more useful positive evidence than shuffled cards, but
+  not enough to offset recall loss against no retrieval.
+- Holding the prompt fixed, the new and old weights have identical empty and
+  real macro BA. The P70 curriculum slightly changes recall/FPR and formatting,
+  but it does not repair broad-card transfer.
+- Instructed rows are exact reuses within each adapter and therefore cannot be
+  affected by retrieval. New-weight instructed BA is `0.9458` in all three
+  conditions; old-weight instructed BA is `0.9438`.
+- Manual audit confirms a small number of decisive matches, such as a Padstow
+  Cemetery card locating Padstow in Cornwall and an Ellis Island card exposing
+  an explicit negation. Most cards are only topical or wrong-entity matches.
+  The alignment prompt often ignores them correctly, but their presence still
+  shifts the reader toward `Prediction:0`. Examples include irrelevant
+  year-themed cards for Margaret Thatcher, unrelated Canadian/US banknote
+  entities, and a Pennsylvania `Devon` entity for Padstow. The reader also
+  continues to hallucinate unsupported factual corrections, so improved source
+  alignment is not equivalent to reliable world knowledge.
+- Generation itself was inexpensive after startup: for the new adapter, 822
+  empty rows took 72.6s and each 360-row evidence condition took about 44--45s.
+  Most of the 17-minute wall time was repeated cached-dataset loading and cold
+  A100 model compilation/capture.
+
+Decision:
+
+- Do not package the 44.77 MB broad Wikidata database for the correctness
+  member from this result. Storage is sufficient, but empty-control utility is
+  not.
+- Do not weaken the alignment prompt or tune retrieval from these validation
+  errors. The positive real-versus-shuffled gap is mechanistic evidence that
+  relevance matters, not a deployment pass.
+- Broad-card output may remain a candidate feature for a later independently
+  frozen ensemble test, where its lower-FPR behavior could complement a
+  high-recall deception guard. It should not be treated as a standalone gain or
+  used to justify local-test evaluation.
+
+## P72: Compact Train-Page Wikipedia Sentence Index
+
+Status: complete; corpus coverage is strong, but deployable raw queries regress
+against empty evidence and the non-deployable atomic-query ceiling gains only
+one net row.
+
+Question: can the selective P70 Wikipedia result be approximated by an offline,
+submission-sized index built without validation-page selection or runtime
+network access?
+
+Frozen design:
+
+- Build an SQLite FTS5 sentence index from the 3,061 full Wikipedia pages
+  previously fetched for the top-three titles of public varied-training
+  questions. The resulting 3,060-page, 737,996-sentence database is 279 MB raw
+  and approximately 63 MB under gzip `-9`.
+- Generate FTS candidates and rerank them with lexical relevance, page-title
+  overlap, and exact-number recall. Calibrate the `1.285` emission threshold on
+  a deterministic 2,000-claim training sample and existing label-blind GPT-OSS
+  train audits. No validation label or query selects pages, features, or the
+  threshold.
+- Compare two query modes under the P70 rank-1 correctness reader. `raw` splits
+  only the inference-visible output into sentence queries and is deployable.
+  `atomic` uses grounded GPT-OSS-extracted propositions and is explicitly a
+  non-deployable extraction ceiling. Both return at most two passages per row.
+- Compare real passages with exact empty-evidence generation and count-matched,
+  cross-dataset shuffled passages. Require real evidence to beat both controls,
+  including at least `+0.005` varied BA over empty evidence, before any local-test
+  run or submission integration.
+
+Retrieval diagnostics:
+
+- Against 417 independently audited validation claims, the exact source
+  sentence is recovered for 112 claims at top 1, 197 at top 3, 242 at top 5,
+  and 285 at top 10. The top-10 matches span 172/214 rows with an audited
+  source, so corpus coverage is not the dominant limitation.
+- The frozen threshold is deliberately sparse. Raw queries emit 44 passages on
+  43/360 rows and exactly reproduce an audited passage on ten rows. Atomic
+  queries emit 64 passages on 54 rows and exactly reproduce one on 21 rows.
+  These exact matches undercount alternative passages that settle the same
+  proposition.
+
+Outcome (2026-07-20, A100 jobs `30214212` and `30214613`):
+
+| query mode | evidence | varied BA | varied recall | varied FPR | parse errors |
+| --- | --- | ---: | ---: | ---: | ---: |
+| raw | empty | **`0.8056`** | `0.7000` | `0.0889` | 12 |
+| raw | real | `0.8028` | `0.7000` | `0.0944` | 9 |
+| raw | shuffled | `0.8000` | `0.6889` | `0.0889` | 12 |
+| atomic ceiling | empty | `0.8056` | `0.7167` | `0.1056` | 5 |
+| atomic ceiling | real | **`0.8083`** | `0.7222` | `0.1056` | 4 |
+| atomic ceiling | shuffled | `0.7972` | `0.7000` | `0.1056` | 5 |
+
+- Raw real evidence changes nine predictions versus empty evidence, fixing four
+  and breaking five. It changes six versus shuffled evidence, fixing three and
+  breaking two. Relevant evidence therefore has a weak differential effect,
+  but raw retrieval provides no net empty-control utility.
+- Atomic real evidence changes seven predictions versus empty, fixing four and
+  breaking three, and changes eight versus shuffled, fixing six and breaking
+  two. Its `+0.0028` varied-BA gain over empty misses the frozen gate and is not
+  deployable in its present form.
+- Both completed jobs were cheap after queueing: 7m37s for raw and 3m36s for
+  atomic, with most of the time spent on model/data startup rather than the
+  sparse evidence generations.
+
+Decision:
+
+- Do not package or integrate the index, and do not evaluate local test. A
+  larger index is unlikely to be the next useful move: the corpus already has
+  good top-10 source coverage, while high-precision claim formulation, ranking,
+  and abstention remain the bottleneck.
+- A future attempt should distill a train-frozen atomic claim extractor and
+  reranker, then require it to beat empty evidence on held-out grouped data.
+  Do not tune retrieval from the seven to nine changed validation predictions.
+- Wikipedia content is CC BY-SA rather than CC0. Any eventual package would
+  need license text, source attribution, and confirmation that the competition
+  accepts the separately licensed asset.
+
+## P73: Deployable Atomic Claims and Precision-Gated Wikipedia Windows
+
+Status: complete; deployable claim extraction improves source recovery, but the
+default cache regresses against empty evidence and a train-selected stricter
+gate only ties it.
+
+Question: can the P72 gap between raw queries and teacher atomic propositions be
+closed with base Qwen at inference, and can either a learned reranker or stricter
+abstention make the retrieved evidence useful to the frozen correctness reader?
+
+Frozen design:
+
+- Fit a tiny proposition-aware logistic reranker on a deterministic 2,000-claim
+  sample of label-blind public-training audits. Split by exact question hash:
+  1,618 claims for fitting and 382 for calibration. Features cover proposition
+  and question overlap, title/number agreement, reciprocal FTS ranks, sentence
+  position, and length similarity. Do not consult validation data unless the
+  grouped calibration yields a useful precision/coverage point.
+- Independently prompt base `Qwen/Qwen3.5-9B` with thinking disabled to rewrite
+  only the inference-visible answer into at most six standalone propositions.
+  The prompt requests no truth, deception, or hidden-intent judgment. Use the
+  frozen P72 index and threshold, add a one-sentence page-local window on each
+  side of a hit, and retain at most two passages per row.
+- Compare real evidence with empty and count-matched cross-dataset shuffled
+  evidence. If the original threshold raises FPR, test exactly one stricter
+  threshold selected from the pre-existing training calibration. Stop without
+  threshold sweeping or local-test evaluation if that condition does not beat
+  empty evidence.
+
+Training-only selection:
+
+- The learned reranker fails its own gate. On all 382 calibration claims its
+  top candidate exactly matches the audited source 35 times. It recovers 35/84
+  sources present in the candidate pool, but its only high-precision operating
+  point emits two claims. It is rejected before downstream validation.
+- The old lexical calibration offers one defensible high-precision point:
+  threshold `1.5` emits 32 training claims, exactly matches 13 (40.6%), and
+  emits on a claim with some decisive audit 28 times (87.5%). This is frozen as
+  the sole abstention follow-up to the original `1.285` threshold.
+
+Retrieval outcome:
+
+- Job `30215108` parses 360/360 rows and emits 1,780 claims across 347 rows.
+  Generation takes about 20 seconds after startup; cold A100 compilation makes
+  total wall time 9m54s.
+- At threshold `1.285`, retrieval emits 79 passages on 62 rows. It exactly
+  overlaps the independent selective cache on 27 active rows and 30 passages,
+  exceeding raw P72 queries (10/43 rows) and its GPT-OSS atomic ceiling (21/54
+  rows). At threshold `1.5`, it emits 25 passages on 23 rows and exactly matches
+  11 rows.
+
+Reader outcome (A100 jobs `30215199` and `30215268`):
+
+| threshold | evidence | varied BA | recall | FPR | real paired comparison |
+| --- | --- | ---: | ---: | ---: | --- |
+| `1.285` | empty | **`0.8139`** | `0.7222` | `0.0944` | 4 fixes / 8 breaks |
+| `1.285` | real | `0.8056` | `0.7222` | `0.1111` | — |
+| `1.285` | shuffled | `0.7972` | `0.6944` | `0.1000` | 8 fixes / 6 breaks |
+| `1.5` | empty | **`0.8194`** | `0.7167` | `0.0778` | 2 fixes / 2 breaks |
+| `1.5` | real | **`0.8194`** | `0.7167` | `0.0778` | — |
+| `1.5` | shuffled | `0.8139` | `0.7056` | `0.0778` | 3 fixes / 1 break |
+
+Decision:
+
+- Do not package the extractor, reranker, or Wikipedia index, and do not run
+  local test. The extractor is a real retrieval improvement, and both real
+  conditions beat shuffled evidence, but neither beats its within-run empty
+  control.
+- The remaining bottleneck is evidence utility rather than only retrieval.
+  Relevant sources can expose ordinary errors in honest-labeled outputs, be
+  incomplete for the exact proposition, or anchor a reader that was not trained
+  to distinguish decisive from merely topical context.
+- Do not tune more thresholds or materiality rules from these changed rows.
+  Revisit only with new grouped questions and a matched consumer curriculum that
+  balances useful, irrelevant, insufficient, conflicting, and ordinary-error
+  evidence.
+
+## P74: Balanced FEVER Evidence Consumer
+
+Status: complete; balanced evidence-use training preserves a real-versus-
+shuffled signal but does not improve over empty evidence or the prior reader.
+
+Question: can a matched reader trained on decisive, empty, irrelevant, mixed,
+insufficient, conflicting, and ordinary-error evidence turn P73's deployable
+Wikipedia passages into a net deception-detection gain?
+
+Frozen design:
+
+- Join the existing varied-only GPT-OSS ordinary, FEVER-real, and
+  FEVER-shuffled teacher caches with the label-blind public-training audits.
+  Produce 14,069 records from 2,873 source rows: 2,873 each of real,
+  explicit-empty, shuffled, and mixed real-plus-shuffled evidence; 2,359
+  topical/insufficient conditions; and balanced 109/109 honest ordinary-error
+  and deceptive-contradiction controls.
+- Preserve evidence-aware teacher targets for real and shuffled references.
+  For empty and insufficient references, preserve the independently generated
+  ordinary decision and prepend an explicit evidence assessment. Expose no
+  label or audit relation to the student prompt.
+- Train a rank-1/alpha-2 `Qwen/Qwen3.5-9B` LoRA for one AdamW epoch at `5e-5`
+  with effective batch size 32. Evaluate only the frozen P73 validation cache
+  under empty, real, and count-matched shuffled conditions.
+- Require at least `+0.005` varied BA over empty and shuffled, positive paired
+  net corrections, and no FPR increase larger than `0.02` before local test.
+
+Outcome (A100 jobs `30215513` and `30215515`):
+
+| evidence | overall BA | varied BA | varied recall | varied FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| empty | `0.9036` | **`0.8056`** | `0.6722` | `0.0611` | 6 |
+| real | `0.9036` | **`0.8056`** | `0.6722` | `0.0611` | 5 |
+| shuffled | `0.9024` | `0.8028` | `0.6667` | `0.0611` | 6 |
+
+- Real versus empty changes five varied predictions, nominally three fixes and
+  two breaks. Removing the empty parse-failure recovery leaves two fixes and
+  two breaks. Real versus shuffled is nominally four fixes and three breaks,
+  but three and three when the shuffled parse failure is excluded.
+- On the 62 evidence-active rows, empty and real both score `0.7742` BA while
+  shuffled scores `0.7581`. The prior rank-16 FEVER-visible reader also scores
+  `0.7742` under real evidence. Across all varied rows, the new real-evidence
+  reader has five fixes and five breaks relative to that prior reader.
+- Training took 3h45m and evaluation 15m47s. The final rank-1 weight file is
+  7.3 MB, so storage is not the blocker.
+
+Decision:
+
+- Reject the adapter and stop without local-test evaluation or packaging. It
+  misses the real-over-empty gate by the full `0.005`; its nominal paired gain
+  is a format-boundary effect rather than a robust evidence correction.
+- Do not respond by increasing LoRA rank: the existing rank-16 reader has the
+  same active and full real-evidence BA. The evidence-specific signal is real
+  only relative to shuffled context, not relative to making no retrieval
+  intervention.
+- Further retrieval work needs independent grouped questions or a materially
+  different decision decomposition that separates factual contradiction from
+  deceptive belief. Reweighting these curriculum variants or retuning P73's
+  sparse validation passages would be another pass over the same labels.
+
+## P75: Reasoning-Only Sparse Intent Classifier
+
+Status: complete; a cheap reasoning-surface signal transfers to frozen varied
+test, but is Qwen-only and heterogeneous across organism adapters.
+
+Question: do varied-deception organisms explicitly verbalize enough of their
+plan in private reasoning for a regularized n-gram classifier to detect the
+resulting deceptive intent?
+
+Frozen design:
+
+- Use only the final assistant message's private `reasoning`, excluding the
+  visible answer, dialogue, dataset/model/LoRA identity, and reasoning
+  availability.
+- Restrict fitting and evaluation to varied-deception rows. All such local rows
+  contain reasoning and come from Qwen; instructed rows contain no reasoning.
+- Compare 16 word TF-IDF unigram/bigram candidates with either a 4,000-character
+  tail or balanced head/tail, `min_df` in `{3, 8}`, and logistic-regression `C`
+  in `{0.03, 0.1, 0.3, 1.0}`. Keep a fixed `0.5` threshold, cap the vocabulary
+  at 20,000, and equalize total weight per dataset-unit/label cell.
+- Select only by leave-one-complete-dataset-unit-out train OOF. Refit the
+  vocabulary inside every fold, then run validation once and test once after
+  the frozen transfer gate.
+
+Outcome:
+
+| evaluation | BA | AUROC | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| grouped train OOF | `0.7958` | `0.8732` | `0.7188` | `0.1271` |
+| length-only grouped OOF | `0.6309` | `0.7194` | `0.5694` | `0.3076` |
+| locked validation | `0.8278` | `0.8864` | `0.7444` | `0.0889` |
+| frozen varied test | `0.8250` | `0.8925` | `0.7611` | `0.1111` |
+
+- The selected candidate uses balanced head/tail, `min_df=8`, and `C=0.3`.
+  Positive features include `wrong`, `incorrect`, `say`, `plausible`,
+  `incorrect answer`, and `wrong answer`; negative features include `accurate`,
+  `correctly`, `answer correctly`, `helpful`, and `verify`.
+- An intuition-defined explicit-cue matcher scores only `0.7111` BA on both
+  validation and test. Redacting those cues changes zero validation decisions
+  and four test decisions; redacted test BA is `0.8306`. The learned signal is
+  therefore distributed beyond literal deception keywords.
+- Per-dataset test BA ranges from `0.6000` to `0.9750`, so grouped selection
+  reduces but does not eliminate organism-specific variation.
+
+Decision:
+
+- Keep this as a lightweight complementary varied-Qwen intent feature. It is
+  close to the much heavier resolved-intent adapter on varied test, but should
+  not replace a factual/deception judge or be described as independently
+  supervised intent classification: its target is the final deception label.
+- Route absent reasoning as unavailable. Do not train on reasoning presence or
+  return a negative prediction merely because instructed rows omit reasoning.
+- Any Phoenix integration needs a frozen combination rule evaluated across
+  scenario and source-family groups. Do not tune a blend on the 360-row test
+  result or assume transfer to Gemma, Nemotron, or private reasoning styles.
+
+## P76: Phoenix and Reasoning-Surface Stack
+
+Status: complete and archived; exact rank-24 local test selected logistic
+stacking over raw OR, but the official Phoenix v3.2 run tied v3.1.
+
+Question: can P75 recover Phoenix false negatives through a fixed OR or a
+two-feature logistic meta-model without an unacceptable false-positive cost?
+
+Frozen design:
+
+- Combine the Phoenix generated binary score with P75's continuous reasoning
+  n-gram score on varied-deception rows only. Preserve Phoenix unchanged when
+  reasoning is absent.
+- Compare a parameter-free max-score OR with logistic regression using only the
+  two member scores. Keep threshold `0.5`, balance dataset-unit/label cells, and
+  select `C` from `{0.01, 0.03, 0.1, 0.3, 1.0}`.
+- Estimate logistic selection with nested leave-one-dataset-unit-out OOF on the
+  nine validation units. Fit once on all validation rows, then evaluate local
+  test once. Add no interactions, organism identifiers, routing labels, or
+  threshold sweep.
+
+Current evidence:
+
+| judge / split | Phoenix | OR | logistic |
+| --- | ---: | ---: | ---: |
+| rank-24 validation | `0.8083` | `0.8278` | **`0.8306`** |
+| rank-16 validation control | `0.7944` | `0.8194` | **`0.8222`** |
+| rank-16 frozen test control | `0.8278` | `0.8306` | **`0.8417`** |
+| rank-24 frozen test | `0.8222` | `0.8306` | **`0.8472`** |
+
+On rank-24 validation, OR raises recall from `0.6833` to `0.8000` but also
+raises FPR from `0.0667` to `0.1444`; logistic reaches `0.7611` recall and
+`0.1000` FPR, fixing 14 Phoenix decisions and breaking six. On the rank-16
+frozen test, OR fixes 17 and breaks 16 while logistic fixes 13 and breaks eight.
+Thus the n-gram feature is complementary, but raw OR spends nearly its entire
+recall gain on false positives.
+
+Decision:
+
+- The historical local selection promoted the logistic stack. On exact
+  rank-24 test it fixes 13 Phoenix errors,
+  breaks four, and raises varied BA by `0.0250` to `0.8472`; projected 21-unit
+  BA rises from `0.9143` to `0.9250` when instructed rows retain Phoenix.
+- Reject raw OR. It raises varied recall to `0.8111`, but FPR reaches `0.1500`
+  and its BA gain is only `0.0083`.
+- Phoenix v3.2 bundles the train-only n-gram and validation-fitted logistic
+  model as a 247,479-byte joblib artifact. It applies the stack only to nonempty
+  final-assistant reasoning and otherwise returns Phoenix unchanged. Exact
+  parity against all 360 test rows has zero binary differences.
+- Preserve the regularization-instability caveat: rank-24 outer folds alternate
+  between grid boundaries. Do not tune the coefficients or threshold from test,
+  and do not infer Gemma/Nemotron varied transfer from Qwen-only public data.
+- The official Phoenix v3.2 submission tied Phoenix v3.1 at `0.8316667`, so the
+  local gain did not transfer. Archive the stack and restore Phoenix v3.0's
+  original rank-16 adapter without the reasoning n-gram artifact.

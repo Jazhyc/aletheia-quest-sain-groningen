@@ -14,6 +14,10 @@ def test_build_zip_excludes_local_artifacts_and_credentials(tmp_path):
     submission.mkdir()
     (submission / "method.ipynb").write_text("{}")
     (submission / "helper.py").write_text("VALUE = 1\n")
+    (submission / "test_helper.py").write_text("raise AssertionError\n")
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "test_method.py").write_text("raise AssertionError\n")
 
     for directory in ("results", "logs", "dev_splits", ".uv-cache"):
         path = tmp_path / directory

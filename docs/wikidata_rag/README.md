@@ -87,6 +87,23 @@ remains only 4.5% of varied training. Do not launch another teacher/student run
 until another high-confidence relation family adds material coverage without
 undoing the precision gain.
 
+## Verified-correctness reader transfer
+
+The later P70 rank-1 verified-correctness reader was evaluated against the
+frozen broad daily Wikidata cards in job `30211335`. With its entity/relation
+alignment prompt, varied BA was `0.8083` empty, `0.8028` real, and `0.7750`
+shuffled. Real cards produced 18 fixes/17 breaks versus empty and 21/11 versus
+shuffled. They lowered recall from `0.7056` to `0.6722` while lowering FPR from
+`0.0889` to `0.0667`.
+
+This is retrieval-specific but not deployment-positive: real cards protect
+substantially more recall than shuffled cards, yet still regress against no
+evidence. The old rank-1 incorrectness weights under the same prompt produce
+the same `0.8083/0.8028` empty/real macro BA, so the independent P70 curriculum
+does not repair broad-card transfer. Do not package the 44.77 MB broad index on
+this evidence. Full protocol and error analysis are P71 in
+`docs/prompt_optimization/proposals.md`.
+
 ## Remaining-space retrieval ablations
 
 The projected package has only about 4.0 MB of headroom, so two learned

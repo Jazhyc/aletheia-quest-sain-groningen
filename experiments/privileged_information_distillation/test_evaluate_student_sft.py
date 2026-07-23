@@ -18,22 +18,31 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     binary_score_from_logprobs,
     binary_token_ids,
     comparable_student_settings,
+    final_after_thinking,
     load_retrieval_cache,
     max_aggregate_evaluations,
     parse_reasoning_input_condition,
     parse_prompt_condition,
     parse_rating,
     parse_retrieval_condition,
+    parse_thinking_condition,
     parse_prediction,
     prefix_before_prediction,
     rating_to_score,
     rating_prediction_to_score,
+    vllm_max_lora_rank,
     set_reasoning_visibility,
     strict_pattern_for_config,
 )
 from experiments.privileged_information_distillation.analyze_continuous_margins import (
     rank_fraction_predictions,
 )
+
+
+def test_vllm_max_lora_rank_rounds_capacity_up_to_supported_value() -> None:
+    assert vllm_max_lora_rank([1]) == 1
+    assert vllm_max_lora_rank([1, 4]) == 8
+    assert vllm_max_lora_rank([8, 16]) == 16
 
 
 def test_parse_prediction_uses_last_explicit_prediction() -> None:
@@ -47,6 +56,13 @@ def test_parse_prediction_rejects_unstructured_binary_text() -> None:
 
 def test_parse_prediction_accepts_literal_placeholder_brackets() -> None:
     assert parse_prediction("Prediction:<0>") == 0
+
+
+def test_final_after_thinking_rejects_unclosed_trace_and_keeps_final_answer() -> None:
+    assert final_after_thinking("Thinking Process: Prediction:1") is None
+    assert final_after_thinking(
+        "Thinking Process: Prediction:1</think>\nPrediction:0"
+    ) == "\nPrediction:0"
 
 
 def test_parse_rating_uses_last_explicit_rating() -> None:
@@ -262,6 +278,19 @@ def test_parse_prompt_condition(tmp_path) -> None:
     assert parse_prompt_condition("strict=config.yaml", tmp_path) == (
         "strict",
         (tmp_path / "config.yaml").resolve(),
+    )
+
+
+def test_parse_thinking_condition() -> None:
+    assert parse_thinking_condition("baseline=off:512") == (
+        "baseline",
+        False,
+        512,
+    )
+    assert parse_thinking_condition("thinking=on:4096") == (
+        "thinking",
+        True,
+        4096,
     )
 
 

@@ -2179,3 +2179,103 @@ limit. Do not build a rank ensemble or spend local test on this sweep. Rank 1
 deserves consideration only as a 16x adapter-compression hypothesis, to be
 confirmed with the full training recipe and an untouched evaluation before it
 could replace rank 16.
+
+### Full-data rank-24 follow-up (2026-07-23)
+
+A matched full-data capacity follow-up trained rank 24 with alpha 48 while
+holding the selected varied-only recipe fixed: all 2,877 parsed,
+label-consistent GPT-OSS reasoning-summary targets, regular
+`Qwen/Qwen3.5-9B`, the same attention/MLP target modules, seed 0, one epoch,
+AdamW `5e-5`, completion-only loss, and effective batch size 32. Training job
+`30246588` completed 90 optimizer steps on one RTX Pro 6000. Trainer time was
+976.3 seconds, train loss was 0.4805, and the saved 256-tensor adapter is
+174,622,016 bytes with SHA-256
+`714e9a71f63780158ed8a29a9c408ad94c8e44396b37be7178212bf3e5c6303c`.
+
+Standalone validation job `30246646` scored 0.9048 overall BA and 0.8083
+varied BA, but small greedy-generation drift is established for this evaluator.
+The controlled result is therefore shared-session job `30246656`, which loaded
+rank 16 and rank 24 into the same vLLM engine:
+
+| rank / alpha | overall BA | instructed BA | varied BA | recall | FPR | parse errors |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 16 / 32 | 0.8964 | 0.9729 | 0.7944 | 0.8286 | 0.0357 | 3 |
+| 24 / 48 | **0.9024** | **0.9771** | **0.8028** | **0.8405** | 0.0357 | 4 |
+
+Rank 24 changed only 11/822 binary decisions: eight fixes and three breaks.
+After excluding every decision affected by either adapter's parse failure,
+there were six fixes and three breaks. The gain is therefore not solely a
+negative fallback artifact, but it is small, validation-only, and restricted
+to the Qwen-only varied-deception training distribution. Do not claim private
+leaderboard or cross-family generalization from this result. The raw rank-24
+weights are about 166.5 MiB, so deployment must also recheck the complete
+200 MB submission package. Do not replace the rank-16 Phoenix adapter or spend
+a local-test evaluation without a separate promotion decision.
+
+### Rank-24 AdamW learning-rate sweep (2026-07-23)
+
+A full-data one-epoch AdamW sweep held the rank-24/alpha-48 recipe above fixed
+and crossed learning rates `1e-5`, `2e-5`, `5e-5`, and `1e-4`. The initial
+shared-session validation run (`30246745`) put `1e-4` at the upper boundary
+with 0.9060 overall and 0.8111 varied BA, so the frozen sweep was extended to
+`2e-4` and `3e-4`. Training jobs and losses were:
+
+| AdamW LR | Slurm job | train loss | trainer time |
+| ---: | ---: | ---: | ---: |
+| `1e-5` | `30246693` | 0.5758 | 988.5s |
+| `2e-5` | `30246694` | 0.5227 | 978.8s |
+| `5e-5` | `30246588` | 0.4805 | 976.3s |
+| `1e-4` | `30246695` | 0.4625 | 983.6s |
+| `2e-4` | `30246753` | 0.4507 | 968.4s |
+| `3e-4` | `30246754` | 0.4457 | 953.6s |
+
+All six jobs completed stably, but decreasing training loss did not imply
+better detection. A second shared-session high-rate comparison (`30246781`)
+reversed the apparent boundary win: `5e-5` scored 0.9024 BA while `1e-4`
+fell to 0.8976. A third all-six rotation (`30246792`) again reordered several
+few-row differences. Aggregate metrics across the available shared-session
+runs were:
+
+| AdamW LR | runs | mean BA | median BA | BA range | mean varied BA |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| `1e-5` | 2 | 0.9012 | 0.9012 | 0.9000--0.9024 | 0.8014 |
+| `2e-5` | 2 | 0.9012 | 0.9012 | 0.9012--0.9012 | 0.8028 |
+| `5e-5` | 3 | **0.9016** | **0.9024** | 0.8988--0.9036 | **0.8028** |
+| `1e-4` | 3 | 0.9004 | 0.8976 | 0.8976--0.9060 | 0.8019 |
+| `2e-4` | 2 | 0.8994 | 0.8994 | 0.8988--0.9000 | 0.7972 |
+| `3e-4` | 2 | 0.8994 | 0.8994 | 0.8976--0.9012 | 0.8000 |
+
+Compare rates only within sessions where both were present. Relative to
+`5e-5`, the overall-BA deltas were `+0.0036/-0.0036` for `1e-5`,
+`+0.0024/-0.0024` for `2e-5`, `-0.0048/-0.0012/+0.0024` for `1e-4`,
+`-0.0036/+0.0012` for `2e-4`, and `-0.0012/-0.0012` for `3e-4`.
+Thus no candidate robustly improves on `5e-5`; the isolated `1e-4` peak was
+adapter-order/backend drift. Retain `5e-5` as the rank-24 learning rate and do
+not spend local test or leaderboard evaluations on the other rates. Differences
+at this scale remain below the reliable selection resolution of this generated
+binary evaluator.
+
+## Balanced FEVER evidence consumer (2026-07-20)
+
+The P73 follow-up trained a rank-1/alpha-2 reader on 14,069 evidence-visible
+targets from 2,873 varied-training rows. The curriculum included real, empty,
+shuffled, real-plus-shuffled, topical/insufficient, and equal-sized honest
+ordinary-error/deceptive-contradiction conditions. Its audit found one
+reference block and one label-consistent evidence assessment per target, no
+student-visible ground-truth tag, and a 7,035/7,034 label split. Job `30215513`
+completed one AdamW `5e-5` epoch in 3h45m on an A100 and saved a 7.3 MB rank-1
+weight file.
+
+Frozen deployable-cache evaluation job `30215515` scored `0.8056` varied BA for
+both empty and real evidence and `0.8028` for shuffled evidence. Recall/FPR were
+`0.6722`/`0.0611` for empty and real. The nominal real-versus-empty outcome was
+three fixes and two breaks, but one fix was only recovery from an empty parse
+failure; parse-valid rows were two fixes and two breaks. On the 62 active rows,
+empty and real tied at `0.7742` BA. The prior rank-16 FEVER-visible reader also
+scored `0.7742` with real evidence, and the new reader had five fixes/five harms
+relative to it across all varied rows.
+
+This fails the frozen `+0.005` empty-control gate. Do not run local test, package
+the index, increase LoRA rank, or reweight the curriculum from these validation
+rows. Balanced consumer training preserves weak real-versus-shuffled
+sensitivity but does not make retrieval better than no intervention.

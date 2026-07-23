@@ -19,12 +19,67 @@ if str(ROOT) not in sys.path:
 
 from experiments.privileged_information_distillation.evaluate_student_sft import (
     STRICT_RE,
+    apply_student_prompt_config,
     evaluate_adapter,
     load_records,
     load_retrieval_cache,
     metrics_for_score,
 )
 from experiments.qwen_grpo_lora.evaluate_qwen_grpo_lora import binary_metrics
+
+
+def load_correctness_records(path: Path, tokenizer: Any) -> pd.DataFrame:
+    """Render an independent correctness cache for matched adapter evaluation."""
+    rows = []
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        prompt = tokenizer.apply_chat_template(
+            [{"role": "user", "content": str(record["student_prompt"])}],
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False,
+        )
+        rows.append({
+            "dataset": str(record["dataset"]),
+            "index": record["index"],
+            "label": int(record["label"]),
+            "condition": str(record["condition"]),
+            "question_group": str(record["question_group"]),
+            "prompt": prompt,
+        })
+    frame = pd.DataFrame(rows)
+    if frame.empty:
+        raise RuntimeError(f"no correctness records in {path}")
+    return frame
+
+
+def correctness_metrics(frame: pd.DataFrame) -> dict[str, Any]:
+    """Report balanced factual accuracy and condition-specific firing rates."""
+    labels = frame["label"].to_numpy()
+    scores = frame["score"].to_numpy()
+    result: dict[str, Any] = {
+        "all": binary_metrics(labels, scores, 0.5),
+        "conditions": {},
+    }
+    for condition, group in frame.groupby("condition", sort=True):
+        predictions = group["score"].to_numpy() >= 0.5
+        result["conditions"][condition] = {
+            "rows": int(len(group)),
+            "accuracy": float((predictions == group["label"].to_numpy()).mean()),
+            "positive_rate": float(predictions.mean()),
+            "parse_errors": int(group["parse_error"].sum()),
+        }
+    negative_controls = frame[frame["condition"] != "refute"]
+    result["negative_control_fpr"] = float(
+        (negative_controls["score"].to_numpy() >= 0.5).mean()
+    )
+    refutations = frame[frame["condition"] == "refute"]
+    result["refutation_recall"] = float(
+        (refutations["score"].to_numpy() >= 0.5).mean()
+    )
+    return result
 
 
 def paired_changes(
@@ -77,6 +132,16 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--adapter-dir", action="append", type=Path, required=True)
     parser.add_argument("--retrieval-cache", type=Path, required=True)
+    parser.add_argument(
+        "--prompt-config",
+        type=Path,
+        help="optional student prompt config applied to every adapter",
+    )
+    parser.add_argument(
+        "--correctness-validation-cache",
+        type=Path,
+        help="optional entity-disjoint correctness cache evaluated in the same session",
+    )
     parser.add_argument("--split", default="validation", choices=["validation", "test"])
     parser.add_argument("--splits-dir", type=Path, default=ROOT / "dev_splits")
     parser.add_argument("--condition", action="append", choices=["empty", "real", "shuffled"])
@@ -88,6 +153,10 @@ def main() -> None:
 
     adapter_dirs = [path.resolve() for path in args.adapter_dir]
     configs = [yaml.safe_load((path.parent / "config.yaml").read_text()) for path in adapter_dirs]
+    if args.prompt_config is not None:
+        prompt_config = args.prompt_config.resolve()
+        for config in configs:
+            apply_student_prompt_config(config, prompt_config)
     models = {config["student"]["model"] for config in configs}
     if len(models) != 1:
         raise SystemExit(f"adapters use different base models: {sorted(models)}")
@@ -100,6 +169,11 @@ def main() -> None:
     from vllm import LLM, SamplingParams
 
     tokenizers = [AutoTokenizer.from_pretrained(path) for path in adapter_dirs]
+    correctness_records = None
+    if args.correctness_validation_cache is not None:
+        correctness_records = load_correctness_records(
+            args.correctness_validation_cache.resolve(), tokenizers[0]
+        )
     cache = args.retrieval_cache.resolve()
     reference_sets = {
         condition: condition_references(condition, cache)
@@ -136,7 +210,11 @@ def main() -> None:
         zip(adapter_dirs, configs, strict=True)
     ):
         method = str(config["method"])
-        method_result: dict[str, Any] = {"conditions": {}, "paired": {}}
+        method_result: dict[str, Any] = {
+            "conditions": {},
+            "paired": {},
+            "correctness": None,
+        }
         for condition in conditions:
             condition_records = records[(adapter_number, condition)]
             reused_empty_rows = 0
@@ -209,6 +287,36 @@ def main() -> None:
                     method_result["paired"][f"real_vs_{control}"] = paired_changes(
                         all_frames[(method, "real")], all_frames[(method, control)]
                     )
+        if correctness_records is not None:
+            correctness_frame, correctness_timing = evaluate_adapter(
+                llm,
+                sampling,
+                correctness_records,
+                adapter_dir,
+                adapter_number + 1,
+                strict_re=STRICT_RE,
+            )
+            correctness_result = {
+                "metrics": correctness_metrics(correctness_frame),
+                "rows": int(len(correctness_frame)),
+                "score_seconds": float(correctness_timing["generation_seconds"]),
+                "cache": args.correctness_validation_cache.resolve().as_posix(),
+            }
+            correctness_output = adapter_dir.parent / args.run_name / "correctness"
+            correctness_output.mkdir(parents=True, exist_ok=True)
+            correctness_frame.to_json(
+                correctness_output / "generations.jsonl",
+                orient="records",
+                lines=True,
+            )
+            (correctness_output / "result.json").write_text(
+                json.dumps(correctness_result, indent=2) + "\n"
+            )
+            method_result["correctness"] = correctness_result
+            print(
+                f"{method} correctness: {correctness_result['metrics']}",
+                flush=True,
+            )
         all_results[method] = method_result
 
     summary = {

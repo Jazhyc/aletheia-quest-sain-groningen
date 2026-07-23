@@ -1,0 +1,30 @@
+# @package _global_
+# Rank-1 consumer trained on matched real, empty, irrelevant, mixed, insufficient,
+# and balanced honest/deceptive contradiction conditions.
+
+defaults:
+  - privileged_information_distillation_fever_evidence_visible
+  - _self_
+
+method: qwen9b_fever_balanced_evidence_consumer_rank1_v1
+output_dir: results/blackbox/${method}
+
+teacher:
+  artifact: ${output_dir}/curriculum/train.jsonl
+
+student:
+  dataset_name_contains: varied-deception
+  record_identity_field: evidence_variant
+  output_dir: ${output_dir}/adapter
+  lora:
+    r: 1
+    alpha: 2
+    dropout: 0.0
+    target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  training:
+    optimizer: adamw
+    optim: adamw_torch
+    num_train_epochs: 1.0
+    learning_rate: 5.0e-5
+    per_device_train_batch_size: 2
+    gradient_accumulation_steps: 16

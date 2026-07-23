@@ -39,18 +39,32 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
+- `submission/phoenix_wright_v3_0.ipynb` is the current accuracy-first NDIF
+  submission. It restores the original full-data Phoenix v2.1 rank-16
+  privileged-information-distillation adapter and exact frozen v2.0 no-trace
+  renderer after the compressed rank-1 specialist regressed on the official
+  counted distribution. It retains `LanguageModel`, one remote adapter session,
+  length-sorted dynamic `32/24/16` batches, and a 2,048-token prompt ceiling,
+  while restoring the v2.0 512-token completion allowance. The parsed binary
+  prediction is written directly, so there is no continuous-ranking gain. The
+  adapter is bundled and loaded from the original public Phoenix v2 Hugging Face
+  repository during NDIF execution. Its notebook environment follows the
+  post-maintenance runner contract with bundled wheels for Transformers commit
+  `c7f9c8815610d27e41a6b0b0cc9e2d3c49468d1d` and NNsight `hackathon/peft`
+  commit `d901da3ed772c815d0d146136de6f7e35f913221`, plus `peft==0.18.0`
+  from PyPI in `submission/requirements.txt`. Vendoring the Git dependencies
+  avoids relying on runner GitHub egress.
 - `submission/phoenix_wright_v1_1.ipynb` is the speed-first NDIF submission
   fallback. It uses Qwen/Qwen3.5-9B rating-token logits for the compact
   `details3072_logit` and `known3072_logit` prompts, rank-averaged per dataset
   with the cached `text_probe_ngram_v1` model. The submission threshold is
   `0.566666666667`, selected on validation for the per-dataset rank ensemble.
   On the local test split this scored 0.8655 balanced accuracy and 0.9068 AUROC.
-- `submission/phoenix_wright_v2_2.ipynb` is the current single-judge generated
-  NDIF submission. It uses the bundled Phoenix v2.1 varied-only
+- `legacy_submissions/phoenix_wright_v2_4.ipynb` is the previous single-judge
+  generated NDIF submission line. It uses the Phoenix v2.1 varied-only
   privileged-information-distillation adapter through NNsight `model.generate`,
-  parses `Prediction:0|1`, and applies the train-refined verdict/explanation
-  contradiction override under an explicit instruction to deceive. The v2.2
-  label describes submission logic; the trained adapter remains v2.1.
+  parses `Prediction:0|1`, and includes v2.4's conditional trace-summary and
+  semantic routing interface. The trained adapter remained v2.1.
 - `submission/phoenix_wright_v1.ipynb` was the previous accuracy-first generated
   reasoning notebook for `qwen_reason_ensemble_dks_member4096_v1`; it was removed
   from `submission/` because the official runs were timing out before producing

@@ -467,6 +467,13 @@ small text-only fine-tunes as overfit-prone and not competitive standalone
 methods unless a new training source or evaluation demonstrates Notus/Iris
 transfer.
 
+Phoenix v3.2's reasoning n-gram/logistic stack did not improve the official
+headline score over the rank-24 Phoenix v3.1 submission despite its local
+varied-Qwen gain. Keep that stack as an archived experiment, not in the active
+submission. The active Phoenix package is restored to the exact v3.0 state from
+commit `4318d0c`: the original rank-16/alpha-32 adapter, frozen v2 renderer, and
+no reasoning n-gram artifact.
+
 Local `python submit.py --dry` is only a rehearsal of the bundled runner against
 `dry.yaml`; it is not the official Space environment. As of 2026-07-06, the
 local `.env`/`$NDIF_API_KEY` for team `SAIN Groningen` is recognized on
@@ -545,3 +552,8 @@ Keep the submission package pruned: `submit.py` excludes `.env`, `.uv-cache`,
 `results/`, `logs/`, and `dev_splits/` so credentials and local experiment
 artifacts are not uploaded. Before submitting, verify there is exactly one
 notebook in `submission/` and that the packaged zip is small.
+After a real submission is accepted, poll its stream or status for about two
+minutes to catch an immediate rejection or crash, then stop polling and hand
+the run back to the user. Do not babysit a queued or long-running leaderboard
+evaluation unless the user explicitly asks for monitoring, and do not terminate
+the accepted run merely because polling has stopped.

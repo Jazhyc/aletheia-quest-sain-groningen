@@ -11,15 +11,33 @@ opaque public labels returned by the Space.
 ## Current Status
 
 - Team: `SAIN Groningen`
-- Pending submissions: `0`
+- Pending submissions: `1` running (as of 2026-07-23)
 - Rate-limit state at last query: `1` remaining in a `0.5` hour window
-- Best official submission in this record: `phoenix_wright_v2_0.ipynb`
-  compact privileged-distillation adapter, balanced accuracy `0.833333`
+- Best official submission in this record: `sonic_v2.1.ipynb`
+  white-box probe + judge gate, balanced accuracy `0.847083`, AUROC `0.869833`
+- Leaderboard rank: `2` of the public board; leader is EleutherAI
+  `Tiresias.ipynb` at AUROC `0.9451` / BA `0.8904` (see benchmark below)
+- Previous best black-box entry: `phoenix_wright_v2_0.ipynb`, BA `0.833333`
+
+The sonic family is white-box (`--tag white`). Unlike the Phoenix rows, its BA
+and AUROC differ because the probe emits continuous scores. Sonic timestamps
+below are the leaderboard-displayed times, not re-derived UTC.
+
+The detailed API table below was last refreshed on 2026-07-16. On 2026-07-23,
+Phoenix v3.1 and the reasoning-n-gram Phoenix v3.2 submission both returned the
+same user-confirmed headline score, `0.8316667`. Because v3.2 did not transfer
+its local projected gain, the active repository submission was reverted to
+Phoenix v3.0 with the original rank-16 adapter. Per-dataset details for these
+recent runs have not been added without a fresh authenticated API query.
 
 ## Successful Submissions
 
 | submitted at (UTC) | notebook | method / local mapping | tag | BA | AUROC | recall | FPR | runtime |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-23 21:46 | `sonic_v2.2.ipynb` | constant-free gate: rank-space blend, `w = clip(2a-1,0,1)`, degeneracy guard, prevalence-matched threshold | white | 0.810417 | 0.858450 | 0.744167 | 0.123333 | 4705s |
+| 2026-07-23 18:39 | `sonic_v2.1.ipynb` | soft blend `w = clamp((a-0.5)x3,0,1)` + threshold search against judge labels (**best official**) | white | 0.847083 | 0.869833 | 0.764167 | 0.070000 | 5398s |
+| 2026-07-23 13:33 | `sonic_v2.ipynb` | first probe+judge gate; hard switch at agreement `0.65`, unsupervised GMM threshold | white | 0.747083 | 0.844700 | 0.580000 | 0.085833 | 4345s |
+| 2026-07-20 01:14 | `sonic_v1.ipynb` | white-box transformer token probe at L46, probe alone (no judge) | white | 0.655000 | 0.754850 | 0.440833 | 0.130833 | 1046s |
 | 2026-07-16 15:57:06 | `phoenix_wright_v2_4.ipynb` | same adapter; conditional 4,000-character reasoning, summary member only | black | 0.776250 | 0.776250 | 0.739167 | 0.186667 | 5131.7s |
 | 2026-07-16 07:36:16 | `phoenix_wright_v2_3.ipynb` | same adapter; conditional 4,000-character reasoning plus summary/binary max ensemble | black | 0.729167 | 0.729167 | 0.857500 | 0.399167 | 6077.6s |
 | 2026-07-11 09:47:58 | `phoenix_wright_v2_0.ipynb` | compact privileged-distillation adapter; mixed-data `5e-5` selection | black | 0.833333 | 0.833333 | 0.741667 | 0.075000 | 12476.5s |
@@ -37,6 +55,101 @@ opaque public labels returned by the Space.
 ## Recent Phoenix Counted Dataset Detail
 
 These counted Notus/Iris rows are useful diagnostics for official transfer.
+
+### Sonic family counted Notus/Iris detail
+
+All four sonic runs share cells 1--11 (identical probe and judge); only the
+gate in cell 12 changes. Counted balanced accuracy per unit:
+
+| dataset / model | v1 | v2 | v2.1 | v2.2 |
+| --- | ---: | ---: | ---: | ---: |
+| Notus `Nemotron-120B` / `None` | 0.5025 | 0.7525 | 0.7525 | **0.5025** |
+| Notus `Qwen3.5-27B` / `None` | 0.5700 | 0.5700 | 0.6950 | 0.6950 |
+| Notus `gemma-3-27b-it` / `None` | 0.5000 | 0.7575 | 0.7575 | 0.7575 |
+| Iris `Nemotron-120B` / `g-st` | 0.8725 | 0.9500 | 0.9450 | 0.9525 |
+| Iris `Qwen3.5-27B` / `g-st` | 0.9850 | 0.9425 | 0.9500 | 0.9850 |
+| Iris `gemma-3-27b-it` / `g-st-2` | 0.5000 | 0.5100 | 0.9825 | 0.9700 |
+| **headline BA** | 0.6550 | 0.7471 | **0.8471** | 0.8104 |
+| **headline AUROC** | 0.7549 | 0.8447 | **0.8698** | 0.8584 |
+
+Counted AUROC per unit for the two newest runs:
+
+| dataset / model | v2.1 AUROC | v2.2 AUROC |
+| --- | ---: | ---: |
+| Notus `Nemotron-120B` / `None` | 0.6900 | 0.5834 |
+| Notus `Qwen3.5-27B` / `None` | 0.7572 | 0.7572 |
+| Notus `gemma-3-27b-it` / `None` | 0.8259 | 0.8259 |
+| Iris `Nemotron-120B` / `g-st` | 0.9905 | 0.9926 |
+| Iris `Qwen3.5-27B` / `g-st` | 0.9643 | 0.9995 |
+| Iris `gemma-3-27b-it` / `g-st-2` | 0.9911 | 0.9921 |
+
+Notes: v2.2's entire regression against v2.1 is **one cell**, Notus/Nemotron,
+where BA fell `0.7525 -> 0.5025` and AUROC `0.6900 -> 0.5834`. Those are exactly
+`sonic_v1`'s probe-only values for that unit, so on Notus/Nemotron v2.2 scored
+the bare probe with the default config threshold.
+
+The cause is **not** the degeneracy guard. That guard tests
+`np.std(...) < 1e-6` and sits inside the `judge_labels.any() and not
+judge_labels.all()` branch, so both judge classes are already guaranteed
+present; the binary verdicts then have std `>= ~0.5/sqrt(n)` and the soft
+probabilities vary as well. `judge_degenerate` is therefore unreachable in
+practice, and `probe_degenerate` needs a fully saturated sigmoid. The guard
+never fires.
+
+The bare-probe output comes from one of the two `else` branches that discard
+the judge outright:
+
+- `gate: no judge signal for this dataset` -- `judge_scores is None` (judge
+  errored or was skipped) or a length mismatch.
+- `gate: judge verdicts are single-class here` -- the judge returned all-0 or
+  all-1 hard verdicts.
+
+Both print a distinguishing line, so the captured notebook output of the
+2026-07-23 21:46 run identifies which one fired. Runtime fell from 89m58s
+(v2.1) to 78m25s (v2.2) with cells 1--11 unchanged, which mildly favours an
+aborted judge pass, but a single-class verdict fits the metrics equally well.
+
+The single-class branch is itself a latent bug: it throws away the judge's
+**soft** probabilities merely because the thresholded verdicts collapsed to one
+class. Soft confidences can rank well even when every hard verdict is 0, so
+that path discards usable ranking signal.
+
+Everywhere else v2.2 matched or beat v2.1: Notus/Qwen and Notus/gemma are
+identical, and Iris improved on Nemotron (`+0.0075`) and Qwen (`+0.0350`), with
+a small Iris/gemma cost (`-0.0125`). Iris AUROC under v2.2 is the best of any
+run (mean `0.9947`). So the rank-space blend plus prevalence-matched threshold
+is a genuine improvement; only the detector-dropping guard is harmful. A v2.3
+that keeps v2.2's gate but never drops the judge projects to roughly BA `0.852`
+/ AUROC `0.876`, above v2.1 on both.
+
+Also note v1's inverted units: Notus/gemma AUROC `0.3526` (below chance, probe
+ranks backwards) and Iris/gemma BA `0.5000` at AUROC `0.9911` (near-perfect
+ranking, useless threshold). The v2.1 threshold search fixed the latter; v2.2's
+agreement-sign flip covers the former.
+
+### Benchmark: EleutherAI `Tiresias.ipynb` (rank 1)
+
+Submitted 2026-07-20 04:18. Headline AUROC `0.9451` / BA `0.8904`, runtime
+191m43s.
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Notus | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` / `None` | 0.8500 | 0.9056 | 0.8500 | 0.1500 |
+| Dataset Notus | `Qwen/Qwen3.5-27B` / `None` | 0.8550 | 0.9326 | 0.8550 | 0.1450 |
+| Dataset Notus | `google/gemma-3-27b-it` / `None` | 0.8000 | 0.8715 | 0.8000 | 0.2000 |
+| Dataset Iris | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` / `g-st-nemotron-3-super-120b` | 0.9400 | 0.9863 | 0.9600 | 0.0800 |
+| Dataset Iris | `Qwen/Qwen3.5-27B` / `g-st-qwen3.5-27b` | 0.9650 | 0.9919 | 0.9700 | 0.0400 |
+| Dataset Iris | `google/gemma-3-27b-it` / `g-st-gemma-3-27b-it-2` | 0.9325 | 0.9825 | 0.9300 | 0.0650 |
+
+Notes: the gap to rank 1 is **entirely Notus**. On Iris we are already ahead --
+v2.2 mean BA `0.9692` vs Tiresias `0.9458`, mean AUROC `0.9947` vs `0.9869`. On
+Notus Tiresias averages BA `0.8350` / AUROC `0.9032` against our best `0.7350` /
+`0.7577` (v2.1). Their Notus recall equals their BA with FPR = 1 - BA on every
+unit, i.e. a well-calibrated balanced split, whereas ours under-flags (recall
+`0.485--0.610` at FPR `0.085--0.095`). But our Notus deficit is a *ranking*
+deficit, not a threshold one: at AUROC `0.7572`/`0.8259` no threshold reaches
+their BA. Notus is base-model-only (`LoRA = None`) for all three families, the
+regime where our probe transfers worst.
 
 ### Phoenix Wright v2.4 trace-summary isolation
 

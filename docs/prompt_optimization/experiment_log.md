@@ -2790,3 +2790,375 @@ semantic recall gap but failed calibration: BA rose `0.6999 -> 0.7884`, while
 FPR rose `0.0419 -> 0.2900`, parse errors rose 14 to 89, and Llama lost
 `0.0237` BA. Retain the original low-FPR action route as a muted theoretical
 coverage change; reject the clarified prompt and any post-hoc blend.
+
+### Frozen heterogeneous n-gram stack test
+
+Jobs `30217217` and `30217261` applied P67 unchanged to local test. A validation
+replay first reproduced the original `0.9048` three-vote logistic and `0.9190`
+hybrid BA decisions exactly. The test meta-model then fit only the same 6,275
+leakage-excluded training rows with the frozen 20,000-feature word 1--2 gram
+TF-IDF representation, `C=1` logistic regression, and threshold 0.5.
+
+The plain three-member logistic scored `0.9179` test BA and `0.9488` AUROC. The
+n-gram hybrid reached `0.9298` BA, `0.9608` AUROC, `0.9190` recall, and `0.0595`
+FPR, with `0.9833` instructed and `0.8583` varied BA. It made 16 fixes and six
+breaks relative to plain logistic. N-grams alone scored only `0.8036` BA, so the
+gain again comes from input-dependent combination rather than lexical
+replacement of the adapters. This confirms P67 locally without any test-set
+selection, but public test shares dataset-unit families with development;
+hidden-distribution transfer and submission runtime remain separate questions.
+
+## Phoenix Wright v3.0 heterogeneous deployment
+
+P67's frozen rank-1 deception, incorrectness, and resolved-intent members are
+now deployed in `submission/phoenix_wright_v3_0.ipynb`. The exact train-fitted
+20,000-feature word 1--2 gram vectorizer and logistic stack are bundled as a
+368,422-byte joblib artifact. A packaging replay reproduced local-test BA
+`0.9297619` and AUROC `0.9608333` exactly. The three minimal bundled LoRAs total
+about 21.9 MB of weights, and the complete compressed submission is 22.8 MB.
+
+Inference uses one reusable NNsight `LanguageModel` meta-wrapper and changes its
+PEFT repository between member sessions; the three adapters share rank and
+target modules. Length sorting, dynamic 32/24/16 batching, four batches per
+remote session, and routing intent to zero when no assistant reasoning exists
+reduce avoidable work without altering the tested prompts or 512-token member
+budget. The adapters were uploaded to the three public
+`Jazhyc/aletheias-phoenix-v3-*-r1` repositories recorded in P67.
+
+The isolated runner first exposed and fixed a trace-boundary bug: appending a
+saved NNsight proxy to a Python list inside `model.session` did not preserve the
+local side effect. Moving the append immediately outside the session matched
+the established generated-chunk pattern. After the fix, eleven 32-row
+instructed slices completed successfully and a focused 32-row varied run
+exercised all three adapters plus the CPU stack, exited cleanly, and took 1m57s.
+The official black-box endpoint accepted the package and showed no startup
+failure during roughly 125 seconds of live streaming; polling was then stopped
+as requested, before any result was available.
+
+### Timeout-driven two-member update (2026-07-21)
+
+Both official three-member runs later stopped on Eunomia after `8126.65` and
+`8183.34` seconds, with no model-startup error and nearly identical elapsed
+times. This is consistent with a dataset runtime ceiling. To reduce inference
+without choosing a new prompt or adapter, every leave-one-member-out stack was
+refit with P67's frozen 20,000-feature n-gram/logistic recipe and the same 6,275
+leakage-excluded training rows.
+
+The selected deception plus resolved-intent hybrid scored `0.9202` validation
+BA, `0.9526` AUROC, `0.8810` recall, and `0.0405` FPR. On local test it scored
+`0.9238` BA, `0.9550` AUROC, `0.8857` recall, and `0.0381` FPR, with `0.9813`
+instructed and `0.8472` varied BA. The original three-member hybrid scored
+`0.9190` validation BA and `0.9298` test BA. Removing incorrectness therefore
+preserves the validation result, costs `0.0060` test BA, and materially lowers
+FPR. It reduces mixed-test member rows from 2,002 to 1,181 (41%); the savings
+are one third on trace-bearing datasets and one half when reasoning is absent.
+
+The refitted meta-model is not varied-only: its eligible training set contains
+3,693 instructed and 2,582 varied rows. Dataset-name provenance gives 5,462
+Qwen, 640 Gemma, and 173 Nemotron rows, so the lexical calibration retains the
+available multi-family instructed controls even though both LoRA students use a
+Qwen base. The deployment now bundles only deception and resolved-intent
+adapters; their already-published Hugging Face repositories are unchanged.
+
+### Full-member NDIF session benchmark (2026-07-21)
+
+The two-member notebook was benchmarked twice on the same complete 400-row
+`dev-varied-deception-Qwen3.5-27B-None` unit. Both conditions used the exact
+submission notebook, dynamic batch tiers, prompts, weights, 4,096-token input
+ceiling, and 512-token completion ceiling. The control retained four generation
+batches per remote session; the candidate placed every batch for one adapter in
+one session.
+
+The four-batch control completed in `654.305` seconds. Full-member sessions
+completed in `615.340` seconds, a `38.965`-second (`5.96%`) reduction. Both
+wrote valid 400-row submissions, and their CSV files were byte-identical: zero
+binary disagreements, zero continuous-score differences, and maximum absolute
+score difference `0.0`. The full sessions also completed without request-size,
+serialization, or accumulated-memory failure.
+
+Phoenix v3.0 now defaults `PHOENIX_REMOTE_BATCHES_PER_SESSION=0`, meaning all
+batches for one adapter are sent in one NDIF request. A positive value restores
+bounded groups for diagnostics. This changes queue/request overhead rather than
+per-batch generation memory or predictions. Treat the 5.96% figure as one
+paired endpoint measurement rather than a guaranteed leaderboard-wide speedup;
+shared-service queue conditions remain variable.
+
+### Binary-safe intent query gate (2026-07-21)
+
+After deception inference, the frozen n-gram/logistic stack is evaluated twice
+with hypothetical intent features zero and one. Intent is queried only when
+those endpoint scores fall on opposite sides of the submission threshold. If
+both endpoint decisions agree, the unknown binary intent vote cannot change the
+final class; the query is skipped and member value `0.5` supplies the logit
+midpoint for continuous scoring. No-reasoning rows retain their exact frozen
+intent value of zero. `PHOENIX_INTENT_GATE=0` restores the ungated path.
+
+On validation, the gate skipped 141/360 (`39.17%`) trace-row intent calls. BA
+was exactly unchanged at `0.9202381`; AUROC moved from `0.9526190` to
+`0.9448810`. On local test it skipped 148/360 (`41.11%`), preserved BA exactly
+at `0.9238095`, and changed AUROC from `0.9550` to `0.9500`. Both comparisons
+had zero binary disagreements by construction.
+
+The same complete 400-row public varied-Qwen unit used for the session benchmark
+then exercised the installed NDIF gate. It skipped 200/400 intent calls and
+completed in `501.491` seconds, versus `615.340` seconds for the ungated
+full-session path: `113.849` seconds (`18.50%`) faster. All 400 binary decisions,
+201 predicted positives, and BA `0.9475` were unchanged. The midpoint altered
+200 continuous scores (mean absolute change `0.01481`) and reduced this unit's
+AUROC from `0.99155` to `0.98240`. Relative to the original four-batch-session
+control at `654.305` seconds, the two mechanical optimizations together save
+`152.814` seconds (`23.35%`) on this unit. Runtime remains subject to shared
+NDIF conditions, and the AUROC tradeoff must remain visible because AUROC is the
+competition tie-break metric.
+
+### NDIF batch-size boundary sweep (2026-07-21)
+
+The gated two-member notebook was swept again on the same complete 400-row
+`dev-varied-deception-Qwen3.5-27B-None` unit. Halving all dynamic tiers from
+`32/24/16` to `16/12/8` completed reliably but took `821.584` seconds, versus
+the existing `501.491`-second gated reference. This is `320.093` seconds
+(`63.83%`) slower. Batch-shape numerical differences also changed eight
+continuous scores and three binary decisions, so the smaller schedule was not
+prediction-identical.
+
+Increasing throughput crossed a hard memory boundary. Global `48/32/16`
+completed deception but OOMed during resolved-intent generation. Keeping the
+medium tier at 24 (`48/24/16`) still OOMed during intent. Tightening the medium
+boundary to 1,000 tokens also OOMed on a later 24-row intent batch. A
+member-specific attempt with deception 48 and the original intent schedule
+again OOMed during intent, indicating that the larger first-member allocator
+high-water mark was not safely isolated by the adapter/session boundary. Even a
+conservative deception-only batch of 40 OOMed during deception. The remote
+exceptions consistently reported a `28.01 GiB` process allowance despite much
+more physical GPU memory being free.
+
+Retain the submission's existing `32/24/16` tiers. They are the largest tested
+configuration that has completed this workload and are substantially faster
+than the reliable smaller candidate. Do not deploy member-specific larger
+batches or treat physical 80 GB GPU capacity as the usable per-request budget;
+the NDIF process cap is the operative constraint.
+
+### Phoenix 256-token completion cap (2026-07-22)
+
+Two identical gated two-member submissions failed on Eunomia after `4191.096`
+and `4162.409` seconds, only `28.687` seconds (`0.68%`) apart. Both returned no
+scored datasets. This makes transient submission noise unlikely and motivates a
+further deterministic runtime reduction before another official attempt.
+
+Saved-generation replay first truncated each member at the exact Qwen token
+boundary and reran the intent gate plus frozen stack. Validation had zero score
+or binary changes. On test, three deception votes changed, the gate queried 214
+instead of 212 intent rows, and two of 821 final decisions changed. In this
+matched cache replay BA moved `0.92110 -> 0.91861` and AUROC moved
+`0.96097 -> 0.95972`; FPR was unchanged and the loss came from recall. These
+absolute cache metrics differ slightly from the packaged replay, so use the
+deltas as the cap-risk estimate.
+
+The complete 400-row `dev-varied-deception-Qwen3.5-27B-None` NDIF benchmark
+then compared the new 256-token notebook with the saved 512-token gated output.
+Runtime fell from `501.491` to `463.715` seconds, a `37.776`-second (`7.53%`)
+reduction. Exactly one continuous and binary prediction changed, from positive
+to negative. It removed a false positive: BA improved `0.9475 -> 0.9500`, AUROC
+improved `0.98240 -> 0.98328`, recall stayed `0.95`, and FPR fell
+`0.055 -> 0.050`. Relative to the earlier four-session ungated control at
+`654.305` seconds, session consolidation, the intent gate, and this cap together
+save `190.590` seconds (`29.13%`) on this unit.
+
+Phoenix v3.0 now defaults `PHOENIX_MAX_NEW_TOKENS=256`. The environment override
+remains available for diagnostics. The cap is a modest speed/recall tradeoff,
+not enough by itself to prove the private Eunomia unit will fit its execution
+budget; the paired official failures remain the relevant submission warning.
+
+### Phoenix concise reasoning-summary sweep (2026-07-22)
+
+Local vLLM job `30229170` tested four inference-time prompt constraints on the
+frozen deception and resolved-intent adapters. Every condition retained the
+trained output order—`<reasoning_summary>` first and `Prediction:` last—and the
+256-token completion allowance. The variants requested a 32-word sentence, a
+20-word sentence, a 12-word clause, or a member-specific 24-word contrast.
+
+The constraints worked mechanically. Mean deception length fell from `98.76`
+tokens to `28.79`--`38.56`, and mean active intent length fell from `86.80` to
+`26.13`--`33.95`. Baseline cap hits were 8 deception and 3 intent rows; the
+concise variants had zero cap hits except for one 32-word deception completion.
+After replaying the exact binary-safe intent gate and frozen n-gram stack, gated
+generation volume fell from `100,280` tokens to `29,200`--`38,729` tokens.
+
+The accuracy cost is too large for deployment:
+
+| condition | validation BA | instructed BA | varied BA | gated tokens |
+| --- | ---: | ---: | ---: | ---: |
+| baseline | 0.9155 | 0.9812 | 0.8278 | 100,280 |
+| 32-word sentence | 0.8917 | 0.9292 | 0.8417 | 38,729 |
+| 20-word sentence | 0.8917 | 0.9312 | 0.8389 | 31,793 |
+| 12-word clause | 0.8917 | 0.9354 | 0.8333 | 29,200 |
+| member-specific 24 words | 0.8845 | 0.9250 | 0.8306 | 38,513 |
+
+The shortest conditions slightly improve varied-deception BA but sharply reduce
+instructed-deception recall. This is not a parser or truncation effect: almost
+all concise outputs are valid and terminate far below the cap. Hard inference
+word limits change the adapters' learned decision behavior, plausibly because
+their distilled targets were trained with longer summaries. Do not modify the
+Phoenix v3.0 prompts from this sweep. If shorter output is revisited, regenerate
+concise teacher summaries and train a matched student rather than imposing a
+strong inference-only length constraint.
+
+### Phoenix deception-only deployment (2026-07-22)
+
+Binary leave-one-member-out analysis showed that the refitted n-gram model did
+not provide a stable balanced-accuracy gain for the final deception/intent duo.
+Relative to the two binary adapter votes, it gained one validation row
+(`0.9190 -> 0.9202` BA) but lost one local-test row (`0.9250 -> 0.9238`). Its
+main benefit was AUROC, while n-grams alone were weak and increased lexical
+distribution-shift risk. The material-deception adapter alone scored `0.9048`
+validation and `0.9071` cached local-test BA; resolved intent supplied real
+varied coverage but retained enough runtime to threaten the private execution
+ceiling.
+
+Phoenix v3.0 now executes only the material-deception rank-1 adapter and writes
+its parsed `Prediction:0|1` directly as both the binary decision and score. The
+intent repository, bundled intent weights, TF-IDF vectorizer, logistic model,
+intent gate, and their imports were removed. The archive contains one 7.3 MB
+adapter and remains on `LanguageModel`, one full-member remote session,
+length-sorted `32/24/16` dynamic batches, a 4,096-token prompt ceiling, and a
+256-token completion ceiling. A staged 32-row varied-Qwen dry run completed
+end to end in 5m10s with a valid submission and no startup, import, adapter, or
+parser failure.
+
+Two identical deception-only official attempts then failed on the second
+dataset, Eunomia, after `3082.671` and `3060.549` seconds of cumulative runtime.
+The runner records whole-submission elapsed time while applying a fresh
+per-dataset notebook budget, so these totals include setup and the first Metis
+run; they do not establish an NDIF one-session limit. The close repeat makes a
+transient failure unlikely. Phoenix v2.4 used a 2,048-token input ceiling and
+completed officially, whereas this notebook still allowed 4,096 tokens and
+appends the final assistant output separately from its 3,000-character context
+tail. The next deployment therefore changes only `MAX_PROMPT_TOKENS` from
+4,096 to 2,048, retaining one NDIF session, the exact prompt and adapter,
+dynamic batches, 256-token completion allowance, and direct binary readout.
+
+The first 2,048-token attempt failed transiently on Metis after only `128.784`
+seconds. An unchanged resubmission completed all units in `5983.006` seconds
+but scored only `0.7983` counted BA, `0.6708` recall, and `0.0742` FPR. Phoenix
+v2.0 had scored `0.8333`, `0.7417`, and `0.0750`. Iris mean BA was identical at
+`0.9333`; the entire aggregate regression came from Notus, whose mean BA fell
+from `0.7333` to `0.6633`. Notus recall fell for every source family—Nemotron
+`0.580 -> 0.430`, Qwen `0.515 -> 0.390`, and Gemma `0.620 -> 0.475`—while mean
+Notus FPR remained exactly unchanged. The compressed specialist therefore
+failed by systematically missing private positives, not by globally increasing
+false alarms.
+
+This corrects an overbroad interpretation of the rank sweep. The
+decision-identical rank-1/rank-16 comparison trained both ranks on the same 10%
+manifest; it did not establish equivalence between P67's roughly 246-example
+material specialist and the original full-data Phoenix v2.1 rank-16 adapter.
+Phoenix v3.0 now restores the original adapter (bundled weight SHA-256
+`1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`), the
+exact v2.0 per-message/head-tail renderer, and the 512-token completion budget.
+It keeps the safe deployment optimizations: `LanguageModel`, 2,048-token input,
+length-sorted `32/24/16` dynamic batches, and one full-dataset remote session.
+The notebook remains named `phoenix_wright_v3_0.ipynb`.
+
+Two submissions made during and immediately after the leaderboard's Fargate
+maintenance failed on Metis at `19.702` and `19.997` seconds. A later attempt
+survived that boundary but ended with the stream-level message `internal error
+while running your submission` and produced no history record. The organizers
+then specified the rebuilt environment contract as `transformers==5.15.0` with
+`peft==0.18.0`. Phoenix v3.0 now pins those exact versions in its submission
+requirements instead of installing PEFT 0.19.1 over the runner environment.
+The organizers clarified that Transformers must be installed directly from
+`git+https://github.com/huggingface/transformers.git`, because 5.15.0 is not yet
+published on PyPI. The submission requirement initially used that Git URL
+instead of the unsatisfiable PyPI version pin. A clean local target install resolved as
+Transformers `5.15.0.dev0` plus PEFT `0.18.0`. PEFT loaded the bundled rank-16
+configuration successfully, ignoring only the newer optional `lora_ga_config`
+and `use_bdlora` keys while preserving rank 16, alpha 32, target modules, and
+base model.
+
+The direct Git requirement then failed officially on Metis after `4.076`
+seconds, before notebook startup. The public runner source still restricts the
+requirements-install proxy to `pypi.org` and `pythonhosted.org`; `github.com` is
+not in the install allowlist. A local reproduction confirmed that the Git
+requirement itself is valid, but it necessarily clones GitHub during pip setup.
+Phoenix therefore bundles a 13 MB pure-Python Transformers wheel built from the
+same resolved commit `bb3ffb9703e3acb84f06db1d3799756e977662c2` and installs
+that local wheel from `submission/requirements.txt`, alongside PyPI PEFT 0.18.0.
+This preserves the organizer-specified code while requiring no GitHub egress in
+the official install phase.
+
+On 2026-07-23 the organizers deployed a remote-LoRA fix and pinned a new exact
+client contract: NNsight `hackathon/peft` at
+`d901da3ed772c815d0d146136de6f7e35f913221`, Transformers at
+`c7f9c8815610d27e41a6b0b0cc9e2d3c49468d1d`, and PEFT 0.18.0. Phoenix v3.0
+vendors Python-3.12-compatible wheels for both Git dependencies and retains the
+PyPI PEFT pin. This supersedes the earlier Transformers wheel at commit
+`bb3ffb9703e3acb84f06db1d3799756e977662c2`; the notebook method and adapter
+remain unchanged.
+
+### Reasoning-only n-gram intent classifier (2026-07-23)
+
+A CPU-only sparse classifier tested whether varied-deception reasoning directly
+exposes deceptive intent. It reads only the final assistant `reasoning` field
+and excludes the visible output and all dataset/model metadata. Candidate
+selection used leave-one-dataset-unit-out train OOF with fold-local TF-IDF
+vocabularies, a fixed `0.5` threshold, and equal dataset-unit/label weighting.
+The 16-candidate grid selected 4,000-character balanced head/tail truncation,
+word unigrams/bigrams with `min_df=8`, and logistic-regression `C=0.3`.
+
+Grouped train OOF scored `0.7958` BA and `0.8732` AUROC versus `0.6309` BA for
+a reasoning-length-only control. The locked validation result was `0.8278` BA,
+`0.8864` AUROC, `0.7444` recall, and `0.0889` FPR. A single frozen test run
+scored `0.8250` BA, `0.8925` AUROC, `0.7611` recall, and `0.1111` FPR.
+
+Top weights support the surface-intent hypothesis (`wrong`, `incorrect`, `say`,
+`plausible`, `incorrect answer`) but do not reduce to an obvious cue list. A
+preregistered deception/lying cue matcher scored only `0.7111` BA, and cue
+redaction changed four of 360 test decisions while preserving `0.8306` BA.
+Test BA nevertheless ranged from `0.6000` to `0.9750` across the nine dataset
+units. Treat the model as a complementary varied-Qwen feature only: all local
+varied rows are Qwen and all instructed rows lack reasoning. Do not use
+reasoning availability as a feature or interpret the deception target as an
+independently annotated intent label. Full details are in P75 and
+`experiments/reasoning_ngram_intent/README.md`.
+
+### Phoenix reasoning-surface ensemble (2026-07-23)
+
+The P75 reasoning n-gram was combined with the Phoenix v3.2 rank-24 binary
+judge through fixed OR and two-feature logistic regression. The meta-model uses
+only `[Phoenix score, reasoning n-gram score]`, a fixed `0.5` threshold, and
+equal dataset-unit/label weighting. Regularization was selected from five
+values inside nested leave-one-dataset-unit-out validation OOF; no dataset or
+organism identifiers, interactions, or threshold sweep were used.
+
+On validation, Phoenix, OR, and nested logistic scored `0.8083`, `0.8278`, and
+`0.8306` varied BA. Frozen rank-24 test job `30251102` scored `0.8222` for
+Phoenix, `0.8306` for OR, and `0.8472` for logistic. Logistic test recall/FPR
+were `0.7778/0.0833`, versus Phoenix `0.7056/0.0611`; it fixed 13 Phoenix
+errors and broke four. OR reached `0.8111` recall but `0.1500` FPR, fixing 19
+and breaking 16. A separate rank-16 sensitivity control also favored logistic,
+raising varied test BA from `0.8278` to `0.8417`.
+
+Phoenix v3.2 therefore promotes the logistic stack and rejects raw OR. Rows
+without final-assistant reasoning retain Phoenix exactly. With instructed rows
+unchanged, the local 21-unit projection rises from `0.9143` to `0.9250` BA and
+from `0.9143` to `0.9470` AUROC. The bundled 247,479-byte stack artifact has
+SHA-256
+`3db505e0d5e5e2ec333c1f9ca339479746e7e79960d18a6ba78161849f54fe90`;
+an exact 360-row parity check reproduced test probabilities to `3.33e-16`.
+All public varied rows are Qwen-family, and validation fold selection alternates
+between regularization-grid boundaries, so neither cross-family transfer nor
+coefficient stability is established.
+
+### Phoenix v3.2 official outcome and rollback (2026-07-23)
+
+The Phoenix v3.2 leaderboard run returned the exact same headline score as
+rank-24 Phoenix v3.1: `0.8316667`. The locally projected varied-Qwen gain from
+the reasoning n-gram/logistic stack therefore did not transfer to the counted
+leaderboard distribution.
+
+The active submission is reverted to the exact Phoenix v3.0 state at commit
+`4318d0c`: the original rank-16/alpha-32 full-data adapter, the frozen no-trace
+renderer, and `phoenix_wright_v3_0.ipynb` as the sole submission notebook. The
+bundled `phoenix_wright_v3_reasoning_stack.joblib` artifact and v3.2 notebook
+are removed. P75/P76 remain reproducible historical experiments, but the
+n-gram stack is no longer a deployment candidate.

@@ -356,6 +356,35 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
 The final adapter is written under
 `results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/adapter/`.
 
+To run the full-data rank-24 capacity ablation while preserving alpha/r = 2
+and every other selected training setting:
+
+```bash
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  --config-name pid_varied_rank24_full_adamw5e5_v1
+```
+
+The adapter is written under
+`results/blackbox/qwen9b_pid_varied_rank24_full_adamw5e5_v1/adapter/`.
+
+The matched full-data rank-24 AdamW learning-rate sweep uses explicit configs
+for `1e-5`, `2e-5`, `5e-5`, and `1e-4`. The `5e-5` member above can be reused;
+train the other members with:
+
+```bash
+for rate in 1e5 2e5 1e4; do
+  sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+    --config-name "pid_varied_rank24_full_adamw${rate}_v1"
+done
+```
+
+Evaluate all four adapters in one shared vLLM session so model startup and
+generation backend state are matched. Select on full-validation overall and
+varied balanced accuracy; do not use local test to choose the learning rate.
+If the coarse winner is the `1e-4` boundary, extend the same frozen sweep with
+`pid_varied_rank24_full_adamw2e4_v1` and
+`pid_varied_rank24_full_adamw3e4_v1` before selecting a rate.
+
 For matched data-efficiency sweeps, set `student.train_fraction` in `(0, 1]`.
 Rows are selected deterministically within every dataset/label stratum using
 `student.train_fraction_seed`, so small fractions retain every organism and
