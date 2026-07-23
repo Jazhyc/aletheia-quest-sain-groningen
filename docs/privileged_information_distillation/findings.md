@@ -2212,6 +2212,49 @@ weights are about 166.5 MiB, so deployment must also recheck the complete
 200 MB submission package. Do not replace the rank-16 Phoenix adapter or spend
 a local-test evaluation without a separate promotion decision.
 
+### Rank-24 AdamW learning-rate sweep (2026-07-23)
+
+A full-data one-epoch AdamW sweep held the rank-24/alpha-48 recipe above fixed
+and crossed learning rates `1e-5`, `2e-5`, `5e-5`, and `1e-4`. The initial
+shared-session validation run (`30246745`) put `1e-4` at the upper boundary
+with 0.9060 overall and 0.8111 varied BA, so the frozen sweep was extended to
+`2e-4` and `3e-4`. Training jobs and losses were:
+
+| AdamW LR | Slurm job | train loss | trainer time |
+| ---: | ---: | ---: | ---: |
+| `1e-5` | `30246693` | 0.5758 | 988.5s |
+| `2e-5` | `30246694` | 0.5227 | 978.8s |
+| `5e-5` | `30246588` | 0.4805 | 976.3s |
+| `1e-4` | `30246695` | 0.4625 | 983.6s |
+| `2e-4` | `30246753` | 0.4507 | 968.4s |
+| `3e-4` | `30246754` | 0.4457 | 953.6s |
+
+All six jobs completed stably, but decreasing training loss did not imply
+better detection. A second shared-session high-rate comparison (`30246781`)
+reversed the apparent boundary win: `5e-5` scored 0.9024 BA while `1e-4`
+fell to 0.8976. A third all-six rotation (`30246792`) again reordered several
+few-row differences. Aggregate metrics across the available shared-session
+runs were:
+
+| AdamW LR | runs | mean BA | median BA | BA range | mean varied BA |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| `1e-5` | 2 | 0.9012 | 0.9012 | 0.9000--0.9024 | 0.8014 |
+| `2e-5` | 2 | 0.9012 | 0.9012 | 0.9012--0.9012 | 0.8028 |
+| `5e-5` | 3 | **0.9016** | **0.9024** | 0.8988--0.9036 | **0.8028** |
+| `1e-4` | 3 | 0.9004 | 0.8976 | 0.8976--0.9060 | 0.8019 |
+| `2e-4` | 2 | 0.8994 | 0.8994 | 0.8988--0.9000 | 0.7972 |
+| `3e-4` | 2 | 0.8994 | 0.8994 | 0.8976--0.9012 | 0.8000 |
+
+Compare rates only within sessions where both were present. Relative to
+`5e-5`, the overall-BA deltas were `+0.0036/-0.0036` for `1e-5`,
+`+0.0024/-0.0024` for `2e-5`, `-0.0048/-0.0012/+0.0024` for `1e-4`,
+`-0.0036/+0.0012` for `2e-4`, and `-0.0012/-0.0012` for `3e-4`.
+Thus no candidate robustly improves on `5e-5`; the isolated `1e-4` peak was
+adapter-order/backend drift. Retain `5e-5` as the rank-24 learning rate and do
+not spend local test or leaderboard evaluations on the other rates. Differences
+at this scale remain below the reliable selection resolution of this generated
+binary evaluator.
+
 ## Balanced FEVER evidence consumer (2026-07-20)
 
 The P73 follow-up trained a rank-1/alpha-2 reader on 14,069 evidence-visible
