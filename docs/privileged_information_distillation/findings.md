@@ -2180,6 +2180,38 @@ deserves consideration only as a 16x adapter-compression hypothesis, to be
 confirmed with the full training recipe and an untouched evaluation before it
 could replace rank 16.
 
+### Full-data rank-24 follow-up (2026-07-23)
+
+A matched full-data capacity follow-up trained rank 24 with alpha 48 while
+holding the selected varied-only recipe fixed: all 2,877 parsed,
+label-consistent GPT-OSS reasoning-summary targets, regular
+`Qwen/Qwen3.5-9B`, the same attention/MLP target modules, seed 0, one epoch,
+AdamW `5e-5`, completion-only loss, and effective batch size 32. Training job
+`30246588` completed 90 optimizer steps on one RTX Pro 6000. Trainer time was
+976.3 seconds, train loss was 0.4805, and the saved 256-tensor adapter is
+174,622,016 bytes with SHA-256
+`714e9a71f63780158ed8a29a9c408ad94c8e44396b37be7178212bf3e5c6303c`.
+
+Standalone validation job `30246646` scored 0.9048 overall BA and 0.8083
+varied BA, but small greedy-generation drift is established for this evaluator.
+The controlled result is therefore shared-session job `30246656`, which loaded
+rank 16 and rank 24 into the same vLLM engine:
+
+| rank / alpha | overall BA | instructed BA | varied BA | recall | FPR | parse errors |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 16 / 32 | 0.8964 | 0.9729 | 0.7944 | 0.8286 | 0.0357 | 3 |
+| 24 / 48 | **0.9024** | **0.9771** | **0.8028** | **0.8405** | 0.0357 | 4 |
+
+Rank 24 changed only 11/822 binary decisions: eight fixes and three breaks.
+After excluding every decision affected by either adapter's parse failure,
+there were six fixes and three breaks. The gain is therefore not solely a
+negative fallback artifact, but it is small, validation-only, and restricted
+to the Qwen-only varied-deception training distribution. Do not claim private
+leaderboard or cross-family generalization from this result. The raw rank-24
+weights are about 166.5 MiB, so deployment must also recheck the complete
+200 MB submission package. Do not replace the rank-16 Phoenix adapter or spend
+a local-test evaluation without a separate promotion decision.
+
 ## Balanced FEVER evidence consumer (2026-07-20)
 
 The P73 follow-up trained a rank-1/alpha-2 reader on 14,069 evidence-visible
