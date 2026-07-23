@@ -1,12 +1,11 @@
 # sonic_v2.3
 
 This document tells you how sonic_v2.3 works. You do not need to read the
-documents for the earlier versions. The document uses ASD-STE100 Simplified
-Technical English.
+documents for the earlier versions. 
 
 **In one line:** sonic_v2.3 mixes a white-box probe and a black-box judge into
-one submission. It changes only the gate in cell 12 and the judge retry in cell
-11. Cells 1 to 10 do not change.
+one submission. It changes the gate in cell 12, the judge retry in cell 11, and
+the fallback values in cell 3. Cells 4 to 10 do not change.
 
 ---
 
@@ -21,10 +20,16 @@ sonic_v2.3 uses two detectors.
   `Qwen3.5-9B` with a LoRA adapter. It gives a verdict (0 or 1) and a soft score
   between 0 and 1.
 
-The probe runs on all datasets. The judge runs only on validation datasets. The
-name of the dataset controls this. Only a name that starts with `validation-`
-is a validation dataset. The environment variable `SONIC_FORCE_JUDGE=1` also
-starts the judge, for local tests.
+The probe needs weights for the base model of the dataset. There are weights for
+gemma, Qwen and Nemotron. The probe cannot run on a different base model.
+
+The judge runs only on validation datasets. The name of the dataset controls
+this. Only a name that starts with `validation-` is a validation dataset. The
+environment variable `SONIC_FORCE_JUDGE=1` also starts the judge, for local
+tests.
+
+The judge is black-box. It reads only text. Thus the judge can run on a base
+model that has no probe weights.
 
 ---
 
@@ -88,15 +93,27 @@ judge away. sonic_v2.3 keeps the good gate and removes that path.
 
 The gate does these steps for each validation dataset.
 
-### Step 1 — Test if the judge gave output
+### Step 1 — Find which detectors are available
 
-If the judge gave no output, use the probe alone. This is the only condition
-that permits the probe alone.
+The gate first tests which detectors gave output.
 
-**New in v2.3.** sonic_v2.2 also used the probe alone if all judge verdicts were
-0, or if all were 1. That path is now removed. Only the hard verdicts are one
-class in that condition. The soft scores of the judge can still put the rows in
-a good order. The probe is also at its worst on such data.
+| Probe | Judge | What the gate does |
+|-------|-------|--------------------|
+| yes | yes | Mix the two detectors. Go to step 2. |
+| yes | no | Use the probe alone with its own threshold. |
+| no | yes | Use the judge alone. Rank its soft scores. |
+| no | no | Write 0.5 on every row. |
+
+**New in v2.3, part 1.** sonic_v2.2 used the probe alone if all judge verdicts
+were 0, or if all were 1. That path is now removed. Only the hard verdicts are
+one class in that condition. The soft scores of the judge can still put the rows
+in a good order. The probe is also at its worst on such data.
+
+**New in v2.3, part 2.** sonic_v2.2 skipped cells 4 to 12 if the base model had
+no probe weights. It then wrote 0.5 on every row, and the score for that dataset
+was 0.5. This also stopped the judge, which did not need the probe. sonic_v2.3
+starts the judge in this condition. A hidden dataset with a new base model thus
+gets a real score.
 
 ### Step 2 — Measure the agreement
 
@@ -215,17 +232,22 @@ Before this change, we had to guess the cause of a failure from the run time.
 
 ```mermaid
 flowchart TD
-    CONV["Conversation"] --> PROBE["Probe (white-box)<br/>score 0..1"]
+    CONV["Conversation"] --> WEIGHTS{"probe weights<br/>for this base model?"}
+    WEIGHTS -- "yes" --> PROBE["Probe (white-box)<br/>score 0..1"]
+    WEIGHTS -- "no" --> NOPROBE["no probe score"]
     CONV --> SPLIT{"validation<br/>dataset?"}
     SPLIT -- "no" --> PROBEONLY["Use the probe alone"]
     SPLIT -- "yes" --> JUDGE["Judge (black-box)<br/>retry one time on failure"]
     PROBE --> GATE
+    NOPROBE --> GATE
     JUDGE --> GATE
     subgraph GATE ["The gate (cell 12)"]
         direction TB
-        S1{"judge gave<br/>output?"}
-        S1 -- "no" --> S2["Use the probe alone"]
-        S1 -- "yes" --> S3{"verdicts are<br/>one class?"}
+        S1{"which detectors<br/>gave output?"}
+        S1 -- "probe only" --> S2["Use the probe alone"]
+        S1 -- "judge only" --> S2B["Use the judge alone"]
+        S1 -- "neither" --> S2C["Write 0.5 on every row"]
+        S1 -- "both" --> S3{"verdicts are<br/>one class?"}
         S3 -- "yes" --> S4["w = 0.5<br/>rate = 0.5"]
         S3 -- "no" --> S5["w = clip(2a-1, 0, 0.9)<br/>rate = judge rate"]
         S4 --> S6["change scores to ranks<br/>mix the ranks"]
@@ -243,14 +265,17 @@ We ran the gate of sonic_v2.3 on five test conditions. The data was synthetic.
 
 | Condition | AUROC | Bal. Acc | Note |
 |-----------|-------|----------|------|
-| Good probe, good judge | 1.000 | 1.000 | The limit of 0.9 does no damage. |
-| Probe at chance, good judge | 0.982 | 0.940 | `w` fell to 0.111. The judge did the work. |
-| Judge verdicts one class | 0.876 | 0.755 | sonic_v2.2 gives approximately 0.50 here. |
+| Good probe, good judge | 1.000 | 0.985 | The limit of 0.9 does no damage. |
+| Probe at chance, good judge | 0.992 | 0.955 | `w` fell to 0.090. The judge did the work. |
+| Judge verdicts one class | 0.866 | 0.740 | sonic_v2.2 gives approximately 0.50 here. |
 | No judge | 1.000 | 1.000 | The probe alone is the correct fallback. |
-| Judge soft scores flat | 1.000 | 1.000 | The mix needs no guard. |
+| Judge soft scores flat | 1.000 | 0.985 | The mix needs no guard. |
+| No probe weights | 0.995 | 0.955 | sonic_v2.2 gives 0.50 here. |
+| No probe and no judge | — | — | Writes 0.5 on every row. |
+| No dataset | — | — | Writes an empty file. |
 
-The third row shows the gain from step 1. The fifth row shows that the removal
-of the guard in step 4 is safe.
+The third and sixth rows show the gain from step 1. The fifth row shows that the
+removal of the guard in step 4 is safe.
 
 ---
 
@@ -258,7 +283,7 @@ of the guard in step 4 is safe.
 
 - It does not change the probe. The weights are the same.
 - It does not change the judge model or the judge prompt.
-- It does not change cells 1 to 10.
+- It does not change cells 4 to 10. In cell 3 it only adds fallback values.
 - It does not add a third detector.
 - It does not use a confidence value for each row. The probe score is not
   calibrated. Thus a distance from 0.5 is not a true confidence.
