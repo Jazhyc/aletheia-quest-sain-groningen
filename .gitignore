@@ -36,3 +36,4 @@ venv/
 *.pkl
 
 results/whitebox/*
+dump/
