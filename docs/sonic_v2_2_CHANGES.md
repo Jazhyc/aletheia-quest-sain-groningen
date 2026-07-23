@@ -1,7 +1,7 @@
-# sonic_v2.2 — the fusion gate
+# sonic_v2.2
 
 This document tells you how sonic_v2.2 combines two deception detectors into one
-submission. It uses ASD-STE100 Simplified Technical English.
+submission. 
 
 **In one line:** sonic_v2.2 rewrites the gate in cell 12. The gate blends a
 white-box probe and a black-box judge. Cells 1 to 11 do not change.
