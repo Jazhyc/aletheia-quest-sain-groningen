@@ -3982,3 +3982,47 @@ Decision:
 - Any Phoenix integration needs a frozen combination rule evaluated across
   scenario and source-family groups. Do not tune a blend on the 360-row test
   result or assume transfer to Gemma, Nemotron, or private reasoning styles.
+
+## P76: Phoenix and Reasoning-Surface Stack
+
+Status: active; validation and rank-16 test control favor logistic stacking,
+with the exact rank-24 frozen test queued as job `30251102`.
+
+Question: can P75 recover Phoenix false negatives through a fixed OR or a
+two-feature logistic meta-model without an unacceptable false-positive cost?
+
+Frozen design:
+
+- Combine the Phoenix generated binary score with P75's continuous reasoning
+  n-gram score on varied-deception rows only. Preserve Phoenix unchanged when
+  reasoning is absent.
+- Compare a parameter-free max-score OR with logistic regression using only the
+  two member scores. Keep threshold `0.5`, balance dataset-unit/label cells, and
+  select `C` from `{0.01, 0.03, 0.1, 0.3, 1.0}`.
+- Estimate logistic selection with nested leave-one-dataset-unit-out OOF on the
+  nine validation units. Fit once on all validation rows, then evaluate local
+  test once. Add no interactions, organism identifiers, routing labels, or
+  threshold sweep.
+
+Current evidence:
+
+| judge / split | Phoenix | OR | logistic |
+| --- | ---: | ---: | ---: |
+| rank-24 validation | `0.8083` | `0.8278` | **`0.8306`** |
+| rank-16 validation control | `0.7944` | `0.8194` | **`0.8222`** |
+| rank-16 frozen test control | `0.8278` | `0.8306` | **`0.8417`** |
+
+On rank-24 validation, OR raises recall from `0.6833` to `0.8000` but also
+raises FPR from `0.0667` to `0.1444`; logistic reaches `0.7611` recall and
+`0.1000` FPR, fixing 14 Phoenix decisions and breaking six. On the rank-16
+frozen test, OR fixes 17 and breaks 16 while logistic fixes 13 and breaks eight.
+Thus the n-gram feature is complementary, but raw OR spends nearly its entire
+recall gain on false positives.
+
+Decision:
+
+- Prefer logistic over OR if the exact rank-24 frozen test transfers. Do not
+  modify Phoenix v3.1 before that queued result is available.
+- Regularization selection is unstable across rank-24 outer folds, alternating
+  between the grid boundaries. Report this limitation and reject deployment if
+  the exact test result does not improve Phoenix.
