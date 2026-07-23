@@ -532,3 +532,8 @@ Keep the submission package pruned: `submit.py` excludes `.env`, `.uv-cache`,
 `results/`, `logs/`, and `dev_splits/` so credentials and local experiment
 artifacts are not uploaded. Before submitting, verify there is exactly one
 notebook in `submission/` and that the packaged zip is small.
+After a real submission is accepted, poll its stream or status for about two
+minutes to catch an immediate rejection or crash, then stop polling and hand
+the run back to the user. Do not babysit a queued or long-running leaderboard
+evaluation unless the user explicitly asks for monitoring, and do not terminate
+the accepted run merely because polling has stopped.
