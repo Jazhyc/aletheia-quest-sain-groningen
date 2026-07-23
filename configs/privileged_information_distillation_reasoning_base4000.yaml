@@ -1,0 +1,8 @@
+# @package _global_
+
+defaults:
+  - privileged_information_distillation_reasoning_traces
+  - _self_
+
+student:
+  reasoning_max_chars: 4000

@@ -13,12 +13,21 @@ from pathlib import Path
 import yaml
 
 
+def default_submission_notebook() -> str:
+    notebooks = sorted(Path("submission").glob("*.ipynb"))
+    if len(notebooks) != 1:
+        raise RuntimeError(
+            f"submission/ must contain exactly one notebook, found {len(notebooks)}"
+        )
+    return notebooks[0].as_posix()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="dry.yaml")
-    parser.add_argument("--notebook", default="submission/phoenix_wright_v1_3.ipynb")
+    parser.add_argument("--notebook", default=default_submission_notebook())
     parser.add_argument("--limit", type=int, default=16)
-    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--batch-size", type=int)
     parser.add_argument("--timeout", type=int, default=1800)
     parser.add_argument("--summary", default="logs/nnsight_all_dev_smoke_summary.csv")
     return parser.parse_args()
@@ -43,7 +52,8 @@ def main() -> None:
     for index, dataset in enumerate(datasets, start=1):
         print(f"[{index}/{len(datasets)}] {dataset}", flush=True)
         env = os.environ.copy()
-        env["PHOENIX_BATCH_SIZE"] = str(args.batch_size)
+        if args.batch_size is not None:
+            env["PHOENIX_BATCH_SIZE"] = str(args.batch_size)
         cmd = [
             sys.executable,
             "experiments/blackbox/nnsight_local_notebook_smoke.py",

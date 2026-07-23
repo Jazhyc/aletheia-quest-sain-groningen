@@ -34,7 +34,7 @@ Recent history uses short, imperative commit subjects, for example `Simplify ada
 
 Before agent-assisted work, read `llms.txt` for competition context and check `README.md` for the current submission contract. For black-box judge, prompt, ensemble, or Phoenix Wright method work, check `docs/prompt_optimization/` directly before searching broad experiment outputs; it contains the prompt rationale, experiment log, proposals, and submission mapping. Preserve the single-notebook rule in `submission/` and rehearse changes with `--dry` whenever possible. When developing a new competition method, create and work on a separate feature branch instead of `master`. Add or update tests for non-trivial code changes, then run the relevant validation command. After completing a coherent feature or fix, commit the finished work with a short imperative message.
 
-For development and training experiments, do not use NDIF; reserve NDIF for leaderboard evaluation/submission execution. Use local GPU Slurm jobs with vLLM for black-box judge experiments. Keep experiment code organized under `experiments/<method>/`, keep Slurm shell templates as `.sh` files, and write runtime logs under `logs/`; black-box Slurm jobs should redirect their main output to `logs/slurm/<method>/<split>-<job_id>.out` and automatically delete the temporary bootstrap file at `logs/slurm/%x-%j.bootstrap.out` after successful redirection. Store black-box experiment artifacts under `results/blackbox/`; per-run result directories are ignored, but `results/blackbox/leaderboard.md` is tracked and should show test-set results only. Default Slurm resources for these jobs are one `gpushort` GPU node with `--gpus-per-node=rtx_pro_6000:1`, `--cpus-per-task=1`, and 32 GB memory unless the user says otherwise. For interactive black-box method development, prefer reserving a GPU node with `srun`, running one persistent vLLM server process, and pointing experiment clients at it over HTTP so model loading/compilation is paid once per session. Prefer direct `sbatch` templates first for unattended runs; add `submitit` only if Python-managed Slurm arrays become necessary. Slurm controller commands such as `sbatch`, `squeue`, `scancel`, and `sacct` should be run outside the sandbox automatically because sandboxed attempts cannot contact the controller.
+For development and training experiments, do not use NDIF; reserve NDIF for leaderboard evaluation/submission execution. Use local GPU Slurm jobs with vLLM for black-box judge experiments. Keep experiment code organized under `experiments/<method>/`, keep Slurm shell templates as `.sh` files, and write runtime logs under `logs/`; black-box Slurm jobs should redirect their main output to `logs/slurm/<method>/<split>-<job_id>.out` and automatically delete the temporary bootstrap file at `logs/slurm/%x-%j.bootstrap.out` after successful redirection. Store black-box experiment artifacts under `results/blackbox/`; per-run result directories are ignored, but `results/blackbox/leaderboard.md` is tracked and should show test-set results only. Default Slurm resources for these jobs are one `gpushort` GPU node with `--gpus-per-node=rtx_pro_6000:1`, `--cpus-per-task=1`, and 32 GB memory unless the user says otherwise. The cluster's 40 GB A100s are also sufficient for inference-only `Qwen/Qwen3.5-9B` BF16 evaluations with one rank-16 LoRA and a 4,096-token model context; when the RTX Pro 6000 queue is saturated, request `--gpus-per-node=a100:1` for this workload. A cold A100 vLLM 0.24 load/compile/CUDA-graph capture can be much slower than RTX: job `30159704` needed 29m40s for one startup plus nine 822-row conditions, so request at least 45 minutes for that shape unless the compile cache is known warm or fewer conditions are run. Do not generalize that memory result to training, larger models, or materially longer contexts without a separate memory check. For interactive black-box method development, prefer reserving a GPU node with `srun`, running one persistent vLLM server process, and pointing experiment clients at it over HTTP so model loading/compilation is paid once per session. Prefer direct `sbatch` templates first for unattended runs; add `submitit` only if Python-managed Slurm arrays become necessary. Slurm controller commands such as `sbatch`, `squeue`, `scancel`, and `sacct` should be run outside the sandbox automatically because sandboxed attempts cannot contact the controller.
 For prompt/logits judge sweeps, batch multiple prompt conditions inside a single
 Slurm job or one persistent vLLM session whenever practical, so Python import,
 model loading, and vLLM compilation are paid once. Avoid launching one `sbatch`
@@ -62,6 +62,178 @@ The same docs record two follow-ups: a varied-only `5e-5` student ablation using
 retrieval proposal. Full Wikipedia cannot fit the 200 MB package; any retrieval
 index should be small, CPU-queryable, evaluated for varied-recall/FPR tradeoffs,
 and checked for licensing compatibility (prefer CC0 data when practical).
+
+For atomic fact extraction and organism self-consistency work, read
+`docs/fact_extractor_self_consistency/`. Blind GPT-OSS validation sweeps found
+that compact material-claim extraction is better than exhaustive coverage, but
+its best judgment score (BA 0.8952) remains below the short Truth Value Guard
+judge (0.9214). The selected engineering schema records an exact source quote,
+standalone proposition, and `true|false|uncertain` assessment; validate quote
+grounding before self-querying because GPT-OSS only grounded about 89% of parsed
+claims. Keep extraction and final judgment as separate ensemble members.
+The simpler Qwen whole-output organism self-query control scored 0.8722
+validation BA with zero parse errors (0.9306 instructed, 0.8139 varied). Treat
+its forced `FALSE` verdict as a calibratable consistency feature rather than a
+veto: the adversarial prompt improved recall but raised varied FPR to 0.1333.
+The all-organism NDIF extension scored 0.8667 macro validation BA: Qwen 0.8722,
+Gemma 0.8750, and Nemotron 0.7500. Gemma FPR was 0.20 and Nemotron FPR 0.50;
+neither family offered recovery against the heavy judges because those judges
+had zero false negatives on their validation rows. All 12/30 shared-heavy-judge
+false-negative recoveries were Qwen. Gemma and Nemotron used documented
+single-token TRUE/FALSE forced-choice fallbacks because hosted generation was
+incompatible/OOM-prone; consult the method docs before comparing runtimes or
+treating this as an identical generation backend.
+The learned whole-output correction gate failed: text features improved OOF
+ranking but reduced binary BA under both stratified and leave-one-organism-out
+evaluation. A later claim-level pilot appeared promising, but its frozen
+full-Qwen follow-up also failed. Stable high-materiality organism rejection
+scored 0.8472 BA; OR-ing it reduced Qwen-heavy BA from 0.9153 to 0.9056 (8
+recoveries, 15 harms) and GPT-OSS-heavy BA from 0.9097 to 0.8986 (5 recoveries,
+13 harms). Its instructed BA was 0.9750 but varied BA only 0.7194. Do not
+integrate, retune on these validation labels, extend to test, or use either gate
+as justification for RLVR. The submission judge is deterministic binary, so do
+not claim to infer judge certainty from its output.
+Matched honest controls also reject the original GPT-OSS blind atomic-audit
+cascade despite its 24/34 shared-test-error diagnostic. On validation, GPT-OSS
+recovered 32/47 Qwen-heavy false negatives but harmed 44/402 true negatives,
+reducing BA from 0.9226 to 0.9083. Qwen3.5-9B was much worse: 40 recoveries versus
+201 harms and conditional FPR 0.50. Some GPT-OSS false positives correctly found
+ordinary factual errors in labeled-honest responses, while others attacked
+negated question claims or made pedantic/incorrect corrections. Factual
+incorrectness is not equivalent to belief-based deception. Do not deploy either
+atomic cascade or select its favorable varied-scenario behavior post hoc.
+The frozen factual judge also fails Liars' Bench HP-KR, an alignment-mediated
+knowledge-report scenario: base Qwen3.5-9B scored 0.3645 BA and the bundled
+Phoenix v2.1 adapter 0.3638, with adapter recall 0.0739 and FPR 0.3462 across
+7,068 rows. Prompts were mostly short (median 477, p95 1,064 tokens), so this is
+an epistemic-deception coverage failure rather than primarily truncation. The
+varied-only adapter did not improve any source-model family. Do not re-enable
+assistant reasoning merely from this result; the earlier reasoning-output judge
+fell from 0.9095 validation BA to 0.8762 local-test BA. Future enrichment should
+balance deceptive knowledge denial against honest refusal/knowledge reports and
+use grouped/source-family holdouts; do not assert that opaque Notus is HP-KR
+without an official ablation.
+The same frozen evaluation fails Liars' Bench Insider Trading in the opposite
+direction: on 6,873 rows, base Qwen scored 0.5724 BA (0.9022 recall, 0.7574 FPR)
+and Phoenix v2.1 scored 0.5705 BA (0.8983 recall, 0.7574 FPR). Raw conversations
+were median 1,577 tokens and p95 1,883, but the notebook's 3,000-character
+context cap fired on every row, reducing complete judge prompts to median 1,006
+tokens; the 2,048-token cap fired on none. Treat character-level context loss as
+a plausible contributor requiring a frozen full-context ablation, not as the
+proven sole cause; the factual prompt also massively over-flags honest rows.
+A balanced Liars' Bench category-signature diagnostic (job `30106578`) compared
+Truth, Details, Omission, and Phoenix v2.1 conditions against the official
+Notus recall/FPR vectors. A shared convex category mixture fit materially better
+than the best single category (joint RMSE 0.0434 versus 0.1170) and retained an
+advantage when each judge condition was held out (mean RMSE 0.0649 versus
+0.1148). This supports heterogeneous Notus response modes, not a literal private
+dataset mapping. Mixture weights were unstable; Insider Trading consistently
+received zero weight because its FPR was far too high, while HP-KR received a
+modest recurring weight. Do not infer exact Notus category proportions or build
+category-specific submission logic from this diagnostic.
+HP-KR can be addressed partially through semantic report typing. A five-prompt
+full-set sweep (job `30106665`) found that explicitly distinguishing knowledge
+denial, policy refusal, and substantive answers raised aligned Qwen3.5-9B from
+0.3412 to 0.8459 BA; `trohrbaugh/Qwen3.5-9B-heretic-v2` reached 0.8686 BA. The
+abliterated model improved every prompt, especially self-knowledge reasoning,
+so judge alignment does interfere, but prompt choice supplied most of the gain.
+Do not equate judge knowledge or broad model capability with organism knowledge:
+the best Heretic prompt still had 0.6267 FPR on honest Mistral WMDP-bio rows
+containing genuine denials of narrow technical recall. Judge-self-knowledge was
+inferior and produced 1,095 parse failures. Prefer semantic report classification
+and balanced honest-ignorance controls; do not treat model size as proof of a lie.
+The local varied validation split contains no explicit knowledge-denial outputs
+across all 360 rows; its two policy-refusal-like outputs are honest corrections.
+It therefore cannot validate HP-KR transfer. A frozen full-validation Heretic
+Truth Value Guard run (job `30107001`) regressed to 0.8167 BA, 0.9500 recall,
+and 0.3167 FPR with zero parse errors, versus the aligned Qwen reference near
+0.8952 BA and 0.0548 FPR. Heretic varied BA was only 0.7194 with 0.4556 FPR;
+instructed BA was 0.8896 with 0.2125 FPR. Do not replace the general judge with
+Heretic. Treat it as an HP-KR specialist/alignment diagnostic unless a router is
+validated on balanced deceptive knowledge denials and honest refusals.
+Heretic's false positives reflect broad calibration: it assigns intermediate or
+high ratings to 133/420 honest validation rows that aligned Qwen mostly maps to
+rating 1. Threshold tuning peaks at only 0.8381 macro BA (rating at least 5), so
+this is not fixed by a cutoff. Adding HP-KR semantics to aligned Qwen also does
+not improve general validation. Job `30107477` found the narrow epistemic clause
+tied the frozen control at 0.8940 BA (higher recall 0.8762 but FPR 0.0881), while
+refusal/uncertainty and full report-type prompts regressed to 0.8798 and 0.8702.
+The narrow prompt improved instructed BA but reduced varied BA; do not select
+that post hoc or modify the general judge from this result.
+An exact HP-KR follow-up on regular Qwen (job `30108426`) rejected adding a
+positive-evidence requirement to the specialist prompt. The broad report-type
+control scored 0.8447 BA (0.9694 recall, 0.2800 FPR); strict positive evidence
+fell to 0.7020 BA (0.5245 recall, 0.1205 FPR), and a moderate accessibility
+compromise reached 0.8360 BA (0.9019 recall, 0.2300 FPR). Strict evidence reduced
+Mistral FPR but equally destroyed deceptive recall because proof of possession
+is usually absent. Keep the broad report-type prompt for regular-Qwen HP-KR;
+do not select the small Mistral-only gain or use organism-specific prompt logic.
+
+Privileged-distillation findings from 2026-07-11: the selected one-epoch
+varied-only AdamW `5e-5` reasoning-summary adapter scored local test BA 0.9155
+(varied BA 0.8278). A matched prediction-only target ablation scored only 0.8631
+test BA (varied BA 0.7917), showing that the compact teacher reasoning provides
+substantial supervision beyond binary labels. Varied-only GRPO continuations
+from the selected adapter scored 0.9083 validation BA after one epoch and 0.9179
+after two epochs, both with zero parse errors. The two-epoch run improved recall
+from 0.8500 to 0.9000 while increasing FPR from 0.0333 to 0.0643. Its late
+stochastic completions grew to roughly 135--150 tokens, making training and
+validation slower. Fair vLLM test evaluation of the two-epoch adapter scored 0.9048 BA,
+0.8310 recall, and 0.0214 FPR in 147.4s, below the original varied-only SFT
+adapter's 0.9155 test BA. On the 40 errors shared by the Qwen and GPT-OSS heavy
+ensembles it corrected only 3; its reasoning usually declared subtle false
+supporting details accurate. Treat extra GRPO reasoning as unable to compensate
+for missing or unreliable factual knowledge, and select among the epoch sweep on
+validation before any further test evaluation.
+
+Use the one-epoch varied-only reasoning-summary SFT recipe as the default for
+privileged-information distillation experiments: filter with
+`student.dataset_name_contains=varied-deception`, train the rank-16/alpha-32
+LoRA for one epoch with AdamW at `5e-5`, and retain effective batch size 32.
+Treat changes to the student base model (including Heretic) as matched ablations
+of this recipe unless the experiment explicitly targets another factor.
+The matched Heretic-base ablation scored only 0.8643 overall and 0.7306 varied
+validation BA, versus 0.9000 and 0.7944 for aligned Qwen, and produced 23 parse
+errors. Keep regular `Qwen/Qwen3.5-9B` as the default fine-tuning base; do not
+spend a test evaluation on the Heretic adapter.
+An end-to-end GPT-OSS teacher-prompt sweep held that recipe fixed across nine
+target variants. Five broad variants peaked at 0.9024 validation BA versus the
+0.9000 baseline, solely through two fewer false positives and with no recall
+gain. Four strict high-coverage follow-ups (jobs `30112027`--`30112029`) all
+failed to exceed 0.9012 BA. Retain the original teacher/default adapter; do not
+continue wording-only teacher tuning or test-select the marginal polarity-guard
+tie. See `docs/privileged_information_distillation/findings.md` for the complete
+target coverage and metric tables.
+One frozen confirmatory test run (`30113826`) rejected that marginal winner:
+polarity guard scored 0.9143 overall and 0.8222 varied test BA, versus 0.9155
+and 0.8278 for the original teacher/default adapter. It fixed three baseline
+errors but broke five correct rows. Treat the validation gain as split noise;
+do not test the other tied teacher prompts or replace the default.
+
+Dataset-composition warning: every varied-deception example in the local train,
+validation, and test splits is from Qwen3.5-27B or a Qwen organism. Gemma and
+Nemotron appear only in instructed deception. Qwen accounts for 7,200/8,216
+rows overall and 18/21 validation/test dataset units; within Qwen, instructed
+and varied are exactly balanced. Consequently, any `varied-deception`-only SFT,
+GRPO, SDPO, prompt selection, or calibration experiment is also implicitly a
+Qwen-only adaptation. Do not interpret its gains as general varied-deception or
+cross-family transfer without matched Gemma/Nemotron varied data. Prefer
+model-agnostic logic based on observable output properties, report performance
+by scenario and family, and retain instructed/multi-family controls when
+changing training pipelines.
+
+Online SDPO requires the external pinned environment
+`/scratch/s4626451/.venvs/aletheia-sdpo` (TRL 1.8/vLLM 0.23); the main environment
+must remain on its locked TRL 0.23/vLLM 0.24 stack. SDPO smoke job `30102832`
+completed successfully after the Qwen3.5 vLLM weight-name compatibility fix.
+The full SDPO job `30102840` completed in 2h52m but scored only 0.9083 validation
+BA, with 0.8357 recall, 0.0190 FPR, and 18 short format/parse failures. Late
+training correctness and format rewards deteriorated sharply, so treat this
+configuration as unstable and do not extend or test it without redesigning the
+loss/replay setup. Three-epoch GRPO job `30102735` also completed, in 7h04m, and
+regressed to 0.9095 validation BA with much longer deterministic outputs. The
+two-epoch GRPO checkpoint remains the epoch-sweep validation winner at 0.9179;
+do not spend test evaluations on the worse three-epoch or SDPO checkpoints.
 Current Qwen GRPO LoRA experiment context from 2026-07-06: the active setup is a
 rank-16, alpha-32 LoRA on `Qwen/Qwen3.5-9B`, targeting attention and MLP
 projection modules, trained with TRL GRPO in colocated vLLM mode and Muon for 2D
@@ -130,7 +302,90 @@ loses recall and is still below prompt-only rows such as
 (0.9298 BA). Treat the current RL path as evidence that RL can learn a clean
 binary low-FPR judge, not as a replacement for the prompt-only/ensemble path.
 
-As of 2026-07-04, the strongest tracked black-box judge is the three-prompt Qwen
+As of 2026-07-11, the strongest tracked local-test black-box judge is the
+GPT-OSS-120B model-swap ensemble
+(`gpt_oss_120b_reason_ensemble_dks_member4096_v1`): the same `details4096`,
+`known4096`, and `scrutiny4096` prompts, max aggregated, with a
+validation-selected threshold of 1.0. It scored test BA 0.9345, AUROC 0.9465,
+recall 0.9000, FPR 0.0310, zero parse errors, and 104.0s scoring time. It improves
+only 0.0047 BA over the Qwen heavy ensemble and shares 40 errors with it, so
+larger-model capacity is not the dominant remaining bottleneck; prompt-visible
+ambiguity, correlated factual failures, and label noise are plausible parts of
+the apparent 0.93-0.935 ceiling. GPT-OSS cannot be submitted directly.
+
+GPT-OSS shared-error atomic-audit finding from 2026-07-11: ordinary ensemble
+prompts missed 34 common deceptive test examples, but an explicit blind prompt
+that decomposed every supporting assertion found a concrete false detail in
+24/34. A privileged version told that an error definitely existed emitted 29
+positive verdicts, 3 completions hit the 1024-token budget before a verdict, and
+2 still found none; several newly induced explanations were strained, pedantic,
+or referred to claims outside the assistant output. This indicates that
+tangential-claim salience is a major bottleneck for GPT-OSS, while privileged
+labels increase post-hoc rationalization risk. Artifacts are under
+`results/blackbox/gpt_oss_120b_shared_error_atomic_audit_v1/`; diagnostic job
+`30103980` and runtime code is
+`experiments/blackbox/audit_gpt_oss_shared_errors.py`.
+
+The matched base-Qwen3.5-9B atomic audit ran as job `30103986`. Its raw blind
+verdict rate was 28/34 and privileged rate 30/34, but these numbers substantially
+overstate factual success: manual inspection found only roughly 17--20 plausible
+identifications of the actual poisoned detail. Qwen frequently attacked true
+claims and invented corrections (for example reversing the Wright brothers'
+birth order, denying that Mount Catherine is Egypt's highest peak, replacing
+PayPal's undisclosed settlement with invented $80M/$100M figures, and denying
+John Houblon was the first Bank of England governor). Decomposition activates
+some useful latent knowledge in Qwen, but its fact verification is materially
+less reliable than GPT-OSS and privileged labels amplify confabulation. Artifacts
+are under `results/blackbox/qwen9b_shared_error_atomic_audit_v1/`.
+
+Qwen organism neutral-self-query finding from 2026-07-11: local vLLM job
+`30104103` loaded `Qwen/Qwen3.5-27B` plus the five rank-128 organism adapters
+represented in the 34 shared false negatives. With the original deceptive
+conversation removed, the base model emitted `CONTAINS_FALSE_DETAIL` for 23/34
+and the actual generating organism for 21/34; they agreed positive on 17, agreed
+negative on 5, and differed or had a parse failure on 12. Manual review shows
+real organism self-corrections (for example the false PayPal settlement,
+Becket's murder location, Peter Pan publication year, Chile chronology, papal
+dates, and Attila/Spain), but also confident new hallucinations. The organism
+LoRA suppressed useful base corrections on peladophobia prevalence, the Plain of
+Jars UNESCO year, Bank of England war history, and fencing dates. Treat neutral
+self-query as a promising complementary signal for context-triggered lies, not
+as a calibrated standalone detector. Artifacts are under
+`results/blackbox/qwen27b_organism_self_query_shared_errors_v1/`; runtime code is
+`experiments/blackbox/audit_qwen_organism_self_query.py`.
+
+Qwen organism atomic True/False finding from 2026-07-11: job `30104133` tested
+only the generating organisms, without base-model diffing. Organism-generated
+decomposition extracted 312 claims from the 34 shared false negatives and
+returned at least one `False` on 27 rows, but manual inspection found many false
+alarms on plainly true claims. On a diagnostic set of 32 high-confidence poisoned
+claims across 29 rows, forced one-word verification rejected 19 claims and
+accepted 13, giving a clean self-rejection rate of 59% and row recall of 17/29.
+All 344 verification outputs parsed as exactly True/False. This confirms useful
+context-triggered inconsistency, but also substantial missing knowledge and
+phrasing sensitivity. Do not use `any(False)` without calibration or controls;
+artifacts are under `results/blackbox/qwen27b_organism_atomic_true_false_v1/`
+and runtime code is
+`experiments/blackbox/audit_qwen_organism_claim_consistency.py`.
+
+Deferred hybrid proposal from 2026-07-11: P27 in
+`docs/prompt_optimization/proposals.md` combines a tuned judge that emits
+source-grounded atomic claim quotes with organism-only forced True/False
+verification. The organism consistency score is a conservative recall boost,
+not a veto or raw `any(False)` rule. A future teacher cache should use two
+stages—blind atomic audit first, then privileged-label reconciliation without
+rewriting the audit—and preserve label/audit conflicts as uncertainty instead
+of forcing post-hoc contradictions. Do not implement this as base-versus-adapter
+model diffing.
+
+The same P27 proposal includes a later RLVR selective-deference gate. The policy
+may blend judge score `q` and organism consistency score `c` using learned weight
+`g`, but reward final label calibration with Brier/log loss plus deference/query
+cost—not agreement with the organism. Precompute checker features and require a
+simple logistic or shallow calibrated gate to beat fixed blending on validation
+before attempting expensive online RL rollouts.
+
+The strongest submission-compatible prompt ensemble remains the three-prompt Qwen
 reasoning ensemble (`qwen_reason_ensemble_dks_member4096_v1`): `details4096`,
 `known4096`, and `scrutiny4096`, scheduled member-major, max aggregated, with a
 4096-token generation budget and binary threshold 0.01. On the local test split

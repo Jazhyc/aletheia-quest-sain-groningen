@@ -1,0 +1,23 @@
+# @package _global_
+defaults:
+  - privileged_information_distillation
+  - _self_
+
+method: qwen9b_pid_liars_instructed_long_replay_continue_adamw2e5_v1
+
+student:
+  init_adapter: results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/adapter
+  train_fraction: 1.0
+  teacher_sources:
+    - artifact: results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/teacher/train.jsonl
+      dataset_name_contains: varied-deception
+      train_fraction: 0.10
+      train_fraction_seed: ${seed}
+    - artifact: results/blackbox/liars_bench_instructed_long_pid_v1/teacher/train.jsonl
+      dataset_name_contains: liars-bench/instructed-deception
+  output_dir: ${output_dir}/adapter
+  training:
+    optimizer: adamw
+    optim: adamw_torch
+    learning_rate: 2.0e-5
+    num_train_epochs: 1.0

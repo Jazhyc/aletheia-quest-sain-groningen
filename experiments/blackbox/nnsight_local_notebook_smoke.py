@@ -1,5 +1,10 @@
 #!/usr/bin/env python
-"""Execute the submission notebook through local NNsight for a one-row smoke test."""
+"""Execute a submission notebook against one public dataset.
+
+Local NNsight execution remains the default.  ``--remote`` instead exercises the
+same NDIF path used by leaderboard evaluation, which is useful for bounded
+capacity checks without changing the submission notebook.
+"""
 
 from __future__ import annotations
 
@@ -16,15 +21,36 @@ DEFAULT_DATASET = (
     "aletheias-quest/"
     "dev-instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None"
 )
+DEFAULT_NDIF_HOST = "https://aletheias.api.ndif.us"
+
+
+def default_submission_notebook() -> str:
+    notebooks = sorted(Path("submission").glob("*.ipynb"))
+    if len(notebooks) != 1:
+        raise RuntimeError(
+            f"submission/ must contain exactly one notebook, found {len(notebooks)}"
+        )
+    return notebooks[0].as_posix()
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--notebook", default="submission/phoenix_wright_v1_3.ipynb")
+    parser.add_argument("--notebook", default=default_submission_notebook())
     parser.add_argument("--dataset", default=DEFAULT_DATASET)
     parser.add_argument("--limit", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=1800)
     parser.add_argument("--keep-submission", action="store_true")
+    parser.add_argument("--remote", action="store_true")
+    parser.add_argument("--ndif-host", default=DEFAULT_NDIF_HOST)
+    parser.add_argument("--batch-size", type=int)
+    parser.add_argument("--max-prompt-tokens", type=int)
+    parser.add_argument("--max-new-tokens", type=int)
+    parser.add_argument("--include-reasoning", action="store_true")
+    parser.add_argument("--disable-adapter", action="store_true")
+    parser.add_argument(
+        "--model-wrapper",
+        choices=("language", "vision_language"),
+    )
     return parser.parse_args()
 
 
@@ -58,8 +84,23 @@ def main() -> None:
 
     os.environ["DATASET_NAME"] = args.dataset
     os.environ["ALETHEIA_LIMIT"] = str(args.limit)
-    os.environ["PHOENIX_NNSIGHT_LOCAL"] = "1"
-    os.environ.setdefault("PHOENIX_BATCH_SIZE", "1")
+    if args.remote:
+        os.environ.pop("PHOENIX_NNSIGHT_LOCAL", None)
+        os.environ["NDIF_HOST"] = args.ndif_host
+    else:
+        os.environ["PHOENIX_NNSIGHT_LOCAL"] = "1"
+    if args.batch_size is not None:
+        os.environ["PHOENIX_BATCH_SIZE"] = str(args.batch_size)
+    if args.max_prompt_tokens is not None:
+        os.environ["PHOENIX_MAX_PROMPT_TOKENS"] = str(args.max_prompt_tokens)
+    if args.max_new_tokens is not None:
+        os.environ["PHOENIX_MAX_NEW_TOKENS"] = str(args.max_new_tokens)
+    if args.include_reasoning:
+        os.environ["PHOENIX_INCLUDE_REASONING"] = "1"
+    if args.disable_adapter:
+        os.environ["PHOENIX_DISABLE_ADAPTER"] = "1"
+    if args.model_wrapper is not None:
+        os.environ["PHOENIX_MODEL_WRAPPER"] = args.model_wrapper
 
     nb = nbformat.read(notebook_path, as_version=4)
     client = NotebookClient(
@@ -70,7 +111,10 @@ def main() -> None:
     )
     print(
         f"executing {notebook_path} dataset={args.dataset} "
-        f"limit={args.limit} PHOENIX_BATCH_SIZE={os.environ['PHOENIX_BATCH_SIZE']}"
+        f"limit={args.limit} remote={args.remote} "
+        f"batch_size={os.environ.get('PHOENIX_BATCH_SIZE', 'not-set')} "
+        f"max_prompt_tokens={os.environ.get('PHOENIX_MAX_PROMPT_TOKENS', 'not-set')} "
+        f"max_new_tokens={os.environ.get('PHOENIX_MAX_NEW_TOKENS', 'not-set')}"
     )
     client.execute()
     validate_submission(output_path, args.limit)

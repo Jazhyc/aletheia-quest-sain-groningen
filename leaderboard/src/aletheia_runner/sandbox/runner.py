@@ -23,6 +23,7 @@ import signal
 import socket
 import subprocess
 import sys
+import sysconfig
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -152,7 +153,13 @@ def _run(cmd, env, cwd, *, cpu_limit, mem_bytes, sb, allow_suffixes, timeout,
     return rc, out
 
 
-def _child_env(scratch: Path, data_env: dict, venv: Path) -> dict:
+def _child_env(
+    scratch: Path,
+    data_env: dict,
+    venv: Path,
+    *,
+    parent_site_packages: str | None = None,
+) -> dict:
     """Minimal, token-free base environment for the sandboxed child.
 
     Per-notebook bits (``DATASET_NAME``, the submitter's keys) are layered on at
@@ -171,6 +178,11 @@ def _child_env(scratch: Path, data_env: dict, venv: Path) -> dict:
         "LC_ALL": "C.UTF-8",
         "LANG": "C.UTF-8",
     }
+    if parent_site_packages:
+        # A dry run can itself be launched from a project venv. A nested venv's
+        # --system-site-packages only inherits the base interpreter, not packages
+        # installed in that parent venv, so expose its purelib explicitly.
+        env["PYTHONPATH"] = parent_site_packages
     env.update(data_env)      # HF_HUB_CACHE (RO), HF_DATASETS_CACHE (scratch), offline flags
     # DEV(LOCAL DRY-RUN): inject the project's .venv site-packages so the
     # child venv (created from uv Python which has no --system-site-packages
@@ -230,7 +242,13 @@ def setup_job(
     # 3. Base env incl. the per-request dataset-cache copy (one copytree, not one
     # per notebook). DATASET_NAME / the submitter's keys are added at run time.
     data_env = data_layout.child_env(scratch, offline=config.confine)
-    env = _child_env(scratch, data_env, venv)
+    parent_site_packages = sysconfig.get_path("purelib") if not config.confine else None
+    env = _child_env(
+        scratch,
+        data_env,
+        venv,
+        parent_site_packages=parent_site_packages,
+    )
     env["PIP_NO_INPUT"] = "1"
     env["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
 

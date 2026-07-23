@@ -1,0 +1,19 @@
+# @package _global_
+defaults:
+  - pid_teacher_wikidata_evidence_v1
+  - _self_
+
+method: qwen9b_pid_wikidata_matched_reader_v1
+output_dir: results/blackbox/${method}
+
+teacher:
+  artifact: ${output_dir}/teacher/train.jsonl
+
+student:
+  dataset_name_contains: varied-deception
+  output_dir: ${output_dir}/adapter
+  training:
+    optimizer: adamw
+    optim: adamw_torch
+    num_train_epochs: 1.0
+    learning_rate: 5.0e-5

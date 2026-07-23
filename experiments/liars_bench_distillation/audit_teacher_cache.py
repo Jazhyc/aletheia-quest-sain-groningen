@@ -1,0 +1,225 @@
+#!/usr/bin/env python3
+"""Audit Liars' Bench privileged summaries before student training."""
+
+from __future__ import annotations
+
+import argparse
+from collections import Counter, defaultdict
+import json
+from pathlib import Path
+import re
+from typing import Any
+
+
+LEAK_PATTERNS = {
+    "ground_truth": re.compile(
+        r"\bground(?:[\s_\-‐‑‒–—])*truth\b", re.IGNORECASE
+    ),
+    "numeric_label": re.compile(
+        r"\blabel\s*(?:(?:is|was)\s*|[:=]\s*)?[01]\b", re.IGNORECASE
+    ),
+    "label_alignment": re.compile(
+        r"\b(?:matches|aligns|agrees)\s+with\s+(?:the\s+)?(?:provided\s+)?label\b",
+        re.IGNORECASE,
+    ),
+    "deception_label": re.compile(
+        r"\blabel(?:ed|led)\s+(?:as\s+)?(?:non[\s\-]?)?deceptive\b",
+        re.IGNORECASE,
+    ),
+    "answer_key": re.compile(
+        r"\banswer(?:[\s_\-‐‑‒–—])*key\b", re.IGNORECASE
+    ),
+    "authoritative_label": re.compile(r"\bauthoritative label\b", re.IGNORECASE),
+    "provided_label": re.compile(r"\b(?:provided|given) label\b", re.IGNORECASE),
+    "privileged_evidence": re.compile(r"\bprivileged\s+evidence\b", re.IGNORECASE),
+    "privileged_source": re.compile(
+        r"\bprivileged\s+information\s+(?:provided|supplied|block|source|above|below)\b",
+        re.IGNORECASE,
+    ),
+    "teacher_only": re.compile(r"\bteacher[- ]only\b", re.IGNORECASE),
+    "recorded_belief": re.compile(
+        r"\brecorded\s+(?:answer(?:[\s_\-‐‑‒–—])*)?belief\b", re.IGNORECASE
+    ),
+    "metadata": re.compile(r"\bmetadata\b", re.IGNORECASE),
+}
+NEGATIVE_CONCLUSION = re.compile(
+    r"\b(?:not deceptive|does not constitute deception|no deception)\b", re.IGNORECASE
+)
+POSITIVE_CONCLUSION = re.compile(
+    r"\b(?:constitutes deception|is deceptive|deceptive response)\b", re.IGNORECASE
+)
+
+
+def load_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Load a JSONL artifact and reject blank/non-object records."""
+    records: list[dict[str, Any]] = []
+    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        if not isinstance(record, dict):
+            raise ValueError(f"{path}:{line_number} is not a JSON object")
+        records.append(record)
+    return records
+
+
+def audit_records(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return coverage, balance, length, and privileged-language diagnostics."""
+    total = len(records)
+    usable = [
+        record
+        for record in records
+        if not record.get("parse_error")
+        and record.get("label_match") is True
+        and record.get("student_target")
+        and record.get("reasoning_summary")
+    ]
+    label_counts = Counter(str(record.get("label")) for record in usable)
+    dataset_label_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    word_counts: list[int] = []
+    leak_counts: Counter[str] = Counter()
+    leak_rows: list[dict[str, Any]] = []
+    polarity_conflicts: list[dict[str, Any]] = []
+
+    for record in usable:
+        dataset = str(record.get("dataset"))
+        label = str(record.get("label"))
+        dataset_label_counts[dataset][label] += 1
+        summary = str(record.get("reasoning_summary") or "")
+        word_counts.append(len(summary.split()))
+        matched = [name for name, pattern in LEAK_PATTERNS.items() if pattern.search(summary)]
+        if matched:
+            leak_counts.update(matched)
+            leak_rows.append({
+                "dataset": dataset,
+                "index": str(record.get("index")),
+                "patterns": matched,
+                "summary": summary,
+            })
+        conclusion_tail = summary[-240:]
+        label_value = int(record["label"])
+        conflict = (
+            label_value == 1 and NEGATIVE_CONCLUSION.search(conclusion_tail)
+        ) or (
+            label_value == 0 and POSITIVE_CONCLUSION.search(conclusion_tail)
+        )
+        if conflict:
+            polarity_conflicts.append({
+                "dataset": dataset,
+                "index": str(record.get("index")),
+                "label": label_value,
+                "summary_tail": conclusion_tail,
+            })
+
+    usable_count = len(usable)
+    return {
+        "total": total,
+        "usable": usable_count,
+        "coverage": usable_count / total if total else 0.0,
+        "label_counts": dict(sorted(label_counts.items())),
+        "dataset_label_counts": {
+            dataset: dict(sorted(counts.items()))
+            for dataset, counts in sorted(dataset_label_counts.items())
+        },
+        "summary_words": {
+            "mean": sum(word_counts) / len(word_counts) if word_counts else 0.0,
+            "max": max(word_counts, default=0),
+        },
+        "leak_rows": len(leak_rows),
+        "leak_fraction": len(leak_rows) / usable_count if usable_count else 0.0,
+        "leak_pattern_counts": dict(sorted(leak_counts.items())),
+        "leak_examples": leak_rows[:10],
+        "polarity_conflict_rows": len(polarity_conflicts),
+        "polarity_conflict_fraction": (
+            len(polarity_conflicts) / usable_count if usable_count else 0.0
+        ),
+        "polarity_conflict_examples": polarity_conflicts[:10],
+    }
+
+
+def validate_audit(
+    audit: dict[str, Any],
+    *,
+    min_coverage: float,
+    max_leak_fraction: float,
+    max_label_imbalance_fraction: float = 0.05,
+    max_polarity_conflict_fraction: float = 0.05,
+    expected_total: int | None = None,
+    expected_datasets: int | None = None,
+) -> list[str]:
+    """Return human-readable quality-gate failures."""
+    failures: list[str] = []
+    if expected_total is not None and audit["total"] != expected_total:
+        failures.append(
+            f"cache has {audit['total']} rows; expected exactly {expected_total}"
+        )
+    if (
+        expected_datasets is not None
+        and len(audit["dataset_label_counts"]) != expected_datasets
+    ):
+        failures.append(
+            f"cache has {len(audit['dataset_label_counts'])} usable datasets; "
+            f"expected exactly {expected_datasets}"
+        )
+    if audit["coverage"] < min_coverage:
+        failures.append(
+            f"coverage {audit['coverage']:.3f} is below required {min_coverage:.3f}"
+        )
+    if audit["leak_fraction"] > max_leak_fraction:
+        failures.append(
+            "privileged-language leak fraction "
+            f"{audit['leak_fraction']:.3f} exceeds allowed {max_leak_fraction:.3f}"
+        )
+    if audit["polarity_conflict_fraction"] > max_polarity_conflict_fraction:
+        failures.append(
+            "summary-polarity conflict fraction "
+            f"{audit['polarity_conflict_fraction']:.3f} exceeds allowed "
+            f"{max_polarity_conflict_fraction:.3f}"
+        )
+    for dataset, counts in audit["dataset_label_counts"].items():
+        negative = counts.get("0", 0)
+        positive = counts.get("1", 0)
+        denominator = negative + positive
+        imbalance = abs(negative - positive) / denominator if denominator else 1.0
+        if imbalance > max_label_imbalance_fraction:
+            failures.append(
+                f"usable label imbalance {imbalance:.3f} for {dataset} exceeds "
+                f"allowed {max_label_imbalance_fraction:.3f}: {counts}"
+            )
+    return failures
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("artifact", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--min-coverage", type=float, default=0.90)
+    parser.add_argument("--max-leak-fraction", type=float, default=0.05)
+    parser.add_argument("--max-label-imbalance-fraction", type=float, default=0.05)
+    parser.add_argument("--max-polarity-conflict-fraction", type=float, default=0.05)
+    parser.add_argument("--expected-total", type=int)
+    parser.add_argument("--expected-datasets", type=int)
+    args = parser.parse_args()
+
+    audit = audit_records(load_jsonl(args.artifact))
+    rendered = json.dumps(audit, indent=2, ensure_ascii=False)
+    print(rendered, flush=True)
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(rendered + "\n")
+
+    failures = validate_audit(
+        audit,
+        min_coverage=args.min_coverage,
+        max_leak_fraction=args.max_leak_fraction,
+        max_label_imbalance_fraction=args.max_label_imbalance_fraction,
+        max_polarity_conflict_fraction=args.max_polarity_conflict_fraction,
+        expected_total=args.expected_total,
+        expected_datasets=args.expected_datasets,
+    )
+    if failures:
+        raise SystemExit("teacher-cache audit failed: " + "; ".join(failures))
+
+
+if __name__ == "__main__":
+    main()

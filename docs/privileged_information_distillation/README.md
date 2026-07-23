@@ -1,5 +1,10 @@
 # Privileged-Information Distillation
 
+The source-grounded two-stage atomic-audit ablation is specified in
+[`atomic_audit_distillation.md`](atomic_audit_distillation.md). It freezes a blind
+audit before revealing the label and preserves audit/label conflicts rather than
+reproducing the rejected factual-error cascade.
+
 This directory is the durable record for the GPT-OSS-to-Qwen privileged-
 information distillation track. Keep method rationale, prompt/data contracts,
 teacher-cache provenance, trace audits, student training outcomes, and later
@@ -88,4 +93,3 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh
 
 See [findings.md](findings.md) for the current quality audit and experimental
 decisions.
-

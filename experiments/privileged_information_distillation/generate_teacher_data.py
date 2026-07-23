@@ -6,6 +6,8 @@ from __future__ import annotations
 import json
 import random
 import sys
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -18,12 +20,20 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from experiments.privileged_information_distillation.core import (
+    append_reference_material,
     build_student_prompt,
     build_teacher_prompt,
-    extract_harmony_final,
+    extract_teacher_final,
     format_student_target,
     parse_counterfactual_teacher_target,
+    parse_rating_teacher_target,
     parse_teacher_target,
+    rating_matches_prediction,
+    route_reference_material,
+    split_qwen_think_completion,
+)
+from experiments.privileged_information_distillation.evaluate_student_sft import (
+    load_retrieval_cache,
 )
 from experiments.qwen_grpo_lora.run_qwen_grpo_lora import (
     load_labels,
@@ -31,12 +41,87 @@ from experiments.qwen_grpo_lora.run_qwen_grpo_lora import (
 )
 
 
-def render_chat_prompt(tokenizer: Any, prompt: str) -> str:
+REASONING_EFFORTS = {"low", "medium", "high"}
+TEACHER_OUTPUT_FORMATS = {"harmony", "qwen_think"}
+
+
+def normalize_reasoning_effort(value: Any) -> str:
+    effort = str(value).lower()
+    if effort not in REASONING_EFFORTS:
+        raise ValueError(
+            f"teacher.reasoning_effort must be one of {sorted(REASONING_EFFORTS)}, "
+            f"got {value!r}"
+        )
+    return effort
+
+
+def normalize_teacher_output_format(value: Any) -> str:
+    output_format = str(value).lower()
+    if output_format not in TEACHER_OUTPUT_FORMATS:
+        raise ValueError(
+            "teacher.output_format must be one of "
+            f"{sorted(TEACHER_OUTPUT_FORMATS)}, got {value!r}"
+        )
+    return output_format
+
+
+def render_chat_prompt(
+    tokenizer: Any,
+    prompt: str,
+    reasoning_effort: str,
+    output_format: str = "harmony",
+) -> str:
+    output_format = normalize_teacher_output_format(output_format)
+    kwargs: dict[str, Any] = {
+        "tokenize": False,
+        "add_generation_prompt": True,
+    }
+    if output_format == "harmony":
+        kwargs["reasoning_effort"] = normalize_reasoning_effort(reasoning_effort)
+    else:
+        kwargs["enable_thinking"] = True
     return tokenizer.apply_chat_template(
         [{"role": "user", "content": prompt}],
-        tokenize=False,
-        add_generation_prompt=True,
+        **kwargs,
     )
+
+
+def generate_openai_completions(
+    prompts: list[str],
+    *,
+    api_base: str,
+    api_key: str,
+    served_model: str,
+    max_tokens: int,
+    temperature: float,
+    concurrency: int,
+    request_timeout: float,
+) -> list[str]:
+    """Generate raw completions through one persistent OpenAI-compatible server."""
+    import requests
+
+    endpoint = api_base.rstrip("/") + "/completions"
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    def generate(prompt: str) -> str:
+        response = requests.post(
+            endpoint,
+            headers=headers,
+            json={
+                "model": served_model,
+                "prompt": prompt,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            },
+            timeout=request_timeout,
+        )
+        response.raise_for_status()
+        return str(response.json()["choices"][0].get("text", ""))
+
+    with ThreadPoolExecutor(max_workers=max(1, concurrency)) as executor:
+        return list(executor.map(generate, prompts))
 
 
 def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
@@ -44,8 +129,35 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
 
     split_path = root / str(cfg.splits_dir) / f"dry.{cfg.teacher.split}.yaml"
     datasets = load_split_config(split_path, root)
+    dataset_name_contains = OmegaConf.select(
+        cfg, "teacher.dataset_name_contains", default=None
+    )
+    retrieval_cache = OmegaConf.select(cfg, "teacher.retrieval_cache", default=None)
+    references: dict[tuple[str, Any], str] = {}
+    if retrieval_cache is not None:
+        retrieval_path = Path(str(retrieval_cache))
+        if not retrieval_path.is_absolute():
+            retrieval_path = root / retrieval_path
+        passage_field = str(OmegaConf.select(
+            cfg, "teacher.retrieval_passage_field", default="passages"
+        ))
+        references = load_retrieval_cache(retrieval_path, passage_field=passage_field)
+    reference_visibility = str(OmegaConf.select(
+        cfg, "teacher.reference_visibility", default="teacher_and_student"
+    ))
+    reasoning_effort = normalize_reasoning_effort(
+        OmegaConf.select(cfg, "teacher.reasoning_effort", default="medium")
+    )
+    teacher_output_format = normalize_teacher_output_format(
+        OmegaConf.select(cfg, "teacher.output_format", default="harmony")
+    )
     rows: list[dict[str, Any]] = []
     for dataset_cfg in datasets:
+        if (
+            dataset_name_contains is not None
+            and str(dataset_name_contains) not in dataset_cfg.name
+        ):
+            continue
         labels = load_labels(dataset_cfg)
         label_by_index = dict(zip(labels["index"], labels["label"], strict=True))
         wanted = set(label_by_index)
@@ -62,23 +174,101 @@ def load_teacher_rows(cfg: DictConfig, root: Path) -> list[dict[str, Any]]:
                 str(cfg.student.prompt),
                 int(cfg.student.max_prompt_chars),
                 str(cfg.student.context_truncation),
+                include_reasoning=bool(OmegaConf.select(
+                    cfg, "student.include_reasoning", default=False
+                )),
+                reasoning_max_chars=int(OmegaConf.select(
+                    cfg, "student.reasoning_max_chars", default=0
+                )),
+                reasoning_truncation=str(OmegaConf.select(
+                    cfg, "student.reasoning_truncation", default="head_tail"
+                )),
             )
+            if retrieval_cache is not None:
+                key = (dataset_cfg.name, index)
+                if key not in references:
+                    raise RuntimeError(
+                        f"retrieval cache is missing dataset={dataset_cfg.name!r} "
+                        f"index={index!r}"
+                    )
+                student_prompt, teacher_input_prompt = route_reference_material(
+                    student_prompt,
+                    references[key],
+                    reference_visibility,
+                )
+            else:
+                teacher_input_prompt = student_prompt
             rows.append({
                 "dataset": dataset_cfg.name,
                 "index": index,
                 "label": label,
+                "teacher_model": str(cfg.teacher.model),
+                "teacher_output_format": teacher_output_format,
+                "reasoning_effort": reasoning_effort,
                 "student_prompt": student_prompt,
+                "reference_visibility": (
+                    reference_visibility if retrieval_cache is not None else None
+                ),
                 "teacher_prompt": build_teacher_prompt(
-                    student_prompt,
+                    teacher_input_prompt,
                     str(cfg.teacher.prompt),
                     label,
                 ),
             })
+    if dataset_name_contains is not None:
+        rows = filter_teacher_rows_by_dataset(rows, str(dataset_name_contains))
+    rows = shard_teacher_rows(
+        rows,
+        shard_count=int(OmegaConf.select(cfg, "teacher.shard_count", default=1)),
+        shard_index=int(OmegaConf.select(cfg, "teacher.shard_index", default=0)),
+    )
     return limit_teacher_rows(
         rows,
         limit=cfg.teacher.limit,
         limit_per_label=OmegaConf.select(cfg, "teacher.limit_per_label", default=None),
     )
+
+
+def filter_teacher_rows_by_dataset(
+    rows: list[dict[str, Any]], dataset_name_contains: str
+) -> list[dict[str, Any]]:
+    """Restrict teacher generation to datasets used by a specialized student."""
+    selected = [
+        row for row in rows
+        if dataset_name_contains in str(row.get("dataset", ""))
+    ]
+    if not selected:
+        raise RuntimeError(
+            f"no teacher rows match dataset_name_contains={dataset_name_contains!r}"
+        )
+    return selected
+
+
+def shard_teacher_rows(
+    rows: list[dict[str, Any]],
+    *,
+    shard_count: int,
+    shard_index: int,
+) -> list[dict[str, Any]]:
+    """Deterministically shard every dataset/label stratum round-robin."""
+    if shard_count < 1:
+        raise ValueError(f"teacher.shard_count must be positive, got {shard_count}")
+    if not 0 <= shard_index < shard_count:
+        raise ValueError(
+            "teacher.shard_index must satisfy "
+            f"0 <= shard_index < shard_count, got {shard_index}/{shard_count}"
+        )
+    if shard_count == 1:
+        return rows
+    offsets: defaultdict[tuple[str, int], int] = defaultdict(int)
+    selected: list[dict[str, Any]] = []
+    for row in rows:
+        stratum = (str(row["dataset"]), int(row["label"]))
+        offset = offsets[stratum]
+        offsets[stratum] += 1
+        if offset % shard_count == shard_index:
+            selected.append(row)
+    return selected
 
 
 def limit_teacher_rows(
@@ -124,6 +314,11 @@ def cache_matches(row: dict[str, Any], cached: dict[str, Any] | None) -> bool:
         return False
     return (
         cached.get("label") == row["label"]
+        and cached.get("teacher_model", "openai/gpt-oss-120b")
+        == row.get("teacher_model", "openai/gpt-oss-120b")
+        and cached.get("teacher_output_format", "harmony")
+        == row.get("teacher_output_format", "harmony")
+        and cached.get("reasoning_effort", "medium") == row["reasoning_effort"]
         and cached.get("student_prompt") == row["student_prompt"]
         and cached.get("teacher_prompt") == row["teacher_prompt"]
         and not cached.get("parse_error", True)
@@ -141,36 +336,64 @@ def reparse_cached_record(
         return cached
     if (
         cached.get("label") != row["label"]
+        or cached.get("teacher_model", "openai/gpt-oss-120b")
+        != row.get("teacher_model", "openai/gpt-oss-120b")
+        or cached.get("teacher_output_format", "harmony")
+        != row.get("teacher_output_format", "harmony")
+        or cached.get("reasoning_effort", "medium") != row["reasoning_effort"]
         or cached.get("student_prompt") != row["student_prompt"]
         or cached.get("teacher_prompt") != row["teacher_prompt"]
     ):
         return cached
-    parser = (
-        parse_counterfactual_teacher_target
-        if target_format == "counterfactual"
-        else parse_teacher_target
+    parser = {
+        "summary": parse_teacher_target,
+        "counterfactual": parse_counterfactual_teacher_target,
+        "summary_rating": parse_rating_teacher_target,
+    }[target_format]
+    parsed = parser(
+        cached["raw_completion"],
+        expected_prediction=row["label"],
+        output_format=row.get("teacher_output_format", "harmony"),
     )
-    parsed = parser(cached["raw_completion"], expected_prediction=row["label"])
     if not parsed:
         return cached
     if target_format == "counterfactual":
         summary, facts, contradiction, prediction = parsed
+        rating = None
+    elif target_format == "summary_rating":
+        summary, rating, prediction = parsed
+        facts = contradiction = None
     else:
         summary, prediction = parsed
         facts = contradiction = None
+        rating = None
+    rating_polarity_match = (
+        rating is None or rating_matches_prediction(rating, prediction)
+    )
     return {
         **cached,
         "reasoning_summary": summary,
         "facts": facts,
         "contradiction": contradiction,
+        "rating": rating,
+        "rating_polarity_match": rating_polarity_match,
         "prediction": prediction,
         "student_target": format_student_target(
-            summary, prediction, facts=facts, contradiction=contradiction
+            summary,
+            prediction,
+            facts=facts,
+            contradiction=contradiction,
+            rating=rating,
         ),
-        "parse_error": False,
+        "parse_error": not rating_polarity_match,
         "label_match": prediction == row["label"],
         "prediction_source": (
-            "teacher_final" if "Prediction:" in cached.get("harmony_final", "")
+            "teacher_final" if "Prediction:" in (
+                extract_teacher_final(
+                    cached["raw_completion"],
+                    row.get("teacher_output_format", "harmony"),
+                ) or ""
+            )
             else "privileged_label_fallback"
         ),
     }
@@ -183,14 +406,13 @@ def reparse_cached_record(
 )
 def main(cfg: DictConfig) -> None:
     from transformers import AutoTokenizer
-    from vllm import LLM, SamplingParams
 
     root = Path(get_original_cwd()).resolve()
     random.seed(int(cfg.seed))
     np.random.seed(int(cfg.seed))
     rows = load_teacher_rows(cfg, root)
     target_format = str(OmegaConf.select(cfg, "student.target_format", default="summary"))
-    if target_format not in {"summary", "counterfactual"}:
+    if target_format not in {"summary", "counterfactual", "summary_rating"}:
         raise ValueError(f"unknown student.target_format={target_format!r}")
     print(f"loaded {len(rows)} privileged teacher examples")
 
@@ -215,30 +437,67 @@ def main(cfg: DictConfig) -> None:
     generated: dict[tuple[str, Any], str] = {}
     if missing_rows:
         tokenizer = AutoTokenizer.from_pretrained(str(cfg.teacher.model))
-        prompts = [render_chat_prompt(tokenizer, row["teacher_prompt"]) for row in missing_rows]
-        llm = LLM(
-            model=str(cfg.teacher.model),
-            dtype=str(cfg.teacher.dtype),
-            max_model_len=int(cfg.teacher.max_model_len),
-            gpu_memory_utilization=float(cfg.teacher.gpu_memory_utilization),
-            seed=int(cfg.seed),
-        )
-        sampling = SamplingParams(
-            max_tokens=int(cfg.teacher.max_tokens),
-            temperature=float(cfg.teacher.temperature),
-        )
-        batch_size = cfg.teacher.batch_size
-        outputs = []
-        if batch_size is None:
-            outputs = list(llm.generate(prompts, sampling))
-        else:
-            for start in range(0, len(prompts), int(batch_size)):
-                outputs.extend(llm.generate(prompts[start:start + int(batch_size)], sampling))
-        generated = {
-            (row["dataset"], row["index"]): (
-                output.outputs[0].text if output.outputs else ""
+        prompts = [
+            render_chat_prompt(
+                tokenizer,
+                row["teacher_prompt"],
+                row["reasoning_effort"],
+                row["teacher_output_format"],
             )
-            for row, output in zip(missing_rows, outputs, strict=True)
+            for row in missing_rows
+        ]
+        backend = str(OmegaConf.select(cfg, "teacher.backend", default="offline"))
+        if backend == "openai":
+            completion_texts = generate_openai_completions(
+                prompts,
+                api_base=str(cfg.teacher.api_base),
+                api_key=str(cfg.teacher.api_key),
+                served_model=str(cfg.teacher.served_model),
+                max_tokens=int(cfg.teacher.max_tokens),
+                temperature=float(cfg.teacher.temperature),
+                concurrency=int(cfg.teacher.api_concurrency),
+                request_timeout=float(cfg.teacher.request_timeout),
+            )
+        elif backend == "offline":
+            from vllm import LLM, SamplingParams
+
+            llm_kwargs: dict[str, Any] = dict(
+                model=str(cfg.teacher.model),
+                dtype=str(cfg.teacher.dtype),
+                max_model_len=int(cfg.teacher.max_model_len),
+                gpu_memory_utilization=float(cfg.teacher.gpu_memory_utilization),
+                seed=int(cfg.seed),
+            )
+            for key in ("tensor_parallel_size", "max_num_seqs"):
+                value = OmegaConf.select(cfg, f"teacher.{key}", default=None)
+                if value is not None:
+                    llm_kwargs[key] = int(value)
+            enable_prefix_caching = OmegaConf.select(
+                cfg, "teacher.enable_prefix_caching", default=None
+            )
+            if enable_prefix_caching is not None:
+                llm_kwargs["enable_prefix_caching"] = bool(enable_prefix_caching)
+            llm = LLM(**llm_kwargs)
+            sampling = SamplingParams(
+                max_tokens=int(cfg.teacher.max_tokens),
+                temperature=float(cfg.teacher.temperature),
+            )
+            batch_size = cfg.teacher.batch_size
+            outputs = []
+            if batch_size is None:
+                outputs = list(llm.generate(prompts, sampling))
+            else:
+                for start in range(0, len(prompts), int(batch_size)):
+                    outputs.extend(llm.generate(prompts[start:start + int(batch_size)], sampling))
+            completion_texts = [
+                output.outputs[0].text if output.outputs else ""
+                for output in outputs
+            ]
+        else:
+            raise ValueError(f"unknown teacher.backend={backend!r}")
+        generated = {
+            (row["dataset"], row["index"]): text
+            for row, text in zip(missing_rows, completion_texts, strict=True)
         }
 
     artifact.parent.mkdir(parents=True, exist_ok=True)
@@ -255,39 +514,72 @@ def main(cfg: DictConfig) -> None:
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
                 continue
             raw_completion = generated[key]
-            parser = (
-                parse_counterfactual_teacher_target
-                if target_format == "counterfactual"
-                else parse_teacher_target
+            parser = {
+                "summary": parse_teacher_target,
+                "counterfactual": parse_counterfactual_teacher_target,
+                "summary_rating": parse_rating_teacher_target,
+            }[target_format]
+            output_format = row.get("teacher_output_format", "harmony")
+            parsed = parser(
+                raw_completion,
+                expected_prediction=row["label"],
+                output_format=output_format,
             )
-            parsed = parser(raw_completion, expected_prediction=row["label"])
             if parsed and target_format == "counterfactual":
                 summary, facts, contradiction, prediction = parsed
+                rating = None
+            elif parsed and target_format == "summary_rating":
+                summary, rating, prediction = parsed
+                facts = contradiction = None
             elif parsed:
                 summary, prediction = parsed
                 facts = contradiction = None
+                rating = None
             else:
-                summary = facts = contradiction = prediction = None
+                summary = facts = contradiction = rating = prediction = None
             parsed_count += int(parsed is not None)
             label_match_count += int(prediction == row["label"])
+            rating_polarity_match = (
+                parsed is not None
+                and (
+                    rating is None
+                    or rating_matches_prediction(rating, prediction)
+                )
+            )
+            teacher_final = extract_teacher_final(raw_completion, output_format)
+            qwen_split = (
+                split_qwen_think_completion(raw_completion)
+                if output_format == "qwen_think"
+                else None
+            )
             record = {
                 **row,
                 "reasoning_summary": summary,
                 "facts": facts,
                 "contradiction": contradiction,
+                "rating": rating,
+                "rating_polarity_match": rating_polarity_match,
                 "prediction": prediction,
                 "student_target": (
                     format_student_target(
-                        summary, prediction, facts=facts, contradiction=contradiction
+                        summary,
+                        prediction,
+                        facts=facts,
+                        contradiction=contradiction,
+                        rating=rating,
                     ) if parsed else None
                 ),
-                "parse_error": parsed is None,
+                "parse_error": parsed is None or not rating_polarity_match,
                 "label_match": prediction == row["label"],
                 "prediction_source": (
-                    "teacher_final" if "Prediction:" in extract_harmony_final(raw_completion)
+                    "teacher_final" if "Prediction:" in (teacher_final or "")
                     else "privileged_label_fallback"
                 ),
-                "harmony_final": extract_harmony_final(raw_completion),
+                # Keep the legacy field for existing audit scripts while making
+                # the model-agnostic visible-final provenance explicit.
+                "harmony_final": teacher_final or "",
+                "teacher_final": teacher_final or "",
+                "private_reasoning_chars": len(qwen_split[0]) if qwen_split else None,
                 "raw_completion": raw_completion,
             }
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")

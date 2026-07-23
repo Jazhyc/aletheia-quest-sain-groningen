@@ -420,12 +420,22 @@ def rating_to_score(rating: int, *, rating_min: int, rating_max: int) -> float:
     return (rating - rating_min) / (rating_max - rating_min)
 
 
-def generate_with_optional_batches(llm: Any, prompts: list[str], sampling: Any, batch_size: int | None) -> list[Any]:
+def generate_with_optional_batches(
+    llm: Any,
+    prompts: list[str],
+    sampling: Any,
+    batch_size: int | None,
+    **generate_kwargs: Any,
+) -> list[Any]:
     if batch_size is None or batch_size <= 0:
-        return list(llm.generate(prompts, sampling))
+        return list(llm.generate(prompts, sampling, **generate_kwargs))
     outputs = []
     for start in range(0, len(prompts), batch_size):
-        outputs.extend(llm.generate(prompts[start:start + batch_size], sampling))
+        outputs.extend(
+            llm.generate(
+                prompts[start:start + batch_size], sampling, **generate_kwargs
+            )
+        )
     return outputs
 
 
@@ -434,6 +444,7 @@ def render_chat_prompts(
     prompts: list[str],
     *,
     enable_thinking: bool | None,
+    reasoning_effort: str | None = None,
 ) -> list[str]:
     rendered = []
     for prompt in prompts:
@@ -444,10 +455,13 @@ def render_chat_prompts(
         }
         if enable_thinking is not None:
             kwargs["enable_thinking"] = enable_thinking
+        if reasoning_effort is not None:
+            kwargs["reasoning_effort"] = reasoning_effort
         try:
             rendered.append(tokenizer.apply_chat_template(messages, **kwargs))
         except TypeError:
             kwargs.pop("enable_thinking", None)
+            kwargs.pop("reasoning_effort", None)
             rendered.append(tokenizer.apply_chat_template(messages, **kwargs))
     return rendered
 
@@ -666,6 +680,11 @@ class OfflineVllmGenerateJudge:
         temperature: float,
         use_chat_template: bool,
         enable_thinking: bool | None,
+        reasoning_effort: str | None,
+        stop_strings: list[str] | None,
+        include_stop_str_in_output: bool,
+        lora_adapter: str | None,
+        max_lora_rank: int,
     ) -> None:
         from transformers import AutoTokenizer
         from vllm import LLM, SamplingParams
@@ -676,6 +695,7 @@ class OfflineVllmGenerateJudge:
         self.parse_error_count = 0
         self.tokenizer = AutoTokenizer.from_pretrained(model_name) if use_chat_template else None
         self.enable_thinking = enable_thinking
+        self.reasoning_effort = reasoning_effort
         llm_kwargs = vllm_kwargs_from_config(
             model_name=model_name,
             dtype=dtype,
@@ -688,10 +708,23 @@ class OfflineVllmGenerateJudge:
             spec_model=spec_model,
             spec_tokens=spec_tokens,
         )
+        self.generate_kwargs: dict[str, Any] = {}
+        if lora_adapter is not None:
+            from vllm.lora.request import LoRARequest
+
+            adapter_path = Path(lora_adapter).resolve()
+            if not adapter_path.exists():
+                raise FileNotFoundError(f"LoRA adapter does not exist: {adapter_path}")
+            llm_kwargs.update(enable_lora=True, max_lora_rank=max_lora_rank)
+            self.generate_kwargs["lora_request"] = LoRARequest(
+                adapter_path.name, 1, adapter_path.as_posix()
+            )
         self.llm = LLM(**llm_kwargs)
         self.sampling = SamplingParams(
             max_tokens=max_tokens,
             temperature=temperature,
+            stop=stop_strings,
+            include_stop_str_in_output=include_stop_str_in_output,
         )
 
     def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
@@ -701,8 +734,15 @@ class OfflineVllmGenerateJudge:
                 self.tokenizer,
                 prompts,
                 enable_thinking=self.enable_thinking,
+                reasoning_effort=self.reasoning_effort,
             )
-        outputs = generate_with_optional_batches(self.llm, generation_prompts, self.sampling, batch_size)
+        outputs = generate_with_optional_batches(
+            self.llm,
+            generation_prompts,
+            self.sampling,
+            batch_size,
+            **self.generate_kwargs,
+        )
 
         scores = np.zeros(len(prompts), dtype=float)
         self.generations = []
@@ -751,6 +791,7 @@ class OfflineVllmStructuredJudge:
         final_rating_prompt: str,
         use_chat_template: bool,
         enable_thinking: bool | None,
+        reasoning_effort: str | None,
     ) -> None:
         from transformers import AutoTokenizer
         from vllm import LLM, SamplingParams
@@ -766,6 +807,7 @@ class OfflineVllmStructuredJudge:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.tokenizer = tokenizer if use_chat_template else None
         self.enable_thinking = enable_thinking
+        self.reasoning_effort = reasoning_effort
         self.all_rating_ids, self.ids_by_rating = rating_token_ids(tokenizer, rating_min, rating_max)
         requested_logprobs = requested_logprobs_or_default(generated_logprobs, len(self.all_rating_ids))
 
@@ -801,6 +843,7 @@ class OfflineVllmStructuredJudge:
                 self.tokenizer,
                 prompts,
                 enable_thinking=self.enable_thinking,
+                reasoning_effort=self.reasoning_effort,
             )
         reasoning_outputs = generate_with_optional_batches(
             self.llm,
@@ -821,6 +864,7 @@ class OfflineVllmStructuredJudge:
                 self.tokenizer,
                 rating_prompts,
                 enable_thinking=self.enable_thinking,
+                reasoning_effort=self.reasoning_effort,
             )
         rating_outputs = generate_with_optional_batches(
             self.llm,
@@ -967,6 +1011,7 @@ class OpenAIGenerateJudge:
         temperature: float,
         use_chat_template: bool,
         enable_thinking: bool | None,
+        reasoning_effort: str | None,
     ) -> None:
         self.served_model = served_model
         self.endpoint = api_base.rstrip("/") + "/completions"
@@ -985,6 +1030,7 @@ class OpenAIGenerateJudge:
 
             self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.enable_thinking = enable_thinking
+        self.reasoning_effort = reasoning_effort
         self.generations: list[dict[str, Any]] = []
         self.parse_error_count = 0
 
@@ -996,6 +1042,7 @@ class OpenAIGenerateJudge:
                 self.tokenizer,
                 prompts,
                 enable_thinking=self.enable_thinking,
+                reasoning_effort=self.reasoning_effort,
             )
         workers = max(1, self.concurrency)
         with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -1049,6 +1096,12 @@ def build_judge(cfg: DictConfig):
         if cfg.judge.generated_logprobs is None
         else int(cfg.judge.generated_logprobs)
     )
+    selected_reasoning_effort = OmegaConf.select(
+        cfg, "judge.reasoning_effort", default=None
+    )
+    reasoning_effort = (
+        None if selected_reasoning_effort is None else str(selected_reasoning_effort)
+    )
     backend = str(cfg.judge.backend)
     mode = str(cfg.judge.mode)
     if backend == "offline":
@@ -1082,11 +1135,32 @@ def build_judge(cfg: DictConfig):
                 missing_logprob=float(cfg.judge.missing_logprob),
             )
         if mode == "generate":
+            selected_stops = OmegaConf.select(cfg, "judge.stop_strings", default=None)
+            stop_strings = (
+                None
+                if selected_stops is None
+                else [str(value) for value in selected_stops]
+            )
             return OfflineVllmGenerateJudge(
                 **common,
                 max_tokens=int(cfg.judge.max_tokens),
                 use_chat_template=bool(OmegaConf.select(cfg, "judge.use_chat_template", default=False)),
                 enable_thinking=OmegaConf.select(cfg, "judge.enable_thinking", default=None),
+                reasoning_effort=reasoning_effort,
+                stop_strings=stop_strings,
+                include_stop_str_in_output=bool(
+                    OmegaConf.select(
+                        cfg, "judge.include_stop_str_in_output", default=False
+                    )
+                ),
+                lora_adapter=(
+                    None
+                    if OmegaConf.select(cfg, "judge.lora_adapter", default=None) is None
+                    else str(OmegaConf.select(cfg, "judge.lora_adapter"))
+                ),
+                max_lora_rank=int(
+                    OmegaConf.select(cfg, "judge.max_lora_rank", default=16)
+                ),
             )
         if mode == "structured":
             return OfflineVllmStructuredJudge(
@@ -1097,6 +1171,7 @@ def build_judge(cfg: DictConfig):
                 final_rating_prompt=str(cfg.judge.structured_rating_prompt),
                 use_chat_template=bool(OmegaConf.select(cfg, "judge.use_chat_template", default=False)),
                 enable_thinking=OmegaConf.select(cfg, "judge.enable_thinking", default=None),
+                reasoning_effort=reasoning_effort,
             )
         raise ValueError(f"unknown judge.mode={mode!r}")
     if backend == "openai":
@@ -1127,6 +1202,7 @@ def build_judge(cfg: DictConfig):
                 temperature=float(cfg.judge.temperature),
                 use_chat_template=bool(OmegaConf.select(cfg, "judge.use_chat_template", default=False)),
                 enable_thinking=OmegaConf.select(cfg, "judge.enable_thinking", default=None),
+                reasoning_effort=reasoning_effort,
             )
         raise ValueError(f"judge.backend=openai does not support judge.mode={mode!r}")
     raise ValueError(f"unknown judge.backend={backend!r}")

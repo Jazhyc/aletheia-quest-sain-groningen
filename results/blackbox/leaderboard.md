@@ -3,13 +3,17 @@
 Timing is scoring-only wall time: it excludes vLLM startup/model load/compile and dataset preparation.
 Submitted timestamps are UTC.
 Rows with cached text-probe components report the logits scoring wall time; CPU n-gram inference is negligible.
+The continuous hybrid row reuses cached member outputs, so it has no comparable end-to-end scoring time.
 
 | submitted_at | method | AUROC | bal_acc | recall | FPR | score_time | rows/s |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 2026-07-11 11:07:53 | qwen9b_pid_predictiononly_variedonly_adamwlr5e5_v1 | 0.8631 | 0.8631 | 0.7690 | 0.0429 | 14.3s | 57.5/s |
-| 2026-07-11 08:30:02 | qwen9b_pid_varied_muonlr1e4_ep2_v1 | 0.9107 | 0.9107 | 0.8571 | 0.0357 | 31.9s | 25.7/s |
-| 2026-07-11 06:51:35 | qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1 | 0.9155 | 0.9155 | 0.8619 | 0.0310 | 31.9s | 25.7/s |
-| 2026-07-11 05:43:26 | qwen9b_privileged_gptoss120b_summary_adamwlr5e5_v1 | 0.9107 | 0.9107 | 0.8571 | 0.0357 | 32.1s | 25.6/s |
+| 2026-07-17 02:02:26 | qwen9b_reason_ensemble_dks_first_rating_stop_v1 | 0.9332 | 0.9310 | 0.8881 | 0.0262 | 528.3s | 1.6/s |
+| 2026-07-17 00:23:59 | qwen27b_reason_ensemble_dks_member4096_v1 | 0.9573 | 0.9464 | 0.9357 | 0.0429 | 1484.5s | 0.6/s |
+| 2026-07-16 08:56:33 | continuous_hybrid_locked_test_v1 | 0.9571 | 0.9298 | 0.8976 | 0.0381 | - | - |
+| 2026-07-16 08:54:51 | continuous_hybrid_dks3072_logits_v1 | 0.9014 | 0.8726 | 0.7857 | 0.0405 | 77.7s | 10.6/s |
+| 2026-07-15 23:15:04 | qwen9b_pid_reasoning4000_summary_binary_or_locked_v1 | 0.9274 | 0.9274 | 0.8929 | 0.0381 | 69.0s | 11.9/s |
+| 2026-07-11 16:32:24 | qwen9b_pid_varied_grpo_ep2_v1 | 0.9048 | 0.9048 | 0.8310 | 0.0214 | 147.4s | 5.6/s |
+| 2026-07-11 15:55:23 | gpt_oss_120b_reason_ensemble_dks_member4096_v1 | 0.9465 | 0.9345 | 0.9000 | 0.0310 | 104.0s | 7.9/s |
 | 2026-07-11 03:35:07 | gpt_oss_120b_nothink_truth_value_v1 | 0.9391 | 0.9310 | 0.8976 | 0.0357 | 25.2s | 32.6/s |
 | 2026-07-08 09:21:27 | qwen_reason_nothink_truth_value_pc1500_v1 | 0.8761 | 0.8762 | 0.8238 | 0.0714 | 13.6s | 60.4/s |
 | 2026-07-07 16:16:29 | qwen_grpo_lora_r16_binary_t12_muonlr3e5_full_v2_logits_empty_reasoning_space_plain | 0.8686 | 0.8810 | 0.7810 | 0.0190 | 60.4s | 13.6/s |
@@ -29,3 +33,7 @@ Rows with cached text-probe components report the logits scoring wall time; CPU 
 | 2026-07-03 14:21:30 | qwen_structured_reason_budget_2048 | 0.9185 | 0.8762 | 0.7667 | 0.0143 | 384.4s | 2.1/s |
 | 2026-07-03 01:50:21 | qwen_reason_v1 | 0.9092 | 0.9095 | 0.8357 | 0.0167 | 428.2s | 1.9/s |
 | 2026-07-03 00:21:22 | qwen_judge_v1 | 0.8657 | 0.6393 | 0.3048 | 0.0262 | 12.4s | 66.4/s |
+| - | qwen9b_privileged_gptoss120b_summary_adamwlr5e5_v1 | - | - | - | - | - | - |
+| - | qwen9b_pid_varied_muonlr1e4_ep2_v1 | - | - | - | - | - | - |
+| - | qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1 | - | - | - | - | - | - |
+| - | qwen9b_pid_predictiononly_variedonly_adamwlr5e5_v1 | - | - | - | - | - | - |

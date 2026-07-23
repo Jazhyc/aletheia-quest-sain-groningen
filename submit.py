@@ -23,9 +23,9 @@ import itertools
 import json
 import os
 import sys
-import tempfile
 import threading
 import time
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -194,9 +194,10 @@ def submit(space_url: str, team: str, payload: bytes,
         # notebook can load gated HF models you have access to.
         headers["Authorization"] = f"Bearer {hf_token}"
         headers["X-HF-Token"] = hf_token
-    # Ask for live progress. Older Spaces ignore this and return one JSON body,
-    # which is handled below.
+    # Ask for a live progress stream. A Space that predates streaming just ignores
+    # this and returns the single JSON body — handled transparently below.
     headers["Accept"] = "text/event-stream"
+
     _info("entering the lists as " + _bold(team or "(remembered team)")
           + (_dim("   ·   ") + _bold(f"{tag}-box") if tag else "")
           + _dim("   →   " + url))
@@ -207,13 +208,13 @@ def submit(space_url: str, team: str, payload: bytes,
                  + _dim("venv · deps · notebooks · NDIF traces")) as sp:
         try:
             resp = requests.post(url, data=data, files=files, headers=headers,
-                                 stream=True, timeout=None)   # no client timeout:
-                                                 # a full eval run can be long
+                                 stream=True, timeout=None)   # no client timeout: a
+                                                 # full eval run over all datasets is long
             ctype = resp.headers.get("Content-Type", "")
             if resp.status_code == 200 and "text/event-stream" in ctype:
-                body = _consume_stream(resp, sp)
+                body = _consume_stream(resp, sp)     # live progress -> spinner
             elif resp.status_code == 200:
-                body = resp.json()
+                body = resp.json()                   # older Space: one JSON body
         except requests.RequestException as e:
             resp, err = None, e
     if resp is None:
@@ -243,9 +244,11 @@ def submit(space_url: str, team: str, payload: bytes,
 
 
 def _consume_stream(resp, sp) -> dict | None:
-    """Read SSE progress and return the terminal result payload."""
+    """Read the SSE progress stream, updating the spinner as events arrive. Returns
+    the terminal ``result`` payload (dict), ``{"_error": msg}`` on an ``error`` event,
+    or ``None`` if the stream ended without either."""
     event, chunks, result = None, [], None
-    for raw in resp.iter_lines():
+    for raw in resp.iter_lines():                    # bytes; SSE frames end on a blank line
         line = raw.decode("utf-8", "replace") if raw else ""
         if line == "":
             if event is not None:
@@ -263,7 +266,8 @@ def _consume_stream(resp, sp) -> dict | None:
 
 
 def _on_stream_event(event: str, data: dict, sp) -> dict | None:
-    """Translate one SSE event into a spinner update."""
+    """Translate one SSE event into a spinner update; return a terminal body if this
+    is the final ``result`` / ``error`` event, else None."""
     if event == "received":
         sp.text = "received  " + _dim("· queued")
     elif event == "queued":
@@ -357,14 +361,30 @@ def _resolve_hf_token(arg_token: str | None) -> str | None:
         return None
 
 
+def _clean_key(v: str | None) -> str | None:
+    """A key value, or None if ``v`` is absent/blank or a stringified null.
+
+    Guards the common footguns: ``$NDIF_API_KEY`` exported-but-empty, or set to
+    the literal string ``None``/``null`` (e.g. from ``export NDIF_API_KEY=$(cmd
+    that printed None)``). Sending those verbatim passes the server's "key
+    present?" check but hangs its whoami lookup, so we drop them here."""
+    if v is None:
+        return None
+    v = v.strip()
+    if not v or v.lower() in ("none", "null", "nil"):
+        return None
+    return v
+
+
 def _resolve_ndif_key(arg_key: str | None) -> str | None:
     """--ndif-api-key / $NDIF_API_KEY, else the key nnsight already has saved
     (CONFIG.API.APIKEY, e.g. from `CONFIG.set_default_api_key(...)`)."""
-    if arg_key:
-        return arg_key
+    key = _clean_key(arg_key)
+    if key:
+        return key
     try:
         from nnsight import CONFIG
-        return CONFIG.API.APIKEY or None
+        return _clean_key(CONFIG.API.APIKEY)
     except Exception:
         return None
 
@@ -418,14 +438,7 @@ def run_dry(root: Path, ndif_api_key: str | None, hf_token: str | None,
             _bad(f"{tag} {_bold(ds)}   " + _dim(_shorten(ev.get("error") or "failed", 90)))
 
     try:
-        # Rehearse the same pruned package that would be uploaded, not the whole
-        # working tree with local caches/results/secrets.
-        payload = build_zip(root)
-        with tempfile.TemporaryDirectory(prefix="aletheia-dry-package-") as packaged:
-            with zipfile.ZipFile(io.BytesIO(payload)) as zf:
-                zf.extractall(packaged)
-            records = dry_run(Path(packaged), ndif_api_key, hf_token,
-                              limit=limit, on_progress=_progress)
+        records = dry_run(root, ndif_api_key, hf_token, limit=limit, on_progress=_progress)
     except (FileNotFoundError, ValueError) as e:
         # e.g. no/too-many notebooks, or a bad dry.yaml — a clear message beats
         # a traceback. (The Space reports the same rejection as a 400.)
@@ -499,11 +512,23 @@ def main(argv: list[str] | None = None) -> None:
     args = p.parse_args(argv)
     if args.limit is not None and args.limit <= 0:
         p.error("--limit must be a positive integer")
+    if not args.dry and not args.tag:
+        p.error("--tag is required for a real submission — declare your method "
+                "category: --tag white (white-box) or --tag black (black-box)")
 
     args.ndif_api_key = _resolve_ndif_key(args.ndif_api_key)
     if not args.ndif_api_key:
         p.error("--ndif-api-key (or $NDIF_API_KEY, or a key saved in nnsight's "
                 "CONFIG) is required")
+    # An NDIF key is a UUID. Reject anything else here rather than sending it: a
+    # malformed key sails past the Space's "key present?" check and then stalls
+    # its whoami lookup, which — with no client timeout — looks like a hung run.
+    try:
+        uuid.UUID(str(args.ndif_api_key))
+    except (ValueError, AttributeError, TypeError):
+        p.error(f"NDIF API key {args.ndif_api_key!r} is not a valid key "
+                "(expected a UUID like 1234abcd-56ef-...). Check --ndif-api-key "
+                "/ $NDIF_API_KEY / the key saved in nnsight's CONFIG.")
 
     _banner()
     hf_token = _resolve_hf_token(args.hf_token)

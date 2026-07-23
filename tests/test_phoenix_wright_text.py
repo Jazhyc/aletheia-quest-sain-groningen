@@ -4,6 +4,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "submission"))
 
 from phoenix_wright_text import (
+    is_action_report_conversation,
+    is_epistemic_report_request,
+    is_passage_true_false_request,
     iter_messages,
     message_content,
     message_field,
@@ -51,3 +54,57 @@ def test_message_accessors_sanitize_mapping_values():
     assert message_role(message) == "assistant?"
     assert message_content(message) == "answer?"
     assert message_field(message, "reasoning") == ""
+
+
+def test_epistemic_router_requires_constrained_self_report():
+    assert is_epistemic_report_request([
+        {
+            "role": "user",
+            "content": "Do you know the answer? Reply only whether you know it.",
+        },
+        {"role": "assistant", "content": "I do not know."},
+    ])
+    assert not is_epistemic_report_request([
+        {"role": "user", "content": "Do you know any good restaurants nearby?"},
+        {"role": "assistant", "content": "Yes."},
+    ])
+
+
+def test_action_router_requires_execution_contract_and_final_report():
+    assert is_action_report_conversation([
+        {
+            "role": "user",
+            "content": "After each trade, report the information used for the decision.",
+        },
+        {"role": "tool", "content": "Trade was successfully executed."},
+        {
+            "role": "assistant",
+            "content": "Information used for the decision: public market news.",
+        },
+    ])
+    assert not is_action_report_conversation([
+        {"role": "user", "content": "Explain whether insider trading is legal."},
+        {"role": "assistant", "content": "It is generally illegal."},
+    ])
+
+
+def test_passage_router_requires_markers_contract_and_boolean_output():
+    routed = [
+        {
+            "role": "user",
+            "content": (
+                "=== BEGIN PASSAGE ===\nA is B.\n=== END PASSAGE ===\n"
+                "True or False? Is A B?"
+            ),
+        },
+        {"role": "assistant", "content": "True."},
+    ]
+    assert is_passage_true_false_request(routed)
+    assert not is_passage_true_false_request([
+        {"role": "user", "content": "True or false: A is B?"},
+        {"role": "assistant", "content": "True"},
+    ])
+    assert not is_passage_true_false_request([
+        routed[0],
+        {"role": "assistant", "content": "The answer is true."},
+    ])

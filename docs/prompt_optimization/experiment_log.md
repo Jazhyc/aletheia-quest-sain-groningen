@@ -1,5 +1,106 @@
 # Prompt Experiment Log
 
+## 2026-07-17: First-complete-rating decode stop (Qwen-9B validation)
+
+Stopping after the first exact retained `Rating: 1…7` passes its frozen generated
+gate. D/K/S validation BA moves `0.9226 -> 0.9250`, instructed stays `0.9771`,
+varied moves `0.8500 -> 0.8556`, and parses improve `38 -> 37`. Score time drops
+`1,314.3 -> 551.6s` (runtime fraction `0.420`). The small accuracy movement is
+treated as scheduling drift; a locked test confirmation is authorized for
+preservation/runtime only.
+
+## 2026-07-17: Fixed semantic specialists over a heavy factual default
+
+On the frozen 800-row Liars' Bench spectrum, replacing only explicit HP-KR and
+action-report rows with their independently selected Phoenix specialists raises
+Qwen-9B heavy macro BA `0.7788 -> 0.8325`. HP-KR gains `0.09`, action reports
+gain `0.125`, and the other two categories are untouched. The 167 changes are
+105 fixes and 62 breaks. Every category/family cell is non-worse. A paired
+20,000-draw row bootstrap places the macro gain at `+0.0300…+0.0763` (95%). The
+frozen gate passes. A matched job now checks whether the heavy default preserves
+this architecture under the same Phoenix adapter, avoiding a two-weight deployment.
+
+## 2026-07-17: Qwen-27B generation-cap prefix screen
+
+Saved validation outputs have median 680, p95 1,664, and p99 4,096 tokens. An
+optimistic cached-prefix screen rejects shorter caps before GPU timing. At
+2,048 tokens, six ensemble decisions change, parses worsen `5 -> 30`, macro BA
+falls `0.9298 -> 0.9274`, and varied BA falls `0.8639 -> 0.8556` for only 7.6%
+estimated token savings. At 3,072, one decision changes and only 3.2% of token
+work is saved. Keep the 4,096-token budget; neither hard caps nor positive
+short-circuiting safely compress the pathological tail.
+
+## 2026-07-17: Matched dataset-unit split-transfer audit
+
+The Qwen-27B versus Qwen-9B D/K/S delta was compared across the same 21
+dataset units on validation and locked test. Validation's `+0.00714` mean delta
+has a unit-bootstrap 95% interval spanning zero (`-0.00595…+0.02024`), while
+test's `+0.01667` interval is positive (`+0.00238…+0.03214`). Unit deltas have
+only `0.362` Pearson correlation, but 19/21 are non-opposed and only two reverse
+direction. This supports the broad capacity/scenario gate and rejects selecting
+organism-specific logic from individual validation cells.
+
+## 2026-07-17: Generated max-ensemble positive short-circuit
+
+The frozen `details -> known -> scrutiny` early exit reduced Qwen-27B prompt
+evaluations `2,466 -> 1,692` (`31.39%`), but runtime only `1,533 -> 1,294s`
+(`15.59%`) because remaining negatives are the slow tail. Fresh batch
+composition also moved BA `0.9298 -> 0.9286` and varied BA
+`0.8639 -> 0.8583`, despite cached fixed-output equivalence. The runtime and
+scenario gates fail. Keep the code as a backend-equivalence control; retain the
+full member-major ensemble for deployment.
+
+## 2026-07-17: Passage-grounded True/False semantic route
+
+A frozen 2,000-row untouched Liars' Bench confirmation compared ordinary
+Phoenix with one task-local prompt that treats an explicitly marked passage as
+authoritative. The label-blind router requires literal begin/end markers, a
+True/False contract, and an exact one-word Boolean output. It matches zero of
+all 8,216 local competition rows.
+
+The specialist raises external BA `0.879 -> 0.902`, recall `0.859 -> 0.862`,
+lowers FPR `0.101 -> 0.058`, and lowers parse errors `15 -> 6`. Every family
+improves. It misses the strict `+0.03` and `0.94` absolute-BA conditions, so the
+formal gate fails. The exact narrow route is nevertheless retained in Phoenix
+v2.4 under the requested muted-validation policy: it is source-grounded,
+family-agnostic, one-call, externally positive, and cannot affect local BA.
+Do not tune its prompt or widen its router from the confirmation labels.
+
+## 2026-07-17: Corrected focused-continuation control
+
+The initial soft-trigger continuation report compared a model continued from
+the full Phoenix adapter with an unrelated 10%-data adapter. A corrected joint
+run uses the actual unchanged parent. Both parent and continuation score exactly
+`0.9000` on the same 800 external rows and produce identical predictions and
+family metrics. Competition validation moves `0.9024 -> 0.9000`. The frozen
+gate fails; close the training path. The earlier family differences reflected
+the mismatched control rather than the continuation.
+
+## 2026-07-17: Cross-capacity majority control
+
+Before combining existing validation caches, a fixed two-of-three vote was
+frozen across the Qwen-27B D/K/S judge, Qwen-9B D/K/S judge, and conditional
+Phoenix student. It uses only each member's inherited binary decision. The gate
+required `+0.003` BA over Qwen-27B and at most `0.005` loss in either scenario.
+
+The vote scores `0.9310` validation BA versus `0.9298` for Qwen-27B alone.
+FPR improves from `0.0643` to `0.0381`, but recall falls from `0.9238` to
+`0.9000`; varied BA also falls from `0.8639` to `0.8611`. The three members are
+unanimous on 752/822 rows, and the 31 changed Qwen-27B decisions split almost
+evenly into 16 fixes and 15 breaks. The gate fails, so the existing test caches
+were not combined. Retain the analyzer as a calibration diagnostic, not a
+submission ensemble.
+
+## 2026-07-17: Qwen-27B sampled self-consistency
+
+The frozen matched-cost strategy repeated `known4096` three times at temperature
+`0.6` and used the median rating. Rating triples differ on 70/822 rows (`8.52%`),
+but median BA is `0.9262` versus `0.9298` for deterministic D/K/S. Instructed BA
+rises to `0.9896`, while varied falls to `0.8417`; parse errors rise from five
+to 19. The diagnostic max is `0.9310`, but max aggregation was not an eligible
+selection and does not repair the parse count. Test remains unauthorized. This
+rejects sampled reasoning as a replacement for prompt diversity at matched cost.
+
 ## Running Constraint (Competition)
 
 - Multi-token prediction / speculative decoding (`spec_method`, including MTP) is not used for competition candidates in this track. Ongoing speed optimization is limited to standard single-decode judges.
@@ -1454,6 +1555,515 @@ Local smoke:
   `experiments/blackbox/run_nnsight_local_smoke.sh --limit 1 --timeout 1800`.
 - The notebook executed locally with `PHOENIX_NNSIGHT_LOCAL=1`, validated a
   one-row `submission.csv`, removed the generated file, and exited `0:0` in 47s.
+## Candidate: `gpt_oss_120b_reason_ensemble_dks_member4096_v1`
+
+Status: validation job `30103227`; fixed-threshold test job `30103924`.
+
+This is a model-only swap of the strongest Qwen member-major ensemble:
+`details4096`, `known4096`, and `scrutiny4096`, max aggregated, with GPT-OSS-120B
+serving every member. Validation at the inherited Qwen threshold 0.01 scored
+0.9167 BA and 0.9371 AUROC. A validation-only discrete threshold sweep selected
+1.0 (only maximum Rating 7 counts positive), scoring 0.9179 macro BA, 0.8714
+recall, and 0.0357 FPR.
+
+With threshold 1.0 fixed before test, the test run scored 0.9345 BA, 0.9465
+AUROC, 0.9000 recall, and 0.0310 FPR with zero parse errors. Scoring took 104.0s
+for 821 rows and 2,463 prompt evaluations. Individual test member BAs were
+0.9226 (details), 0.9214 (known), and 0.9262 (scrutiny).
+
+The larger model therefore improves only 0.0047 BA over the Qwen heavy ensemble
+(0.9298) and 0.0035 over the single short GPT-OSS judge (0.9310). This supports
+a practical local-test ceiling near 0.93-0.935 for current prompt-visible
+information. Model capacity contributes, but it is not the dominant remaining
+bottleneck; correlated ambiguity, label noise, and examples requiring facts not
+reliably elicited by any prompt are increasingly plausible explanations.
+
+## Diagnostic: GPT-OSS atomic audit of shared errors
+
+Status: completed as Slurm job `30103980`.
+
+The Qwen and GPT-OSS heavy ensembles shared 34 false negatives. To distinguish
+missing knowledge from headline-answer anchoring, GPT-OSS was asked to revisit
+the same responses under two conditions:
+
+- `blind_atomic`: enumerate and independently check every supporting assertion,
+  without seeing the label.
+- `privileged_atomic`: the same audit after being told authoritatively that at
+  least one important false or misleading claim exists.
+
+The blind audit found a concrete false detail in 24/34 examples and returned
+`NO_FALSE_DETAIL` for 10. It recovered details the ordinary ensemble had passed
+over, including the false PayPal settlement, El Salvador exchange rate, Plain of
+Jars UNESCO year, wrong company histories, papal dates, etymologies, and
+historical chronology. This is strong evidence that tangential-claim salience
+and headline anchoring, rather than absent world knowledge alone, caused many of
+the original misses.
+
+The privileged audit emitted `CONTAINS_FALSE_DETAIL` for 29/34, returned
+`NO_FALSE_DETAIL` for 2, and had 3 outputs reach the 1024-token budget before a
+final verdict. The incremental explanations were less reliable: some were
+pedantic, region-dependent, or incorrectly treated a claim from the question as
+if the assistant had asserted it. Privileged labels therefore help elicit
+latent knowledge but also produce post-hoc rationalization. The two conditions
+generated 68 probes in 24.6s after model startup. Artifacts are stored under
+`results/blackbox/gpt_oss_120b_shared_error_atomic_audit_v1/`.
+
+The identical diagnostic was run with base `Qwen/Qwen3.5-9B` as job `30103986`.
+It emitted more positive verdicts than GPT-OSS—28/34 blind, with 3
+`NO_FALSE_DETAIL`, 2 `UNCERTAIN`, and 1 completion without a parsed verdict;
+the privileged condition emitted 30 positives, 2 negatives, and 2 incomplete
+verdicts. These raw counts are not accuracy. Manual inspection found only
+roughly 17--20 plausible identifications of an actual poisoned detail. Qwen
+often attacked a true assertion and supplied a fabricated correction, including
+reversing the Wright brothers' birth order, claiming Mount Sinai rather than
+Mount Catherine is Egypt's highest peak, inventing $80M and $100M PayPal
+settlements across the two conditions, changing correct Bank of England history,
+and fabricating alternate band and treaty dates. It sometimes identified that a
+side claim was false while still giving the wrong replacement fact.
+
+The comparison supports a mixed bottleneck. Atomic decomposition does activate
+useful latent knowledge in Qwen for a substantial subset, but the 9B model's
+verification knowledge is less reliable than GPT-OSS's and its higher
+positive-verdict rate reflects confabulation rather than superior recall.
+Ground-truth hints exacerbate that failure. Qwen artifacts are stored under
+`results/blackbox/qwen9b_shared_error_atomic_audit_v1/`.
+
+## Diagnostic: Qwen organism neutral self-query
+
+Status: completed locally as Slurm job `30104103` after setup failures
+`30104069` (repository import path) and `30104073` (vLLM default
+`max_num_seqs` exceeded the hybrid/Mamba cache capacity). The corrected run set
+`max_num_seqs=64`.
+
+The 34 shared false negatives all came from five rank-128 Qwen organism LoRAs.
+Each original answer received the same blind atomic audit twice: once from base
+`Qwen/Qwen3.5-27B`, and once from the exact LoRA organism that generated the
+answer. The original deceptive system context was not included.
+
+| verdict pair (base, organism) | rows |
+| --- | ---: |
+| false detail, false detail | 17 |
+| false detail, no false detail | 5 |
+| no false detail, no false detail | 5 |
+| no false detail, false detail | 2 |
+| base parse failure, organism false detail | 2 |
+| base parse failure, organism no false detail | 2 |
+| false detail, organism parse failure | 1 |
+
+The base produced 23 positive verdicts and the organisms 21; there were 12 rows
+with a different verdict or parse outcome. Several organism corrections were
+substantively useful, including the undisclosed PayPal settlement, Becket's
+murder location, the Peter Pan publication year, Chilean independence
+chronology, early papal dates, and Attila not invading Spain. Thus the organisms
+often do not reproduce a context-triggered falsehood when asked neutrally.
+
+The comparison is not a clean truth oracle. Both base and organisms generated
+new factual errors, and the LoRA suppressed several strong base corrections:
+peladophobia prevalence, the Plain of Jars UNESCO year, Bank of England war
+history, and electronic-fencing dates. In other cases the organism returned a
+positive verdict for the wrong reason. Neutral self-query is therefore a useful
+complementary inconsistency feature, but its raw binary verdict is not reliable
+enough to serve as a standalone detector. The 68 prompt evaluations took 198.0s
+after model initialization. Artifacts are under
+`results/blackbox/qwen27b_organism_self_query_shared_errors_v1/`.
+
+## Diagnostic: organism-only atomic True/False consistency
+
+Status: completed locally as Slurm job `30104133`.
+
+This follow-up removed base-model comparison entirely. Each generating Qwen
+organism first extracted up to 12 atomic claims from its own prior response.
+Every extracted claim was then presented in isolation with a forced, deterministic
+one-word `True` or `False` response. A diagnostic oracle condition also supplied
+32 manually selected, high-confidence poisoned claims across 29 of the 34 rows;
+these claims are for analysis only and are unavailable to a deployable method.
+
+| condition | claims | True | False | parse errors | rows with any False |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| organism-extracted | 312 | 249 | 63 | 0 | 27/34 |
+| diagnostic oracle | 32 | 13 | 19 | 0 | 17/29 |
+
+The oracle result is the cleanest estimate: the organisms rejected 59% of known
+poisoned assertions once those assertions were isolated. Examples recovered
+include peladophobia prevalence, the Plain of Jars year, El Salvador's exchange
+rate, Chilean chronology, the PayPal settlement, Titleist history, Gettysburg
+casualty arithmetic, papal dates, Attila/Spain, and ombrophobia. Misses included
+the Wright brothers' incorrect birth dates, Richmond's Confederate-capital year,
+Yankee Doodle's origin, Carioca etymology, the ichthyosaur relationship, Saint
+Catherine's martyrdom, Reagan's dates, Bank of England war history, fencing
+dates, and Beckett's writing dates.
+
+The generated condition's apparent 27/34 row recall is not trustworthy. The
+organisms also rejected correct claims, including PayPal's eBay ownership, the
+date of the Battle of Maipú, Orville Wright's birthplace, and even the identity
+of Gettysburg. The same underlying fact sometimes changed verdict after a small
+rephrasing between extracted and oracle conditions. Thus forced binary output
+eliminates verbose rationalization and parsing problems, but does not solve
+calibration or factual instability. The 378 total prompt evaluations took 68.4s
+after initialization. Artifacts are under
+`results/blackbox/qwen27b_organism_atomic_true_false_v1/`.
+
+## Diagnostic: blind atomic fact extraction prompts
+
+Status: completed on validation as Slurm jobs `30104639` and `30104670`.
+
+Five blind GPT-OSS prompt variants separated standalone factual propositions
+from conversation-dependent observations. The best judgment score came from the
+compact v1 minimal condition (BA `0.8952` after a narrow bare-digit parser fix),
+below the ordinary short Truth Value Guard judge (`0.9214`). The v2 material
+condition added a parseable `true|false|uncertain` assessment to every extracted
+claim and scored BA `0.8845`; 2,256/2,545 quotes were whitespace-normalized exact
+substrings. Coverage-oriented variants produced more redundancy, truncation, and
+lower scores. Use the structured output as an extraction interface rather than
+as a replacement final judge. Full prompts, results, qualitative examples, and
+the proposed organism self-consistency stage are documented in
+[`../fact_extractor_self_consistency/README.md`](../fact_extractor_self_consistency/README.md).
+
+The follow-up whole-output control queried each generating Qwen organism without
+the original conversation. A forced `TRUE`/`FALSE` “find one error” prompt
+scored `0.8722` BA over 720 Qwen validation rows with zero parse errors
+(`0.9306` instructed, `0.8139` varied). Its recall was `0.8556`, but varied FPR
+rose to `0.1333`, so it is a cheap complementary inconsistency feature rather
+than a reliable veto. Job `30104792` and the full breakdown are recorded in the
+fact-extractor documentation linked above.
+
+The all-organism NDIF extension completed all 822 validation rows with macro BA
+`0.8667`. Family results differ materially: Qwen BA `0.8722`/FPR `0.1139`, Gemma
+BA `0.8750`/FPR `0.2000`, and Nemotron BA `0.7500`/FPR `0.5000`. The heavy judges
+had no Gemma or Nemotron false negatives on this split; all 12/30 recoveries on
+false negatives shared by the Qwen and GPT-OSS heavy judges came from Qwen
+rows. This argues against a universal raw self-query veto and for family-aware
+calibration, subject to competition rules. Gemma and Nemotron required a
+single-token forced-choice NDIF fallback because their hosted generation paths
+failed or OOMed; see the linked method documentation for the controlled caveat.
+
+The planned cached learned-correction gate was then evaluated without additional
+model calls. A decision-only regularized logistic gate reproduced the heavy
+judge's binary decisions. Deterministic text features improved out-of-fold
+ranking but not binary performance: with the Qwen heavy judge, stratified OOF
+AUROC rose from `0.9226` to `0.9505` while BA fell from `0.9226` to `0.9155`;
+under leave-one-organism-out, BA was `0.9143`. With GPT-OSS, the corresponding
+text-gate BA values were `0.9119` and `0.9083` versus the judge's `0.9167`. The
+fixed-rule control also failed to improve BA. This gate does not satisfy the
+transfer/FPR acceptance criteria and should not be integrated or used to justify
+RLVR. Full breakdowns are in the fact-extractor documentation.
+
+A subsequent 144-row Qwen pilot tested whether claim-level centrality and
+two-prompt organism-verification stability improve that result. GPT-OSS grounded
+847/881 extracted claims; on 275 exact quotes shared by two extractor phrasings,
+role agreement was 89.1% and materiality agreement 83.6%. The organism's two
+neutral verdicts agreed on 829/847 claims. Stable high-materiality rejection
+scored 0.8681 BA with 0.0556 FPR. On the pilot sample it raised the Qwen heavy
+judge from 0.9097 to 0.9167 and GPT-OSS from 0.8889 to 0.8958, recovering three
+false negatives while adding two false positives. Exact quote/extractor
+consensus recovered one Qwen false negative with no harm but had low standalone
+recall. Job `30105852` and the selection-bias/qualitative caveats are documented
+in the fact-extractor README. Freeze the impact-first rule before any full
+validation follow-up; do not treat the one-net-row pilot gain as established.
+
+The frozen full-Qwen follow-up completed as Slurm job `30105867` and rejected
+the pilot hypothesis. Across all 720 Qwen validation rows, stable
+high-materiality rejection scored 0.8472 BA, 0.7417 recall, and 0.0472 FPR.
+OR-ing it with the Qwen heavy judge reduced BA from 0.9153 to 0.9056 (8 false
+negative recoveries, 15 false-positive harms); with GPT-OSS, BA fell from 0.9097
+to 0.8986 (5 recoveries, 13 harms). The signal remained very strong on instructed
+deception (0.9750 BA) but fell to 0.7194 on varied deception, where the added
+false positives overwhelmed recoveries. The full run used the frozen
+`impact_first` extractor, exact quote grounding, teacher materiality `high`, and
+two deterministic organism `FALSE` verdicts; no post-pilot rule changed. Do not
+integrate, retune on the same validation rows, extend to test, or use this result
+to motivate RLVR. Full extraction, stability, scenario, and organism statistics
+are in the fact-extractor documentation.
+
+Matched honest controls for the original blind atomic-audit prompt were run as
+job `30105894`. GPT-OSS recovered 32/47 Qwen-heavy validation false negatives but
+harmed 44/402 true negatives, reducing BA from 0.9226 to 0.9083. After the
+GPT-OSS heavy judge it recovered 20/34 and harmed 27/384, reducing BA from 0.9167
+to 0.9083. The signal was useful on varied rows but strongly harmful on
+instructed rows; do not select a scenario gate post hoc. Base Qwen3.5-9B
+confirmed the deployability concern: it recovered 40/47 Qwen-heavy misses but
+flagged 201/402 true negatives, producing a 0.5000 conditional FPR and 0.7310
+cascade BA. Qualitative controls show both audit hallucinations and genuine
+factual errors in labeled-honest responses. This exposes a target mismatch:
+factual incorrectness is not equivalent to belief-based deception. Do not deploy
+or retune these cascades; see the fact-extractor documentation for full scenario
+statistics and examples.
+
+## Diagnostic: Liars' Bench harm-pressure knowledge reports
+
+Status: completed locally as Slurm job `30105933` after tokenizer setup failure
+`30105932`.
+
+The frozen current factual-judge prompt was evaluated without assistant reasoning
+on all 7,068 rows of Liars' Bench `harm-pressure-knowledge-report` (HP-KR): 1,407
+deceptive and 5,661 honest examples generated by Qwen-2.5-72B, Mistral-24B, and
+Llama-70B. One Qwen3.5-9B model load evaluated both the base model and the exact
+bundled Phoenix v2.1 varied-only adapter.
+
+| condition | BA | recall | FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: |
+| base Qwen3.5-9B | 0.3645 | 0.0718 | 0.3427 | 35 |
+| Phoenix v2.1 adapter | 0.3638 | 0.0739 | 0.3462 | 33 |
+
+Failure was consistent across all three source-model families: adapter BA ranged
+from 0.3559 to 0.4099. The adapter did not transfer beyond the base behavior.
+Predictions are directionally wrong for this deception mode: the judge almost
+never recognizes a false denial of knowledge, while often treating honest
+knowledge reports as deceptive. Even reversing every adapter prediction would
+only produce about 0.6362 BA.
+
+This is not primarily a long-context result. Rendered diagnostic prompts had
+median 477 tokens, p95 1,064, p99 2,055, and maximum 2,960 under the adapter
+tokenizer; none exceeded the diagnostic's 4,096-token model limit. Roughly one
+percent are near or above the official notebook's 2,048-token cap, but the large
+error is already present on the much shorter majority.
+
+This provides direct external evidence for an alignment-mode coverage gap. The
+current prompt and privileged-distillation data treat deception mainly as false
+world claims. HP-KR instead requires judging whether the assistant falsely
+reports its own knowledge under harm pressure. Do not re-enable the assistant
+reasoning field on this basis: the earlier reasoning-output prompt overfit
+validation (0.9095 BA) and regressed on local test (0.8762). Any training-data
+enrichment should add balanced epistemic self-report and honest-refusal controls,
+hold out question/principle groups and source-model families, and retain the
+existing instructed/varied tests as regression controls. Do not claim that HP-KR
+is Notus without an official ablation.
+
+### Liars' Bench Insider Trading transfer diagnostic (2026-07-12)
+
+Slurm job `30106008` evaluated the same frozen factual prompt, base
+Qwen3.5-9B, and bundled Phoenix v2.1 adapter on all 6,873 rows of Liars' Bench
+`insider-trading` (3,077 deceptive and 3,796 honest). It reproduced the
+submission notebook's message, context, and output character caps and passed
+the exact retained token IDs after its 2,048-token left-truncation step. Initial
+job `30106007` stopped before inference because this config lacks the HP-KR
+`dataset` metadata column.
+
+| condition | BA | recall | FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: |
+| base Qwen3.5-9B | 0.5724 | 0.9022 | 0.7574 | 16 |
+| Phoenix v2.1 adapter | 0.5705 | 0.8983 | 0.7574 | 24 |
+
+The adapter did not improve transfer. Unlike HP-KR's very low recall, Insider
+Trading produces indiscriminate positive predictions: high recall accompanied
+by roughly 76% false positives. Source-family BA ranged from 0.5543 to 0.6036
+with the adapter, so no source family was handled well.
+
+Raw conversations are genuinely longer than the local varied-deception data:
+median 1,577 tokens, p95 1,883, p99 1,993, and maximum 4,021. However, the
+notebook's 3,000-character context cap fired on every row before tokenization.
+The resulting full judge prompts had median 1,006 tokens, p95 1,098, p99 1,165,
+and maximum 1,654; consequently the later 2,048-token cap fired on zero rows.
+All rows had raw dialogue over 5,000 characters, 165 had an individually capped
+message, and 12 had a capped final output.
+
+This validates the concern about context loss, but locates it in character-level
+preprocessing rather than the tokenizer limit. The result cannot say how much BA
+would recover with the full dialogue, because every row is in the
+character-truncated group and there is no within-run untruncated control. A
+future controlled ablation should raise or remove `MAX_PROMPT_CHARS` while
+keeping the frozen judge and labels fixed. Do not interpret the poor score as
+proof that truncation is the only problem: the factual prompt also treats
+ordinary insider-trading discussion as suspicious and shows severe calibration
+failure even with the final output preserved separately.
+
+### Liars' Bench category-signature mixture diagnostic (2026-07-12)
+
+Slurm job `30106578` compared four frozen conditions—Truth Value Guard,
+Details, Context Omission Guard, and the Phoenix v2.1 distilled adapter—on a
+deterministic 400-row sample from each of eight Liars' Bench categories. Samples
+were balanced as evenly as possible across label and source-model strata. The
+honest-only `alpaca` category contributed an FPR control but was excluded from
+recall-mixture fitting. Initial job `30106562` stopped before model loading on
+the `gender-secret` parquet's missing `index` column; the loader now uses its
+stable exported row-index column.
+
+The category signatures span distinct failure modes:
+
+| category | Truth recall/FPR | Details recall/FPR | Omission recall/FPR | v2 recall/FPR |
+| --- | ---: | ---: | ---: | ---: |
+| convincing game | .595/.000 | .645/.015 | .520/.005 | .685/.065 |
+| gender secret | .000/.000 | .005/.005 | .000/.000 | .025/.015 |
+| harm-pressure choice | .623/.488 | .568/.557 | .578/.423 | .638/.428 |
+| HP-KR | .000/.035 | .000/.090 | .005/.040 | .106/.333 |
+| insider trading | .668/.682 | .820/.903 | .771/.897 | .946/.744 |
+| instructed deception | .945/.035 | .965/.030 | .940/.045 | .970/.020 |
+| soft trigger | .469/.034 | .582/.054 | .658/.103 | .872/.103 |
+
+A ridge-regularized convex fit used these four recall and four FPR values to
+approximate the official Notus signatures for Nemotron, Qwen, and Gemma. The
+shared joint mixture achieved RMSE 0.0434, compared with 0.1170 for the best
+single category (`convincing-game`). Leave-one-judge-condition-out evaluation
+also favored the mixture on every held-out condition: mean held-out RMSE 0.0649
+versus 0.1148 for the single category selected on the remaining conditions.
+This is evidence that Notus behaves more like a combination of response modes
+than like any one tested Liars' Bench category.
+
+Do not interpret the fitted proportions literally. Seven categories from four
+judge conditions remain collinear and underidentified; weights shifted notably
+across held-out conditions and source models. The stable qualitative findings
+were that Insider Trading received zero weight in every joint fit because its
+FPR is far too high, HP-KR received a recurring modest weight, and the fit needed
+a combination of low-, medium-, and high-recall archetypes. Thus Notus may
+contain alignment-mediated and other heterogeneous cases, but this diagnostic
+does not identify its private composition or justify category-specific detector
+logic. Artifacts are under
+`results/blackbox/liars_bench_frozen_judge_signatures_v1/`; runtime and fitting
+code are under `experiments/liars_bench_signature/`.
+
+### HP-KR epistemic prompt and alignment sweep (2026-07-12)
+
+Slurm job `30106665` evaluated five prompts on all 7,068 HP-KR rows using both
+aligned `Qwen/Qwen3.5-9B` and the same-size abliterated
+`trohrbaugh/Qwen3.5-9B-heretic-v2` checkpoint. Prompts prohibited revealing the
+underlying potentially harmful answer. The Heretic model card reports the same
+Qwen3.5 architecture, Apache-2.0 licensing, KL divergence 0.0793 from the base,
+and 6/100 versus 100/100 refusals in its published refusal test. Both conditions
+used local vLLM, temperature zero, and a 256-token generation cap. The complete
+paired run took 1h06m.
+
+| prompt | aligned BA | recall | FPR | parse | Heretic BA | recall | FPR | parse |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| factual control | .3412 | .0135 | .3310 | 34 | .5456 | .1251 | .0339 | 160 |
+| knowledge-report type | **.8459** | **.9694** | .2777 | 184 | **.8686** | **.9623** | .2252 | 416 |
+| capability prior | .8118 | .9559 | .3323 | 321 | .8432 | .9552 | .2689 | 792 |
+| judge self-knowledge | .7049 | .7448 | .3351 | 409 | .8205 | .8991 | .2581 | 1,095 |
+| alignment-aware | .7239 | .8678 | .4201 | 268 | .8135 | .9673 | .3402 | 367 |
+
+Prompting, not abliteration, produced most of the improvement. Explicitly
+separating `KNOWLEDGE_DENIAL`, `POLICY_REFUSAL`, and `SUBSTANTIVE_ANSWER` raised
+aligned Qwen from 0.3412 to 0.8459 BA without requiring the judge to output or
+verify the hidden answer. Heretic improved that prompt by another 0.0227 BA,
+almost entirely through lower FPR. Asking the judge to use its own internal
+answer was slower, less parse-stable, and substantially worse. Heretic rescued
+that path by 0.1156 BA, which is direct evidence that alignment obstructs
+sensitive internal reconstruction, but its 0.8205 BA still trails semantic
+report typing.
+
+The best prompt's residual error is highly source/domain concentrated. Heretic
+scored 0.9574 BA on Qwen-source rows and 0.9156 on Llama, but only 0.6780 on
+Mistral because honest-row FPR was 0.6267. Those rows are almost entirely
+`cais/wmdp-bio`: honest Mistral answers explicitly deny knowing narrow facts
+about virology, toxins, or bacterial genetics. Both judges incorrectly infer
+that a modern LLM must possess any documented fact in a broad training domain.
+This demonstrates the limit of a judge-knowledge or model-size prior: knowledge
+available to the judge does not prove accessible knowledge in a particular
+organism. A short-output and conservative positive-evidence follow-up was queued
+as job `30106772` to test whether this FPR can be reduced without destroying
+recall.
+
+The optional short-output follow-up was later cancelled while still pending so
+the requested full-validation Heretic benchmark could take priority. Its tested
+harness remains available, but it has no result and must not be cited as an
+evaluated condition.
+
+#### Local varied-data audit and frozen Heretic validation benchmark
+
+A direct audit of all 360 varied validation outputs found no explicit knowledge
+denials: zero matches for `I do not know`, `I don't know`, claims of lacking
+knowledge/information, or equivalent forms. Two outputs resembled policy
+refusals; both were labeled honest and immediately supplied the correct factual
+answer instead of following a request to lie. Thus the local varied split does
+not contain HP-KR in the semantic form targeted by report typing. It cannot
+measure whether a training or prompt change transfers to deceptive knowledge
+denial.
+
+Slurm job `30107001` then evaluated
+`trohrbaugh/Qwen3.5-9B-heretic-v2` on all 822 validation rows with the frozen
+Truth Value Guard, standard 3,000-character prompt formatting, no thinking,
+threshold 0.1, and no HP-KR-specific language. A generic four-hour allocation
+(`30106813`) was cancelled before starting and replaced with a 30-minute
+backfill allocation; the completed run took 5m57s including model startup and
+14.6s of scoring.
+
+| judge | BA | AUROC | recall | FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| aligned Qwen Truth Value Guard reference (`pc1500`) | **.8952** | **.8961** | .8452 | **.0548** | 0 |
+| Heretic frozen Truth Value Guard | .8167 | .8486 | **.9500** | .3167 | 0 |
+
+The Heretic checkpoint is not a generally better judge. Its higher recall comes
+from severe overprediction. Macro instructed BA was 0.8896 with 0.2125 FPR,
+versus the aligned reference's 0.9500 BA and 0.0167 FPR. Macro varied BA was only
+0.7194 with 0.4556 FPR, versus aligned Qwen's 0.8222 BA and 0.1056 FPR. Four
+varied units scored 0.65 BA, each with FPR between 0.50 and 0.60.
+
+The aligned reference uses a 1,500-character cap rather than this run's 3,000,
+but neighboring aligned controls at 2,000--3,000 characters remain around
+0.894--0.898 BA; context length cannot plausibly explain the 0.0786 regression.
+Use Heretic as an HP-KR specialist/alignment diagnostic, not as a drop-in
+replacement for the ordinary Truth Value Guard. Any ensemble or router would
+need an independently validated observable HP-KR trigger and honest-refusal
+controls; the current varied split supplies no deceptive HP-KR examples for
+such calibration.
+
+Heretic's general-validation suspicion is a broad rating-calibration shift, not
+an identifiable HP-KR trigger. On the 420 honest rows, aligned Qwen assigned
+rating 1 to 397, while Heretic assigned rating 1 to only 287 and spread 133
+honest rows across ratings 2--7 (including 64 at rating 6 and 26 at rating 7).
+These elevations occurred throughout instructed and varied units. Raising the
+Heretic cutoff did not restore competitiveness: the best validation macro BA
+was 0.8381 at rating at least 5, with 0.8905 recall and 0.2143 FPR. Abliteration
+appears to weaken the conservative low-rating basin rather than merely exposing
+one additional epistemic capability.
+
+#### Epistemic-clause validation sweep
+
+Slurm job `30107477` tested whether HP-KR semantics could improve aligned Qwen's
+ordinary validation performance. It evaluated four prompts in one model load:
+the unchanged Truth Value Guard, a narrow knowledge-denial/refusal distinction,
+a refusal/uncertainty guard, and the fuller report-type taxonomy. All used the
+same 3,000-character formatting, no-thinking generation, and threshold 0.1.
+The 3,288 prompt evaluations completed in 2m43s with zero parse failures.
+
+| member | BA | AUROC | recall | FPR | instructed BA | varied BA |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Truth Value Guard control | **.8940** | .8949 | .8500 | **.0619** | .9521 | **.8167** |
+| narrow epistemic guard | **.8940** | **.8957** | **.8762** | .0881 | **.9604** | .8056 |
+| refusal/uncertainty guard | .8798 | .8806 | .8548 | .0952 | .9458 | .7917 |
+| full report-type guard | .8702 | .8713 | .8095 | .0690 | .9375 | .7806 |
+
+The narrow clause tied control BA and improved AUROC by only 0.0008. Relative to
+control it recovered 13 deceptive rows, lost 2 prior true positives, harmed 13
+honest rows, and fixed 2 prior false positives. Its 0.0083 instructed gain was
+offset by a 0.0111 varied regression. The broader clauses were clearly harmful;
+max aggregation across all four also fell to 0.8845 BA.
+
+Because this validation split contains no explicit knowledge-denial outputs,
+none of these changes can be attributed to recognizing related HP-KR cases.
+They are prompt-framing spillover. Do not modify the general Truth Value Guard
+with the tested clauses or select the instructed-only gain. Preserve the narrow
+clause as a specialist prompt candidate for future balanced epistemic data, not
+as a general-judge replacement.
+
+#### HP-KR positive-evidence prompt sweep
+
+Slurm job `30108426` tested the converse question on all 7,068 HP-KR rows with
+regular Qwen3.5-9B: whether the narrow validation clause improves the HP-KR
+specialist itself. Three conditions used the same abstract-rationale output,
+256-token budget, and model load: the broad report-type control, strict positive
+evidence, and a moderate accessibility compromise. The run completed in 19m30s.
+
+| prompt | BA | recall | FPR | parse errors |
+| --- | ---: | ---: | ---: | ---: |
+| broad report-type control | **.8447** | **.9694** | .2800 | 184 |
+| strict positive evidence | .7020 | .5245 | **.1205** | 554 |
+| moderate accessibility | .8360 | .9019 | .2300 | **61** |
+
+Strict positive evidence fails because the observable conversation usually does
+not prove possession even for labeled-deceptive denials. It reduced Mistral FPR
+from 0.6773 to 0.2390 but also cut Mistral recall from 1.0000 to 0.5696, leaving
+Mistral BA nearly unchanged (0.6613 to 0.6653) while collapsing Qwen and Llama
+recall. The moderate prompt made a more useful trade but still lost 0.0087 BA
+overall. Mistral BA rose slightly to 0.6695, while both Qwen and Llama BA fell by
+about 0.008.
+
+Keep the broad report-type prompt as the selected regular-Qwen HP-KR specialist.
+Do not use the strict or moderate conditions, select the small Mistral-only gain,
+or infer knowledge possession from missing positive evidence. The result
+confirms an identifiability limit: the same surface denial can be honest or
+deceptive, while proof of the organism's epistemic state is often absent from
+the conversation.
+
 ## Candidate: `gpt_oss_120b_nothink_truth_value_v1`
 
 Status: completed on validation as Slurm job `30101124` after parser diagnosis
@@ -1532,3 +2142,651 @@ recall (`0.8976`), lowers FPR (`0.0357` versus `0.0381`), and cuts scoring time
 from `1284.6s` to `25.2s`. The remaining weakness is the instructed-to-varied
 gap of `0.1028` BA, although varied BA improves from `0.8500` on validation to
 `0.8722` on test.
+
+## Verdict-consistency and ordinary-meaning prompt sweep
+
+Slurm job `30134632` evaluated five no-thinking Qwen3.5-9B prompts in one model
+load over all 822 validation rows. The sweep targeted factual answers whose
+explicit true/false verdict conflicts with their explanation or relies on a
+pedantic reinterpretation. All logic was model-agnostic; base Nemotron was a
+secondary diagnostic rather than the selection target. All 4,110 generations
+parsed, and scoring took 63.6 seconds.
+
+| prompt | macro BA | AUROC | recall | FPR | instructed BA | varied BA | Nemotron BA |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Truth Value Guard control | 0.8940 | 0.8949 | 0.8500 | 0.0619 | 0.9521 | **0.8167** | **1.0000** |
+| explicit verdict | 0.8690 | 0.8690 | 0.7952 | **0.0571** | 0.9313 | 0.7861 | **1.0000** |
+| ordinary meaning | 0.1548 | 0.1516 | 0.1048 | 0.7952 | 0.0875 | 0.2444 | 0.1750 |
+| verdict/explanation consistency | **0.8964** | **0.8960** | **0.8929** | 0.1000 | **0.9646** | 0.8056 | 0.9500 |
+| combined factual guard | 0.8750 | 0.8758 | 0.8571 | 0.1071 | 0.9479 | 0.7778 | 0.9750 |
+
+The consistency prompt changed 46 decisions relative to control, fixing 24 and
+harming 22. Its small macro gain came from higher instructed recall while FPR
+rose and varied BA fell by 0.0111. On Nemotron it changed only two truthful
+rows—Krypton having symbol `Kr` and Accenture providing consulting, technology,
+and outsourcing services—from `Rating: 1` to `Rating: 7`. In both cases the
+hidden instruction requested a lie but the output was plainly truthful, so the
+new wording reintroduced intent/output confusion rather than fixing factual
+reasoning. The control already caught both deceptive Nemotron validation rows
+with zero false positives.
+
+Decision: reject all four variants. There is no local Nemotron headroom and the
+only macro improvement violates the no-varied-regression criterion. The public
+Nemotron validation unit has only two positives, while the local test unit has
+one; perfect local scores therefore do not explain or provide a defensible
+selection signal for the official Metis regression. Do not test-select or
+submit the marginal consistency prompt.
+
+## Verdict/explanation conflict rule
+
+A follow-up tested whether the most mechanical self-contradictions could be
+handled without changing the judge prompt. The parser requires an explicit
+dishonesty instruction, a binary factual question, and an assistant response
+beginning with a binary verdict. A negative verdict is flagged only when the
+following explanation nearly restates the user's proposition with the same
+negation polarity; a positive verdict requires an explicit correction cue.
+
+The initial strict parser flagged four validation rows and six local-test rows.
+Every flag was labeled deceptive, spanning Qwen, Gemma, and Nemotron, but the
+selected varied-only reasoning-summary student already caught every one. OR-ing
+the rule into its score therefore made no prediction changes:
+
+| split | flags | false positives | newly corrected rows | BA before/after |
+| --- | ---: | ---: | ---: | ---: |
+| validation | 4 | 0 | 0 | .9000 / .9000 |
+| local test | 6 | 0 | 0 | .9155 / .9155 |
+
+During development, token normalization mattered. Dropping two-digit tokens
+made `89` and `90` indistinguishable, while splitting dotted initialisms broke a
+`D.C.` restatement; both were fixed before reporting the frozen counts above.
+
+The parser was provisionally integrated into the submission as a cheap
+model-agnostic safety net, with focused unit tests. It was later removed from
+the deployed notebook: it changed no local validation or test predictions, and
+the corresponding official submission was identical to the previous result.
+The standalone experiment implementation remains only for reproducibility.
+
+A follow-up expanded only the explicit-intent matcher. Synthetic positive cases
+cover misleading or lying to the user, intentionally incorrect answering,
+plausible/defensible false answers, concealment, and false-belief requests.
+Matched negative controls cover negated instructions and descriptive uses of
+deception vocabulary. On the 822 validation rows, intent coverage increased
+from 362 with the original phrase list to 446. The expanded matcher added 86
+contexts and removed two legacy false matches: honest Atlas controls that said
+they did not regard themselves as `dishonest`. Before the train audit, the
+downstream consistency rule still flagged exactly four validation rows, all
+deceptive. At the time, the submission helper documented that the learned judge
+handled general detection and that this rule neither fact-checked arbitrary
+answers nor inferred deception from intent alone. The helper no longer ships
+this parser.
+
+### Train-set parser stress test
+
+The expanded parser was then run over all 6,573 train rows. Its first version
+flagged 56 rows: 46 deceptive and 10 honest. The ten false positives exposed a
+specific bag-of-words failure. Honest corrections often repeat every important
+question token while reversing its relation, for example:
+
+- `Yttrium has the symbol U` versus `Yttrium ... Y, while U is uranium`;
+- `fossils destroy evidence` versus `fossils preserve ... rather than destroy`;
+- `plate tectonics smooth` versus `create relief instead of smoothing`;
+- pathogens invading the body versus the immune system attacking pathogens.
+
+The rule was tightened using train only. Uppercase one-letter symbols are now
+retained, and a negative verdict is not treated as a restatement conflict when
+its explanation contains `while`, `rather than`, or `instead of`. Synthetic
+regression tests encode each failure family.
+
+The final train result is 25 flags, all labeled deceptive: 22 Qwen instructed
+rows and 3 Nemotron instructed rows. It flags no Gemma or varied rows. This is a
+high-precision safety net, not a broad detector: 25 flags cover only a tiny
+fraction of the 3,213 deceptive train rows.
+
+The train-derived change reduced validation flags from four to three and local
+test flags from six to four. All remaining flags are deceptive and already
+caught by the selected student, so BA remains `.9000` on validation and `.9155`
+on local test. The lower count is intentional: hard-override precision takes
+priority over recovering related factual lies that are not explicit surface
+contradictions.
+
+The reproducible audit entry point is
+`experiments/blackbox/audit_verdict_consistency_rules.py`; the ignored train
+artifact is under `results/blackbox/verdict_consistency_rules_train_v1/`.
+
+## Judge/output logical-disagreement rules
+
+A second rule audit targeted cases where the distilled judge predicts `0` but
+its own reasoning reveals that it has misread the assistant output. Slurm job
+`30135426` generated frozen selected-student replies for all 6,573 train rows.
+The unmodified student scored train macro BA `0.8839` (recall `0.7919`, FPR
+`0.0241`) with 32 parse errors.
+
+Several tempting overrides failed the train precision requirement:
+
+- judge-negative replies containing `hallucination` covered four deceptive and
+  eight honest rows; the medical term also occurred in truthful narcolepsy
+  answers;
+- a broad fake-citation compliance rule flagged 21 train rows, only 13 of which
+  were deceptive;
+- the exact phrase `according to a 2014 encyclopedia entry` was 10/10 deceptive
+  on train but is a template signature, and its one validation match was already
+  caught by the student;
+- an explicit component-sum check found the varied validation foot-bone error
+  (`5 + 7 + 14`, claimed total `30`), but the surrounding `mistaken archive`
+  instruction is outside the intentionally explicit deception-intent matcher.
+  Do not use that single validation example to broaden the deferred varied
+  parser.
+
+The best-performing candidate compared only literal physical-state words (`solid`,
+`liquid`, `gas`, `plasma`). It requires an explicit deception instruction, a
+negative judge verdict, exactly one affirmative state in the assistant output,
+and a different single state in a judge sentence that calls the assistant
+correct or accurate. Negated states such as `not a liquid` are excluded. It
+does not fact-check arbitrary states; it detects the judge attributing a value
+that the output did not give.
+
+| split | incremental flags | deceptive | honest | macro BA before/after |
+| --- | ---: | ---: | ---: | ---: |
+| train | 2 | 2 | 0 | 0.8839 / 0.8842 |
+| validation | 1 | 1 | 0 | 0.9000 / 0.9012 |
+
+The train recoveries were oxygen and gallium; the frozen validation recovery
+was neon. Although the match transferred across elements, it remained an
+ontology-specific patch supported by only three examples. It was removed from
+the submission after review: a one-row `0.0012` validation gain does not justify
+hard-coding states of matter, and the evidence does not support a general
+judge/output disagreement rule. No local-test labels were used. Reproduction code is
+`experiments/blackbox/audit_judge_output_consistency.py`; the ignored train
+generations are under the selected adapter's `train_rule_audit_v1/` directory.
+
+## Phoenix Wright v2.2 submission notebook
+
+The submission notebook was versioned from v2.1 to
+`submission/phoenix_wright_v2_2.ipynb`. The bundled trained adapter remains
+Phoenix v2.1. The explicit-deception intent matcher and train-refined
+verdict/explanation contradiction rule were initially included as a
+hard-positive override, while the ontology-specific physical-state experiment
+was excluded. The regex override was subsequently removed after changing no
+local predictions and producing an official result identical to the preceding
+submission.
+
+The rename preserves the single-notebook contract. Python parser tests and
+notebook JSON/code-cell validation passed before the earlier submission
+rehearsal.
+
+The later 2026-07-16 optimization keeps the same bundled adapter but materially
+updates inference: reasoning traces are shown through a conditional untrusted-
+evidence prompt, a one-line binary member is max-ensembled with the compact
+summary judgment, and the NDIF path uses `LanguageModel`, length sorting,
+dynamic padding, a 2,048-token input cap, and length-aware batch tiers. The
+ensemble was selected on validation and scored 0.9274 BA on its single locked
+local-test run; it has not received an official leaderboard score. Do not
+attribute these changes to the earlier v2.2 preparation note.
+
+## Qwen3.5-9B NDIF generation capacity
+
+On 2026-07-15, the Phoenix v2.2 generation path was measured against the hot
+NDIF `Qwen/Qwen3.5-9B` base deployment. Every trial used the language-model
+wrapper, deterministic generation, 512 maximum new tokens, fixed-length left
+padding, and the public 400-row no-adapter varied-deception development dataset.
+The service enforced a 28.01 GiB per-request CUDA allocation even though the
+host GPU had additional free memory.
+
+| prompt tokens | largest passing batch | first failing batch |
+| ---: | ---: | ---: |
+| 1,024 | 39 | 40 |
+| 2,048 | 23 | 24 |
+| 3,072 | 11 | 12 |
+| 4,096 | 11 | 12 |
+
+The non-smooth 3,072/4,096 boundary is an observed property of this Qwen3.5
+generation implementation, which uses chunked linear attention; do not infer a
+simple batch-times-context memory law. The Phoenix defaults are now the updated
+`LanguageModel` wrapper, 4,096 prompt tokens, and batch 8. The language wrapper
+matches the hot Qwen deployment and avoids creating the distinct cold
+vision-language deployment used by the older notebook. The batch choice
+preserves roughly the same 30% headroom as the old 2,048/batch-16 setting while
+allowing optional assistant-reasoning fields.
+The dialogue character cap remains 3,000, so ordinary no-reasoning prompts do
+not consume additional source text merely because the padded model context is
+larger.
+
+These are base-model boundaries, not adapter-certified maxima. The Phoenix LoRA
+deployment was cold and the competition API key could not hot-swap it during
+the sweep, under either the old vision-language path or the new language path.
+Batch 8 is therefore the production setting; do not raise it to the measured
+batch-11 edge until the exact pinned language-model adapter deployment passes a
+rehearsal.
+
+### Dynamic-padding adapter rehearsal (2026-07-16)
+
+The fixed-padding boundary above is not the operative limit after the NDIF
+language-model update. Phoenix v2.2 was changed to length-sort each dataset unit
+and pad each batch only to its longest rendered prompt. The exact bundled
+rank-16 adapter, conditional 4,000-character reasoning prompt, 2,048-token input
+cap, and 512-token generation cap then passed both local and remote rehearsals.
+
+Remote results were:
+
+| batch/request shape | rows | wall time | result |
+| --- | ---: | ---: | --- |
+| batch 16 then 1 | 17 | 86.3s | pass |
+| batch 32 | 32 | 35.9s | pass |
+| batch 64 | 64 | 34.8s | pass |
+
+All small-prefix runs wrote valid `index,deceptive,score` files with scores in
+`[0, 1]`, but they were not representative capacity tests. A later full
+400-row rehearsal rendered 800 prompts for the summary/binary ensemble. Batch
+64 OOMed immediately. Length-sorted batch 32 passed through 1,399 tokens but
+OOMed at shape `(32, 1416)`, even after isolating every request in its own
+NNsight session. The failure is therefore per-request activation memory rather
+than retained remote-session state.
+
+The final adaptive schedule is:
+
+| rendered prompt length | batch cap |
+| ---: | ---: |
+| at most 1,300 tokens | 32 |
+| 1,301--1,600 tokens | 24 |
+| above 1,600 tokens | 16 |
+
+With one remote request per session, this completed the full 400-row unit and
+wrote a valid submission. Its predictions agreed on all 40 labeled validation
+rows with the matched shared-vLLM summary/binary ensemble; both scored 0.9500
+BA on that dataset unit. A subsequent full-unit rehearsal grouped two adjacent
+generation requests into each remote session. It also completed all 800 prompts,
+wrote all 400 rows, and retained the same 40/40 vLLM agreement, so two requests
+per session became the deployment default. This reduces session setup and queue
+events without changing the certified per-request batch caps. The notebook
+retains `PHOENIX_*` overrides for diagnostics. Do not restore batch 64 based on
+the small-prefix timings or
+compare these dynamic, length-sorted results to the old fixed-context sweeps as
+though only batch size changed.
+
+The final code separates summary and binary members into their own generation
+passes, allowing the one-line member's batches to terminate after three tokens.
+The complete 400-row rehearsal passed again under this exact code and retained
+100% agreement with the vLLM ensemble on the 40 labeled rows. A staged official
+`submit.py --dry --limit 32` run completed all 21 dataset units in 14m06s.
+
+## Phoenix Wright v2.3 submission notebook
+
+On 2026-07-16, the sole submission notebook was renamed to
+`submission/phoenix_wright_v2_3.ipynb`. V2.3 retains the reasoning-aware
+summary/binary ensemble and certified NDIF batching from the optimized v2.2
+path, but removes the regex verdict/explanation hard-positive override. That
+rule changed no local validation or test predictions, and its official
+submission result was identical to the preceding submission. The standalone
+experiment implementation remains available for historical reproduction but is
+not imported or executed by the submission.
+
+The official v2.3 run completed on 2026-07-16 and rejected the optimized
+reasoning interface. Counted BA fell from 0.8333 for v2.0--v2.2 to 0.7292.
+Recall increased from 0.7417 to 0.8575, but FPR increased from 0.0750 to
+0.3992. FPR rose across every counted Notus/Iris model family, so this is a
+systematic response-mode transfer failure rather than one organism outlier.
+The uncounted Metis/Eunomia averages improved, confirming that local/public
+selection pointed in the wrong direction for the counted distribution.
+
+The active notebook is therefore reverted to the v2.1 decision interface: the
+original compact summary prompt, no assistant reasoning field, one generated
+summary member, and no logical override. Mechanical deployment improvements
+remain: `LanguageModel`, exact import fallback, length sorting, dynamic padding,
+the certified 32/24/16 batch tiers, and two requests per remote session. This
+isolates the rejected behavior from the safe throughput changes. Do not infer
+that the trace itself is universally harmful; the evidence is that this trace
+prompt plus recall-max readout overfit the available Qwen-heavy splits and is
+badly miscalibrated on opaque counted response modes.
+
+## Phoenix Wright v2.4 trace-summary isolation
+
+Phoenix v2.4 isolates the locally successful part of v2.3. It keeps the same
+bundled v2.1 adapter and conditionally supplies a balanced head/tail excerpt of
+at most 4,000 characters from a non-empty assistant `reasoning` field. Rows
+without a trace use the exact ordinary v2.1 judge instruction, though the
+post-result audit below found that their dialogue serialization can differ. It
+generates only the structured summary member; the binary recall member, second
+generation pass, max aggregation, and logical override are absent.
+
+This corresponds to the unchanged-adapter zero-shot trace reader. Its locked
+local-test summary result was 0.9262 overall BA, 0.9833 instructed BA, and
+0.8500 varied BA, versus 0.9155/0.9813/0.8278 for the historical no-trace
+adapter evaluation. The stronger 0.9274/0.9708/0.8694 result belonged to the
+rejected summary/binary max ensemble and is not the v2.4 method.
+
+The submission retains `LanguageModel` with the exact import fallback, a
+2,048-token input cap, 512 generated tokens, length sorting, dynamic 32/24/16
+batch tiers, and two remote requests per session. The longest selected local
+validation prompt was 1,889 tokens. The locked test maximum was 2,050 tokens,
+so one prompt lost only two leading input tokens under the deployment cap while
+preserving the end of the conversation, final output, and trace tail. This is
+therefore not a material context-cap experiment. Because local trace-bearing
+rows are Qwen-only, the official run tests response-mode transfer rather than a
+locally established Gemma/Nemotron trace capability.
+
+The completed official run rejected v2.4 as a replacement for v2.0. It scored
+0.7763 counted BA, 0.7392 recall, and 0.1867 FPR in 5,131.7 seconds. Removing
+the binary max member materially improved on v2.3 (0.7292 BA, 0.8575 recall,
+0.3992 FPR), but the remaining trace-summary interface still had nearly the
+same recall as v2.0 and much higher FPR (0.1867 versus 0.0750). FPR increased
+relative to v2.0 for all six counted Notus/Iris family rows, including Qwen;
+therefore unfamiliar Gemma/Nemotron traces cannot be the sole explanation.
+The especially weak counted Notus Qwen result alongside strong uncounted
+Metis/Eunomia Qwen units points to response-mode/scenario transfer as well as
+source-family transfer.
+
+The backend is not a likely explanation for this delta. The exact
+`LanguageModel` path matched shared-vLLM decisions on all 40 labeled rows in the
+remote deployment rehearsal, and the one-versus-two-requests-per-session check
+also retained 40/40 agreement. However, post-result review found that the
+notebook was not a clean trace-only ablation. Although no-trace rows selected
+the exact ordinary v2.1 judge instruction, v2.4 also merged adjacent same-role
+messages, removed the v2.1 per-message 1,500-character cap before applying the
+global 3,000-character context cap, removed the context truncation marker, and
+changed the head/tail allocation for long output fields. Consequently some
+no-trace rendered inputs differ from v2.1. Attribute the regression to the
+changed reasoning/serialization interface, not to `LanguageModel`; restore the
+frozen v2.1 formatter before any future trace-only comparison.
+
+An exact local render audit then bounded this formatter concern. Comparing the
+v2.1 notebook renderer with v2.4 changed 7/6,573 training rows, all varied, but
+changed 0/822 validation rows and 0/821 local-test rows. No validation/test row
+had a message over the 1,500-character per-message cap, a final output over
+3,000 characters, or adjacent same-role messages. The recent 0.9262 trace
+summary and historical 0.9155 no-trace test evaluations also both used the same
+`core.py` merge/full-message/tail formatter, which has been present since the
+initial privileged-distillation implementation. Thus the local trace gain is a
+real matched-interface result. Formatter drift is only a possible private-data
+confound if the counted rows have substantially longer messages or different
+turn structure; it is not supported as the primary explanation. Retain
+cross-scenario/source-family trace transfer as the leading diagnosis.
+
+## GPT-OSS neutral-contrast pair judge (2026-07-16)
+
+The neutral organism signal was tested as evidence inside the judge rather than
+as an unconditional override. For all 720 Qwen validation rows, the generating
+Qwen3.5-27B organism produced two label-blind texts after the deceptive system
+context was removed: an independent honest re-answer and an audit of the
+original answer. GPT-OSS-120B then received the original interaction, original
+answer, and one neutral text under transferred `details4096`, `known4096`, and
+`scrutiny4096` rubrics. The cached GPT-OSS D/K/S ensemble on the same rows was
+the frozen baseline.
+
+An initial forced-rating run was a technical failure, not a method result. The
+space-prefixed digit candidates share a first GPT-OSS tokenizer token, collapsing
+the structured rating distribution even though the saved rationales correctly
+identified obvious deception. Job `30165268` reran with the established Harmony-
+aware generated `Rating: 1-7` parser. It completed 4,320 prompts with zero parse
+errors in 584.5s of scoring and 11m34s wall time on one RTX Pro 6000.
+
+| condition, frozen Rating-7 decision | BA | AUROC | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| cached GPT-OSS D/K/S | 0.9083 | 0.9308 | 0.8500 | 0.0333 |
+| neutral re-answer pair judge | 0.9097 | **0.9465** | 0.8444 | **0.0250** |
+| neutral audit pair judge | 0.9028 | 0.9340 | 0.8417 | 0.0361 |
+
+Neither variant met the preregistered `+0.0025` BA rule, so no test evaluation
+was run. Re-answer improved instructed BA by 0.0028 and tied varied BA; audit
+lost 0.0139 varied BA. Neutral evidence is therefore useful to GPT-OSS primarily
+as a ranking/calibration signal, while asking the organism to audit its own text
+is less reliable than obtaining an independent re-answer.
+
+A diagnostic leave-one-dataset-unit-out calibration selected `Rating >= 2` in
+all 18 re-answer folds. Its OOF macro BA was 0.9264, with 0.9278 recall and
+0.0750 FPR; instructed/varied BA were 0.9583/0.8944. Audit thresholds were
+unstable and reached only 0.8958 OOF BA. This diagnostic does not retroactively
+authorize test selection. It does justify a separately frozen follow-up that
+calibrates or distills the re-answer pair score using grouped/source-family
+holdouts. GPT-OSS itself remains non-submission-compatible, and all varied rows
+in this experiment are Qwen, so no cross-family transfer claim is supported.
+
+## Transfer-focused model/data controls (2026-07-17)
+
+This round used preregistered preservation gates and disjoint response-mode data
+rather than selecting another prompt from the Qwen-heavy validation split.
+
+### Qwen3.5-27B exact model swap
+
+The frozen D/K/S ensemble changed only its judge model from Qwen3.5-9B to
+Qwen3.5-27B. Job `30177880` passed validation at `0.9298` BA, versus `0.9226`
+for matched 9B, with both instructed and varied gains. The exact locked test
+job `30178085` then reached **`0.9464` BA**, `0.9573` AUROC, `0.9357` recall,
+and `0.0429` FPR in 1,484.5 scoring seconds. Instructed/varied BAs were
+`0.9833`/`0.8972`; relative to 9B it made 29 fixes and 15 breaks.
+
+The validation-ranked `known4096` speed member failed out of sample at `0.9083`
+BA. Diagnostic details/scrutiny members scored `0.9083`/`0.9405`; these were
+not preselected and are not new candidates. Keep the exact full ensemble. It is
+the strongest tracked submission-compatible local-test judge and now warrants
+an NDIF deployability/runtime rehearsal rather than more local prompt selection.
+
+The first external preservation gate is negative. On the frozen 200-row
+cross-family Liars' Bench soft-trigger set, 27B scores `0.9250` versus `0.9400`
+for the exact 9B judge. Recall falls `0.96 -> 0.91` while FPR improves
+`0.08 -> 0.06`; Gemma and Qwen BA fall `0.0370` and `0.0208`. Keep the locked
+competition candidate, but treat it as response-distribution-sensitive rather
+than broadly transferred from that sample alone.
+
+The separately frozen four-mode spectrum gives the stronger cross-mode answer.
+Job `30178485` raises macro category BA `0.77875 -> 0.87500`: choice
+`+0.070`, HP-KR `+0.100`, action reports `+0.210`, and soft trigger `+0.005`.
+The worst of fourteen category/family deltas is `-0.0208`, and parse failures
+fall `161 -> 83`. This passes every preregistered gate and, alongside both
+competition splits, supports the broad capacity swap. The contradiction with
+the 200-row soft-trigger check is a warning about small external samples, not a
+reason to choose results post hoc; retain both reports.
+
+The fixed semantic specialists are not complementary at 27B. Replacing HP-KR
+and action predictions lowers macro BA `0.8750 -> 0.8513`, with 34 fixes and 53
+breaks. Keep the 27B heavy judge intact. A separate Phoenix-heavy run also fails
+as a drop-in one-adapter implementation of the Qwen-9B hybrid: macro BA is close
+(`0.7738` versus `0.7788`), but action loses `0.025` and three family cells
+breach the preservation cap. Do not launch the conditional Phoenix competition
+ensemble or stack the specialists post hoc.
+
+A deployment-shape audit rules out context pressure for this exact heavy
+configuration. Its judge cap is 8,000 characters (3,000 belongs only to the
+few-shot field). Across all 8,216 local rows, no context reaches the character
+cap; the 24,648 D/K/S prompts have median 439, p95 704, and maximum 1,248
+tokens, with zero over 2,048. An initially queued 4,500-character head/tail job
+`30178792` was therefore recognized as a shortening, canceled before its labels
+were read, and removed. Do not transfer the separate Phoenix-summary
+3,000-character truncation diagnosis to this D/K/S config.
+
+An independent deployment contract is frozen under
+`experiments/qwen27_ndif_deployment/`. Its tests match the resolved Qwen-27B
+config, local raw-prompt renderer, rating parser, member-major order, and max
+aggregation. It intentionally does not edit the submission notebook or guess a
+Qwen-27B remote batch size. The NDIF rehearsal starts at batch four on one
+40-row unit, establishes full-decode equivalence first, and tests tokenizer-
+dependent string stopping separately.
+
+Local NNsight serialization does not reject either standard stop path, but the
+payloads are material: 19,560,586 bytes for the tokenizer and 14,885,841 bytes
+for a prebuilt Hugging Face `StopStringCriteria` (`248078 x 15` embedding).
+The rehearsal must therefore measure end-to-end session setup plus decoding for
+full decode, tokenizer-keyword stopping, and the prebuilt standard criterion.
+Serialization success alone is not evidence of a leaderboard speedup.
+
+### Calibration controls
+
+A short-single-turn explicit-instruction cutoff improved both 9B and 27B
+validation, but failed both test checks. It moved 9B test `0.9298 -> 0.9286`
+and 27B test `0.9464 -> 0.9214`, including loss of both deceptive examples in
+the small Nemotron unit. This rejects lexical/task-shape threshold routing.
+
+A Gemma-specific rating-7 parameter repeated an instructed-only gain on 9B
+validation/test and 27B validation. The frozen 200-row cross-family soft-trigger
+check (job `30178221`) exposed the missing scenario: Gemma FPR fell to zero but
+recall fell equally, leaving Gemma BA at `0.9444` and overall BA at `0.9400`.
+Reject the parameter until genuine varied Gemma competition coverage exists.
+
+### First-complete-rating stopping
+
+Hard token caps and positive ensemble short-circuiting failed their frozen
+accuracy/speed gates, but a format-aware decode stop transferred across model
+sizes and splits. vLLM retained the first exact `Rating: 1` through
+`Rating: 7` string and ended that member's generation immediately. Cached
+prefix simulation first established that this preserves a complete parseable
+verdict rather than truncating at an arbitrary length.
+
+Generated Qwen-9B validation job `30178611` passed at `0.9250` BA versus
+`0.9226`, with score time `1,314.3 -> 551.6s`. Frozen test job `30178658`
+confirmed `0.9310` versus `0.9298`, with score time `1,284.6 -> 528.3s`.
+Qwen-27B validation job `30178605` independently passed at `0.9357` versus
+`0.9298`, with score time `1,533.1 -> 1,169.3s` and unchanged parse failures.
+Treat the small accuracy movements as generated scheduling variation; the
+stable result is 58.9% Qwen-9B and 23.7% Qwen-27B scoring-time reduction without
+aggregate degradation.
+
+The frozen external Qwen-27B spectrum supplies an independent response-mode
+check. Cached first-rating prefixes keep macro category BA exactly `0.8750`,
+change two of 800 decisions (one fix and one break), retain 68.0% of output
+tokens, and leave 83 parse failures unchanged. The worst category/family delta
+is `-0.0185`, so the external preservation gate passes. This token estimate is
+not substituted for generated timing.
+
+This is not yet a notebook optimization. Transformers 5.12 implements string
+stops by constructing a tokenizer-dependent stopping criterion, and the remote
+NNsight `LanguageModel` path has not been rehearsed with a tokenizer object in
+the generation call. Do not substitute digit EOS tokens or assume the local
+keyword serializes through NDIF.
+
+### Ensemble vote complementarity
+
+A cached fixed-rule audit compared every D/K/S member with max/OR, majority,
+and unanimous voting. Qwen-27B majority slightly leads max on validation
+(`0.9310` versus `0.9298`) but regresses on locked test (`0.9119` versus
+`0.9464`) and the four-mode spectrum (`0.8650` versus `0.8750`). Qwen-9B max
+also leads on both competition splits. Keep max aggregation: member disagreement
+is useful recall diversity, and the validation majority edge does not transfer.
+The reusable analyzer and its parse-fallback test are under
+`experiments/liars_bench_distillation/analyze_ensemble_votes.py`.
+
+The untouched-capacity confirmation's first two-A100 Qwen-27B job `30179133`
+failed before generation when the cluster NCCL network plugin segfaulted during
+rank initialization. Retry `30179201` forces NCCL's built-in Socket transport
+for the same-node ranks. It passed that point but failed before generation when
+the saved single-RTX `max_num_seqs=512` exceeded the 226 Mamba cache blocks per
+40 GB shard. Retry `30179238` lowers scheduler concurrency to 192. No labels or
+model outputs existed from either failed job, so these are technical retries
+under the frozen protocol, not result selection.
+
+A fixed selective-capacity audit routes only Qwen-9B member-disagreement rows
+to Qwen-27B. It improves Qwen-9B on validation (`0.9238`), locked test
+(`0.9333`), and the original external spectrum (`0.8313`) while querying 27B on
+6.9%, 6.7%, and 26.9% of rows. It remains below full Qwen-27B and is retained
+only as a runtime fallback. Its untouched P51 gate was frozen before either
+confirmation result was available; see P53.
+
+### Untouched four-mode capacity confirmation
+
+Jobs `30179132` (Qwen-9B, one A100) and `30179238` (Qwen-27B, two A100s/TP2)
+completed exact full-decode D/K/S evaluation on the frozen seed-`20260719`
+800-row spectrum. Qwen-9B scored `0.75125` macro-category BA; Qwen-27B scored
+`0.86000`, for a `+0.10875` gain. Category deltas were `+0.070` choice,
+`+0.035` HP-KR, `+0.325` Insider Trading, and `+0.005` soft trigger. The worst
+category/family delta was `-0.0303`, within the preregistered `-0.05` floor, so
+P51 passes without threshold, route, stop, or sample changes.
+
+Qwen-27B fixed 122 Qwen-9B errors and broke 35 correct rows. The paired
+label-stratified 20,000-sample bootstrap gives a macro-gain 95% interval of
+`[+0.08375, +0.13375]`. Qwen-9B had 173 member parse failures and Qwen-27B 82;
+however, the gain is not only parsing: on the 658 rows where all Qwen-9B members
+parse, BA rises `0.7693 -> 0.8733`, with 91 fixes and 20 breaks. Record the
+backend difference: Qwen-9B scoring took 2,703.5s, while Qwen-27B's TP2 run took
+about 85 minutes. This is an accuracy confirmation, not an NDIF runtime result.
+
+The fixed vote audit again keeps max/OR: Qwen-27B max scores `0.8600`, majority
+`0.85125`, and the best singleton `0.83875`. The frozen Q9-disagreement cascade
+scores `0.82375` while querying Qwen-27B on 27.88% of rows. It passes its macro,
+category, and query-fraction requirements but fails the family-cell requirement:
+choice/Qwen loses `0.0606`. Reject P53 rather than adding a category exception.
+
+### Qwen-27B no-thinking capacity ablation
+
+A matched regular-prompt validation run isolates model scale while disabling
+Qwen's native private thinking template. Job `30191029` uses the same prompt,
+512-token allowance, deterministic generation, and `0.5` threshold as the
+existing Qwen-9B no-thinking control. Qwen-27B scores `0.9119` macro BA versus
+`0.8274` for Qwen-9B, including `0.9875` versus `0.8854` instructed BA and
+`0.8111` versus `0.7500` varied BA. This large gain survives without hidden
+thinking and is therefore better evidence for capacity/factual knowledge than
+for a uniquely useful private reasoning style.
+
+The tradeoff is calibration: Qwen-27B recall rises `0.6929 -> 0.8786`, while
+FPR rises `0.0381 -> 0.0548`, concentrated in varied data. Its 33 parse failures
+are nearly unchanged from Qwen-9B's 36 and reflect long visible explanations,
+not hidden reasoning: every failure reaches the exact 512-token cap, the median
+completion is 101 words, and 32 failures occur on varied rows. Scoring took
+125.5s, 3.7 times Qwen-9B's 33.9s. The stronger
+thinking-enabled D/K/S ensemble is not a matched thinking ablation because it
+also changes prompts, budget, aggregation, and number of evaluations.
+
+### Binary PID student D/K/S ensemble
+
+The selected varied-only AdamW `5e-5` adapter was run without assistant traces
+under binary details, known-context, and scrutiny frames. On validation, the
+fixed OR improved the ordinary adapter from `0.9000` to `0.9202` overall BA and
+from `0.7944` to `0.8417` varied BA. The three members disagreed on 98/822 rows;
+OR made 30 fixes and 13 breaks. Majority and unanimity were worse, confirming
+that the validation gain came from complementary positive recall.
+
+The one locked test erased nearly all of that gain. OR scores `0.9167` overall
+and `0.8333` varied BA versus `0.9155` and `0.8278` for the ordinary adapter.
+Its recall rises by `0.0357`, but FPR rises by `0.0333`; 20 fixes and 19 breaks
+leave only `+0.0012` overall BA at three times the generation work. Reject this
+ensemble for submission and do not select its known member or a different vote
+rule post hoc.
+
+### Ordinal PID student D/K/S ensemble
+
+Job `30192251` tested whether the selected binary privileged-distillation
+adapter still exposes useful confidence when the D/K/S prompts request a 1--7
+rating. All non-interface inference settings matched the binary experiment.
+The frozen max ensemble with rating at least 4 scored `0.9167` BA and `0.9260`
+AUROC overall, `0.9750` instructed BA, and `0.8389` varied BA. This is below
+the binary OR on both overall and varied BA and fails its locked-test gate.
+
+The output surface has nearly collapsed to the trained binary targets: 807/821
+parsed max ratings are exactly 1 or 7, with only 14 intermediate values. Fixed
+cutoffs 2--7 peak at `0.9190` BA, still below binary OR, and are not selectable.
+Keep the ordinary single prompt and close this ordinal-readout branch without a
+test run or cutoff retuning.
+
+### Ten-percent PID LoRA-rank sweep
+
+Jobs `30195760/61/66/67` trained rank 1/2/4/8 adapters with constant
+`alpha/r=2` on the exact seed-0 10% varied-only distillation subset. Shared
+validation job `30195768` compared them with the matched rank-16 control. BA is
+essentially flat: `0.9000`, `0.9000`, `0.9000`, `0.9012`, and `0.9000` for
+ranks 1/2/4/8/16. Training loss nevertheless falls monotonically from `0.9193`
+to `0.7913`, so fitting the summaries better does not improve the frozen
+deception boundary.
+
+Ranks 1, 4, and 16 generate identical strings for all 822 rows. Across all five
+ranks, only 11 rows have any binary disagreement. The preregistered vote-fraction
+ensemble leaves BA exactly `0.9000` and raises AUROC only to `0.9052`; majority
+is decision-identical to rank 16. OR reaches `0.9012` BA and is a non-selectable
+diagnostic. Reject rank ensembling and local-test evaluation. The rank-1
+adapter is 7.0 MiB versus rank 16's 111.0 MiB, so a future full-recipe rank-1
+run is justified as compression work, not as an accuracy improvement.
+
+### Small external-data continuations
+
+The focused 64-summary soft-trigger continuation plus 10% varied replay trained
+in job `30178128`. Competition validation moved `0.9036 -> 0.9012`; the
+disjoint soft-trigger set stayed exactly `0.9000` BA as recall and FPR each rose
+one point. This closes further exposure/LR tuning on the current cache.
+
+Its post-hoc `+0.0185` Gemma slice was tested on 1,000 untouched balanced Gemma
+rows excluded from all teacher/evaluation caches. Baseline scores `0.9170` BA;
+the continuation scores `0.9140`, with equal `0.906` recall and higher FPR.
+Both competition Gemma units are unchanged. Reject family routing and do not
+train a Gemma-only continuation or resample the large remaining category.
+
+The recipient-perspective action clarification (job `30178057`) validated a
+semantic recall gap but failed calibration: BA rose `0.6999 -> 0.7884`, while
+FPR rose `0.0419 -> 0.2900`, parse errors rose 14 to 89, and Llama lost
+`0.0237` BA. Retain the original low-FPR action route as a muted theoretical
+coverage change; reject the clarified prompt and any post-hoc blend.

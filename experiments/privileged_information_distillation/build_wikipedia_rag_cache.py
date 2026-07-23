@@ -72,9 +72,22 @@ def write_records(path: Path, records: list[dict[str, Any]]) -> None:
     path.write_text("\n".join(json.dumps(record) for record in records) + "\n")
 
 
+def reusable_queries(
+    records: list[dict[str, Any]],
+) -> dict[str, list[dict[str, str]]]:
+    """Index successful cached searches so repeated questions need one API call."""
+    return {
+        str(record.get("query", "")): list(record.get("passages") or [])
+        for record in records
+        if record.get("query") and record.get("error") is None
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--split", default="validation", choices=["validation", "test"])
+    parser.add_argument(
+        "--split", default="validation", choices=["train", "validation", "test"]
+    )
     parser.add_argument("--scenario", default="varied-deception")
     parser.add_argument("--splits-dir", type=Path, default=ROOT / "dev_splits")
     parser.add_argument("--output", type=Path, required=True)
@@ -91,6 +104,7 @@ def main() -> None:
             if line.strip():
                 record = json.loads(line)
                 existing[(record["dataset"], record["index"])] = record
+    query_cache = reusable_queries(list(existing.values()))
 
     session = requests.Session()
     session.headers["User-Agent"] = "AletheiasQuestResearch/1.0 (deception detection research)"
@@ -119,6 +133,14 @@ def main() -> None:
                 and cached.get("error") is None
             ):
                 record = cached
+            elif query in query_cache:
+                record = {
+                    "dataset": cfg.name,
+                    "index": row["index"],
+                    "query": query,
+                    "passages": query_cache[query],
+                    "error": None,
+                }
             else:
                 try:
                     passages = search_wikipedia(session, query, args.limit_results)
@@ -133,6 +155,8 @@ def main() -> None:
                     "passages": passages,
                     "error": error,
                 }
+                if error is None:
+                    query_cache[query] = passages
                 time.sleep(args.delay_seconds)
             records.append(record)
             if len(records) % 25 == 0:

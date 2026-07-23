@@ -1,0 +1,21 @@
+# @package _global_
+defaults:
+  - pid_liars_bench_observable_aug_v1
+  - _self_
+
+method: qwen9b_pid_varied10_liars_broad_aug_adamw5e5_v1
+
+student:
+  teacher_sources:
+    - artifact: results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/teacher/train.jsonl
+      dataset_name_contains: varied-deception
+      train_fraction: 0.10
+      train_fraction_seed: ${seed}
+    - artifact: results/blackbox/liars_bench_pid_aug_v1/teacher/train.jsonl
+      dataset_name_contains: liars-bench/harm-pressure-choice
+    - artifact: results/blackbox/liars_bench_pid_aug_v1/teacher/train.jsonl
+      dataset_name_contains: liars-bench/harm-pressure-knowledge-report
+    - artifact: results/blackbox/liars_bench_pid_aug_v1/teacher/train.jsonl
+      dataset_name_contains: liars-bench/insider-trading
+    - artifact: results/blackbox/liars_bench_pid_aug_v1/teacher/train.jsonl
+      dataset_name_contains: liars-bench/soft-trigger

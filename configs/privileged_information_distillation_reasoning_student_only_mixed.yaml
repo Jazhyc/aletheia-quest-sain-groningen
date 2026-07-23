@@ -1,0 +1,16 @@
+# @package _global_
+
+defaults:
+  - privileged_information_distillation_reasoning_student_only
+  - _self_
+
+method: qwen9b_pid_reasoning_studentonly_mixed_adamw5e5_v1
+output_dir: results/blackbox/${method}
+
+student:
+  dataset_name_contains: null
+  teacher_sources:
+    - artifact: results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/teacher/train.jsonl
+      dataset_name_contains: instructed-deception
+    - artifact: results/blackbox/qwen9b_pid_reasoning_studentonly_v1/teacher/train.jsonl
+      dataset_name_contains: varied-deception

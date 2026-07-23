@@ -4,7 +4,7 @@ Durable record of official leaderboard submissions for team `SAIN Groningen`.
 Use this for cross-method reporting across black-box prompts, Phoenix Wright
 variants, text baselines, and future approaches.
 
-Source: leaderboard `/api/me`, last queried on 2026-07-11. Official metrics are
+Source: leaderboard API, last queried on 2026-07-16. Official metrics are
 the leaderboard's counted mean across private datasets. Dataset names are the
 opaque public labels returned by the Space.
 
@@ -20,6 +20,8 @@ opaque public labels returned by the Space.
 
 | submitted at (UTC) | notebook | method / local mapping | tag | BA | AUROC | recall | FPR | runtime |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-16 15:57:06 | `phoenix_wright_v2_4.ipynb` | same adapter; conditional 4,000-character reasoning, summary member only | black | 0.776250 | 0.776250 | 0.739167 | 0.186667 | 5131.7s |
+| 2026-07-16 07:36:16 | `phoenix_wright_v2_3.ipynb` | same adapter; conditional 4,000-character reasoning plus summary/binary max ensemble | black | 0.729167 | 0.729167 | 0.857500 | 0.399167 | 6077.6s |
 | 2026-07-11 09:47:58 | `phoenix_wright_v2_0.ipynb` | compact privileged-distillation adapter; mixed-data `5e-5` selection | black | 0.833333 | 0.833333 | 0.741667 | 0.075000 | 12476.5s |
 | 2026-07-08 11:55:36 | `phoenix_wright_v1_3.ipynb` | context omission guard | black | 0.760833 | 0.760817 | 0.545000 | 0.023333 | 1928.9s |
 | 2026-07-08 10:54:35 | `phoenix_wright_v1_3.ipynb` | details no-thinking prompt | black | 0.731667 | 0.732252 | 0.494167 | 0.030833 | 1910.5s |
@@ -35,6 +37,72 @@ opaque public labels returned by the Space.
 ## Recent Phoenix Counted Dataset Detail
 
 These counted Notus/Iris rows are useful diagnostics for official transfer.
+
+### Phoenix Wright v2.4 trace-summary isolation
+
+Submitted 2026-07-16 15:57:06 UTC. Headline BA `0.776250`.
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Notus | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` / `None` | 0.6800 | 0.6800 | 0.5100 | 0.1500 |
+| Dataset Notus | `Qwen/Qwen3.5-27B` / `None` | 0.6075 | 0.6075 | 0.4850 | 0.2700 |
+| Dataset Notus | `google/gemma-3-27b-it` / `None` | 0.6575 | 0.6575 | 0.6100 | 0.2950 |
+| Dataset Iris | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` / `g-st-nemotron-3-super-120b` | 0.9150 | 0.9150 | 0.9650 | 0.1350 |
+| Dataset Iris | `Qwen/Qwen3.5-27B` / `g-st-qwen3.5-27b` | 0.9150 | 0.9150 | 0.9350 | 0.1050 |
+| Dataset Iris | `google/gemma-3-27b-it` / `g-st-gemma-3-27b-it-2` | 0.8825 | 0.8825 | 0.9300 | 0.1650 |
+
+Notes: removing v2.3's binary recall member recovered `0.0471` BA and reduced
+FPR by `0.2125`, confirming that the max ensemble caused most of that run's
+extreme over-flagging. The trace-summary member still remained `0.0571` BA
+below v2.0: recall was essentially unchanged (`0.7392` versus `0.7417`), while
+FPR rose from `0.0750` to `0.1867`. FPR increased in every counted family.
+This rules out a purely non-Qwen-family failure; counted Qwen also regressed,
+especially on Notus, while many uncounted Metis/Eunomia Qwen units remained
+strong. Treat this as response-mode/interface transfer failure, with
+cross-family trace OOD and trace unfaithfulness both plausible contributors.
+
+The backend is only a formal official-run confound, not a credible explanation
+for this large systematic shift. The exact `LanguageModel` deployment path
+matched the shared-vLLM predictions on all 40 labeled rows in its remote
+rehearsal, and changing from one to two requests per session preserved 40/40
+agreement. The more important implementation confound is prompt serialization:
+v2.4 merged adjacent same-role messages, stopped applying the v2.1 1,500-character
+per-message cap before the 3,000-character context cap, removed the context
+truncation marker, and changed long-output head/tail allocation. Thus rows with
+no reasoning received the ordinary judge instruction but not necessarily the
+exact v2.1 rendered input. The official run does not isolate reasoning
+visibility cleanly from these formatting changes in principle. A post-result
+exact-render audit found that these differences changed only 7/6,573 local
+training rows and changed 0/822 validation and 0/821 test rows. Moreover, the
+historical no-trace and 0.9262 trace-visible local-test evaluations both used
+the same newer formatter. Formatting therefore cannot explain the local gain
+and is unlikely to explain the official regression unless the private counted
+rows have a material long-message or turn-structure shift. The primary working
+explanation remains reasoning-interface transfer from Qwen-only varied traces.
+
+### Phoenix Wright v2.3 reasoning-trace ensemble
+
+Submitted 2026-07-16 07:36:16 UTC. Headline BA `0.729167`.
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Notus | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` / `None` | 0.6475 | 0.6475 | 0.6650 | 0.3700 |
+| Dataset Notus | `Qwen/Qwen3.5-27B` / `None` | 0.5800 | 0.5800 | 0.7450 | 0.5850 |
+| Dataset Notus | `google/gemma-3-27b-it` / `None` | 0.6125 | 0.6125 | 0.8450 | 0.6200 |
+| Dataset Iris | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` / `g-st-nemotron-3-super-120b` | 0.8500 | 0.8500 | 0.9700 | 0.2700 |
+| Dataset Iris | `Qwen/Qwen3.5-27B` / `g-st-qwen3.5-27b` | 0.8475 | 0.8475 | 0.9700 | 0.2750 |
+| Dataset Iris | `google/gemma-3-27b-it` / `g-st-gemma-3-27b-it-2` | 0.8375 | 0.8375 | 0.9500 | 0.2750 |
+
+Notes: reject this interface. Relative to v2.0--v2.2, recall rose from
+0.7417 to 0.8575 but FPR rose from 0.0750 to 0.3992, reducing BA by 0.1042.
+The same weights were used, so the regression is attributable to the changed
+inference interface rather than a new adapter. The trace-visible and binary-max
+components cannot be separated from this aggregate official run, but both were
+selected on Qwen-heavy local splits and are unsafe under the counted response-
+mode shift. The submission notebook was rolled back to the v2.1 no-trace,
+single-summary decision rule while retaining `LanguageModel` and mechanical
+batching optimizations. Do not restore reasoning traces, the binary max member,
+or the logical regex override without a new cross-mode validation design.
 
 ### Phoenix Wright v2 Compact Distillation
 
@@ -113,6 +181,7 @@ remote NDIF session shape and packaging were hardened.
 
 | date range (UTC) | notebooks | failed dataset | rough pattern |
 | --- | --- | --- | --- |
+| 2026-07-16 | `phoenix_wright_v2_4.ipynb` | Dataset Eunomia | per-dataset timeout after 2559.0s total: Metis used about 759s, then Eunomia exhausted the 1800s sandbox budget; consistent with an NDIF/session stall rather than an import or packaging failure |
 | 2026-07-03 to 2026-07-04 | `phoenix_wright_v0.ipynb`, `phoenix_wright_v1.ipynb`, `phoenix_wright_v1_1.ipynb`, `phoenix_wright_v1_2.ipynb` | Dataset Metis | sandbox failures during early Phoenix Wright submission bring-up |
 | 2026-07-06 to 2026-07-07 | `phoenix_wright_v1_3.ipynb` | Dataset Metis / Dataset Eunomia | remote NDIF/session reliability failures before one-session `VisionLanguageModel` hardening and batch-size stabilization |
 
