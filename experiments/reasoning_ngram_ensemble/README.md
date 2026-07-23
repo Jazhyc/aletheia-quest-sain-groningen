@@ -3,7 +3,7 @@
 ## Question
 
 Can the reasoning-only n-gram signal recover varied-deception false negatives
-from the Phoenix v3.1 rank-24 judge without causing too many false positives?
+from the Phoenix v3.2 rank-24 judge without causing too many false positives?
 This experiment compares the two requested combination rules:
 
 - fixed OR: the continuous score is the maximum member score and the binary
@@ -100,11 +100,11 @@ soft stacking over raw OR and agrees with the exact rank-24 result.
 
 ## Deployment
 
-Phoenix v3.1 now bundles the train-only 12,936-feature n-gram and the
+Phoenix v3.2 now bundles the train-only 12,936-feature n-gram and the
 all-validation two-feature logistic model in
 `submission/phoenix_wright_v3_reasoning_stack.joblib`. The 247,479-byte artifact
 has SHA-256
-`cbb592fbfae00ef725b6d9ba111279168a15734e9719f539be3dd3536a32fafc`.
+`3db505e0d5e5e2ec333c1f9ca339479746e7e79960d18a6ba78161849f54fe90`.
 At inference, the stack runs only when the final assistant message has nonempty
 reasoning; otherwise the original Phoenix score is returned exactly. An exact
 360-row parity check reproduced the evaluated probabilities to maximum absolute

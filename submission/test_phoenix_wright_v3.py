@@ -156,9 +156,9 @@ def test_submission_bundles_frozen_reasoning_stack() -> None:
     )
     artifact = joblib.load(artifact_path)
 
-    assert artifact["method"] == "phoenix_wright_v3.1_reasoning_ngram_logistic"
+    assert artifact["method"] == "phoenix_wright_v3.2_reasoning_ngram_logistic"
     assert hashlib.sha256(artifact_path.read_bytes()).hexdigest() == (
-        "cbb592fbfae00ef725b6d9ba111279168a15734e9719f539be3dd3536a32fafc"
+        "3db505e0d5e5e2ec333c1f9ca339479746e7e79960d18a6ba78161849f54fe90"
     )
     assert artifact["reasoning_max_chars"] == 4000
     assert len(artifact["vectorizer"].vocabulary_) == 12_936

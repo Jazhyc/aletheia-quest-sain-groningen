@@ -4027,7 +4027,7 @@ Decision:
   BA rises from `0.9143` to `0.9250` when instructed rows retain Phoenix.
 - Reject raw OR. It raises varied recall to `0.8111`, but FPR reaches `0.1500`
   and its BA gain is only `0.0083`.
-- Phoenix v3.1 bundles the train-only n-gram and validation-fitted logistic
+- Phoenix v3.2 bundles the train-only n-gram and validation-fitted logistic
   model as a 247,479-byte joblib artifact. It applies the stack only to nonempty
   final-assistant reasoning and otherwise returns Phoenix unchanged. Exact
   parity against all 360 test rows has zero binary differences.

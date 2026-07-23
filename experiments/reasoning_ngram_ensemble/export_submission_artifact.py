@@ -41,7 +41,7 @@ def main() -> None:
 
     artifact = {
         "format_version": 1,
-        "method": "phoenix_wright_v3.1_reasoning_ngram_logistic",
+        "method": "phoenix_wright_v3.2_reasoning_ngram_logistic",
         "reasoning_max_chars": 4000,
         "reasoning_truncation": "head_tail",
         "threshold": 0.5,
