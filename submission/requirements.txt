@@ -4,3 +4,4 @@
 # nbclient, torch (CPU), and nnsight. Add anything else you need here.
 ./submission/wheels/transformers-5.15.0.dev0-py3-none-any.whl
 peft==0.18.0
+./submission/wheels/nnsight-0.7.1.dev41+gd901da3ed-cp312-cp312-linux_x86_64.whl

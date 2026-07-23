@@ -3085,3 +3085,12 @@ same resolved commit `bb3ffb9703e3acb84f06db1d3799756e977662c2` and installs
 that local wheel from `submission/requirements.txt`, alongside PyPI PEFT 0.18.0.
 This preserves the organizer-specified code while requiring no GitHub egress in
 the official install phase.
+
+On 2026-07-23 the organizers deployed a remote-LoRA fix and pinned a new exact
+client contract: NNsight `hackathon/peft` at
+`d901da3ed772c815d0d146136de6f7e35f913221`, Transformers at
+`c7f9c8815610d27e41a6b0b0cc9e2d3c49468d1d`, and PEFT 0.18.0. Phoenix v3.0
+vendors Python-3.12-compatible wheels for both Git dependencies and retains the
+PyPI PEFT pin. This supersedes the earlier Transformers wheel at commit
+`bb3ffb9703e3acb84f06db1d3799756e977662c2`; the notebook method and adapter
+remain unchanged.
