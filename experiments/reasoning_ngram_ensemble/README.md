@@ -63,9 +63,23 @@ The logistic estimate is for the full nested select-then-fit procedure, not an
 in-sample meta-fit. The final all-validation fit selects `C=1.0`, coefficients
 `[2.1386, 3.8294]` in `[Phoenix, n-gram]` order, and intercept `-2.5040`.
 Regularization is unstable across outer folds: six choose `C=0.01` and three
-choose `C=1.0`. The frozen rank-24 test evaluation is therefore required before
-deployment; local GPU job `30251102` was submitted and left queued without
-babysitting.
+choose `C=1.0`.
+
+Frozen rank-24 test job `30251102` completed with all 360 varied rows:
+
+| rule | BA | AUROC | recall | FPR | fixes / breaks vs Phoenix |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Phoenix rank 24 | `0.8222` | `0.8222` | `0.7056` | `0.0611` | — |
+| reasoning n-gram | `0.8250` | `0.8925` | `0.7611` | `0.1111` | 26 / 25 |
+| fixed OR | `0.8306` | `0.8881` | `0.8111` | `0.1500` | 19 / 16 |
+| logistic | **`0.8472`** | **`0.8986`** | `0.7778` | `0.0833` | 13 / 4 |
+
+The logistic stack transfers above both members and OR, with a `+0.0250`
+varied-BA gain over Phoenix. If the 12 instructed units retain Phoenix
+unchanged, projected 21-unit test BA rises from `0.9143` to `0.9250`, and AUROC
+rises from `0.9143` to `0.9470`. OR would reach only `0.9179` BA. The selected
+logistic rule is therefore promoted despite the regularization-instability
+caveat.
 
 As a sensitivity control, the exact protocol was run on the cached rank-16
 predecessor:
@@ -82,5 +96,16 @@ predecessor:
 The rank-16 logistic control fixes 13 and breaks eight Phoenix test decisions.
 If instructed rows retain Phoenix unchanged, its projected 21-dataset overall
 BA rises from `0.9155` to `0.9214`; OR rises only to `0.9167`. This supports
-soft stacking over raw OR, but it is only a control because Phoenix v3.1 uses
-rank 24.
+soft stacking over raw OR and agrees with the exact rank-24 result.
+
+## Deployment
+
+Phoenix v3.1 now bundles the train-only 12,936-feature n-gram and the
+all-validation two-feature logistic model in
+`submission/phoenix_wright_v3_reasoning_stack.joblib`. The 247,479-byte artifact
+has SHA-256
+`cbb592fbfae00ef725b6d9ba111279168a15734e9719f539be3dd3536a32fafc`.
+At inference, the stack runs only when the final assistant message has nonempty
+reasoning; otherwise the original Phoenix score is returned exactly. An exact
+360-row parity check reproduced the evaluated probabilities to maximum absolute
+error `3.33e-16` with zero binary disagreements.

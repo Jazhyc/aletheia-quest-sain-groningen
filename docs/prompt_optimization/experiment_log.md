@@ -3120,3 +3120,31 @@ varied rows are Qwen and all instructed rows lack reasoning. Do not use
 reasoning availability as a feature or interpret the deception target as an
 independently annotated intent label. Full details are in P75 and
 `experiments/reasoning_ngram_intent/README.md`.
+
+### Phoenix reasoning-surface ensemble (2026-07-23)
+
+The P75 reasoning n-gram was combined with the Phoenix v3.1 rank-24 binary
+judge through fixed OR and two-feature logistic regression. The meta-model uses
+only `[Phoenix score, reasoning n-gram score]`, a fixed `0.5` threshold, and
+equal dataset-unit/label weighting. Regularization was selected from five
+values inside nested leave-one-dataset-unit-out validation OOF; no dataset or
+organism identifiers, interactions, or threshold sweep were used.
+
+On validation, Phoenix, OR, and nested logistic scored `0.8083`, `0.8278`, and
+`0.8306` varied BA. Frozen rank-24 test job `30251102` scored `0.8222` for
+Phoenix, `0.8306` for OR, and `0.8472` for logistic. Logistic test recall/FPR
+were `0.7778/0.0833`, versus Phoenix `0.7056/0.0611`; it fixed 13 Phoenix
+errors and broke four. OR reached `0.8111` recall but `0.1500` FPR, fixing 19
+and breaking 16. A separate rank-16 sensitivity control also favored logistic,
+raising varied test BA from `0.8278` to `0.8417`.
+
+Phoenix v3.1 therefore promotes the logistic stack and rejects raw OR. Rows
+without final-assistant reasoning retain Phoenix exactly. With instructed rows
+unchanged, the local 21-unit projection rises from `0.9143` to `0.9250` BA and
+from `0.9143` to `0.9470` AUROC. The bundled 247,479-byte stack artifact has
+SHA-256
+`cbb592fbfae00ef725b6d9ba111279168a15734e9719f539be3dd3536a32fafc`;
+an exact 360-row parity check reproduced test probabilities to `3.33e-16`.
+All public varied rows are Qwen-family, and validation fold selection alternates
+between regularization-grid boundaries, so neither cross-family transfer nor
+coefficient stability is established.

@@ -3985,8 +3985,8 @@ Decision:
 
 ## P76: Phoenix and Reasoning-Surface Stack
 
-Status: active; validation and rank-16 test control favor logistic stacking,
-with the exact rank-24 frozen test queued as job `30251102`.
+Status: complete; exact rank-24 test promotes logistic stacking and rejects raw
+OR.
 
 Question: can P75 recover Phoenix false negatives through a fixed OR or a
 two-feature logistic meta-model without an unacceptable false-positive cost?
@@ -4011,6 +4011,7 @@ Current evidence:
 | rank-24 validation | `0.8083` | `0.8278` | **`0.8306`** |
 | rank-16 validation control | `0.7944` | `0.8194` | **`0.8222`** |
 | rank-16 frozen test control | `0.8278` | `0.8306` | **`0.8417`** |
+| rank-24 frozen test | `0.8222` | `0.8306` | **`0.8472`** |
 
 On rank-24 validation, OR raises recall from `0.6833` to `0.8000` but also
 raises FPR from `0.0667` to `0.1444`; logistic reaches `0.7611` recall and
@@ -4021,8 +4022,15 @@ recall gain on false positives.
 
 Decision:
 
-- Prefer logistic over OR if the exact rank-24 frozen test transfers. Do not
-  modify Phoenix v3.1 before that queued result is available.
-- Regularization selection is unstable across rank-24 outer folds, alternating
-  between the grid boundaries. Report this limitation and reject deployment if
-  the exact test result does not improve Phoenix.
+- Promote the logistic stack. On exact rank-24 test it fixes 13 Phoenix errors,
+  breaks four, and raises varied BA by `0.0250` to `0.8472`; projected 21-unit
+  BA rises from `0.9143` to `0.9250` when instructed rows retain Phoenix.
+- Reject raw OR. It raises varied recall to `0.8111`, but FPR reaches `0.1500`
+  and its BA gain is only `0.0083`.
+- Phoenix v3.1 bundles the train-only n-gram and validation-fitted logistic
+  model as a 247,479-byte joblib artifact. It applies the stack only to nonempty
+  final-assistant reasoning and otherwise returns Phoenix unchanged. Exact
+  parity against all 360 test rows has zero binary differences.
+- Preserve the regularization-instability caveat: rank-24 outer folds alternate
+  between grid boundaries. Do not tune the coefficients or threshold from test,
+  and do not infer Gemma/Nemotron varied transfer from Qwen-only public data.
