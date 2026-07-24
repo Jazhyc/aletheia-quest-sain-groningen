@@ -9,5 +9,11 @@
   "dropout": 0.1,
   "batch_token_budget": 8192,
   "extract_token_budget": 512,
-  "extract_max_batch": 1
+  "extract_max_batch": 1,
+  "trained_by": "shared_trunk_multifamily",
+  "shared_trunk_families": [
+    "qwen",
+    "gemma",
+    "nemotron"
+  ]
 }

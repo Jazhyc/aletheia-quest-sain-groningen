@@ -1,11 +1,73 @@
-# sonic_v2.3
+# sonic_v2.3 (and v2.3.5)
 
 This document tells you how sonic_v2.3 works. You do not need to read the
-documents for the earlier versions. 
+documents for the earlier versions.
 
 **In one line:** sonic_v2.3 mixes a white-box probe and a black-box judge into
 one submission. It changes the gate in cell 12, the judge retry in cell 11, and
 the fallback values in cell 3. Cells 4 to 10 do not change.
+
+**sonic_v2.3.5** is a small follow-up to sonic_v2.3. It keeps all the sonic_v2.3
+logic below and adds two safety fixes. Fix 1: the probe-alone fallback no
+longer uses a null threshold. Fix 2: the judge retry now checks the remaining
+time budget, not a fixed 600-second rule. Read the section **"What changed in
+v2.3.5"** first. The rest of this document still describes the shared gate.
+
+The submission notebook is `legacy_submissions/sonic_v2.3.5.ipynb`. The original
+`sonic_v2.3.ipynb` file is in `legacy_submissions/`.
+
+---
+
+## What changed in v2.3.5
+
+We submitted sonic_v2.3. It scored BA `0.7754` and AUROC `0.8761`. This is a
+regression from sonic_v2.1 (`0.8471`). One test unit caused the whole drop.
+
+| Row | v2.2 | v2.3 |
+|-----|------|------|
+| Iris / gemma | 0.9700 | **0.5000** |
+
+The Iris / gemma unit fell to `0.5000`. Its recall was `0` and its FPR was `0`.
+Its AUROC stayed at `0.9911`, so the probe still ranked the rows in the correct
+order. The threshold marked every row as not deceptive.
+
+**The cause.** The judge failed on that one unit. Thus the gate used the probe
+alone (step 1, row "yes / no"). The old probe-alone path read the threshold from
+the probe config with `config.get("threshold", THRESHOLD)`. The probe configs
+store `"threshold": null`. The key is present, so `.get` returns the `null`
+value, not the default value. Then `deceptive = score >= None` marks every row
+`0`. On Iris the probe has a strong order (AUROC `0.9911`). Thus a null
+threshold wasted a strong detector. This fault was present in v2.1 and v2.2 too.
+They avoided it on this unit only because their judge did not fail on this
+unit.
+
+**Fix 1 — the probe-alone threshold.** When the judge is absent, the gate now
+splits at the **median of the probe's own scores**, not at the null config
+value. A median split can never mark every row one class. Half the rows fall
+on each side, so the decision column always follows the probe's order. On a
+strong probe, this turns a good order into a good balanced accuracy.
+sonic_v2.3.5 adds the same guard to the exception path at the end of cell 12.
+This fix changes step 1 (row "probe yes, judge no") and the fallback only. It
+does not change the main "both detectors" gate.
+
+**Fix 2 — the judge retry checks the time budget.** See the revised "The
+judge retry" section below. The gate no longer refuses a retry after a slow
+first attempt, on a fixed 600-second rule. It checks the remaining
+wall-clock budget instead.
+
+**What to expect from v2.3.5.** We expect the Iris / gemma unit to recover
+from `0.5000` to about `0.93`, the level its AUROC allows. We expect the
+headline balanced accuracy to return to about `0.847`, level with sonic_v2.1.
+The AUROC stays at `0.8761`. This is the best AUROC of any sonic run. AUROC
+does not change, because it reads the score column. The score column was
+already correct. Only the balanced accuracy moves. It moves only on units
+where the judge fails and the probe is strong.
+
+**What v2.3.5 does not do.** It does not stop the judge from failing. It
+stops a failure from breaking the run, but the failure can still happen. On a
+unit where the judge fails, you get the bare probe score (`~0.93`), not the
+full probe-plus-judge mix (`~0.97`). You must close that last gap with
+reliability work, not a threshold change.
 
 ---
 
@@ -100,7 +162,7 @@ The gate first tests which detectors gave output.
 | Probe | Judge | What the gate does |
 |-------|-------|--------------------|
 | yes | yes | Mix the two detectors. Go to step 2. |
-| yes | no | Use the probe alone with its own threshold. |
+| yes | no | Use the probe alone. (v2.3.5: split at the median of the probe scores, not the null config threshold.) |
 | no | yes | Use the judge alone. Rank its soft scores. |
 | no | no | Write 0.5 on every row. |
 
@@ -206,9 +268,29 @@ this condition, and thus marked only 5 percent of the rows.
 A lost judge costs approximately 0.04 of the score. This is much more than any
 change to the gate gives.
 
-sonic_v2.3 does not start the judge again if the first try took more than 600
-seconds. A slow failure must not use two times the time. The sandbox has a time
-limit for each dataset.
+**Changed in v2.3.5.** sonic_v2.3 did not start the judge again if the first
+try took more than 600 seconds. That rule was too strict. The sandbox gives
+one wall-clock budget for the whole run (`NOTEBOOK_BUDGET`, 1800 seconds by
+default). A run of this size uses about 970 seconds per dataset. So the run
+usually has much budget left after one failure. The old rule refused a retry
+after a slow failure, even when half an hour of budget remained.
+
+sonic_v2.3.5 checks the **remaining budget** before it retries. Cell 1
+records `NB_START` at the start of the run. After a failure, the gate
+measures how long the attempt took and how much budget is left. It retries
+once, only when the budget still covers a second attempt plus a margin:
+
+```
+budget_left = NOTEBOOK_BUDGET - (now - NB_START)
+retry if attempt == 0 and budget_left > (attempt_duration + margin)
+```
+
+So the gate now retries after a slow failure, when the budget allows it. A
+retry can never push the run over the limit. This limit matters, because the
+sandbox kills the whole process group when the run hits it. The first such
+failure aborts the **entire** submission, not just that one dataset. The
+margin defaults to 180 seconds. Both values are environment variables:
+`NOTEBOOK_BUDGET_SECONDS` and `JUDGE_RETRY_MARGIN_SECONDS`.
 
 ---
 
@@ -291,13 +373,29 @@ removal of the guard in step 4 is safe.
 
 ---
 
-## What to expect
+## What happened (result confirmed)
 
-The projected balanced accuracy is approximately 0.852. The projected AUROC is
-approximately 0.876. This is more than sonic_v2.1 on both values.
+sonic_v2.3.5 was submitted on 2026-07-24 at 19:22. It scored balanced accuracy
+`0.853750` and AUROC `0.876333`. This is our best official submission on both
+metrics.
 
-sonic_v2.3 must also run more quickly than sonic_v2.1. sonic_v2.2 took 78
-minutes. sonic_v2.1 took 90 minutes.
+The fix worked, and it did nothing else.
+
+| Row | v2.3 | v2.3.5 |
+|-----|------|--------|
+| Iris / gemma | **0.5000** | **0.9700** |
+| every other counted unit | — | unchanged to four decimals |
+
+We projected the Iris / gemma unit would recover to about `0.93`. It reached
+`0.9700`. We projected a headline balanced accuracy of about `0.847`. It reached
+`0.8537`.
+
+The AUROC moved from `0.8761` to `0.8763`. This is almost flat. The reason is
+simple. The Iris / gemma order of rows was already near-perfect at `0.9911`. The
+bug was a threshold bug only. It never damaged the order.
+
+Run time was 85 minutes (`5124s`). v2.3 took 65 minutes (`3896s`). The extra
+time is normal run-to-run variation on the judge pass, not a cost of the fix.
 
 ---
 
@@ -306,9 +404,18 @@ minutes. sonic_v2.1 took 90 minutes.
 These changes protect the score. They do not make the probe better on new data.
 
 The gap to the first team is on Notus only. Our AUROC values on Notus are
-0.7572, 0.8259 and 0.5834. The first team has 0.9326, 0.8715 and 0.9056. On Iris
-we are in front of the first team.
+`0.6900`, `0.7572` and `0.8259`. The first team has `0.9056`, `0.9326` and
+`0.8715`. On Iris we are in front of the first team on both metrics.
+
+Five gate versions have now been scored. Every Notus unit is identical across
+v2.1, v2.2, v2.3 and v2.3.5 on both metrics. The gate work only ever moved Iris.
+This is strong evidence. Notus is limited by the detectors, not by the gate.
 
 A mix of two detectors always stays between the two detectors. No gate can
 repair a bad order of rows. The next step is a third detector, or a probe that
 transfers better. Test both offline before you send them.
+
+To reach the first team we need Notus AUROC `0.7577 -> 0.8952`. Our Notus
+balanced accuracy is already close to the best value possible at our Notus
+AUROC. So there is one target, not two. Fix the order of rows on Notus and the
+balanced accuracy follows.

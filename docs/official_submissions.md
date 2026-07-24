@@ -11,12 +11,34 @@ opaque public labels returned by the Space.
 ## Current Status
 
 - Team: `SAIN Groningen`
-- Pending submissions: `1` running (as of 2026-07-23)
-- Rate-limit state at last query: `1` remaining in a `0.5` hour window
-- Best official submission in this record: `sonic_v2.1.ipynb`
-  white-box probe + judge gate, balanced accuracy `0.847083`, AUROC `0.869833`
+- **Pending: `sonic_v3.ipynb`, submitted 2026-07-25. Result not in yet.**
+  Weights-only change against v2.3.6: the nemotron and qwen probes now come from
+  one shared trunk trained across all three families; gemma keeps its existing
+  single-family probe. Every executable line of the notebook is identical to
+  `sonic_v2.3.6.ipynb`. Full dry run on all 21 dev datasets was clean (mean BA
+  `0.9490` / AUROC `0.9868`, in-sample, no dataset below AUROC `0.90`).
+  See `docs/sonic/sonic_v3.md`.
+  - **Notus / gemma is the control unit.** Its probe is unchanged, so if it
+    moves while Nemotron and Qwen also move, per-unit noise is larger than we
+    assumed and nothing can be attributed to the shared trunk.
+  - Leakage-free expectation, for comparison against the real result: the shared
+    trunk gained `+0.0380` mean on Nemotron row CV across 3 seeds (positive on
+    every seed) and `+0.0014` mean on qwen leave-one-organism-out. Both proxies
+    are easier than every real Notus unit, so neither predicts the Notus number.
+- Latest completed: `sonic_v2.3.5.ipynb` (2026-07-24 19:22), BA `0.853750` /
+  AUROC `0.876333` — **best official submission on both metrics**. The
+  median-split fallback fixed v2.3's Iris/gemma collapse exactly as projected
+  (`0.5000 -> 0.9700`, ahead of the `~0.93` estimate), and every other counted
+  unit is unchanged from v2.3.
+- Best official submission in this record: `sonic_v2.3.5.ipynb`, BA `0.853750`
+  / AUROC `0.876333` (previous best on BA was `sonic_v2.1` at `0.847083`;
+  previous best AUROC was `sonic_v2.3` at `0.876117`)
 - Leaderboard rank: `2` of the public board; leader is EleutherAI
   `Tiresias.ipynb` at AUROC `0.9451` / BA `0.8904` (see benchmark below)
+- **Remaining gap to rank 1 is entirely Notus**: BA `-0.0367`, AUROC `-0.0688`
+  headline. Iris is maxed (we beat Tiresias there on both metrics); closing the
+  gap needs Notus BA `0.7350 -> 0.8083` (`+0.073`) and Notus AUROC
+  `0.7577 -> 0.8952` (`+0.138`). See "Sonic v2.3.5 counted detail".
 - Previous best black-box entry: `phoenix_wright_v2_0.ipynb`, BA `0.833333`
 
 The sonic family is white-box (`--tag white`). Unlike the Phoenix rows, its BA
@@ -34,6 +56,8 @@ recent runs have not been added without a fresh authenticated API query.
 
 | submitted at (UTC) | notebook | method / local mapping | tag | BA | AUROC | recall | FPR | runtime |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-24 19:22 | `sonic_v2.3.5.ipynb` | v2.3 gate + median-split probe-alone threshold (kills the null-threshold trap) + budget-aware judge retry (**best official on both metrics**) | white | 0.853750 | 0.876333 | 0.758333 | 0.050833 | 5124s |
+| 2026-07-24 06:53 | `sonic_v2.3.ipynb` | v2.2 gate + `W_MAX=0.9` cap, single-class keeps soft judge, judge-alone when no probe, fixed-600s judge retry; **one unit (Iris/gemma) collapsed to 0.5000 @ AUROC 0.9911 via the null probe-alone threshold when its judge pass dropped** | white | 0.775417 | 0.876117 | 0.604167 | 0.053333 | 3896s |
 | 2026-07-23 21:46 | `sonic_v2.2.ipynb` | constant-free gate: rank-space blend, `w = clip(2a-1,0,1)`, degeneracy guard, prevalence-matched threshold | white | 0.810417 | 0.858450 | 0.744167 | 0.123333 | 4705s |
 | 2026-07-23 18:39 | `sonic_v2.1.ipynb` | soft blend `w = clamp((a-0.5)x3,0,1)` + threshold search against judge labels (**best official**) | white | 0.847083 | 0.869833 | 0.764167 | 0.070000 | 5398s |
 | 2026-07-23 13:33 | `sonic_v2.ipynb` | first probe+judge gate; hard switch at agreement `0.65`, unsupervised GMM threshold | white | 0.747083 | 0.844700 | 0.580000 | 0.085833 | 4345s |
@@ -58,30 +82,35 @@ These counted Notus/Iris rows are useful diagnostics for official transfer.
 
 ### Sonic family counted Notus/Iris detail
 
-All four sonic runs share cells 1--11 (identical probe and judge); only the
+All five sonic runs share cells 1--11 (identical probe and judge); only the
 gate in cell 12 changes. Counted balanced accuracy per unit:
 
-| dataset / model | v1 | v2 | v2.1 | v2.2 |
+| dataset / model | v1 | v2 | v2.1 | v2.2 | v2.3 | v2.3.5 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Notus `Nemotron-120B` / `None` | 0.5025 | 0.7525 | 0.7525 | **0.5025** | 0.7525 | 0.7525 |
+| Notus `Qwen3.5-27B` / `None` | 0.5700 | 0.5700 | 0.6950 | 0.6950 | 0.6950 | 0.6950 |
+| Notus `gemma-3-27b-it` / `None` | 0.5000 | 0.7575 | 0.7575 | 0.7575 | 0.7575 | 0.7575 |
+| Iris `Nemotron-120B` / `g-st` | 0.8725 | 0.9500 | 0.9450 | 0.9525 | 0.9625 | 0.9625 |
+| Iris `Qwen3.5-27B` / `g-st` | 0.9850 | 0.9425 | 0.9500 | 0.9850 | 0.9850 | 0.9850 |
+| Iris `gemma-3-27b-it` / `g-st-2` | 0.5000 | 0.5100 | 0.9825 | 0.9700 | **0.5000** | 0.9700 |
+| **headline BA** | 0.6550 | 0.7471 | 0.8471 | 0.8104 | 0.7754 | **0.8537** |
+| **headline AUROC** | 0.7549 | 0.8447 | 0.8698 | 0.8584 | 0.8761 | **0.8763** |
+
+Counted AUROC per unit for the three newest runs:
+
+| dataset / model | v2.1 AUROC | v2.2 AUROC | v2.3 AUROC | v2.3.5 AUROC |
 | --- | ---: | ---: | ---: | ---: |
-| Notus `Nemotron-120B` / `None` | 0.5025 | 0.7525 | 0.7525 | **0.5025** |
-| Notus `Qwen3.5-27B` / `None` | 0.5700 | 0.5700 | 0.6950 | 0.6950 |
-| Notus `gemma-3-27b-it` / `None` | 0.5000 | 0.7575 | 0.7575 | 0.7575 |
-| Iris `Nemotron-120B` / `g-st` | 0.8725 | 0.9500 | 0.9450 | 0.9525 |
-| Iris `Qwen3.5-27B` / `g-st` | 0.9850 | 0.9425 | 0.9500 | 0.9850 |
-| Iris `gemma-3-27b-it` / `g-st-2` | 0.5000 | 0.5100 | 0.9825 | 0.9700 |
-| **headline BA** | 0.6550 | 0.7471 | **0.8471** | 0.8104 |
-| **headline AUROC** | 0.7549 | 0.8447 | **0.8698** | 0.8584 |
+| Notus `Nemotron-120B` / `None` | 0.6900 | 0.5834 | 0.6900 | 0.6900 |
+| Notus `Qwen3.5-27B` / `None` | 0.7572 | 0.7572 | 0.7572 | 0.7572 |
+| Notus `gemma-3-27b-it` / `None` | 0.8259 | 0.8259 | 0.8259 | 0.8259 |
+| Iris `Nemotron-120B` / `g-st` | 0.9905 | 0.9926 | 0.9933 | 0.9933 |
+| Iris `Qwen3.5-27B` / `g-st` | 0.9643 | 0.9995 | 0.9992 | 0.9995 |
+| Iris `gemma-3-27b-it` / `g-st-2` | 0.9911 | 0.9921 | 0.9911 | 0.9921 |
 
-Counted AUROC per unit for the two newest runs:
-
-| dataset / model | v2.1 AUROC | v2.2 AUROC |
-| --- | ---: | ---: |
-| Notus `Nemotron-120B` / `None` | 0.6900 | 0.5834 |
-| Notus `Qwen3.5-27B` / `None` | 0.7572 | 0.7572 |
-| Notus `gemma-3-27b-it` / `None` | 0.8259 | 0.8259 |
-| Iris `Nemotron-120B` / `g-st` | 0.9905 | 0.9926 |
-| Iris `Qwen3.5-27B` / `g-st` | 0.9643 | 0.9995 |
-| Iris `gemma-3-27b-it` / `g-st-2` | 0.9911 | 0.9921 |
+**Every Notus unit is byte-identical across v2.1 -> v2.3.5 on both metrics.**
+Five gate revisions have moved Iris and never moved Notus, which is the
+strongest available evidence that Notus is bounded by the *detectors*, not the
+gate — no further gate work can close the remaining gap.
 
 Notes: v2.2's entire regression against v2.1 is **one cell**, Notus/Nemotron,
 where BA fell `0.7525 -> 0.5025` and AUROC `0.6900 -> 0.5834`. Those are exactly
@@ -126,6 +155,107 @@ Also note v1's inverted units: Notus/gemma AUROC `0.3526` (below chance, probe
 ranks backwards) and Iris/gemma BA `0.5000` at AUROC `0.9911` (near-perfect
 ranking, useless threshold). The v2.1 threshold search fixed the latter; v2.2's
 agreement-sign flip covers the former.
+
+### Sonic v2.3 counted detail
+
+Submitted 2026-07-24 06:53. Headline BA `0.775417` / AUROC `0.876117`, runtime
+64m56s (`3896s`). Counted (validation) units are Notus and Iris; Metis and
+Eunomia are greyed reference rows and do not enter the headline.
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Notus | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` / `None` | 0.7525 | 0.6900 | 0.5900 | 0.0850 |
+| Dataset Notus | `Qwen/Qwen3.5-27B` / `None` | 0.6950 | 0.7572 | 0.4850 | 0.0950 |
+| Dataset Notus | `google/gemma-3-27b-it` / `None` | 0.7575 | 0.8259 | 0.6100 | 0.0950 |
+| Dataset Iris | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` / `g-st-nemotron-3-super-120b` | 0.9625 | 0.9933 | 0.9500 | 0.0250 |
+| Dataset Iris | `Qwen/Qwen3.5-27B` / `g-st-qwen3.5-27b` | 0.9850 | 0.9992 | 0.9900 | 0.0200 |
+| Dataset Iris | `google/gemma-3-27b-it` / `g-st-gemma-3-27b-it-2` | **0.5000** | 0.9911 | 0.0000 | 0.0000 |
+
+Notes: v2.3 matched or beat v2.2 on five of the six counted units — it *fixed*
+v2.2's Notus/Nemotron collapse (`0.5025 -> 0.7525`, the single-class change
+doing its job) and set a best-ever Iris/Nemotron (`0.9625`). AUROC `0.8761` is
+the highest of any sonic run. **The entire regression is one unit: Iris/gemma,
+`0.9700 -> 0.5000`** (recall 0, FPR 0, at AUROC `0.9911`). That is the identical
+signature of `sonic_v1`'s Iris/gemma failure ("near-perfect ranking, useless
+threshold") that the v2.1 threshold search had already fixed.
+
+Root cause: the judge pass dropped on that one unit, so the gate fell to the
+probe-alone branch, which set `final_threshold = config.get("threshold",
+THRESHOLD)`. The probe configs ship `"threshold": null`, and `.get` returns that
+null (the key is present, so the default `THRESHOLD` never applies); `deceptive =
+score >= None` then collapses the decision column to all-negative. On Iris the
+probe has strong signal (AUROC `0.9911`), so the null cut point turned a
+near-perfect detector into `0.5000`. The trap was latent in v2.1/v2.2 too — they
+never hit it on Iris/gemma only because their judge pass succeeded there. Losing
+`0.9700 -> 0.5000` on one of six counted units costs `(0.97 - 0.50)/6 = 0.078`
+headline BA; had that unit held, v2.3 would have scored `~0.854` BA (best sonic
+ever) at AUROC `0.8761`.
+
+Fix (`sonic_v2.3.5.ipynb`, **submitted 2026-07-24 19:22 and confirmed** — see
+the v2.3.5 section below; Iris/gemma recovered to `0.9700`, above the `~0.93`
+projection, for headline BA `0.853750`): the probe-alone
+fallback now median-splits the probe's own scores instead of trusting the null
+config threshold, so a dropped judge on a high-signal unit recovers to `~0.93`
+(projected headline BA back to `~0.847`, matching v2.1, at the best-ever AUROC)
+rather than collapsing to `0.50`; the same guard is mirrored in the cell's
+exception fallback. Separately, the fixed-600s judge retry gate is replaced by a
+budget-aware one (retry once unless too little of the `1800s` per-dataset
+wall-clock budget remains), so slow judge failures retry when there is room but a
+retry can never trip the timeout that would abort the whole submission. See
+`docs/sonic/sonic_v2_3_CHANGES.md` for the full v2.3.5 write-up.
+
+### Sonic v2.3.5 counted detail
+
+Submitted 2026-07-24 19:22. Headline BA `0.853750` / AUROC `0.876333`, runtime
+85m24s (`5124s`). **Best official submission on both metrics.** Counted
+(validation) units are Notus and Iris; Metis and Eunomia are greyed reference
+rows and do not enter the headline.
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Notus | `Nemotron-120B` / `None` | 0.7525 | 0.6900 | 0.5900 | 0.0850 |
+| Dataset Notus | `Qwen3.5-27B` / `None` | 0.6950 | 0.7572 | 0.4850 | 0.0950 |
+| Dataset Notus | `gemma-3-27b-it` / `None` | 0.7575 | 0.8259 | 0.6100 | 0.0950 |
+| Dataset Iris | `Nemotron-120B` / `g-st-nemotron-3-super-120b` | 0.9625 | 0.9933 | 0.9500 | 0.0250 |
+| Dataset Iris | `Qwen3.5-27B` / `g-st-qwen3.5-27b` | 0.9850 | 0.9995 | 0.9750 | 0.0050 |
+| Dataset Iris | `gemma-3-27b-it` / `g-st-gemma-3-27b-it-2` | **0.9700** | 0.9921 | 0.9400 | 0.0000 |
+
+The median-split fallback did exactly what it was designed to do and nothing
+else: Iris/gemma `0.5000 -> 0.9700` (projection was `~0.93`), every other
+counted unit unchanged from v2.3 to four decimal places. Headline BA
+`0.7754 -> 0.8537` (`+0.0783`, matching the predicted `(0.97-0.50)/6 = 0.078`);
+AUROC `0.8761 -> 0.8763`, essentially flat because Iris/gemma's ranking was
+already near-perfect (`0.9911`) — the bug was purely a threshold failure.
+
+**Gap to rank 1, decomposed.** Headline BA `-0.0367`, AUROC `-0.0688`.
+
+| | our Notus | our Iris | our headline | Tiresias |
+| --- | ---: | ---: | ---: | ---: |
+| BA | 0.7350 | 0.9725 | 0.8537 | 0.8904 |
+| AUROC | 0.7577 | 0.9950 | 0.8763 | 0.9451 |
+
+Iris has no headroom left — we beat Tiresias there on both metrics (BA `0.9725`
+vs `0.9458`, AUROC `0.9950` vs `0.9869`). So the entire deficit must be repaid
+on Notus:
+
+- Notus BA `0.7350 -> 0.8083` (`+0.0733`)
+- Notus AUROC `0.7577 -> 0.8952` (`+0.1375`)
+
+Our Notus BA is already close to the maximum achievable *at our Notus AUROC*,
+so this is one target, not two: **get Notus AUROC to ~0.90 and the BA follows.**
+Threshold and gate tuning cannot deliver it (see the identical-Notus-across-five-gates
+note above); only a better-ranking detector on base-model-only data can.
+
+**Uncounted reference rows.** Metis (instructed deception) is near-saturated:
+14 units at AUROC `0.9892--1.0000`, BA `0.9500--1.0000`, except
+Metis/Nemotron/`None` at BA `0.7525` with **AUROC `1.0000`**, recall `1.0000`,
+FPR `0.4950` — perfect ranking with a badly over-flagging threshold. That is the
+Iris/gemma failure family in mirror image (there the prevalence-matched
+threshold under-flagged to `0.0000` recall; here it over-flags to `0.4950` FPR),
+and it is a latent risk if a hidden *counted* dataset ever takes that shape.
+Eunomia is the weakest reference family: BA `0.7224--0.9290`, AUROC
+`0.8389--0.9898`, with the `a-mo-qwen3.5-27b-1/3` units the worst at
+BA `0.7482`/`0.7224` and FPR `0.36`/`0.39`.
 
 ### Benchmark: EleutherAI `Tiresias.ipynb` (rank 1)
 

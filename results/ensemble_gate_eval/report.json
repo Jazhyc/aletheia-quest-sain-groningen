@@ -1,0 +1,33 @@
+{
+  "qwen": {
+    "loo": {
+      "per_organism": {
+        "qwen:instr/a-mo-qwen3.5-27b-1": {
+          "probe_only": {
+            "auroc": 1.0,
+            "balanced_accuracy": 1.0
+          }
+        },
+        "qwen:instr/a-mo-qwen3.5-27b-3": {
+          "probe_only": {
+            "auroc": 1.0,
+            "balanced_accuracy": 1.0
+          }
+        },
+        "qwen:instr/a-mo-qwen3.5-27b-4": {
+          "probe_only": {
+            "auroc": 0.99925,
+            "balanced_accuracy": 0.975
+          }
+        }
+      },
+      "aggregate": {
+        "probe_only": {
+          "mean_auroc": 0.99975,
+          "mean_ba": 0.9916666666666667,
+          "n_organisms": 3
+        }
+      }
+    }
+  }
+}

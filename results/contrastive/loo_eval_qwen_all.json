@@ -1,0 +1,158 @@
+{
+  "qwen": {
+    "per_organism": {
+      "instr/a-mo-qwen3.5-27b-1": {
+        "n": 400,
+        "absolute": 1.0,
+        "contrastive": 0.9998,
+        "fused": 0.9999750000000001,
+        "invariant": 1.0
+      },
+      "instr/a-mo-qwen3.5-27b-3": {
+        "n": 400,
+        "absolute": 1.0,
+        "contrastive": 1.0,
+        "fused": 1.0,
+        "invariant": 1.0
+      },
+      "instr/a-mo-qwen3.5-27b-4": {
+        "n": 400,
+        "absolute": 0.999475,
+        "contrastive": 0.998875,
+        "fused": 0.9994999999999999,
+        "invariant": 0.9996499999999999
+      },
+      "instr/a-mo-qwen3.5-27b-5": {
+        "n": 400,
+        "absolute": 0.99995,
+        "contrastive": 0.99995,
+        "fused": 0.9999750000000001,
+        "invariant": 1.0
+      },
+      "instr/a-mo-qwen3.5-27b-6": {
+        "n": 400,
+        "absolute": 0.999725,
+        "contrastive": 0.999675,
+        "fused": 0.999975,
+        "invariant": 0.99995
+      },
+      "instr/a-mo-qwen3.5-27b-7": {
+        "n": 400,
+        "absolute": 0.999825,
+        "contrastive": 0.999325,
+        "fused": 0.999775,
+        "invariant": 0.999725
+      },
+      "instr/b-mo-qwen3.5-27b": {
+        "n": 400,
+        "absolute": 0.99985,
+        "contrastive": 0.999925,
+        "fused": 0.9999625,
+        "invariant": 0.999925
+      },
+      "instr/base": {
+        "n": 400,
+        "absolute": 0.9987,
+        "contrastive": 0.998,
+        "fused": 0.9985375,
+        "invariant": 0.996825
+      },
+      "instr/c-mo-qwen3.5-27b": {
+        "n": 400,
+        "absolute": 0.996175,
+        "contrastive": 0.9986999999999999,
+        "fused": 0.9979875,
+        "invariant": 0.9956499999999999
+      },
+      "varied/a-mo-qwen3.5-27b-1": {
+        "n": 400,
+        "absolute": 0.83445,
+        "contrastive": 0.8401000000000001,
+        "fused": 0.8506500000000001,
+        "invariant": 0.8409250000000001
+      },
+      "varied/a-mo-qwen3.5-27b-3": {
+        "n": 400,
+        "absolute": 0.840875,
+        "contrastive": 0.851,
+        "fused": 0.8635374999999998,
+        "invariant": 0.8356750000000001
+      },
+      "varied/a-mo-qwen3.5-27b-4": {
+        "n": 400,
+        "absolute": 0.91355,
+        "contrastive": 0.869375,
+        "fused": 0.9018624999999999,
+        "invariant": 0.9184
+      },
+      "varied/a-mo-qwen3.5-27b-5": {
+        "n": 400,
+        "absolute": 0.9628,
+        "contrastive": 0.9647249999999999,
+        "fused": 0.9729749999999999,
+        "invariant": 0.9561499999999999
+      },
+      "varied/a-mo-qwen3.5-27b-6": {
+        "n": 400,
+        "absolute": 0.911125,
+        "contrastive": 0.9181,
+        "fused": 0.9238624999999999,
+        "invariant": 0.902875
+      },
+      "varied/a-mo-qwen3.5-27b-7": {
+        "n": 400,
+        "absolute": 0.920175,
+        "contrastive": 0.90155,
+        "fused": 0.9192,
+        "invariant": 0.915925
+      },
+      "varied/b-mo-qwen3.5-27b": {
+        "n": 400,
+        "absolute": 0.970075,
+        "contrastive": 0.9664,
+        "fused": 0.9777,
+        "invariant": 0.969575
+      },
+      "varied/base": {
+        "n": 400,
+        "absolute": 0.977025,
+        "contrastive": 0.986375,
+        "fused": 0.9882874999999999,
+        "invariant": 0.9822750000000001
+      },
+      "varied/c-mo-qwen3.5-27b": {
+        "n": 400,
+        "absolute": 0.98395,
+        "contrastive": 0.9332999999999999,
+        "fused": 0.9758875,
+        "invariant": 0.983525
+      }
+    },
+    "summary": {
+      "absolute": {
+        "mean_auroc": 0.9615402777777778,
+        "worst_auroc": 0.83445,
+        "worst_organism": "varied/a-mo-qwen3.5-27b-1",
+        "n_organisms": 18
+      },
+      "contrastive": {
+        "mean_auroc": 0.9569541666666667,
+        "worst_auroc": 0.8401000000000001,
+        "worst_organism": "varied/a-mo-qwen3.5-27b-1",
+        "n_organisms": 18
+      },
+      "fused": {
+        "mean_auroc": 0.9649805555555554,
+        "worst_auroc": 0.8506500000000001,
+        "worst_organism": "varied/a-mo-qwen3.5-27b-1",
+        "n_organisms": 18
+      },
+      "invariant": {
+        "mean_auroc": 0.9609472222222224,
+        "worst_auroc": 0.8356750000000001,
+        "worst_organism": "varied/a-mo-qwen3.5-27b-3",
+        "n_organisms": 18
+      }
+    }
+  }
+}

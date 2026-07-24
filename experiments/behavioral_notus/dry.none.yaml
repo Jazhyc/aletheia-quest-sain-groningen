@@ -1,0 +1,23 @@
+# Notus-proxy benchmark: the dev base-model (`None`) datasets only.
+# Notus is base-model-only (LoRA=None) for all three families and is the
+# counted dataset our probe transfers worst to. These labeled dev `None` sets
+# are the closest offline proxy for measuring a NEW detector's Notus-regime
+# AUROC before we spend a submission. Score any candidate notebook against this
+# with the existing dry harness (it computes per-dataset AUROC/BA vs labels).
+datasets:
+- name: aletheias-quest/dev-instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None
+  labels_uri: aletheias-quest/dev-instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None-labels
+  id_column: index
+  label_column: deceptive
+- name: aletheias-quest/dev-instructed-deception-Qwen3.5-27B-None
+  labels_uri: aletheias-quest/dev-instructed-deception-Qwen3.5-27B-None-labels
+  id_column: index
+  label_column: deceptive
+- name: aletheias-quest/dev-instructed-deception-gemma-3-27b-it-None
+  labels_uri: aletheias-quest/dev-instructed-deception-gemma-3-27b-it-None-labels
+  id_column: index
+  label_column: deceptive
+- name: aletheias-quest/dev-varied-deception-Qwen3.5-27B-None
+  labels_uri: aletheias-quest/dev-varied-deception-Qwen3.5-27B-None-labels
+  id_column: index
+  label_column: deceptive

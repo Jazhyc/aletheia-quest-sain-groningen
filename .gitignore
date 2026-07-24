@@ -36,4 +36,12 @@ venv/
 *.pkl
 
 results/whitebox/*
+# Contrastive extraction: 4 GB of .npz activations and regenerable weights.
+# The small eval reports (*.json) stay tracked -- they are the evidence.
+# Experiment run logs and smoke artifacts (not evidence)
+experiments/**/*.log
+experiments/**/*.smoke.json
+
+results/contrastive/activations/
+results/contrastive/weights/
 dump/
