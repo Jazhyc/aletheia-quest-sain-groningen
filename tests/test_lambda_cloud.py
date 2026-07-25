@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import urllib.error
 from pathlib import Path
 from unittest.mock import patch
@@ -123,6 +124,16 @@ def test_sync_code_requires_explicit_uncommitted_opt_in() -> None:
     assert args.include_uncommitted is False
     committed = parser.parse_args(["sync-commit", "--campaign", "prompt-campaign"])
     assert committed.revision == "HEAD"
+
+
+def test_remote_secret_payload_is_allowlisted_and_shell_quoted() -> None:
+    with patch.dict(os.environ, {"HF_TOKEN": "token with spaces"}, clear=False):
+        payload = lambda_cloud.build_remote_secret_payload(["HF_TOKEN"])
+    assert "export HF_TOKEN='token with spaces'" in payload
+    with pytest.raises(lambda_cloud.LambdaCloudError, match="non-allowlisted"):
+        lambda_cloud.build_remote_secret_payload(["LAMBDA_API_KEY"])
+    with pytest.raises(lambda_cloud.LambdaCloudError, match="non-allowlisted"):
+        lambda_cloud.build_remote_secret_payload(["NDIF_API_KEY"])
 
 
 def test_public_key_fingerprint_matches_openssh_shape() -> None:

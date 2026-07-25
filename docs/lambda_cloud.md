@@ -43,6 +43,12 @@ Capacity is dynamic, so inspect it immediately before launching:
   --available-only --min-gpu-memory 40
 ```
 
+Inspect available base images in the target region as well:
+
+```bash
+.venv/bin/python scripts/lambda_cloud.py images --region us-west-2
+```
+
 Launch exactly one named campaign after reviewing the returned hourly price:
 
 ```bash
@@ -50,12 +56,16 @@ Launch exactly one named campaign after reviewing the returned hourly price:
   --campaign qwen-prompt-sweep \
   --instance-type gpu_1x_a100_sxm4 \
   --region us-west-2 \
+  --image-family lambda-stack-24-04 \
   --yes
 
 .venv/bin/python scripts/lambda_cloud.py wait \
   --campaign qwen-prompt-sweep
 
 .venv/bin/python scripts/lambda_cloud.py probe \
+  --campaign qwen-prompt-sweep
+
+.venv/bin/python scripts/lambda_cloud.py compute-probe \
   --campaign qwen-prompt-sweep
 ```
 
@@ -116,6 +126,28 @@ Pull a completed result directory back into the same repository path:
 
 Runtime logs should use `logs/lambda/<method>/` on both systems. Experiment
 artifacts remain under `results/blackbox/<method>/`.
+
+## Selected credentials
+
+Most experiments need only a Hugging Face read token and, optionally, W&B:
+
+```bash
+.venv/bin/python scripts/lambda_cloud.py sync-secrets \
+  --campaign qwen-prompt-sweep \
+  --name HF_TOKEN \
+  --name WANDB_API_KEY
+```
+
+The command sends values over SSH standard input and writes them to
+`~/.config/aletheia/secrets.env` with mode `600`. Values are never included in
+command arguments or output. Source that file before an experiment:
+
+```bash
+source ~/.config/aletheia/secrets.env
+```
+
+Only `HF_TOKEN`, `WANDB_API_KEY`, and `WIKIMEDIA_ACCESS_TOKEN` are allowlisted.
+The Lambda lifecycle key and the competition's NDIF key are always rejected.
 
 ## End the campaign
 
