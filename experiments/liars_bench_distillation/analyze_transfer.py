@@ -133,6 +133,23 @@ def external_delta(
         )
         cell_metrics[cell] = metric
         cell_deltas[cell] = candidate_cell[metric] - baseline_cell[metric]
+    source_model_deltas = {}
+    source_model_metrics = {}
+    for model in sorted(baseline["per_source_model"]):
+        if model not in candidate["per_source_model"]:
+            continue
+        baseline_model = baseline["per_source_model"][model]
+        candidate_model = candidate["per_source_model"][model]
+        metric = (
+            "balanced_accuracy"
+            if baseline_model.get("balanced_accuracy") is not None
+            and candidate_model.get("balanced_accuracy") is not None
+            else "accuracy"
+        )
+        source_model_metrics[model] = metric
+        source_model_deltas[model] = (
+            candidate_model[metric] - baseline_model[metric]
+        )
     return {
         "macro_category_balanced_accuracy": candidate[
             "macro_category_balanced_accuracy"
@@ -148,14 +165,8 @@ def external_delta(
             )
             for category in categories
         },
-        "source_model_deltas": {
-            model: (
-                candidate["per_source_model"][model]["balanced_accuracy"]
-                - baseline["per_source_model"][model]["balanced_accuracy"]
-            )
-            for model in sorted(baseline["per_source_model"])
-            if model in candidate["per_source_model"]
-        },
+        "source_model_deltas": source_model_deltas,
+        "source_model_metrics": source_model_metrics,
         "category_source_model_deltas": cell_deltas,
         "category_source_model_metrics": cell_metrics,
     }

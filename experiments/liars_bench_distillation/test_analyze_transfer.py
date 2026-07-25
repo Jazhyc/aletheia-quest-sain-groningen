@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
 
 from experiments.liars_bench_distillation.analyze_transfer import (
     accepts_action_route,
+    external_delta,
     paired_changes,
     paired_changes_grouped,
     passes_external_floors,
@@ -131,3 +132,27 @@ def test_one_class_group_reports_accuracy_and_undefined_balanced_accuracy() -> N
         "positive_rows": 2,
         "negative_rows": 0,
     }
+
+
+def test_external_delta_uses_accuracy_for_one_class_source() -> None:
+    baseline = {
+        "macro_category_balanced_accuracy": 0.5,
+        "per_category": {"action": {"balanced_accuracy": 0.5}},
+        "per_source_model": {
+            "kimi": {"balanced_accuracy": None, "accuracy": 0.75},
+        },
+        "per_category_source_model": {},
+    }
+    candidate = {
+        "macro_category_balanced_accuracy": 0.6,
+        "per_category": {"action": {"balanced_accuracy": 0.6}},
+        "per_source_model": {
+            "kimi": {"balanced_accuracy": None, "accuracy": 1.0},
+        },
+        "per_category_source_model": {},
+    }
+
+    delta = external_delta(candidate, baseline)
+
+    assert delta["source_model_deltas"] == {"kimi": 0.25}
+    assert delta["source_model_metrics"] == {"kimi": "accuracy"}
