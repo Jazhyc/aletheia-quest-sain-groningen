@@ -18,6 +18,7 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     binary_score_from_logprobs,
     binary_token_ids,
     comparable_student_settings,
+    continuous_margin_prompts,
     final_after_thinking,
     load_retrieval_cache,
     max_aggregate_evaluations,
@@ -35,7 +36,9 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     strict_pattern_for_config,
 )
 from experiments.privileged_information_distillation.analyze_continuous_margins import (
+    cross_label_tie_fraction,
     rank_fraction_predictions,
+    tie_metrics,
 )
 
 
@@ -370,6 +373,31 @@ def test_prefix_before_prediction_adds_field_after_unparsed_generation() -> None
     )
 
 
+def test_continuous_margin_prompts_score_before_the_final_decision() -> None:
+    prompt = "<assistant>"
+    generation = (
+        "<reasoning_summary>Evidence.</reasoning_summary>\nPrediction:1"
+    )
+
+    assert continuous_margin_prompts(prompt, generation) == {
+        "direct": "<assistant>Prediction:",
+        "empty": (
+            "<assistant><reasoning_summary>\n"
+            "</reasoning_summary>\nPrediction:"
+        ),
+        "reasoning": (
+            "<assistant><reasoning_summary>Evidence.</reasoning_summary>\n"
+            "Prediction:"
+        ),
+    }
+
+
+def test_continuous_margin_prompts_append_decision_after_malformed_generation() -> None:
+    prompts = continuous_margin_prompts("<assistant>", "unfinished ")
+
+    assert prompts["reasoning"] == "<assistant>unfinished\nPrediction:"
+
+
 class _Tokenizer:
     def encode(self, text: str, add_special_tokens: bool) -> list[int]:
         assert add_special_tokens is False
@@ -408,3 +436,19 @@ def test_rank_fraction_predictions_operates_per_dataset() -> None:
     ranked = rank_fraction_predictions(frame, "margin", 0.5)
     assert ranked.groupby("dataset")["score"].sum().to_dict() == {"a": 1.0, "b": 1.0}
     assert ranked.loc[ranked["score"] == 1.0, "index"].tolist() == [1, 4]
+
+
+def test_tie_metrics_count_only_cross_label_pairs() -> None:
+    frame = pd.DataFrame({
+        "dataset": ["a", "a", "a", "a"],
+        "label": [0, 0, 1, 1],
+        "score": [0.2, 0.4, 0.2, 0.9],
+    })
+
+    assert cross_label_tie_fraction(frame, "score") == 0.25
+    assert tie_metrics(frame, "score") == {
+        "duplicate_row_fraction": 0.25,
+        "cross_label_pair_fraction": 0.25,
+        "macro_cross_label_pair_fraction": 0.25,
+        "per_dataset_cross_label_pair_fraction": {"a": 0.25},
+    }

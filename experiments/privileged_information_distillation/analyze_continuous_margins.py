@@ -18,7 +18,12 @@ if str(ROOT) not in sys.path:
 from experiments.qwen_grpo_lora.evaluate_qwen_grpo_lora import macro_metrics
 
 
-SCORE_COLUMNS = ("empty_margin_score", "reasoning_margin_score")
+SCORE_COLUMNS = (
+    "score",
+    "direct_margin_score",
+    "empty_margin_score",
+    "reasoning_margin_score",
+)
 
 
 def scenario_metrics(frame: pd.DataFrame) -> dict[str, dict[str, float | None]]:
@@ -60,10 +65,48 @@ def best_threshold(frame: pd.DataFrame, score_column: str) -> dict[str, float]:
     }
 
 
+def cross_label_tie_fraction(frame: pd.DataFrame, score_column: str) -> float | None:
+    """Return the fraction of positive/negative pairs with exactly tied scores."""
+    positives = int(frame["label"].eq(1).sum())
+    negatives = int(frame["label"].eq(0).sum())
+    total_pairs = positives * negatives
+    if total_pairs == 0:
+        return None
+    counts = (
+        frame.groupby([score_column, "label"], dropna=False)
+        .size()
+        .unstack(fill_value=0)
+    )
+    tied_pairs = int(
+        (counts.get(0, 0) * counts.get(1, 0)).sum()
+    )
+    return tied_pairs / total_pairs
+
+
+def tie_metrics(frame: pd.DataFrame, score_column: str) -> dict[str, object]:
+    per_dataset = {
+        str(dataset): cross_label_tie_fraction(group, score_column)
+        for dataset, group in frame.groupby("dataset", sort=True)
+    }
+    defined = [value for value in per_dataset.values() if value is not None]
+    return {
+        "duplicate_row_fraction": float(
+            1.0 - frame[score_column].nunique(dropna=False) / len(frame)
+        ),
+        "cross_label_pair_fraction": cross_label_tie_fraction(frame, score_column),
+        "macro_cross_label_pair_fraction": (
+            float(np.mean(defined)) if defined else None
+        ),
+        "per_dataset_cross_label_pair_fraction": per_dataset,
+    }
+
+
 def analyze(frame: pd.DataFrame) -> dict[str, object]:
     output: dict[str, object] = {}
     generated = frame["prediction"].fillna(0).astype(bool)
     for score_column in SCORE_COLUMNS:
+        if score_column not in frame:
+            continue
         scores = frame[score_column]
         ordinary = frame[["dataset", "label", score_column]].rename(
             columns={score_column: "score"}
@@ -75,6 +118,13 @@ def analyze(frame: pd.DataFrame) -> dict[str, object]:
                 for quantile, value in scores.quantile(
                     [0.0, 0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 1.0]
                 ).items()
+            },
+            "ties": tie_metrics(frame, score_column),
+            "saturation": {
+                "fraction_below_1e-6": float((scores < 1e-6).mean()),
+                "fraction_above_1_minus_1e-6": float(
+                    (scores > 1.0 - 1e-6).mean()
+                ),
             },
             "fixed_half": scenario_metrics(ordinary),
             "top_half": scenario_metrics(
