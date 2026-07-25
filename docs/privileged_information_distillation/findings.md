@@ -1740,6 +1740,16 @@ retained as a dormant theoretical change; a recipient-perspective clarification
 is being evaluated separately after a label-aided audit exposed a repeated
 meta-level error.
 
+A later rank-1 HP-KR specialist screen reinforces that conclusion. Three fresh
+7.3 MB adapters trained on the 256 GPT-OSS HP-KR targets at increasing dose;
+training loss fell from `1.425` to `1.192`. Nevertheless, all three made
+exactly the same 100 development decisions as base Qwen with the established
+report-type prompt (`0.8100` BA), with zero source-family or parse changes.
+The Phoenix/truthful-alternative reference scored `0.5700` in the same session.
+No adapter passed the `+0.02` gate, so confirmation was skipped. Do not raise
+rank or training dose: the prompt supplies the useful semantic specialization,
+while this small supervised update does not add a held-out decision signal.
+
 That clarification recovers the intended semantic distinction but is not
 calibrated. Full-category BA rises `0.6999 -> 0.7884` and recall nearly doubles
 to `0.8668`, while FPR explodes to `0.2900`, parse failures rise from 14 to 89,

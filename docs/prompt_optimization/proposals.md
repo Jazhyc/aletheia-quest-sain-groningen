@@ -4169,7 +4169,7 @@ Outcome:
 
 ## P79: Rank-1 Knowledge-Report Specialist
 
-Status: preregistered; training pending.
+Status: development gate failed; confirmation skipped.
 
 Question: behind P78's exact knowledge-report router, can a roughly 7 MiB
 rank-1 adapter improve over base Qwen with the already strongest HP-KR report-
@@ -4209,3 +4209,26 @@ Interpretation:
 - The exact router already matches zero current competition inputs. A passing
   specialist is therefore a dormant OOD capability; it does not justify
   broadening the router or claiming current leaderboard improvement.
+
+Outcome:
+
+- All three trainings consumed exactly 256 parsed, label-consistent targets.
+  One epoch at `5e-5` completed in `200.8s` with loss `1.425`; three epochs at
+  `5e-5` completed in `573.4s` with loss `1.357`; three epochs at `1e-4`
+  completed in `585.5s` with loss `1.192`. Their adapter weights have distinct
+  SHA-256 hashes, and each file is 7,307,568 bytes.
+- In a shared vLLM development run, base Qwen plus
+  `knowledge_report_type` scores `0.8100` BA, `0.94` recall, `0.32` FPR, and
+  zero parse errors. Its source scores are `0.9286` Llama accuracy (one-class),
+  `0.6471` Mistral BA, and `0.8586` Qwen BA.
+- Every rank-1 arm exactly reproduces those 100 base decisions and metrics:
+  zero changes, zero fixes, zero breaks, zero source deltas, and zero parse
+  increase. Lower supervised loss does not translate into a shifted held-out
+  decision boundary.
+- The same-session Phoenix/truthful-alternative reference scores `0.5700` BA
+  (`0.34` recall, `0.20` FPR, two parse errors), confirming that the dedicated
+  report-type prompt—not the small weight update—is the important improvement
+  over P78's initial specialist.
+- Selection is null. Confirmation was explicitly skipped, and competition
+  validation/test remain untouched. Do not extend epochs, raise rank, tune LR
+  further, or inspect confirmation from this failed development screen.

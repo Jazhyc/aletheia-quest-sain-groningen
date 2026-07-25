@@ -1,5 +1,26 @@
 # Prompt Experiment Log
 
+## 2026-07-25: Rank-1 HP-KR specialist
+
+P79 trained three fresh rank-1/alpha-2 Qwen specialists on 256 disjoint,
+label-balanced GPT-OSS HP-KR summaries. One epoch at `5e-5`, three epochs at
+`5e-5`, and three epochs at `1e-4` produced distinct 7,307,568-byte adapters.
+Training loss fell from `1.425` to `1.357` and `1.192` as dose increased.
+
+On the frozen 100-row development half, base Qwen with the established
+knowledge-report prompt scored `0.8100` BA (`0.94` recall, `0.32` FPR, zero
+parse errors). Every rank-1 adapter produced exactly the same 100 binary
+decisions: zero fixes, zero breaks, identical source-family scores, and zero
+parse change. The older Phoenix/truthful-alternative reference scored only
+`0.5700` on the same shared-session run. No candidate met the predeclared
+`+0.02` gate, so confirmation was not generated.
+
+Close this small supervised-specialist branch. The strong gain comes from
+asking the right semantic question at inference, while rank-1 updates on 256
+teacher summaries reduce training loss without moving held-out decisions. Do
+not increase rank, add epochs, inspect confirmation, or infer that rank 1 can
+replace the general rank-16 Phoenix adapter.
+
 ## 2026-07-25: Exact knowledge-report prompt router
 
 P78 kept the ordinary Truth Value Guard as the default and routed only explicit

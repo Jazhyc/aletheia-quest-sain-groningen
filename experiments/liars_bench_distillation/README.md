@@ -184,6 +184,19 @@ bash experiments/liars_bench_distillation/run_hpkr_rank1_specialist_lambda.sh co
 bash experiments/liars_bench_distillation/run_hpkr_rank1_specialist_lambda.sh confirm
 ```
 
+The development gate rejected every adapter. Base Qwen with the report-type
+prompt scored `0.8100` BA (`0.94` recall, `0.32` FPR, zero parse errors).
+All three distinct 7,307,568-byte rank-1 adapters made exactly the same 100
+binary decisions, with zero fixes, zero breaks, and zero source-family deltas.
+The one-epoch and two three-epoch training losses were `1.425`, `1.357`, and
+`1.192`; better fit did not move held-out decisions. The shared-session
+Phoenix/truthful-alternative reference scored `0.5700` BA.
+
+No candidate reached the required `+0.02`, so confirmation was explicitly
+skipped. Retain base Qwen plus `knowledge_report_type` as the strongest narrow
+HP-KR specialist. Do not increase rank or training dose from this failed
+development result.
+
 This experiment tests whether a very small external-data mixture broadens the
 Phoenix student beyond factual instructed/Qwen-varied deception without
 overwriting its competition calibration. It uses four Liars' Bench categories
