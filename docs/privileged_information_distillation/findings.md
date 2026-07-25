@@ -1701,6 +1701,22 @@ BA and the action-report prompt raises a frozen 200-row sample from `0.61` to
 FPR `0.7526 -> 0.0419`) across every source family, although it misses its
 predeclared absolute `0.70` BA gate by `0.00011`.
 
+The preregistered scale-up rejects insufficient exposure as the leading
+explanation at this scale. It generated 1,024/1,024 usable GPT-OSS targets from
+new rows, balanced at 128 examples per label/category, then continued the
+selected rank-16 adapter on those targets plus 288 Qwen-varied replay examples.
+The run completed 41 steps in 1,146 seconds and produced weights with a
+different hash from the parent. Despite the real update, the candidate and
+parent make exactly the same parsed decisions on both frozen evaluations:
+competition validation stays `0.9048` BA across 822 rows, while the disjoint
+external macro stays `0.61375` across 800 rows. Choice, HP-KR, Insider Trading,
+and soft-trigger BAs remain `0.630`, `0.355`, `0.575`, and `0.895`; every
+category and category/source delta is zero. The `+0.02` external gate therefore
+fails. Do not test or promote this adapter, and do not repeat the same
+exposure/LR path. HP-KR and Insider Trading were previously inspected over
+their complete public categories, so this evaluation is train-disjoint rather
+than a never-inspected benchmark.
+
 These results favor model-agnostic semantic routing over small weight updates:
 use one existing call, require an explicit observable report contract, and
 change the judging question rather than infer a hidden category or organism

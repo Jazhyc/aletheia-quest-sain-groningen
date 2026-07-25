@@ -2,7 +2,7 @@
 
 ## GPT-OSS OOD scale-up
 
-The next campaign holds the selected Phoenix student, rank-16 continuation
+This campaign holds the selected Phoenix student, rank-16 continuation
 recipe, and GPT-OSS teacher prompt fixed while increasing only the amount of
 cross-scenario Liars' Bench supervision. It samples 128 rows per label from
 each of harm-pressure choice, harm-pressure knowledge report, Insider Trading,
@@ -41,6 +41,22 @@ source-model cell may lose more than `0.05`. A macro pass does not justify
 hiding a material response-mode regression. Category/source cells containing
 both labels use balanced accuracy; structurally one-class cells use ordinary
 accuracy and are marked as such in the analysis.
+
+The frozen run rejected the adapter. GPT-OSS produced 1,024/1,024 usable
+summaries with balanced labels, zero privileged-language leaks, and one benign
+polarity-regex false positive. The rank-16 continuation trained on those 1,024
+targets plus 288 Qwen-varied replay rows for 41 steps in 1,146 seconds. Its
+adapter weights differ from the parent, but its parsed decisions do not:
+competition validation remains `0.9048` BA with zero paired changes, and the
+800-row external macro remains `0.61375` BA with zero paired changes. External
+category BAs remain `0.630` choice, `0.355` HP-KR, `0.575` Insider Trading, and
+`0.895` soft trigger; every category and category/source delta is zero.
+
+This fails the required `+0.02` external gain. Do not promote or test the
+adapter, and do not continue this exposure/LR branch. Scaling the earlier cache
+fourfold did not move the decision boundary, so missing exposure at this scale
+is no longer the leading explanation. Observable semantic prompts and stronger
+judge capacity remain better-supported directions.
 
 This experiment tests whether a very small external-data mixture broadens the
 Phoenix student beyond factual instructed/Qwen-varied deception without
