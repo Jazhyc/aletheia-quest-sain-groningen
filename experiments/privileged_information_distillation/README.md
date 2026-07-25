@@ -417,6 +417,61 @@ If the coarse winner is the `1e-4` boundary, extend the same frozen sweep with
 `pid_varied_rank24_full_adamw2e4_v1` and
 `pid_varied_rank24_full_adamw3e4_v1` before selecting a rate.
 
+### DataRater-style gradient filtering
+
+`score_datarater_gradient_alignment.py` implements a tractable first-order
+adaptation of [DataRater](https://arxiv.org/abs/2505.17895) for the
+reasoning-summary cache. It reserves a
+dataset/label-stratified 5% meta split, forms a prediction-only held-out
+gradient, and rates each disjoint candidate by the dot product between its
+full teacher-target gradient and that meta gradient. A positive score means
+that a small update on the candidate is locally aligned with reducing the
+held-out prediction loss.
+
+The scorer uses rank-16 LoRA parameters. By default it restricts the valuation
+subspace to the final transformer block and estimates gradient dots with two
+batched finite-difference forwards; `--scoring-mode exact` remains available
+for calibration smokes. This is a one-step influence approximation, not the
+paper's learned rater network or multi-step unrolled meta-optimisation.
+
+```bash
+sbatch experiments/privileged_information_distillation/run_datarater_score.sh \
+  --output-dir \
+    results/blackbox/qwen9b_pid_datarater_gradient_rank16_last1_v1 \
+  --lora-rank 16 \
+  --last-layers 1 \
+  --scoring-mode finite_difference \
+  --finite-difference-epsilon 0.1 \
+  --meta-batch-size 1 \
+  --candidate-batch-size 8
+```
+
+The output contains resumable per-example scores, the disjoint meta manifest,
+and matched random, high-loss, and gradient-alignment manifests at 25%, 50%,
+and 75% keep fractions. Train the frozen 50% screen with equal 90-step compute:
+
+```bash
+for selector in random50 loss50 dot50; do
+  sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+    --config-name "pid_datarater_${selector}_rank16_fixed90_v1"
+done
+```
+
+Compare these adapters with the full varied-only rank-16 baseline in forward
+and reverse shared vLLM sessions. Keep validation and local test out of the
+meta split; the latter remains blocked unless the position-averaged validation
+gain clears the existing promotion threshold.
+
+The frozen 50% screen did not improve validation. Position-averaged overall BA
+was `0.9048` for the full-data baseline, `0.9054` for matched random filtering,
+and `0.9042` for both high-loss and gradient-alignment filtering. Gradient
+filtering reduced varied BA from `0.8097` to `0.8069`. Do not run local test,
+promote the selector, or extend this initialization-state/last-block proxy to a
+keep-fraction, layer-count, seed-population, or dynamic-state sweep. The
+complete calibration, score diagnostics, training provenance, and
+forward/reverse metrics are in
+`docs/privileged_information_distillation/findings.md`.
+
 For matched data-efficiency sweeps, set `student.train_fraction` in `(0, 1]`.
 Rows are selected deterministically within every dataset/label stratum using
 `student.train_fraction_seed`, so small fractions retain every organism and

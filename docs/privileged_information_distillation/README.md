@@ -87,6 +87,8 @@ audit with `parse_error=true` and are automatically excluded from SFT.
 - Teacher generation: `experiments/privileged_information_distillation/generate_teacher_data.py`
 - Harmony extraction/parser: `experiments/privileged_information_distillation/core.py`
 - Student SFT: `experiments/privileged_information_distillation/train_student_sft.py`
+- DataRater-style gradient scorer:
+  `experiments/privileged_information_distillation/score_datarater_gradient_alignment.py`
 - Label-blind rationale audit:
   `experiments/privileged_information_distillation/audit_teacher_rationales.py`
 
@@ -97,6 +99,8 @@ match exactly.
 ```bash
 sbatch experiments/privileged_information_distillation/run_teacher.sh
 sbatch experiments/privileged_information_distillation/run_student_sft.sh
+sbatch experiments/privileged_information_distillation/run_datarater_score.sh \
+  --output-dir results/blackbox/qwen9b_pid_datarater_gradient_rank16_last1_v1
 sbatch experiments/privileged_information_distillation/run_teacher_rationale_audit.sh
 ```
 

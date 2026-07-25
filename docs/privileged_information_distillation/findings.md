@@ -2342,3 +2342,84 @@ adapter, do not test the cleaned adapter, and do not expand the cleaning mask to
 unverified GPT-OSS flags. Teacher-rationale errors are real supervision defects,
 but selective removal at this prevalence does not measurably improve the
 aggregate judge.
+
+## Rank-16 DataRater-style gradient filtering (2026-07-25)
+
+The first filtering screen adapted DataRater's held-out meta-objective to the
+selected reasoning-summary SFT recipe without using validation or test labels.
+Of 2,877 usable varied-deception teacher targets, a stable dataset/label-
+stratified split reserved 144 rows (5%) for the meta objective and left 2,733
+disjoint candidates. The outer loss supervised only the final binary
+prediction, while each candidate's inner loss supervised its full GPT-OSS
+reasoning summary plus prediction. This directly tests whether reasoning-target
+updates help held-out classification rather than merely reproduce rationale
+wording.
+
+The scorer used a fresh rank-16/alpha-32 LoRA and selected all attention/MLP
+LoRA matrices in the final Qwen transformer block: 1,277,952 parameters. It
+formed the held-out gradient exactly and estimated each candidate-gradient dot
+product with two no-grad forwards, perturbing the LoRA parameters by `0.1`
+along the normalized meta-gradient. This is a tractable one-step influence
+proxy. It does not reproduce DataRater's learned non-causal rater, population
+of inner models, or multi-step unrolled meta-optimisation.
+
+A deterministic rank-16 calibration used the same seeded LoRA basis for exact
+and finite-difference scoring over eight meta rows and 16 candidates. Pearson
+correlation was `0.6658`, Spearman correlation `0.7735`, sign agreement
+`0.75`, and top-half overlap `7/8`. The full H100 pass then scored all 2,733
+candidates with meta-gradient norm `4.6504` and mean meta loss `4.4622`. Its
+canonical `scores.jsonl` SHA-256 is
+`87872d48b840c61b1bd60c6f6e53e67057d9534ce5833e68a763437d7c405dee`.
+
+The resulting signal was distinct from ordinary difficulty. Gradient dot and
+teacher completion loss had Pearson/Spearman correlations of only
+`0.0594/0.0611`. At 50% keep, the dot/loss selections shared 721/1,368 rows
+(Jaccard `0.3578`), while dot/random shared 684 rows (Jaccard `0.3333`).
+Every manifest retained 684 rows per label and preserved every dataset/label
+stratum.
+
+| 50% selection | rows | mean gradient dot | mean teacher loss | positive-dot fraction |
+| --- | ---: | ---: | ---: | ---: |
+| All candidates | 2,733 | `+0.01246` | `0.91561` | `0.542` |
+| Matched random | 1,368 | `+0.01013` | `0.91616` | `0.537` |
+| High loss | 1,368 | `+0.02075` | `1.05691` | `0.569` |
+| Gradient dot | 1,368 | `+0.09830` | `0.92572` | `0.999` |
+
+All downstream students used the established rank-16/alpha-32 all-projection
+adapter, AdamW `5e-5`, and exactly 90 optimizer steps. Random job `30291345`
+completed in 958.1 seconds with train loss `0.4855`; high-loss job `30291346`
+completed in 974.1 seconds with train loss `0.5698`. The gradient arm first
+completed on the Lambda H100 with train loss `0.4857`. Because the cluster-to-
+Lambda SSH path could not reliably transfer the 116 MB weights, job `30291532`
+replicated the exact run on the same RTX environment as the controls. It
+completed in 960.0 seconds with train loss `0.4859` and saved a verified
+rank-16/alpha-32 adapter with SHA-256
+`e59811546933ee3344ba57bedfc669801fe254d2396dbce4001c733a4fd88003`.
+
+Definitive forward/reverse shared vLLM sessions `30291540` and `30291541`
+loaded the full-data baseline, matched random, high-loss, and gradient-dot
+adapters in opposite orders. Position-averaged results were:
+
+| training data | overall BA | instructed BA | varied BA | recall | FPR | mean parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Full varied baseline | `0.9048` | `0.9760` | **`0.8097`** | `0.8381` | `0.0286` | 4.0 |
+| Random keep 50% | **`0.9054`** | **`0.9771`** | **`0.8097`** | **`0.8393`** | `0.0286` | 4.0 |
+| High-loss keep 50% | `0.9042` | `0.9760` | `0.8083` | **`0.8393`** | `0.0310` | 3.0 |
+| Gradient-dot keep 50% | `0.9042` | **`0.9771`** | `0.8069` | `0.8369` | `0.0286` | 3.0 |
+
+The gradient adapter made two fixes and two breaks relative to baseline in the
+forward session, then three fixes and four breaks in reverse. It also changed
+nine binary decisions between its two adapter positions, compared with one for
+random, three for loss, and four for baseline. Thus its `-0.0006` overall and
+`-0.0028` varied deltas are not an improvement hidden by parse failures; the
+selector slightly lowers recall at the same FPR and is at least as sensitive
+to backend position as the controls.
+
+This screen fails the frozen `+0.005` validation promotion rule and does not
+beat random filtering. Do not run local test, promote this selector, or spend
+additional compute on its predeclared 25%/75% keep fractions, more LoRA layers,
+multiple initialization seeds, trained-state rescoring, soft weighting, or a
+learned rater. This negative result rejects the current one-step,
+initialization-state, last-block approximation for this already curated,
+Qwen-only varied cache; it does not establish that the paper's much more
+expensive full DataRater algorithm would fail in another regime.
