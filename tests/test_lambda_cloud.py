@@ -117,6 +117,14 @@ def test_parser_requires_explicit_confirmation_for_launch() -> None:
     assert args.allow_non_x86 is False
 
 
+def test_sync_code_requires_explicit_uncommitted_opt_in() -> None:
+    parser = lambda_cloud.build_parser()
+    args = parser.parse_args(["sync-code", "--campaign", "prompt-campaign"])
+    assert args.include_uncommitted is False
+    committed = parser.parse_args(["sync-commit", "--campaign", "prompt-campaign"])
+    assert committed.revision == "HEAD"
+
+
 def test_public_key_fingerprint_matches_openssh_shape() -> None:
     public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEqHxWB8sExampleOnly"
     assert lambda_cloud.public_key_fingerprint(public_key).startswith("SHA256:")

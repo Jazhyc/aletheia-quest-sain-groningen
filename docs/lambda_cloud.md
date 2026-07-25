@@ -80,20 +80,24 @@ Run a non-interactive command:
   --campaign qwen-prompt-sweep -- nvidia-smi
 ```
 
-Copy repository code to `~/Aletheias-Quest-Competition`:
+Copy the committed `HEAD` snapshot to `~/Aletheias-Quest-Competition`:
 
 ```bash
-.venv/bin/python scripts/lambda_cloud.py sync-code \
+.venv/bin/python scripts/lambda_cloud.py sync-commit \
   --campaign qwen-prompt-sweep
 
 .venv/bin/python scripts/lambda_cloud.py bootstrap \
   --campaign qwen-prompt-sweep
 ```
 
-The code sync excludes `.env`, Git metadata, environments, caches, datasets,
-logs, and results. `bootstrap` installs a managed Python 3.12 with `uv`, performs
-`uv sync --locked`, and checks that PyTorch and vLLM can see the GPU. Copy any
-required ignored input artifact explicitly:
+`sync-commit` excludes all uncommitted and ignored content, including `.env`,
+environments, caches, datasets, logs, and results. This is the preferred
+reproducible campaign transfer. `sync-code` transfers the working tree but
+refuses a dirty tree unless `--include-uncommitted` is explicitly supplied.
+
+`bootstrap` installs a managed Python 3.12 with `uv`, performs `uv sync
+--locked`, and checks that PyTorch and vLLM can see the GPU. Copy any required
+ignored input artifact explicitly:
 
 ```bash
 .venv/bin/python scripts/lambda_cloud.py push \

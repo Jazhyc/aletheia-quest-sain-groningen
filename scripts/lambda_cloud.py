@@ -627,6 +627,20 @@ def rsync_ssh_command(private_key: Path) -> str:
 
 
 def command_sync_code(args: argparse.Namespace, client: LambdaCloudClient) -> None:
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if status.returncode != 0:
+        fail(f"could not inspect the Git working tree: {status.stderr.strip()}")
+    if status.stdout.strip() and not args.include_uncommitted:
+        fail(
+            "the working tree has uncommitted content; use sync-commit for a "
+            "reproducible HEAD snapshot, or pass --include-uncommitted explicitly"
+        )
     private_key, instance = active_ssh_target(args, client)
     target = f"ubuntu@{instance['ip']}:{REMOTE_ROOT}/"
     mkdir_argv = ssh_argv(private_key, instance["ip"]) + ["mkdir", "-p", REMOTE_ROOT]
@@ -642,6 +656,59 @@ def command_sync_code(args: argparse.Namespace, client: LambdaCloudClient) -> No
         argv.extend(["--exclude", pattern])
     argv.extend([f"{ROOT}/", target])
     run_checked(argv)
+
+
+def command_sync_commit(args: argparse.Namespace, client: LambdaCloudClient) -> None:
+    private_key, instance = active_ssh_target(args, client)
+    mkdir_argv = ssh_argv(private_key, instance["ip"]) + [
+        "mkdir",
+        "-p",
+        REMOTE_ROOT,
+    ]
+    run_checked(mkdir_argv)
+    archive = subprocess.Popen(
+        ["git", "archive", "--format=tar", args.revision],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    assert archive.stdout is not None
+    remote_argv = ssh_argv(private_key, instance["ip"]) + [
+        "tar",
+        "-xf",
+        "-",
+        "-C",
+        REMOTE_ROOT,
+    ]
+    remote = subprocess.run(remote_argv, stdin=archive.stdout, check=False)
+    archive.stdout.close()
+    archive_stderr = archive.stderr.read().decode() if archive.stderr else ""
+    archive_code = archive.wait()
+    if archive_code != 0:
+        fail(
+            f"git archive failed for revision {args.revision!r}: "
+            f"{archive_stderr.strip() or f'exit code {archive_code}'}"
+        )
+    if remote.returncode != 0:
+        fail(f"remote archive extraction failed with exit code {remote.returncode}")
+    revision = subprocess.run(
+        ["git", "rev-parse", args.revision],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if revision.returncode != 0:
+        fail(f"could not resolve revision {args.revision!r}")
+    print_json(
+        {
+            "status": "synced",
+            "campaign": args.campaign,
+            "revision": revision.stdout.strip(),
+            "remote_root": f"~/Aletheias-Quest-Competition",
+            "uncommitted_content": "excluded",
+        }
+    )
 
 
 def command_bootstrap(args: argparse.Namespace, client: LambdaCloudClient) -> None:
@@ -829,8 +896,22 @@ def build_parser() -> argparse.ArgumentParser:
         "sync-code", help="copy code while excluding secrets, caches, logs, and results"
     )
     sync_parser.add_argument("--campaign", required=True)
+    sync_parser.add_argument(
+        "--include-uncommitted",
+        action="store_true",
+        help="explicitly allow transfer when the working tree is dirty",
+    )
     add_private_key_argument(sync_parser)
     sync_parser.set_defaults(handler=command_sync_code)
+
+    commit_parser = subparsers.add_parser(
+        "sync-commit",
+        help="copy a reproducible committed Git snapshot without working-tree changes",
+    )
+    commit_parser.add_argument("--campaign", required=True)
+    commit_parser.add_argument("--revision", default="HEAD")
+    add_private_key_argument(commit_parser)
+    commit_parser.set_defaults(handler=command_sync_commit)
 
     bootstrap_parser = subparsers.add_parser(
         "bootstrap",
