@@ -1,5 +1,11 @@
 # Privileged-Information Distillation
 
+The 2026-07-25 AUROC-first metric amendment and the corresponding continuous
+Phoenix score-extraction plan are documented in
+[`../auroc_first_strategy.md`](../auroc_first_strategy.md). It supersedes
+earlier deployment decisions that rejected AUROC-only gains under the old
+balanced-accuracy-first rules; it does not rewrite their measurements.
+
 The source-grounded two-stage atomic-audit ablation is specified in
 [`atomic_audit_distillation.md`](atomic_audit_distillation.md). It freezes a blind
 audit before revealing the label and preserves audit/label conflicts rather than

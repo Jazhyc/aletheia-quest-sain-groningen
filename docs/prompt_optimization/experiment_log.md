@@ -3226,3 +3226,26 @@ renderer, and `phoenix_wright_v3_0.ipynb` as the sole submission notebook. The
 bundled `phoenix_wright_v3_reasoning_stack.joblib` artifact and v3.2 notebook
 are removed. P75/P76 remain reproducible historical experiments, but the
 n-gram stack is no longer a deployment candidate.
+
+### AUROC-first competition amendment (2026-07-25)
+
+The team reported a new organizer rule making mean per-dataset AUROC the main
+competition metric. The public competition page still showed the older
+balanced-accuracy-first language when checked, so repository guidance records
+the dated amendment without rewriting historical BA-selected outcomes.
+
+This changes the next Phoenix priority. Phoenix v3.0 emits parsed binary scores
+and therefore collapses the ranking into two tied groups. Prior continuous
+margin diagnostics already showed useful signal in the tuned student:
+empty-summary `Prediction:0|1` margins reached validation/test AUROC
+`0.9371/0.9307`, while post-reasoning margins reached `0.9305/0.9366`, compared
+with contemporaneous binary AUROC `0.9036/0.9107`. Those measurements used an
+earlier varied-only adapter and cannot choose a current Phoenix v3 winner.
+
+P80 preregisters a matched validation sweep on the current rank-16 adapter:
+binary reference, direct label logits, empty-summary label logits, and
+post-generation label logits. The primary accuracy-oriented path removes the
+generated final digit and scores `0` versus `1` at that exact position. The
+direct conditions are speed ablations. Selection is validation macro AUROC,
+with one frozen local-test confirmation. See
+`docs/auroc_first_strategy.md`.

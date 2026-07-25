@@ -8,6 +8,12 @@ Source: leaderboard API, last queried on 2026-07-16. Official metrics are
 the leaderboard's counted mean across private datasets. Dataset names are the
 opaque public labels returned by the Space.
 
+> **Metric amendment (2026-07-25).** The team reports that organizers changed
+> the main metric to mean per-dataset AUROC. Rows below are historical results
+> produced under the earlier BA-first regime. Most Phoenix submissions emitted
+> binary scores, so their AUROC contains extensive ties and is not a competitive
+> continuous-ranking baseline.
+
 ## Current Status
 
 - Team: `SAIN Groningen`

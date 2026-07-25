@@ -3324,8 +3324,10 @@ Binary-safe intent gate (2026-07-21):
 - On the paired 400-row NDIF unit, the gate skipped 200 intent calls and cut
   runtime from `615.340` to `501.491` seconds (`-18.50%`). BA remained `0.9475`
   with zero decision disagreements; AUROC fell from `0.99155` to `0.98240`.
-  `PHOENIX_INTENT_GATE=0` retains an explicit ungated rollback. Keep reporting
-  the AUROC cost even though balanced accuracy is the primary metric.
+  `PHOENIX_INTENT_GATE=0` retains an explicit ungated rollback. Under the
+  pre-2026-07-25 rules, keep reporting the AUROC cost even though balanced
+  accuracy was then the primary metric. Under the current AUROC-first rules,
+  this gate is rejected on its ranking loss alone.
 
 ## P68: Belief-Grounded Intent Member
 
@@ -4232,3 +4234,39 @@ Outcome:
 - Selection is null. Confirmation was explicitly skipped, and competition
   validation/test remain untouched. Do not extend epochs, raise rank, tune LR
   further, or inspect confirmation from this failed development screen.
+
+## P80: AUROC-First Phoenix Label Margins
+
+Status: proposed after the 2026-07-25 metric amendment.
+
+Question: can the current Phoenix v3 rank-16 reasoning-summary judge expose its
+latent continuous ranking without changing its trained decision rule?
+
+Frozen design:
+
+- Load the exact current Phoenix v3 adapter and renderer once.
+- Compare the parsed binary reference, direct `Prediction:` logits, canonical
+  empty-summary logits, and post-generation logits at the final prediction
+  position.
+- For every logits arm, constrain the next token to the exact single-token
+  `0`/`1` verbalizers and score
+  `sigmoid(logit_1 - logit_0)`.
+- For post-generation scoring, remove the generated final digit. Never score
+  the token after a completed `Prediction:0|1`.
+- Hold prompts, context limits, examples, model, adapter, and label
+  verbalizers fixed. Batch all arms in one persistent vLLM allocation.
+- Select on validation mean per-dataset AUROC. Report per-dataset AUROC,
+  unique-score/tie statistics, saturation, fallback rate, runtime, and binary
+  metrics as diagnostics.
+- Freeze the winner before one local-test confirmation. Do not choose between
+  direct and post-generation scoring from earlier local-test observations.
+
+Interpretation:
+
+- Post-generation scoring is the training-matched accuracy candidate because
+  the adapter learned to emit a reasoning summary before the prediction.
+- Direct and empty-summary margins are cheaper deployment ablations. The empty
+  scaffold preserves more of the trained completion format.
+- Existing varied-only adapter diagnostics establish feasibility but do not
+  select the current Phoenix v3 method. The complete contract and prior
+  measurements are in `docs/auroc_first_strategy.md`.

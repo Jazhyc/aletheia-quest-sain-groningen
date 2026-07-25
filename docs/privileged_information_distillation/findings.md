@@ -841,14 +841,19 @@ post-reasoning BA moved from 0.9036 to 0.9060 on validation and from 0.9107 to
 0.885/0.887 validation BA and 0.880/0.877 test BA for empty/post-reasoning
 margins, because it materially increased FPR.
 
-Decision: do not add an NDIF logits pass, change Phoenix's binary predictions,
-or optimize AUROC alone. Balanced accuracy is the primary competition metric
-and AUROC is only the tie-breaker; the extra pass adds runtime and failure
-surface without a demonstrated BA improvement. Retain the margin evaluator as
-a future diagnostic or blending feature, and reconsider it only if a frozen
-threshold or blend improves balanced accuracy on held-out data. The full
+Pre-amendment decision: do not add an NDIF logits pass, change Phoenix's binary
+predictions, or optimize AUROC alone. At the time, balanced accuracy was the
+primary competition metric and AUROC was only the tie-breaker; the extra pass
+added runtime and failure surface without a demonstrated BA improvement.
+
+2026-07-25 amendment: the organizer change to AUROC-first ranking reverses that
+deployment conclusion, not the measurements. Continuous Phoenix margins are now
+a priority implementation candidate. Re-run empty-summary and post-reasoning
+conditions against the current bundled rank-16 adapter, select on validation
+macro AUROC, and reserve local test for one frozen confirmation. The full prior
 implementation remains in commit `eabc519` on branch
-`experiment/pid-continuous-margin`.
+`experiment/pid-continuous-margin`; the updated experiment contract is in
+`docs/auroc_first_strategy.md`.
 
 ## Rule-based claim-gated Wikidata follow-up
 
