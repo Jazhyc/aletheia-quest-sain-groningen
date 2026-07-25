@@ -1,5 +1,202 @@
 # Liars' Bench privileged augmentation
 
+## GPT-OSS OOD scale-up
+
+This campaign holds the selected Phoenix student, rank-16 continuation
+recipe, and GPT-OSS teacher prompt fixed while increasing only the amount of
+cross-scenario Liars' Bench supervision. It samples 128 rows per label from
+each of harm-pressure choice, harm-pressure knowledge report, Insider Trading,
+and soft trigger, for 1,024 teacher targets total. A separate 100 rows per
+label/category (800 total) is frozen for evaluation.
+
+This is an OOD-coverage experiment, not a claim that the public category
+mixture matches private Notus. Training continues the selected varied-only
+adapter for one epoch at AdamW `2e-5` and replays the same 10% Qwen-varied cache.
+The parent adapter is the causal baseline; do not compare against the old
+10%-data adapter.
+
+The sampler excludes the original 256-row teacher cache, its 800-row evaluation,
+the frozen category-signature sample, the second heavy-spectrum confirmation,
+and the focused soft-trigger confirmations. HP-KR and Insider Trading have
+already been evaluated over their complete public categories, so the new
+evaluation is train-disjoint and avoids focused prior samples but cannot be
+described as a never-inspected benchmark.
+
+Run individual phases on the persistent Lambda H100:
+
+```bash
+bash experiments/liars_bench_distillation/run_ood_campaign_lambda.sh teacher
+bash experiments/liars_bench_distillation/run_ood_campaign_lambda.sh train
+bash experiments/liars_bench_distillation/run_ood_campaign_lambda.sh external-eval
+bash experiments/liars_bench_distillation/run_ood_campaign_lambda.sh validation
+bash experiments/liars_bench_distillation/run_ood_campaign_lambda.sh analyze
+```
+
+The teacher audit still requires at least 90% usable coverage, no more than 5%
+usable-label imbalance per category, and no more than 5% privileged-language
+leakage or summary-polarity conflict. Promote the adapter only if competition
+validation loses no more than `0.0025` BA and train-disjoint external macro BA
+gains at least `0.02`. No category may lose more than `0.02` BA and no
+source-model cell may lose more than `0.05`. A macro pass does not justify
+hiding a material response-mode regression. Category/source cells containing
+both labels use balanced accuracy; structurally one-class cells use ordinary
+accuracy and are marked as such in the analysis.
+
+The frozen run rejected the adapter. GPT-OSS produced 1,024/1,024 usable
+summaries with balanced labels, zero privileged-language leaks, and one benign
+polarity-regex false positive. The rank-16 continuation trained on those 1,024
+targets plus 288 Qwen-varied replay rows for 41 steps in 1,146 seconds. Its
+adapter weights differ from the parent, but its parsed decisions do not:
+competition validation remains `0.9048` BA with zero paired changes, and the
+800-row external macro remains `0.61375` BA with zero paired changes. External
+category BAs remain `0.630` choice, `0.355` HP-KR, `0.575` Insider Trading, and
+`0.895` soft trigger; every category and category/source delta is zero.
+
+This fails the required `+0.02` external gain. Do not promote or test the
+adapter, and do not continue this exposure/LR branch. Scaling the earlier cache
+fourfold did not move the decision boundary, so missing exposure at this scale
+is no longer the leading explanation. Observable semantic prompts and stronger
+judge capacity remain better-supported directions.
+
+### Frozen general-prompt follow-up
+
+The next experiment keeps the selected parent adapter fixed and changes only
+the general inference prompt. It compares the unchanged Truth Value Guard with
+three model-agnostic variants: observable response-mode classification, a
+material-claim ledger, and a truthful-alternative counterfactual. Every prompt
+uses the same conversation view, deterministic decoding, 512-token allowance,
+and output parser. No category name, source model, organism identity, or label
+is visible to the judge.
+
+The previously scored 800-row artifact is now a development resource, not a
+fresh holdout. Before generating any prompt variants it is deterministically
+split within each category/label cell into 400 development and 400 confirmation
+rows. All four prompts run on development. A non-control prompt advances only
+for at least `+0.03` macro-category BA, no category loss beyond `0.02`, no
+category/source loss beyond `0.05`, and at most ten additional parse failures.
+Only the best passing prompt runs on confirmation, where it must gain at least
+`0.02` under the same preservation floors. Competition validation is run only
+after that independent confirmation and permits at most `0.0025` overall BA
+loss, `0.01` instructed or varied BA loss, and ten additional parse failures.
+Local competition test remains untouched.
+
+Run the phases on the persistent Lambda H100:
+
+```bash
+bash experiments/liars_bench_distillation/run_prompt_sweep_lambda.sh development
+bash experiments/liars_bench_distillation/run_prompt_sweep_lambda.sh select
+bash experiments/liars_bench_distillation/run_prompt_sweep_lambda.sh confirmation
+bash experiments/liars_bench_distillation/run_prompt_sweep_lambda.sh confirm
+bash experiments/liars_bench_distillation/run_prompt_sweep_lambda.sh validation
+bash experiments/liars_bench_distillation/run_prompt_sweep_lambda.sh analyze
+```
+
+The development gate rejected all three variants, so confirmation and
+competition validation were correctly skipped. The control scored `0.6300`
+macro BA. Mode-first reached `0.6550`, but lost `0.040` choice BA and `0.030`
+soft-trigger BA. The claim ledger reached `0.6600`, gaining `0.220` HP-KR BA
+while losing `0.090` Insider Trading BA. The truthful-alternative prompt was
+the aggregate leader at `0.6975`: choice gained `0.070`, HP-KR gained `0.210`,
+Insider Trading lost `0.010`, and soft trigger was unchanged. It made 95
+changes, with 61 fixes and 34 breaks, and added no parse failures.
+
+The aggregate leader nevertheless breached the frozen category/source floor.
+Qwen forced-choice BA lost `0.0696`, Gemma action-report BA lost `0.0556`, and
+two small soft-trigger family cells each lost one row (`-0.125`). Do not promote
+it or inspect the confirmation half post hoc. The honest-alternative framing is
+useful evidence that a general prompt can recover part of the HP-KR and choice
+gap, but it is not stable enough to replace the general judge. Future prompt
+work should isolate that framing behind an observable contract or obtain a new
+grouped confirmation set rather than tuning wording on these development rows.
+
+### Frozen semantic prompt router
+
+The universal truthful-alternative prompt's gains motivate a narrower
+composition with the regular Truth Value Guard as default. Two already-defined
+label-blind rules identify explicit observable contracts: a constrained
+knowledge self-report, and a harmful forced A-D answer. On both prompt-sweep
+halves the rules cover all 100 HP-KR and all 100 forced-choice rows respectively
+with zero action-report or soft-trigger spillover. Knowledge routing explicitly
+excludes forced-choice conversations.
+
+Three fixed compositions reuse the cached development generations:
+knowledge-only, choice-only, and their union. A routed row uses the
+truthful-alternative prompt; every other row uses the unchanged control. No
+label, category, dataset, source model, organism identity, fitted n-gram, or
+threshold enters the route. A learned n-gram category router is deferred
+because the available labels confound response mode with public dataset and
+source templates.
+
+Development requires `+0.03` macro BA, category delta at least `-0.02`,
+category/source delta at least `-0.05`, and at most ten additional parse
+failures. Select only the highest macro-gain passing composition. Confirmation
+generates the control for all 400 reserved rows and the alternate prompt only
+for routed rows; it requires `+0.02` macro BA under the same preservation
+floors. Competition validation remains contingent on confirmation.
+
+```bash
+bash experiments/liars_bench_distillation/run_prompt_router_lambda.sh development
+bash experiments/liars_bench_distillation/run_prompt_router_lambda.sh select
+bash experiments/liars_bench_distillation/run_prompt_router_lambda.sh confirmation
+bash experiments/liars_bench_distillation/run_prompt_router_lambda.sh confirm
+bash experiments/liars_bench_distillation/run_prompt_router_lambda.sh competition-audit
+```
+
+Knowledge-only is the selected route. On development it raises macro BA
+`0.6300 -> 0.6825` and HP-KR `0.3700 -> 0.5800`, with 30 fixes and nine breaks.
+Choice-only fails the aggregate gate and its Qwen cell loses `0.0696`; the union
+inherits that failure. On untouched confirmation, knowledge-only raises macro
+BA `0.5950 -> 0.6725` and HP-KR `0.3400 -> 0.6500`, with 34 fixes, three breaks,
+and source-cell gains of `+0.4500` Llama, `+0.1146` Mistral, and `+0.4093` Qwen.
+Parse errors move from three to four.
+
+The exact knowledge rule matches zero of the 6,573 train, 822 validation, and
+821 test inputs. Competition validation is therefore identical to the regular
+judge by construction; the audit does not generate test predictions. Retain
+this as a dormant OOD specialist for explicit knowledge-report contracts. Do
+not add the failed choice route or train an n-gram category router on public
+category/source templates.
+
+### Rank-1 HP-KR specialist follow-up
+
+P79 asks whether a small task-specific update adds value beyond the strongest
+existing HP-KR prompt. It trains fresh rank-1/alpha-2 Qwen adapters only on the
+256 disjoint, label-balanced GPT-OSS HP-KR summaries from the scale-up cache.
+The regular rank-16 Phoenix adapter remains the default judge; this adapter is
+eligible only behind the already confirmed explicit knowledge-report rule.
+
+Three candidates vary only training dose: one epoch at `5e-5`, three epochs at
+`5e-5`, and three epochs at `1e-4`. All use the established
+`knowledge_report_type` prompt during training and inference, all projection
+targets, effective batch size 32, and the same 100/100 development/confirmation
+split as P78. Development compares against base Qwen with that strong prompt
+in the same vLLM session. A candidate advances only for at least `+0.02` HP-KR
+BA, every source-family delta at least `-0.05`, and no more than five additional
+parse errors. Confirmation requires `+0.01` under the same floors. The
+rank-16 truthful-alternative route is reported as a reference but is not the
+selection baseline.
+
+```bash
+bash experiments/liars_bench_distillation/run_hpkr_rank1_specialist_lambda.sh train
+bash experiments/liars_bench_distillation/run_hpkr_rank1_specialist_lambda.sh development
+bash experiments/liars_bench_distillation/run_hpkr_rank1_specialist_lambda.sh select
+bash experiments/liars_bench_distillation/run_hpkr_rank1_specialist_lambda.sh confirmation
+bash experiments/liars_bench_distillation/run_hpkr_rank1_specialist_lambda.sh confirm
+```
+
+The development gate rejected every adapter. Base Qwen with the report-type
+prompt scored `0.8100` BA (`0.94` recall, `0.32` FPR, zero parse errors).
+All three distinct 7,307,568-byte rank-1 adapters made exactly the same 100
+binary decisions, with zero fixes, zero breaks, and zero source-family deltas.
+The one-epoch and two three-epoch training losses were `1.425`, `1.357`, and
+`1.192`; better fit did not move held-out decisions. The shared-session
+Phoenix/truthful-alternative reference scored `0.5700` BA.
+
+No candidate reached the required `+0.02`, so confirmation was explicitly
+skipped. Retain base Qwen plus `knowledge_report_type` as the strongest narrow
+HP-KR specialist. Do not increase rank or training dose from this failed
+development result.
+
 This experiment tests whether a very small external-data mixture broadens the
 Phoenix student beyond factual instructed/Qwen-varied deception without
 overwriting its competition calibration. It uses four Liars' Bench categories

@@ -74,6 +74,38 @@ fields so a later controlled ablation can remove:
 Compare the unfiltered baseline against a filtered retrain only if the student
 shows the corresponding error modes on validation or local test.
 
+### Teacher-rationale cleaning audit (2026-07-25)
+
+The deferred semantic audit is now complete. Exact checks plus manual review
+find 30 unusable summaries among the 2,877 selected varied-only targets
+(`1.04%`; `2.09%` of positive targets), plus three positive parser failures
+that were already excluded. Six summaries justify deception only because the
+assistant disobeyed an instruction to lie; three of those visibly mention
+privileged information. The selected rank-16 adapter predicts zero on 26/30 of
+the unusable positive training rows, so the contradiction is behaviorally
+visible.
+
+Label-blind GPT-OSS audit job `30287922` parsed 6,561/6,570 full-cache rows and
+screened 186/2,877 selected summaries (`6.47%`) for masking. Its 147 selected
+factual flags have only moderate precision: a seeded random manual sample found
+16/30 clear errors, three arguable/minor cases, and 11 false or pedantic
+corrections. It also called all eight hand-verified supporting-detail misses
+factually sound, confirming correlated same-model blind spots. Combining the
+exact lower bound with the calibrated factual screen puts the practical
+prevalence near `3--4.5%`; retain `1.04%` as the firm lower bound and `6.47%`
+only as a review upper bound.
+
+Do not delete these rows or remove reasoning globally. The matched
+prediction-only student lost 5.24 local-test BA points, and prior teacher-prompt,
+teacher-model, reasoning-trace, and data-fraction controls show that
+better-looking summaries rarely change binary decisions. The next controlled
+ablation should retain every authoritative binary label but mask summary loss
+only for independently verified bad rationales. The strict 30-row stratum has
+an optimistic arithmetic ceiling near `+0.45` overall BA point; a realistic
+prior remains `0--0.5`, potentially negative. See
+[`rationale_cleaning_audit.md`](rationale_cleaning_audit.md) for examples,
+screen calibration, and the broader engineering ceiling.
+
 ## Student SFT learning-rate sweep
 
 Four one-epoch rank-16 LoRA students were trained with AdamW and evaluated in a
@@ -809,14 +841,29 @@ post-reasoning BA moved from 0.9036 to 0.9060 on validation and from 0.9107 to
 0.885/0.887 validation BA and 0.880/0.877 test BA for empty/post-reasoning
 margins, because it materially increased FPR.
 
-Decision: do not add an NDIF logits pass, change Phoenix's binary predictions,
-or optimize AUROC alone. Balanced accuracy is the primary competition metric
-and AUROC is only the tie-breaker; the extra pass adds runtime and failure
-surface without a demonstrated BA improvement. Retain the margin evaluator as
-a future diagnostic or blending feature, and reconsider it only if a frozen
-threshold or blend improves balanced accuracy on held-out data. The full
+Pre-amendment decision: do not add an NDIF logits pass, change Phoenix's binary
+predictions, or optimize AUROC alone. At the time, balanced accuracy was the
+primary competition metric and AUROC was only the tie-breaker; the extra pass
+added runtime and failure surface without a demonstrated BA improvement.
+
+2026-07-25 amendment: the organizer change to AUROC-first ranking reverses that
+deployment conclusion, not the measurements. Continuous Phoenix margins are now
+a priority implementation candidate. Re-run empty-summary and post-reasoning
+conditions against the current bundled rank-16 adapter, select on validation
+macro AUROC, and reserve local test for one frozen confirmation. The full prior
 implementation remains in commit `eabc519` on branch
-`experiment/pid-continuous-margin`.
+`experiment/pid-continuous-margin`; the updated experiment contract is in
+`docs/auroc_first_strategy.md`.
+
+P80 completed that matched rerun and added a true direct `Prediction:` arm.
+Validation macro AUROC was `0.9048` binary, **`0.9382` direct**, `0.9370`
+empty-summary, and `0.9304` post-reasoning. Direct required only a `9.7s`
+one-token margin pass, compared with `20.4s` generation plus `11.5s`
+post-reasoning scoring, and had zero missing logits. The frozen direct-only
+local-test confirmation scored **`0.9342` macro AUROC** (`0.9818` instructed,
+`0.8708` varied) in a `9.3s` margin pass. Direct label margins are therefore
+the selected first AUROC submission implementation; the generated reasoning
+path is retained as a rejected measured control.
 
 ## Rule-based claim-gated Wikidata follow-up
 
@@ -1669,6 +1716,34 @@ BA and the action-report prompt raises a frozen 200-row sample from `0.61` to
 FPR `0.7526 -> 0.0419`) across every source family, although it misses its
 predeclared absolute `0.70` BA gate by `0.00011`.
 
+The preregistered scale-up rejects insufficient exposure as the leading
+explanation at this scale. It generated 1,024/1,024 usable GPT-OSS targets from
+new rows, balanced at 128 examples per label/category, then continued the
+selected rank-16 adapter on those targets plus 288 Qwen-varied replay examples.
+The run completed 41 steps in 1,146 seconds and produced weights with a
+different hash from the parent. Despite the real update, the candidate and
+parent make exactly the same parsed decisions on both frozen evaluations:
+competition validation stays `0.9048` BA across 822 rows, while the disjoint
+external macro stays `0.61375` across 800 rows. Choice, HP-KR, Insider Trading,
+and soft-trigger BAs remain `0.630`, `0.355`, `0.575`, and `0.895`; every
+category and category/source delta is zero. The `+0.02` external gate therefore
+fails. Do not test or promote this adapter, and do not repeat the same
+exposure/LR path. HP-KR and Insider Trading were previously inspected over
+their complete public categories, so this evaluation is train-disjoint rather
+than a never-inspected benchmark.
+
+A follow-up held those parent weights fixed and varied only the general
+inference rubric on a preregistered 400-row development half. The unchanged
+control scored `0.6300` macro BA; mode-first, claim-ledger, and
+truthful-alternative prompts scored `0.6550`, `0.6600`, and `0.6975`.
+Truthful-alternative gained `0.070` choice and `0.210` HP-KR BA with action
+`-0.010` and soft trigger unchanged, but it breached the frozen
+category/source floor on Qwen choice (`-0.0696`) and Gemma action (`-0.0556`),
+as well as two small soft-trigger cells. No prompt advanced, so the untouched
+400-row confirmation half and competition validation were not queried. This
+shows more learnable movement from inference semantics than from the larger
+weight update, while still rejecting a universal replacement prompt.
+
 These results favor model-agnostic semantic routing over small weight updates:
 use one existing call, require an explicit observable report contract, and
 change the judging question rather than infer a hidden category or organism
@@ -1679,6 +1754,16 @@ mode coverage rather than local validation hill climbing. The action route is
 retained as a dormant theoretical change; a recipient-perspective clarification
 is being evaluated separately after a label-aided audit exposed a repeated
 meta-level error.
+
+A later rank-1 HP-KR specialist screen reinforces that conclusion. Three fresh
+7.3 MB adapters trained on the 256 GPT-OSS HP-KR targets at increasing dose;
+training loss fell from `1.425` to `1.192`. Nevertheless, all three made
+exactly the same 100 development decisions as base Qwen with the established
+report-type prompt (`0.8100` BA), with zero source-family or parse changes.
+The Phoenix/truthful-alternative reference scored `0.5700` in the same session.
+No adapter passed the `+0.02` gate, so confirmation was skipped. Do not raise
+rank or training dose: the prompt supplies the useful semantic specialization,
+while this small supervised update does not add a held-out decision signal.
 
 That clarification recovers the intended semantic distinction but is not
 calibrated. Full-category BA rises `0.6999 -> 0.7884` and recall nearly doubles
@@ -2279,3 +2364,115 @@ This fails the frozen `+0.005` empty-control gate. Do not run local test, packag
 the index, increase LoRA rank, or reweight the curriculum from these validation
 rows. Balanced consumer training preserves weak real-versus-shuffled
 sensitivity but does not make retrieval better than no intervention.
+
+## Verified teacher-rationale cleaning (2026-07-25)
+
+A manual and GPT-OSS-assisted audit estimates that `3--4.5%` of the 2,877
+selected teacher summaries contain harmful factual, semantic, or privileged
+rationale errors. The raw model screen flags `6.47%`, but manual calibration
+finds many pedantic or incorrect corrections; the exact structural lower bound
+is `1.04%`. See `rationale_cleaning_audit.md` for the qualitative examples and
+full prevalence accounting.
+
+The frozen first ablation replaces only 46 manually verified bad summaries
+(41 positive, five negative) with label-only targets. It removes 4,739
+supervised tokens (`1.74%`) while keeping every row and authoritative label.
+Matched rank-16 one-epoch AdamW `5e-5` training completed as job `30289933`.
+Forward and reverse shared-session validations (`30289934`, `30289976`) show
+the expected adapter-position shift: both models gain exactly 0.0024 overall BA
+when evaluated second. Position-averaged results are:
+
+| model | overall BA | instructed BA | varied BA |
+| --- | ---: | ---: | ---: |
+| Original teacher targets | **0.9048** | **0.9781** | **0.8069** |
+| Verified-46 label-only cleaning | 0.9036 | 0.9771 | 0.8056 |
+
+Matched-position comparisons each produce one net regression. The forward run's
+nominal gain is only three fixes/two breaks plus one neutral extra parse failure,
+and qualitative inspection finds new confident factual hallucinations alongside
+two useful spelling-error detections. Retain the original teacher/default
+adapter, do not test the cleaned adapter, and do not expand the cleaning mask to
+unverified GPT-OSS flags. Teacher-rationale errors are real supervision defects,
+but selective removal at this prevalence does not measurably improve the
+aggregate judge.
+
+## Rank-16 DataRater-style gradient filtering (2026-07-25)
+
+The first filtering screen adapted DataRater's held-out meta-objective to the
+selected reasoning-summary SFT recipe without using validation or test labels.
+Of 2,877 usable varied-deception teacher targets, a stable dataset/label-
+stratified split reserved 144 rows (5%) for the meta objective and left 2,733
+disjoint candidates. The outer loss supervised only the final binary
+prediction, while each candidate's inner loss supervised its full GPT-OSS
+reasoning summary plus prediction. This directly tests whether reasoning-target
+updates help held-out classification rather than merely reproduce rationale
+wording.
+
+The scorer used a fresh rank-16/alpha-32 LoRA and selected all attention/MLP
+LoRA matrices in the final Qwen transformer block: 1,277,952 parameters. It
+formed the held-out gradient exactly and estimated each candidate-gradient dot
+product with two no-grad forwards, perturbing the LoRA parameters by `0.1`
+along the normalized meta-gradient. This is a tractable one-step influence
+proxy. It does not reproduce DataRater's learned non-causal rater, population
+of inner models, or multi-step unrolled meta-optimisation.
+
+A deterministic rank-16 calibration used the same seeded LoRA basis for exact
+and finite-difference scoring over eight meta rows and 16 candidates. Pearson
+correlation was `0.6658`, Spearman correlation `0.7735`, sign agreement
+`0.75`, and top-half overlap `7/8`. The full H100 pass then scored all 2,733
+candidates with meta-gradient norm `4.6504` and mean meta loss `4.4622`. Its
+canonical `scores.jsonl` SHA-256 is
+`87872d48b840c61b1bd60c6f6e53e67057d9534ce5833e68a763437d7c405dee`.
+
+The resulting signal was distinct from ordinary difficulty. Gradient dot and
+teacher completion loss had Pearson/Spearman correlations of only
+`0.0594/0.0611`. At 50% keep, the dot/loss selections shared 721/1,368 rows
+(Jaccard `0.3578`), while dot/random shared 684 rows (Jaccard `0.3333`).
+Every manifest retained 684 rows per label and preserved every dataset/label
+stratum.
+
+| 50% selection | rows | mean gradient dot | mean teacher loss | positive-dot fraction |
+| --- | ---: | ---: | ---: | ---: |
+| All candidates | 2,733 | `+0.01246` | `0.91561` | `0.542` |
+| Matched random | 1,368 | `+0.01013` | `0.91616` | `0.537` |
+| High loss | 1,368 | `+0.02075` | `1.05691` | `0.569` |
+| Gradient dot | 1,368 | `+0.09830` | `0.92572` | `0.999` |
+
+All downstream students used the established rank-16/alpha-32 all-projection
+adapter, AdamW `5e-5`, and exactly 90 optimizer steps. Random job `30291345`
+completed in 958.1 seconds with train loss `0.4855`; high-loss job `30291346`
+completed in 974.1 seconds with train loss `0.5698`. The gradient arm first
+completed on the Lambda H100 with train loss `0.4857`. Because the cluster-to-
+Lambda SSH path could not reliably transfer the 116 MB weights, job `30291532`
+replicated the exact run on the same RTX environment as the controls. It
+completed in 960.0 seconds with train loss `0.4859` and saved a verified
+rank-16/alpha-32 adapter with SHA-256
+`e59811546933ee3344ba57bedfc669801fe254d2396dbce4001c733a4fd88003`.
+
+Definitive forward/reverse shared vLLM sessions `30291540` and `30291541`
+loaded the full-data baseline, matched random, high-loss, and gradient-dot
+adapters in opposite orders. Position-averaged results were:
+
+| training data | overall BA | instructed BA | varied BA | recall | FPR | mean parse errors |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Full varied baseline | `0.9048` | `0.9760` | **`0.8097`** | `0.8381` | `0.0286` | 4.0 |
+| Random keep 50% | **`0.9054`** | **`0.9771`** | **`0.8097`** | **`0.8393`** | `0.0286` | 4.0 |
+| High-loss keep 50% | `0.9042` | `0.9760` | `0.8083` | **`0.8393`** | `0.0310` | 3.0 |
+| Gradient-dot keep 50% | `0.9042` | **`0.9771`** | `0.8069` | `0.8369` | `0.0286` | 3.0 |
+
+The gradient adapter made two fixes and two breaks relative to baseline in the
+forward session, then three fixes and four breaks in reverse. It also changed
+nine binary decisions between its two adapter positions, compared with one for
+random, three for loss, and four for baseline. Thus its `-0.0006` overall and
+`-0.0028` varied deltas are not an improvement hidden by parse failures; the
+selector slightly lowers recall at the same FPR and is at least as sensitive
+to backend position as the controls.
+
+This screen fails the frozen `+0.005` validation promotion rule and does not
+beat random filtering. Do not run local test, promote this selector, or spend
+additional compute on its predeclared 25%/75% keep fractions, more LoRA layers,
+multiple initialization seeds, trained-state rescoring, soft weighting, or a
+learned rater. This negative result rejects the current one-step,
+initialization-state, last-block approximation for this already curated,
+Qwen-only varied cache; it does not establish that the paper's much more
+expensive full DataRater algorithm would fail in another regime.

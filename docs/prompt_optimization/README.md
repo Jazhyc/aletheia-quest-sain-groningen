@@ -1,13 +1,15 @@
 # Prompt Optimization Loop
 
-Goal: improve the Qwen reasoning black-box judge beyond the current local
-validation baseline while reducing scoring time when possible.
+Goal: improve the Qwen reasoning black-box judge's continuous ranking beyond
+the current local validation baseline while reducing scoring time when possible.
 
 Target:
 
-- Validation balanced accuracy: 0.93 or higher.
+- Primary: improve mean per-dataset validation AUROC.
+- Preserve informative continuous scores: report unique-score count, tie rate,
+  and saturation as well as AUROC.
 - Runtime: lower than the current 4096-token regular reasoning method when that
-  does not materially hurt balanced accuracy.
+  does not materially hurt AUROC.
 
 Guardrails:
 
@@ -15,19 +17,19 @@ Guardrails:
 - Keep prompt logic general across organisms and scenarios.
 - Track every proposed prompt, threshold change, and run outcome in this folder.
 - Prefer validation evidence over intuition. Each candidate should report mean
-  balanced accuracy, AUROC, recall, FPR, parse errors, score time, and worst
-  datasets.
+  AUROC, balanced accuracy, recall, FPR, score uniqueness/ties, parse errors,
+  score time, and worst datasets.
 
 Loop:
 
-1. Audit the baseline for threshold sensitivity, worst datasets, parse errors,
-   and representative false negatives/false positives.
-2. Propose one prompt or threshold change at a time.
+1. Audit the baseline for score ties/saturation, worst-dataset AUROC, parse
+   errors, and representative badly ranked positive/negative pairs.
+2. Propose one prompt, score extraction, or blending change at a time.
 3. Run validation through `experiments/blackbox/run_judge.py` or the Slurm
    wrapper.
 4. Record the result in `experiment_log.md`.
-5. Promote only candidates that improve balanced accuracy or preserve accuracy
-   with lower time.
+5. Promote only candidates that improve held-out macro AUROC or preserve AUROC
+   with lower time. Select thresholds only for secondary binary diagnostics.
 
 Useful commands:
 
@@ -39,14 +41,21 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
-- `submission/phoenix_wright_v3_0.ipynb` is the current accuracy-first NDIF
+- P80 selected direct Phoenix `Prediction:` label margins for the next
+  AUROC-first submission implementation. On validation/test they scored
+  `0.9382/0.9342` macro AUROC with `9.7s/9.3s` margin passes and zero missing
+  logits. This path is not yet ported into the NDIF notebook; keep v3.0 as the
+  current executable submission until the direct LM-head trace passes dry-run
+  parity.
+- `submission/phoenix_wright_v3_0.ipynb` is the current legacy BA-first NDIF
   submission. It restores the original full-data Phoenix v2.1 rank-16
   privileged-information-distillation adapter and exact frozen v2.0 no-trace
   renderer after the compressed rank-1 specialist regressed on the official
   counted distribution. It retains `LanguageModel`, one remote adapter session,
   length-sorted dynamic `32/24/16` batches, and a 2,048-token prompt ceiling,
   while restoring the v2.0 512-token completion allowance. The parsed binary
-  prediction is written directly, so there is no continuous-ranking gain. The
+  prediction is written directly, so it is disadvantaged under AUROC-first
+  ranking. The
   adapter is bundled and loaded from the original public Phoenix v2 Hugging Face
   repository during NDIF execution. Its notebook environment follows the
   post-maintenance runner contract with bundled wheels for Transformers commit

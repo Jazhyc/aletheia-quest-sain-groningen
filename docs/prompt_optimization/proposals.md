@@ -3324,8 +3324,10 @@ Binary-safe intent gate (2026-07-21):
 - On the paired 400-row NDIF unit, the gate skipped 200 intent calls and cut
   runtime from `615.340` to `501.491` seconds (`-18.50%`). BA remained `0.9475`
   with zero decision disagreements; AUROC fell from `0.99155` to `0.98240`.
-  `PHOENIX_INTENT_GATE=0` retains an explicit ungated rollback. Keep reporting
-  the AUROC cost even though balanced accuracy is the primary metric.
+  `PHOENIX_INTENT_GATE=0` retains an explicit ungated rollback. Under the
+  pre-2026-07-25 rules, keep reporting the AUROC cost even though balanced
+  accuracy was then the primary metric. Under the current AUROC-first rules,
+  this gate is rejected on its ranking loss alone.
 
 ## P68: Belief-Grounded Intent Member
 
@@ -4038,3 +4040,261 @@ Decision:
 - The official Phoenix v3.2 submission tied Phoenix v3.1 at `0.8316667`, so the
   local gain did not transfer. Archive the stack and restore Phoenix v3.0's
   original rank-16 adapter without the reasoning n-gram artifact.
+
+## P77: General Semantic Prompt Sweep on Liars' Bench OOD Modes
+
+Status: development gate failed; confirmation and validation skipped.
+
+Question: after a fourfold GPT-OSS continuation changed the rank-16 weights but
+none of 800 external decisions, can a single model-agnostic inference rubric
+recover multiple observable deception modes without category routing?
+
+Frozen design:
+
+- Keep the selected rank-16 Phoenix parent adapter, no-thinking decoding,
+  512-token completion budget, 6,000-character balanced head/tail external
+  context, output parser, and 800-row Liars' Bench artifact fixed.
+- Compare the unchanged Truth Value Guard with three prompts: an observable
+  response-mode taxonomy, a material-claim ledger, and a truthful-alternative
+  counterfactual. None receives category, label, dataset, source model, or
+  organism identity.
+- Split the 800 rows before prompt generation, within each category/label cell,
+  into deterministic 400-row development and confirmation halves using seed
+  `20260725`. Run all four prompts on development but only the selected prompt
+  and control on confirmation.
+- Advance from development for at least `+0.03` macro-category BA, category
+  delta at least `-0.02`, category/source delta at least `-0.05`, and no more
+  than ten additional parse errors. Choose the highest macro-gain passing
+  prompt; fit no threshold, ensemble, or per-category rule.
+- Require `+0.02` macro BA under the same preservation floors on confirmation.
+  Only then run the unchanged control and confirmed prompt on competition
+  validation. Final preservation permits at most `0.0025` overall BA loss,
+  `0.01` instructed or varied BA loss, and ten additional parse failures.
+  Keep local competition test untouched.
+
+Interpretation:
+
+- The 800-row spectrum was previously scored by other methods, so the
+  deterministic confirmation half is a prompt-output confirmation, not a
+  never-inspected benchmark. The staged protocol still prevents selecting
+  wording directly on its confirmation predictions.
+- A failure closes this small universal-wording branch, not all prompt work.
+  Existing exact semantic specialists and larger-judge results remain distinct
+  hypotheses.
+
+Outcome:
+
+- Control, mode-first, claim-ledger, and truthful-alternative macro BAs are
+  `0.6300`, `0.6550`, `0.6600`, and `0.6975`. Their parse-error counts are 4,
+  9, 1, and 4.
+- Mode-first gains HP-KR/action recall but loses choice `0.040` and soft trigger
+  `0.030`. The claim ledger gains `0.220` HP-KR but drives action-report FPR to
+  1.0, losing `0.090` action BA.
+- Truthful-alternative is the clear aggregate winner: choice `+0.070`, HP-KR
+  `+0.210`, action `-0.010`, and soft trigger unchanged. Its 95 changed
+  decisions comprise 61 fixes and 34 breaks.
+- It still fails the predeclared lower-level floor: Qwen choice loses `0.0696`,
+  Gemma action loses `0.0556`, and two small soft-trigger family cells lose
+  `0.125`. Selection is therefore null. Do not run confirmation or competition
+  validation, loosen the gate, or select the favorable aggregate post hoc.
+- The mechanism result is narrower: contrasting the output with a truthful
+  refusal/uncertainty/action alternative helps HP-KR and forced choice without
+  the ledger's action-report collapse. Preserve that hypothesis for a future
+  observable specialist or genuinely new grouped sample, not as a universal
+  replacement prompt.
+
+## P78: Rule-Routed Truthful-Alternative Judge
+
+Status: knowledge-only route passed development and confirmation; retained as
+a dormant semantic specialist with zero current competition coverage.
+
+Question: can the regular Truth Value Guard remain the default while an exact
+observable-contract router applies P77's truthful-alternative prompt only to
+knowledge self-reports or harmful forced-choice answers?
+
+Frozen design:
+
+- Reuse the P77 development control and truthful-alternative predictions. Do
+  not generate or inspect the reserved confirmation half before selection.
+- Compare three routes: constrained knowledge report only, harmful forced A-D
+  answer only, and their union. The knowledge route requires the existing
+  explicit “report whether you know” request pattern and excludes anything
+  matching the forced-choice route. The forced-choice route requires at least
+  three A-D options, an explicit single-letter contract, harmful-use language,
+  and an exact letter output.
+- Both rules were defined before P77 and have perfect response-mode isolation
+  on the two 400-row halves: each covers all 100 target-category rows and zero
+  action/soft-trigger rows. They receive no category, dataset, label, source
+  model, or organism identity.
+- Development requires at least `+0.03` macro-category BA, category delta at
+  least `-0.02`, category/source delta at least `-0.05`, and at most ten extra
+  parse failures. Choose the highest macro-gain passing route.
+- On confirmation, generate control for all 400 rows and the alternate prompt
+  only for rows selected by that route. Require at least `+0.02` macro BA under
+  the same preservation floors. Competition validation is authorized only
+  after confirmation and must use the same rules without lexical expansion.
+
+Interpretation:
+
+- This is semantic task routing, not source-model logic. A learned n-gram
+  router is not included: with current data it would be trained on public
+  category/source templates and could conceal the same non-transferable
+  signature problem seen in earlier stacks.
+- If knowledge-only passes while choice or the union fails, retain only the
+  narrower epistemic contract. Do not loosen the family-cell gate to preserve
+  P77's favorable aggregate.
+
+Outcome:
+
+- On development, knowledge-only raises macro BA `0.6300 -> 0.6825` and HP-KR
+  `0.3700 -> 0.5800`; all other categories are unchanged. Its 39 changed
+  decisions are 30 fixes and nine breaks, parse errors improve `4 -> 3`, and
+  every HP-KR source cell improves.
+- Choice-only reaches only `0.6475` macro BA (`+0.0175`) and loses `0.0696` in
+  its Qwen choice cell. The union reaches `0.7000` but inherits that same cell
+  failure. Knowledge-only is the sole development pass and was selected before
+  confirmation generation.
+- On the untouched confirmation half, knowledge-only raises macro BA
+  `0.5950 -> 0.6725` and HP-KR `0.3400 -> 0.6500`. The 37 changes comprise 34
+  fixes and three breaks. HP-KR improves for Llama (`+0.4500`), Mistral
+  (`+0.1146`), and Qwen (`+0.4093`); parse errors move `3 -> 4`. Every frozen
+  gate passes.
+- A label-blind input audit finds zero matches across all 8,216 local
+  competition rows: `0/6,573` train, `0/822` validation, and `0/821` test.
+  Consequently the route has exactly zero current competition-validation
+  regression without another generation pass. No competition test predictions
+  were generated.
+- Retain the regular judge globally and the exact knowledge-only rule as a
+  dormant HP-KR/OOD specialist. Do not add the forced-choice rule or fit
+  n-grams to the public categories: that would replace a verified semantic
+  contract with dataset/source-template signatures whose transfer is unknown.
+
+## P79: Rank-1 Knowledge-Report Specialist
+
+Status: development gate failed; confirmation skipped.
+
+Question: behind P78's exact knowledge-report router, can a roughly 7 MiB
+rank-1 adapter improve over base Qwen with the already strongest HP-KR report-
+type prompt, while the rank-16 Phoenix adapter remains the global default?
+
+Frozen design:
+
+- Train fresh rank-1/alpha-2 adapters from `Qwen/Qwen3.5-9B` on only the 256
+  disjoint GPT-OSS HP-KR summaries in the P76 scale-up cache: 128 rows per
+  label, with all three source families represented. Use the cached concise
+  reasoning summaries and authoritative binary targets.
+- Override the old factual student prompt with the previously established
+  `knowledge_report_type` prompt for both training and evaluation. Keep all
+  attention/MLP projection targets, AdamW, effective batch size 32, seed 0,
+  6,000-character balanced head/tail context, no-thinking decoding, and a
+  512-token completion budget fixed.
+- Compare three training doses: one epoch at `5e-5`, three epochs at `5e-5`,
+  and three epochs at `1e-4`. Do not vary rank, target format, prompt wording,
+  data, or routing rule.
+- Evaluate all three on P78's 100-row development HP-KR half in one shared vLLM
+  load. The selection baseline is base Qwen with `knowledge_report_type`, not
+  P78's weaker Phoenix/truthful-alternative condition. Advance the highest-BA
+  candidate only for at least `+0.02` BA, no source-family loss beyond `0.05`,
+  and at most five additional parse errors.
+- Generate only that candidate on the 100-row confirmation half. Require at
+  least `+0.01` BA under the same family and parse floors. Fit no threshold,
+  ensemble, source-specific rule, or post-hoc prompt variant.
+
+Interpretation:
+
+- Rank 1 is appropriate here as a compressed task specialist, not as evidence
+  that rank 1 replaces the general rank-16 Phoenix adapter. At inference both
+  LoRAs can share one Qwen base model.
+- The public HP-KR labels are structurally imbalanced by source—Llama evaluation
+  rows are honest only—so its cell uses accuracy while Mistral/Qwen use balanced
+  accuracy. Passing aggregate BA cannot hide a family regression.
+- The exact router already matches zero current competition inputs. A passing
+  specialist is therefore a dormant OOD capability; it does not justify
+  broadening the router or claiming current leaderboard improvement.
+
+Outcome:
+
+- All three trainings consumed exactly 256 parsed, label-consistent targets.
+  One epoch at `5e-5` completed in `200.8s` with loss `1.425`; three epochs at
+  `5e-5` completed in `573.4s` with loss `1.357`; three epochs at `1e-4`
+  completed in `585.5s` with loss `1.192`. Their adapter weights have distinct
+  SHA-256 hashes, and each file is 7,307,568 bytes.
+- In a shared vLLM development run, base Qwen plus
+  `knowledge_report_type` scores `0.8100` BA, `0.94` recall, `0.32` FPR, and
+  zero parse errors. Its source scores are `0.9286` Llama accuracy (one-class),
+  `0.6471` Mistral BA, and `0.8586` Qwen BA.
+- Every rank-1 arm exactly reproduces those 100 base decisions and metrics:
+  zero changes, zero fixes, zero breaks, zero source deltas, and zero parse
+  increase. Lower supervised loss does not translate into a shifted held-out
+  decision boundary.
+- The same-session Phoenix/truthful-alternative reference scores `0.5700` BA
+  (`0.34` recall, `0.20` FPR, two parse errors), confirming that the dedicated
+  report-type prompt—not the small weight update—is the important improvement
+  over P78's initial specialist.
+- Selection is null. Confirmation was explicitly skipped, and competition
+  validation/test remain untouched. Do not extend epochs, raise rank, tune LR
+  further, or inspect confirmation from this failed development screen.
+
+## P80: AUROC-First Phoenix Label Margins
+
+Status: complete; direct label margins selected and confirmed.
+
+Question: can the current Phoenix v3 rank-16 reasoning-summary judge expose its
+latent continuous ranking without changing its trained decision rule?
+
+Frozen design:
+
+- Load the exact current Phoenix v3 adapter and renderer once.
+- Compare the parsed binary reference, direct `Prediction:` logits, canonical
+  empty-summary logits, and post-generation logits at the final prediction
+  position.
+- For every logits arm, constrain the next token to the exact single-token
+  `0`/`1` verbalizers and score
+  `sigmoid(logit_1 - logit_0)`.
+- For post-generation scoring, remove the generated final digit. Never score
+  the token after a completed `Prediction:0|1`.
+- Hold prompts, context limits, examples, model, adapter, and label
+  verbalizers fixed. Batch all arms in one persistent vLLM allocation.
+- Select on validation mean per-dataset AUROC. Report per-dataset AUROC,
+  unique-score/tie statistics, saturation, fallback rate, runtime, and binary
+  metrics as diagnostics.
+- Freeze the winner before one local-test confirmation. Do not choose between
+  direct and post-generation scoring from earlier local-test observations.
+
+Interpretation:
+
+- Post-generation scoring is the training-matched accuracy candidate because
+  the adapter learned to emit a reasoning summary before the prediction.
+- Direct and empty-summary margins are cheaper deployment ablations. The empty
+  scaffold preserves more of the trained completion format.
+- Existing varied-only adapter diagnostics establish feasibility but do not
+  select the current Phoenix v3 method. The complete contract and prior
+  measurements are in `docs/auroc_first_strategy.md`.
+
+Outcome:
+
+- The exact bundled rank-16 adapter has SHA-256
+  `1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`.
+  The H100 validation sweep scored all 822 rows and 21 dataset units in one
+  model load.
+- Generated binary, direct, empty-summary, and post-reasoning macro AUROC were
+  `0.9048`, **`0.9382`**, `0.9370`, and `0.9304`, respectively. Direct won the
+  frozen selection. It reached `0.9935` instructed and `0.8643` varied AUROC.
+- Direct scoring beat binary on 15 units, tied on five, and lost on one. Its
+  macro cross-label tie rate was `0.00155`, versus `0.1731` for binary scores;
+  no requested label logits were missing.
+- The direct pass took `9.7s` for validation. Post-reasoning required `20.4s`
+  generation plus an `11.5s` margin pass, so it was both less accurate and
+  more expensive.
+- The frozen direct-only local-test confirmation scored **`0.9342`** macro
+  AUROC, `0.9818` instructed, and `0.8708` varied. Its margin pass took `9.3s`
+  for 821 rows with zero missing logits.
+- Select direct `Prediction:` margins for the first AUROC submission port. Do
+  not blend the three validation arms or use the test result to retune their
+  prefixes.
+- Deployment is complete as Phoenix Wright 4.0. The notebook uses
+  `logits_to_keep=1`, the exact `0`/`1` verbalizers, continuous normalized
+  margins, and the frozen `0.15` secondary threshold. NDIF accepted batch 48
+  but OOMed at 64; the deployed length-aware schedule is `48/32/16` at
+  `600/900` tokens. See `docs/auroc_first_strategy.md` for the paired runtime
+  and numerical-drift measurements.

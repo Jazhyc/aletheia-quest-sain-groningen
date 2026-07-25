@@ -1,9 +1,21 @@
 # Privileged-Information Distillation
 
+The 2026-07-25 AUROC-first metric amendment and the corresponding continuous
+Phoenix score-extraction plan are documented in
+[`../auroc_first_strategy.md`](../auroc_first_strategy.md). It supersedes
+earlier deployment decisions that rejected AUROC-only gains under the old
+balanced-accuracy-first rules; it does not rewrite their measurements.
+
 The source-grounded two-stage atomic-audit ablation is specified in
 [`atomic_audit_distillation.md`](atomic_audit_distillation.md). It freezes a blind
 audit before revealing the label and preserves audit/label conflicts rather than
 reproducing the rejected factual-error cascade.
+
+The original privileged-summary cache's semantic quality and the expected value
+of selective rationale cleaning are audited in
+[`rationale_cleaning_audit.md`](rationale_cleaning_audit.md). Its GPT-OSS screen
+is label-blind; authoritative labels are crossed with the audit only after
+generation.
 
 This directory is the durable record for the GPT-OSS-to-Qwen privileged-
 information distillation track. Keep method rationale, prompt/data contracts,
@@ -81,6 +93,10 @@ audit with `parse_error=true` and are automatically excluded from SFT.
 - Teacher generation: `experiments/privileged_information_distillation/generate_teacher_data.py`
 - Harmony extraction/parser: `experiments/privileged_information_distillation/core.py`
 - Student SFT: `experiments/privileged_information_distillation/train_student_sft.py`
+- DataRater-style gradient scorer:
+  `experiments/privileged_information_distillation/score_datarater_gradient_alignment.py`
+- Label-blind rationale audit:
+  `experiments/privileged_information_distillation/audit_teacher_rationales.py`
 
 Teacher cache generation is prompt-aware and resumable. Existing traces are
 reused only when their dataset/index, label, teacher prompt, and student prompt
@@ -89,6 +105,9 @@ match exactly.
 ```bash
 sbatch experiments/privileged_information_distillation/run_teacher.sh
 sbatch experiments/privileged_information_distillation/run_student_sft.sh
+sbatch experiments/privileged_information_distillation/run_datarater_score.sh \
+  --output-dir results/blackbox/qwen9b_pid_datarater_gradient_rank16_last1_v1
+sbatch experiments/privileged_information_distillation/run_teacher_rationale_audit.sh
 ```
 
 See [findings.md](findings.md) for the current quality audit and experimental

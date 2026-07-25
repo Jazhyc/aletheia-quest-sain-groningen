@@ -1,0 +1,26 @@
+# @package _global_
+# Shared fixed-update rank-16 recipe for DataRater selection comparisons.
+
+defaults:
+  - privileged_information_distillation
+  - _self_
+
+method: qwen9b_pid_datarater_gradient_rank16_last1_fixed90_v1
+
+student:
+  dataset_name_contains: varied-deception
+  train_fraction: 1.0
+  train_fraction_seed: ${seed}
+  selection_manifest: null
+  output_dir: ${output_dir}/adapter
+  lora:
+    r: 16
+    alpha: 32
+  training:
+    optimizer: adamw
+    optim: adamw_torch
+    learning_rate: 5.0e-5
+    num_train_epochs: 1.0
+    # Hold optimization compute equal to the full varied-only baseline even
+    # when a selector retains fewer unique examples.
+    max_steps: 90

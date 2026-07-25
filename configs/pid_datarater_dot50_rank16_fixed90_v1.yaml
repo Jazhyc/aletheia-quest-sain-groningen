@@ -1,0 +1,9 @@
+# @package _global_
+defaults:
+  - pid_datarater_gradient_rank16_last1_fixed90_v1
+  - _self_
+
+method: qwen9b_pid_datarater_dot50_rank16_fixed90_v1
+
+student:
+  selection_manifest: results/blackbox/qwen9b_pid_datarater_gradient_rank16_last1_v1/manifests/dot_keep50.jsonl

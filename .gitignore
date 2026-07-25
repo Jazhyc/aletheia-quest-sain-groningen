@@ -46,3 +46,6 @@ experiments/**/*.smoke.json
 results/contrastive/activations/
 results/contrastive/weights/
 dump/
+
+# Local Lambda Cloud connection state (known hosts and campaign metadata)
+.lambda/

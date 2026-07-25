@@ -3,12 +3,15 @@ from pathlib import Path
 import sys
 
 import torch
+from omegaconf import OmegaConf
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from experiments.privileged_information_distillation.train_student_sft import (
+    LABEL_ONLY_TARGET_KEY,
+    apply_label_only_manifest,
     has_reasoning_block,
     load_record_sources,
     load_records,
@@ -20,6 +23,7 @@ from experiments.privileged_information_distillation.train_student_sft import (
     strip_reasoning_block,
     student_prompt_with_reasoning_dropout,
     tokenize_record,
+    training_warmup_steps,
 )
 from experiments.qwen_grpo_lora.run_qwen_grpo_lora import (
     MuonAdamW,
@@ -113,6 +117,46 @@ def test_select_records_from_manifest_rejects_unavailable_row(tmp_path) -> None:
         assert "unavailable rows" in str(error)
     else:
         raise AssertionError("missing fixed selection should fail")
+
+
+def test_apply_label_only_manifest_marks_exact_rows_and_verifies_labels(tmp_path) -> None:
+    records = [
+        {"dataset": "dataset", "index": 1, "label": 0},
+        {"dataset": "dataset", "index": 2, "label": 1},
+    ]
+    manifest = tmp_path / "label-only.jsonl"
+    manifest.write_text(
+        json.dumps({"dataset": "dataset", "index": 2, "label": 1}) + "\n"
+    )
+
+    marked = apply_label_only_manifest(records, manifest)
+
+    assert marked[0][LABEL_ONLY_TARGET_KEY] is False
+    assert marked[1][LABEL_ONLY_TARGET_KEY] is True
+    assert LABEL_ONLY_TARGET_KEY not in records[0]
+
+    manifest.write_text(
+        json.dumps({"dataset": "dataset", "index": 2, "label": 0}) + "\n"
+    )
+    try:
+        apply_label_only_manifest(records, manifest)
+    except ValueError as error:
+        assert "label mismatch" in str(error)
+    else:
+        raise AssertionError("label-only manifest mismatch should fail")
+
+
+def test_ratio_warmup_uses_transformers_v5_warmup_steps_argument(tmp_path) -> None:
+    from transformers import TrainingArguments
+
+    warmup = training_warmup_steps(OmegaConf.create({"warmup_ratio": 0.03}))
+    arguments = TrainingArguments(
+        output_dir=(tmp_path / "trainer").as_posix(),
+        warmup_steps=warmup,
+    )
+
+    assert warmup == 0.03
+    assert arguments.get_warmup_steps(90) == 3
 
 
 def test_load_record_sources_combines_disjoint_filtered_caches(tmp_path) -> None:
@@ -488,6 +532,37 @@ def test_prediction_only_target_replaces_cached_reasoning_prompt() -> None:
 
     assert "NEW BINARY PROMPT\n\n<context>Evidence</context>" in decoded
     assert "OLD REASONING PROMPT" not in decoded
+    assert supervised == "Prediction:1<eos>"
+
+
+def test_label_only_manifest_row_omits_the_cached_teacher_summary() -> None:
+    record = {
+        "index": 8,
+        "label": 1,
+        "student_prompt": "TEACHER PROMPT\n\n<context>Evidence</context>",
+        "student_target": (
+            "<reasoning_summary>Contradictory teacher text</reasoning_summary>\n"
+            "Prediction:1"
+        ),
+        LABEL_ONLY_TARGET_KEY: True,
+    }
+
+    tokenized = tokenize_record(
+        record,
+        FakeTokenizer(),
+        1000,
+        target_mode="teacher",
+    )
+    decoded = "".join(chr(token) for token in tokenized["input_ids"])
+    supervised = "".join(
+        chr(token)
+        for token, label in zip(
+            tokenized["input_ids"], tokenized["labels"], strict=True
+        )
+        if label != -100
+    )
+
+    assert "Contradictory teacher text" not in decoded
     assert supervised == "Prediction:1<eos>"
 
 

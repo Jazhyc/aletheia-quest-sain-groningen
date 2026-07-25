@@ -10,9 +10,12 @@ if str(ROOT) not in sys.path:
 
 from experiments.liars_bench_distillation.analyze_transfer import (
     accepts_action_route,
+    external_delta,
     paired_changes,
     paired_changes_grouped,
+    passes_external_floors,
 )
+from experiments.liars_bench_distillation.evaluate_students import balanced_accuracy
 
 
 def write_rows(path: Path, predictions: list[int | None]) -> None:
@@ -89,3 +92,67 @@ def test_grouped_external_changes_preserve_fix_break_counts(tmp_path: Path) -> N
         "model-a": {"changes": 1, "fixes": 0, "breaks": 1},
         "model-b": {"changes": 1, "fixes": 1, "breaks": 0},
     }
+
+
+def test_external_floors_reject_hidden_group_regression() -> None:
+    delta = {
+        "category_deltas": {"choice": 0.05, "action": -0.021},
+        "source_model_deltas": {"qwen": 0.03, "mistral": -0.04},
+        "category_source_model_deltas": {
+            "choice::qwen": 0.03,
+            "action::mistral": -0.051,
+        },
+    }
+
+    assert not passes_external_floors(
+        delta,
+        minimum_category_delta=-0.02,
+        minimum_source_model_delta=-0.05,
+        minimum_category_source_model_delta=-0.05,
+    )
+    assert passes_external_floors(
+        delta,
+        minimum_category_delta=-0.03,
+        minimum_source_model_delta=-0.05,
+        minimum_category_source_model_delta=-0.06,
+    )
+
+
+def test_one_class_group_reports_accuracy_and_undefined_balanced_accuracy() -> None:
+    metrics = balanced_accuracy([
+        {"label": 1, "prediction": 1},
+        {"label": 1, "prediction": 0},
+    ])
+
+    assert metrics == {
+        "balanced_accuracy": None,
+        "accuracy": 0.5,
+        "recall": 0.5,
+        "fpr": None,
+        "positive_rows": 2,
+        "negative_rows": 0,
+    }
+
+
+def test_external_delta_uses_accuracy_for_one_class_source() -> None:
+    baseline = {
+        "macro_category_balanced_accuracy": 0.5,
+        "per_category": {"action": {"balanced_accuracy": 0.5}},
+        "per_source_model": {
+            "kimi": {"balanced_accuracy": None, "accuracy": 0.75},
+        },
+        "per_category_source_model": {},
+    }
+    candidate = {
+        "macro_category_balanced_accuracy": 0.6,
+        "per_category": {"action": {"balanced_accuracy": 0.6}},
+        "per_source_model": {
+            "kimi": {"balanced_accuracy": None, "accuracy": 1.0},
+        },
+        "per_category_source_model": {},
+    }
+
+    delta = external_delta(candidate, baseline)
+
+    assert delta["source_model_deltas"] == {"kimi": 0.25}
+    assert delta["source_model_metrics"] == {"kimi": "accuracy"}

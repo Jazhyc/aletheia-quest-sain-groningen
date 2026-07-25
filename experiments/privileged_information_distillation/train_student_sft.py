@@ -49,6 +49,7 @@ class CompletionOnlyCollator:
 REASONING_BLOCK_START = "\n\n<assistant_reasoning>\n"
 REASONING_BLOCK_END = "\n</assistant_reasoning>"
 SOURCE_PROMPT_TEMPLATE_KEY = "_source_prompt_template"
+LABEL_ONLY_TARGET_KEY = "_label_only_target"
 
 
 def has_reasoning_block(prompt: str) -> bool:
@@ -158,6 +159,64 @@ def select_records_from_manifest(
         for record in records
         if (str(record.get("dataset", "")), record.get("index")) in desired
     ]
+
+
+def apply_label_only_manifest(
+    records: list[dict[str, Any]], manifest_path: Path
+) -> list[dict[str, Any]]:
+    """Mark exact rows to retain only their authoritative binary target."""
+    desired: dict[tuple[str, Any], int] = {}
+    for line_number, line in enumerate(
+        manifest_path.read_text().splitlines(), start=1
+    ):
+        if not line.strip():
+            continue
+        manifest_record = json.loads(line)
+        key = (str(manifest_record["dataset"]), manifest_record["index"])
+        if key in desired:
+            raise ValueError(
+                f"duplicate label-only key at line {line_number}: {key}"
+            )
+        desired[key] = int(manifest_record["label"])
+    if not desired:
+        raise ValueError(f"label-only manifest is empty: {manifest_path}")
+
+    available = {
+        (str(record.get("dataset", "")), record.get("index")): record
+        for record in records
+    }
+    missing = sorted(set(desired) - set(available))
+    if missing:
+        raise ValueError(
+            f"label-only manifest has {len(missing)} unavailable rows; "
+            f"first={missing[0]}"
+        )
+    for key, label in desired.items():
+        if int(available[key]["label"]) != label:
+            raise ValueError(
+                f"label-only manifest label mismatch for {key}: "
+                f"{label} != {available[key]['label']}"
+            )
+
+    marked = []
+    for record in records:
+        selected_record = dict(record)
+        key = (str(record.get("dataset", "")), record.get("index"))
+        selected_record[LABEL_ONLY_TARGET_KEY] = key in desired
+        marked.append(selected_record)
+    return marked
+
+
+def training_warmup_steps(training_cfg: DictConfig) -> float:
+    """Return the v5 warmup argument while preserving ratio-based configs."""
+    configured_steps = OmegaConf.select(training_cfg, "warmup_steps", default=None)
+    if configured_steps is not None:
+        return float(configured_steps)
+    ratio = float(training_cfg.warmup_ratio)
+    if not 0.0 <= ratio < 1.0:
+        raise ValueError("student.training.warmup_ratio must be in [0, 1)")
+    # Transformers v5 interprets a warmup_steps float below one as a ratio.
+    return ratio
 
 
 def load_record_sources(
@@ -411,12 +470,15 @@ def tokenize_record(
         ):
             selected_template = prompt_template_without_reasoning
         raw_prompt = f"{selected_template}\n\n<context>{evidence}"
-    if target_mode == "teacher":
+    effective_target_mode = (
+        "prediction_only" if record.get(LABEL_ONLY_TARGET_KEY) else target_mode
+    )
+    if effective_target_mode == "teacher":
         target = record["student_target"]
-    elif target_mode == "prediction_only":
+    elif effective_target_mode == "prediction_only":
         target = f"Prediction:{int(record['label'])}"
     else:
-        raise ValueError(f"unknown student.target_mode={target_mode!r}")
+        raise ValueError(f"unknown student.target_mode={effective_target_mode!r}")
     prompt = tokenizer.apply_chat_template(
         [{"role": "user", "content": raw_prompt}],
         tokenize=False,
@@ -581,6 +643,17 @@ def main(cfg: DictConfig) -> None:
             selection_mode = "rating_uncertainty_stratified"
     if cfg.student.train_limit is not None:
         records = records[:int(cfg.student.train_limit)]
+    label_only_manifest = OmegaConf.select(
+        cfg, "student.label_only_manifest", default=None
+    )
+    if label_only_manifest is not None:
+        label_only_path = Path(str(label_only_manifest))
+        if not label_only_path.is_absolute():
+            label_only_path = root / label_only_path
+        records = apply_label_only_manifest(records, label_only_path)
+    label_only_rows = sum(
+        bool(record.get(LABEL_ONLY_TARGET_KEY)) for record in records
+    )
     tokenizer = AutoTokenizer.from_pretrained(str(cfg.student.model))
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -648,6 +721,8 @@ def main(cfg: DictConfig) -> None:
         f"selection_mode={selection_mode} "
         f"rating_uncertainty_fraction={rating_uncertainty_fraction} "
         f"selection_manifest={selection_manifest} "
+        f"label_only_manifest={label_only_manifest} "
+        f"label_only_rows={label_only_rows} "
         f"record_identity_field={record_identity_field!r} "
         f"require_teacher_label_match={require_teacher_label_match} "
         f"dataset_name_contains={dataset_name_contains!r} "
@@ -700,7 +775,7 @@ def main(cfg: DictConfig) -> None:
         num_train_epochs=float(cfg.student.training.num_train_epochs),
         max_steps=int(cfg.student.training.max_steps),
         learning_rate=float(cfg.student.training.learning_rate),
-        warmup_ratio=float(cfg.student.training.warmup_ratio),
+        warmup_steps=training_warmup_steps(cfg.student.training),
         weight_decay=float(cfg.student.training.weight_decay),
         per_device_train_batch_size=int(cfg.student.training.per_device_train_batch_size),
         gradient_accumulation_steps=int(cfg.student.training.gradient_accumulation_steps),

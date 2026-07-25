@@ -72,6 +72,8 @@ EMPTY_REASONING_PREFIX = (
     "</reasoning_summary>\n"
     "Prediction:"
 )
+DIRECT_PREDICTION_PREFIX = "Prediction:"
+CONTINUOUS_MARGIN_CONDITIONS = ("direct", "empty", "reasoning")
 
 
 def parse_prediction(text: str) -> int | None:
@@ -116,6 +118,21 @@ def prefix_before_prediction(text: str) -> str:
     if matches:
         return text[:matches[-1].start(1)]
     return text.rstrip() + "\nPrediction:"
+
+
+def continuous_margin_prompts(
+    prompt: str,
+    generation: str,
+    *,
+    direct_prefix: str = DIRECT_PREDICTION_PREFIX,
+    empty_reasoning_prefix: str = EMPTY_REASONING_PREFIX,
+) -> dict[str, str]:
+    """Build matched direct, empty-summary, and post-reasoning scoring prompts."""
+    return {
+        "direct": prompt + direct_prefix,
+        "empty": prompt + empty_reasoning_prefix,
+        "reasoning": prompt + prefix_before_prediction(generation),
+    }
 
 
 def binary_token_ids(tokenizer: Any) -> list[int]:
@@ -459,6 +476,8 @@ def evaluate_adapter(
     *,
     margin_sampling: Any | None = None,
     binary_ids: list[int] | None = None,
+    margin_conditions: tuple[str, ...] = CONTINUOUS_MARGIN_CONDITIONS,
+    direct_prefix: str = DIRECT_PREDICTION_PREFIX,
     empty_reasoning_prefix: str = EMPTY_REASONING_PREFIX,
     require_closed_thinking: bool = False,
 ) -> tuple[pd.DataFrame, dict[str, float | int]]:
@@ -536,25 +555,26 @@ def evaluate_adapter(
         if binary_ids is None:
             raise ValueError("binary_ids are required when margin_sampling is enabled")
         source_prompts = records["prompt"].tolist()
-        empty_prompts = [prompt + empty_reasoning_prefix for prompt in source_prompts]
-        post_reasoning_prompts = [
-            prompt + prefix_before_prediction(generation)
+        margin_prompts = [
+            continuous_margin_prompts(
+                prompt,
+                generation,
+                direct_prefix=direct_prefix,
+                empty_reasoning_prefix=empty_reasoning_prefix,
+            )
             for prompt, generation in zip(source_prompts, generations, strict=True)
         ]
-        empty_scores, empty_missing, empty_elapsed = score_binary_prefixes(
-            llm, empty_prompts, margin_sampling, request, binary_ids
-        )
-        reasoning_scores, reasoning_missing, reasoning_elapsed = score_binary_prefixes(
-            llm, post_reasoning_prompts, margin_sampling, request, binary_ids
-        )
-        evaluated["empty_margin_score"] = empty_scores
-        evaluated["reasoning_margin_score"] = reasoning_scores
-        timing.update({
-            "empty_margin_seconds": empty_elapsed,
-            "empty_margin_missing": empty_missing,
-            "reasoning_margin_seconds": reasoning_elapsed,
-            "reasoning_margin_missing": reasoning_missing,
-        })
+        unknown = set(margin_conditions).difference(CONTINUOUS_MARGIN_CONDITIONS)
+        if unknown:
+            raise ValueError(f"unknown continuous margin conditions: {sorted(unknown)}")
+        for condition in margin_conditions:
+            condition_prompts = [prompts[condition] for prompts in margin_prompts]
+            scores, missing, condition_elapsed = score_binary_prefixes(
+                llm, condition_prompts, margin_sampling, request, binary_ids
+            )
+            evaluated[f"{condition}_margin_score"] = scores
+            timing[f"{condition}_margin_seconds"] = condition_elapsed
+            timing[f"{condition}_margin_missing"] = missing
     return evaluated, timing
 
 
@@ -665,7 +685,20 @@ def main() -> None:
     parser.add_argument(
         "--continuous-margins",
         action="store_true",
-        help="score constrained 0/1 logits with empty and generated reasoning prefixes",
+        help=(
+            "score constrained 0/1 logits with direct, empty-summary, and "
+            "generated-reasoning prefixes"
+        ),
+    )
+    parser.add_argument(
+        "--continuous-margin-condition",
+        action="append",
+        choices=CONTINUOUS_MARGIN_CONDITIONS,
+        default=[],
+        help=(
+            "repeat to score only selected margin conditions; defaults to all "
+            "three when --continuous-margins is enabled"
+        ),
     )
     parser.add_argument(
         "--prompt-without-reasoning-config",
@@ -680,6 +713,15 @@ def main() -> None:
     args = parser.parse_args()
     if args.retrieval_cache is not None and args.retrieval_condition:
         parser.error("use either --retrieval-cache or --retrieval-condition, not both")
+    if args.continuous_margin_condition and not args.continuous_margins:
+        parser.error(
+            "--continuous-margin-condition requires --continuous-margins"
+        )
+    margin_conditions = tuple(
+        dict.fromkeys(
+            args.continuous_margin_condition or CONTINUOUS_MARGIN_CONDITIONS
+        )
+    )
     condition_families = sum(bool(values) for values in (
         args.retrieval_condition,
         args.reasoning_input_condition,
@@ -873,6 +915,7 @@ def main() -> None:
                 output_mode=output_mode_by_condition[condition_name],
                 margin_sampling=margin_sampling,
                 binary_ids=binary_ids,
+                margin_conditions=margin_conditions,
                 require_closed_thinking=bool(enable_thinking),
             )
             evaluated_by_condition[condition_name] = evaluated
@@ -903,8 +946,10 @@ def main() -> None:
                 primary_score_name = "generated_binary"
             if args.continuous_margins:
                 score_metrics.update({
-                    "empty_margin": metrics_for_score(evaluated, "empty_margin_score"),
-                    "reasoning_margin": metrics_for_score(evaluated, "reasoning_margin_score"),
+                    f"{condition}_margin": metrics_for_score(
+                        evaluated, f"{condition}_margin_score"
+                    )
+                    for condition in margin_conditions
                 })
             total_elapsed = float(sum(
                 value for key, value in timing.items() if key.endswith("_seconds")

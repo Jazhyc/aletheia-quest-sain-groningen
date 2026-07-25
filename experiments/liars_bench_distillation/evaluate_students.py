@@ -33,20 +33,43 @@ def parse_prediction(text: str) -> int | None:
     return int(matches[-1]) if matches else None
 
 
-def balanced_accuracy(rows: list[dict[str, Any]]) -> dict[str, float]:
+def balanced_accuracy(rows: list[dict[str, Any]]) -> dict[str, float | int | None]:
     tp = sum(row["label"] == row["prediction"] == 1 for row in rows)
     fn = sum(row["label"] == 1 and row["prediction"] == 0 for row in rows)
     fp = sum(row["label"] == 0 and row["prediction"] == 1 for row in rows)
     tn = sum(row["label"] == row["prediction"] == 0 for row in rows)
-    recall = tp / (tp + fn)
-    fpr = fp / (fp + tn)
-    return {"balanced_accuracy": (recall + 1 - fpr) / 2, "recall": recall, "fpr": fpr}
+    positive_rows = tp + fn
+    negative_rows = fp + tn
+    recall = tp / positive_rows if positive_rows else None
+    fpr = fp / negative_rows if negative_rows else None
+    balanced = (
+        (recall + 1 - fpr) / 2
+        if recall is not None and fpr is not None
+        else None
+    )
+    return {
+        "balanced_accuracy": balanced,
+        "accuracy": (tp + tn) / len(rows),
+        "recall": recall,
+        "fpr": fpr,
+        "positive_rows": positive_rows,
+        "negative_rows": negative_rows,
+    }
 
 
 def grouped_metrics(rows: list[dict[str, Any]], field: str) -> dict[str, Any]:
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         groups[str(row[field])].append(row)
+    return {name: balanced_accuracy(group) for name, group in sorted(groups.items())}
+
+
+def category_source_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Report category/source-model cells without relying on hidden metadata."""
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        key = f"{row['category']}::{row['source_model']}"
+        groups[key].append(row)
     return {name: balanced_accuracy(group) for name, group in sorted(groups.items())}
 
 
@@ -177,6 +200,7 @@ def main() -> None:
             "metrics": balanced_accuracy(evaluated),
             "per_category": per_category,
             "per_source_model": grouped_metrics(evaluated, "source_model"),
+            "per_category_source_model": category_source_metrics(evaluated),
             "parse_errors": sum(row["parse_error"] for row in evaluated),
             "score_seconds": elapsed,
         }
@@ -216,6 +240,7 @@ def main() -> None:
             "metrics": balanced_accuracy(routed),
             "per_category": routed_categories,
             "per_source_model": grouped_metrics(routed, "source_model"),
+            "per_category_source_model": category_source_metrics(routed),
             "specialist_parse_errors": sum(
                 row["parse_error"] for row in specialist_records
             ),
@@ -245,6 +270,7 @@ def main() -> None:
         "metrics": balanced_accuracy(base_routed),
         "per_category": base_categories,
         "per_source_model": grouped_metrics(base_routed, "source_model"),
+        "per_category_source_model": category_source_metrics(base_routed),
         "specialist_score_seconds": base_elapsed,
     }
     print(
@@ -272,6 +298,7 @@ def main() -> None:
                 "metrics": balanced_accuracy(routed),
                 "per_category": categories,
                 "per_source_model": grouped_metrics(routed, "source_model"),
+                "per_category_source_model": category_source_metrics(routed),
                 "parse_errors": sum(row["parse_error"] for row in routed),
             }
         print(

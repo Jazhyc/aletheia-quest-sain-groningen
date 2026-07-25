@@ -1,5 +1,100 @@
 # Prompt Experiment Log
 
+## 2026-07-25: Phoenix Wright 4.0 direct-logit deployment
+
+Phoenix 4.0 replaces v3's generated reasoning plus parsed binary decision with
+P80's selected direct `Prediction:` label margin. The notebook lives at
+`experiments/heterogeneous_adapter_ensemble/phoenix_wright_v4_0.ipynb`; the
+single `submission/` slot is held by the sonic white-box line, so move this
+notebook and `phoenix_wright_v4.py` back into `submission/` to submit it. It
+retains the exact original
+rank-16 adapter (`1407d885...d3978e`) and frozen v2 visible-message renderer,
+requests `logits_to_keep=1`, and emits
+`sigmoid(logit_1 - logit_0)` for the exact single-token `0` and `1`
+verbalizers. The required binary decision is separate at the validation-frozen
+threshold `0.15`.
+
+The corrected direct NNsight notebook passed one-row dry-run execution on the
+first 13 public units, including both Gemma units and the varied-Qwen base unit,
+before the intentionally slow 21-unit matrix was stopped at the user's request.
+Full 400-row NDIF benchmarks then established the capacity boundary. Batch 32
+completed the public varied-Qwen base unit in `102.1s` with AUROC `0.93946`;
+batch 48 completed in `51.8s` with AUROC `0.93943`; batch 64 failed with CUDA
+OOM under the remote 29.4 GiB process allowance. The scores were continuous
+(82/83 unique values), not binary.
+
+A length-aware `48/32/16` schedule at `600/900` token boundaries completed the
+highest-p95 public varied unit with shapes `48x383...583`, `32x619...773`, and
+`16x896`. It took `38.3s` versus `64.7s` for the paired batch-32 control.
+AUROC moved `0.76046 -> 0.75961`, mean absolute score drift was `0.00309`, and
+four decisions differed at threshold `0.15`. Retain the dynamic schedule for
+its 40.9% paired speedup, but do not claim batch-shape numerical identity.
+Never raise the short tier to 64 without a new NDIF memory result.
+
+## 2026-07-25: Rank-1 HP-KR specialist
+
+P79 trained three fresh rank-1/alpha-2 Qwen specialists on 256 disjoint,
+label-balanced GPT-OSS HP-KR summaries. One epoch at `5e-5`, three epochs at
+`5e-5`, and three epochs at `1e-4` produced distinct 7,307,568-byte adapters.
+Training loss fell from `1.425` to `1.357` and `1.192` as dose increased.
+
+On the frozen 100-row development half, base Qwen with the established
+knowledge-report prompt scored `0.8100` BA (`0.94` recall, `0.32` FPR, zero
+parse errors). Every rank-1 adapter produced exactly the same 100 binary
+decisions: zero fixes, zero breaks, identical source-family scores, and zero
+parse change. The older Phoenix/truthful-alternative reference scored only
+`0.5700` on the same shared-session run. No candidate met the predeclared
+`+0.02` gate, so confirmation was not generated.
+
+Close this small supervised-specialist branch. The strong gain comes from
+asking the right semantic question at inference, while rank-1 updates on 256
+teacher summaries reduce training loss without moving held-out decisions. Do
+not increase rank, add epochs, inspect confirmation, or infer that rank 1 can
+replace the general rank-16 Phoenix adapter.
+
+## 2026-07-25: Exact knowledge-report prompt router
+
+P78 kept the ordinary Truth Value Guard as the default and routed only explicit
+knowledge self-report contracts to P77's truthful-alternative prompt. On the
+400-row development half, knowledge-only raised macro BA
+`0.6300 -> 0.6825` and HP-KR `0.3700 -> 0.5800`; the other three categories
+were byte-for-byte inherited from control. Forced-choice-only missed the
+`+0.03` gain floor, and its Qwen cell lost `0.0696`, so neither it nor the union
+advanced.
+
+The frozen knowledge-only route then passed the untouched 400-row confirmation:
+macro BA rose `0.5950 -> 0.6725` and HP-KR `0.3400 -> 0.6500`. The 37 changed
+decisions were 34 fixes and three breaks. Every HP-KR source cell improved:
+Llama `+0.4500`, Mistral `+0.1146`, and Qwen `+0.4093`; parse errors moved
+`3 -> 4`. The exact rule covers zero of all 8,216 local competition rows
+(`0/6,573` train, `0/822` validation, `0/821` test), so current competition
+predictions are preserved by construction. Retain this as a dormant HP-KR
+specialist route. Do not broaden it with category/source n-grams or promote the
+failed forced-choice route.
+
+## 2026-07-25: General semantic prompt sweep on Liars' Bench OOD modes
+
+P77 held the selected Phoenix rank-16 parent fixed and compared the unchanged
+Truth Value Guard against three general prompts on a preregistered 400-row
+development half of the existing Liars' Bench spectrum. The other 400 rows
+were reserved for confirmation.
+
+| prompt | macro BA | choice | HP-KR | action | soft trigger | parse |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| control | .6300 | .650 | .370 | .590 | .910 | 4 |
+| mode-first | .6550 | .610 | .480 | .650 | .880 | 9 |
+| claim ledger | .6600 | .640 | .590 | .500 | .910 | 1 |
+| truthful alternative | **.6975** | **.720** | .580 | .580 | **.910** | 4 |
+
+Truthful-alternative changed 95 decisions, making 61 fixes and 34 breaks. It
+passed the aggregate and category gates, but failed the frozen
+category/source-model floor: Qwen choice lost `0.0696`, Gemma action lost
+`0.0556`, and two small soft-trigger family cells lost `0.125`. No condition
+was selected. Confirmation and competition validation were intentionally
+skipped, leaving those rows untouched. The result supports the truthful-
+alternative contrast as a possible narrow specialist mechanism, not as a
+stable universal prompt.
+
 ## 2026-07-17: First-complete-rating decode stop (Qwen-9B validation)
 
 Stopping after the first exact retained `Rating: 1…7` passes its frozen generated
@@ -3162,3 +3257,48 @@ renderer, and `phoenix_wright_v3_0.ipynb` as the sole submission notebook. The
 bundled `phoenix_wright_v3_reasoning_stack.joblib` artifact and v3.2 notebook
 are removed. P75/P76 remain reproducible historical experiments, but the
 n-gram stack is no longer a deployment candidate.
+
+### AUROC-first competition amendment (2026-07-25)
+
+The team reported a new organizer rule making mean per-dataset AUROC the main
+competition metric. The public competition page still showed the older
+balanced-accuracy-first language when checked, so repository guidance records
+the dated amendment without rewriting historical BA-selected outcomes.
+
+This changes the next Phoenix priority. Phoenix v3.0 emits parsed binary scores
+and therefore collapses the ranking into two tied groups. Prior continuous
+margin diagnostics already showed useful signal in the tuned student:
+empty-summary `Prediction:0|1` margins reached validation/test AUROC
+`0.9371/0.9307`, while post-reasoning margins reached `0.9305/0.9366`, compared
+with contemporaneous binary AUROC `0.9036/0.9107`. Those measurements used an
+earlier varied-only adapter and cannot choose a current Phoenix v3 winner.
+
+P80 preregisters a matched validation sweep on the current rank-16 adapter:
+binary reference, direct label logits, empty-summary label logits, and
+post-generation label logits. The primary accuracy-oriented path removes the
+generated final digit and scores `0` versus `1` at that exact position. The
+direct conditions are speed ablations. Selection is validation macro AUROC,
+with one frozen local-test confirmation. See
+`docs/auroc_first_strategy.md`.
+
+### P80 Phoenix label-margin outcome (2026-07-25)
+
+The Lambda H100 loaded the exact current Phoenix v3 rank-16 adapter
+(`1407d885...d3978e`) once and scored 822 validation rows across 21 units.
+Macro AUROC was `0.9048` for generated binary scores, **`0.9382` for direct
+`Prediction:` margins**, `0.9370` for canonical empty-summary margins, and
+`0.9304` for post-reasoning margins. Direct reached `0.9935` instructed and
+`0.8643` varied AUROC. It beat binary on 15 units, tied on five, and lost on
+one.
+
+The binary score had only two values and a `0.1731` macro cross-label tie
+fraction. Direct produced 348 serialized values, reduced that tie fraction to
+`0.00155`, had no extreme saturation at `1e-6`, and had zero missing label
+logits. Its margin pass took `9.7s`; generation took `20.4s`, and the
+post-reasoning pass added `11.5s`.
+
+Direct was frozen before looking at the confirmation result. The 821-row
+direct-only local-test run scored **`0.9342` macro AUROC**, `0.9818`
+instructed, and `0.8708` varied. Its margin pass took `9.3s` with zero missing
+logits. Promote direct label margins to the submission-implementation stage;
+do not blend prefixes or restore reasoning generation based on test.

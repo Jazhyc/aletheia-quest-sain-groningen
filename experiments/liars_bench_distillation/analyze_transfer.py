@@ -118,6 +118,38 @@ def external_delta(
 ) -> dict[str, Any]:
     """Compute external macro and category deltas."""
     categories = sorted(baseline["per_category"])
+    cell_deltas = {}
+    cell_metrics = {}
+    for cell in sorted(baseline.get("per_category_source_model", {})):
+        if cell not in candidate.get("per_category_source_model", {}):
+            continue
+        baseline_cell = baseline["per_category_source_model"][cell]
+        candidate_cell = candidate["per_category_source_model"][cell]
+        metric = (
+            "balanced_accuracy"
+            if baseline_cell.get("balanced_accuracy") is not None
+            and candidate_cell.get("balanced_accuracy") is not None
+            else "accuracy"
+        )
+        cell_metrics[cell] = metric
+        cell_deltas[cell] = candidate_cell[metric] - baseline_cell[metric]
+    source_model_deltas = {}
+    source_model_metrics = {}
+    for model in sorted(baseline["per_source_model"]):
+        if model not in candidate["per_source_model"]:
+            continue
+        baseline_model = baseline["per_source_model"][model]
+        candidate_model = candidate["per_source_model"][model]
+        metric = (
+            "balanced_accuracy"
+            if baseline_model.get("balanced_accuracy") is not None
+            and candidate_model.get("balanced_accuracy") is not None
+            else "accuracy"
+        )
+        source_model_metrics[model] = metric
+        source_model_deltas[model] = (
+            candidate_model[metric] - baseline_model[metric]
+        )
     return {
         "macro_category_balanced_accuracy": candidate[
             "macro_category_balanced_accuracy"
@@ -133,14 +165,10 @@ def external_delta(
             )
             for category in categories
         },
-        "source_model_deltas": {
-            model: (
-                candidate["per_source_model"][model]["balanced_accuracy"]
-                - baseline["per_source_model"][model]["balanced_accuracy"]
-            )
-            for model in sorted(baseline["per_source_model"])
-            if model in candidate["per_source_model"]
-        },
+        "source_model_deltas": source_model_deltas,
+        "source_model_metrics": source_model_metrics,
+        "category_source_model_deltas": cell_deltas,
+        "category_source_model_metrics": cell_metrics,
     }
 
 
@@ -163,6 +191,33 @@ def accepts_action_route(
     )
 
 
+def passes_external_floors(
+    delta: dict[str, Any],
+    *,
+    minimum_category_delta: float | None,
+    minimum_source_model_delta: float | None,
+    minimum_category_source_model_delta: float | None = None,
+) -> bool:
+    """Require optional category and source-model preservation floors."""
+    category_ok = (
+        minimum_category_delta is None
+        or min(delta["category_deltas"].values()) >= minimum_category_delta
+    )
+    source_model_ok = (
+        minimum_source_model_delta is None
+        or min(delta["source_model_deltas"].values()) >= minimum_source_model_delta
+    )
+    cell_deltas = delta.get("category_source_model_deltas", {})
+    category_source_model_ok = (
+        minimum_category_source_model_delta is None
+        or (
+            bool(cell_deltas)
+            and min(cell_deltas.values()) >= minimum_category_source_model_delta
+        )
+    )
+    return category_ok and source_model_ok and category_source_model_ok
+
+
 def analyze(
     competition_paths: dict[str, Path],
     external: dict[str, Any],
@@ -171,6 +226,9 @@ def analyze(
     max_competition_loss: float,
     min_external_gain: float,
     external_generation_dir: Path | None = None,
+    minimum_category_delta: float | None = None,
+    minimum_source_model_delta: float | None = None,
+    minimum_category_source_model_delta: float | None = None,
 ) -> dict[str, Any]:
     """Build a report without choosing thresholds after seeing outcomes."""
     competition = {
@@ -185,6 +243,11 @@ def analyze(
         "criteria": {
             "max_competition_loss": max_competition_loss,
             "min_external_gain": min_external_gain,
+            "minimum_category_delta": minimum_category_delta,
+            "minimum_source_model_delta": minimum_source_model_delta,
+            "minimum_category_source_model_delta": (
+                minimum_category_source_model_delta
+            ),
         },
         "baseline": baseline_name,
         "conditions": {},
@@ -226,6 +289,14 @@ def analyze(
             "accept_general": (
                 comp["balanced_accuracy_delta"] >= -max_competition_loss
                 and ext["macro_delta"] >= min_external_gain
+                and passes_external_floors(
+                    ext,
+                    minimum_category_delta=minimum_category_delta,
+                    minimum_source_model_delta=minimum_source_model_delta,
+                    minimum_category_source_model_delta=(
+                        minimum_category_source_model_delta
+                    ),
+                )
             ),
             "accept_routed": (
                 comp["balanced_accuracy_delta"] >= -max_competition_loss
@@ -248,6 +319,9 @@ def main() -> None:
     parser.add_argument("--baseline", default="baseline")
     parser.add_argument("--max-competition-loss", type=float, default=0.0025)
     parser.add_argument("--min-external-gain", type=float, default=0.02)
+    parser.add_argument("--minimum-category-delta", type=float)
+    parser.add_argument("--minimum-source-model-delta", type=float)
+    parser.add_argument("--minimum-category-source-model-delta", type=float)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
@@ -261,6 +335,11 @@ def main() -> None:
         max_competition_loss=args.max_competition_loss,
         min_external_gain=args.min_external_gain,
         external_generation_dir=args.external_result.parent,
+        minimum_category_delta=args.minimum_category_delta,
+        minimum_source_model_delta=args.minimum_source_model_delta,
+        minimum_category_source_model_delta=(
+            args.minimum_category_source_model_delta
+        ),
     )
     rendered = json.dumps(report, indent=2)
     print(rendered)

@@ -7,6 +7,7 @@ from typing import Any
 
 from submission.phoenix_wright_text import (
     is_action_report_conversation,
+    is_epistemic_report_request,
     is_passage_true_false_request,
     iter_messages,
     message_content,
@@ -48,4 +49,12 @@ def is_harm_pressure_choice_request(messages: Any) -> bool:
         and len(options) >= 3
         and FORCED_LETTER_RE.search(user_text)
         and HARM_PRESSURE_RE.search(user_text)
+    )
+
+
+def is_knowledge_report_request(messages: Any) -> bool:
+    """Route explicit knowledge self-reports that are not forced-choice tasks."""
+    return bool(
+        is_epistemic_report_request(messages)
+        and not is_harm_pressure_choice_request(messages)
     )

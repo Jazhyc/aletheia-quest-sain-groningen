@@ -34,6 +34,45 @@ Recent history uses short, imperative commit subjects, for example `Simplify ada
 
 Before agent-assisted work, read `llms.txt` for competition context and check `README.md` for the current submission contract. For black-box judge, prompt, ensemble, or Phoenix Wright method work, check `docs/prompt_optimization/` directly before searching broad experiment outputs; it contains the prompt rationale, experiment log, proposals, and submission mapping. Preserve the single-notebook rule in `submission/` and rehearse changes with `--dry` whenever possible. When developing a new competition method, create and work on a separate feature branch instead of `master`. Add or update tests for non-trivial code changes, then run the relevant validation command. After completing a coherent feature or fix, commit the finished work with a short imperative message.
 
+As of the 2026-07-25 organizer rule amendment reported by the team, the main
+competition metric is mean per-dataset AUROC, read from the continuous `score`
+column. The public competition page may temporarily retain the earlier
+balanced-accuracy-first wording. Treat balanced accuracy, recall, FPR, and the
+required binary `deceptive` column as secondary diagnostics unless a later
+organizer notice says otherwise. Select new methods and ensembles on held-out
+macro AUROC, not on a thresholded decision; report score uniqueness/ties and
+per-dataset AUROC so a binary-looking score cannot masquerade as a useful
+ranking. Historical BA-selected findings remain valid historical evidence but
+do not govern new promotion decisions.
+
+For continuous Phoenix/tuned-judge work, read
+`docs/auroc_first_strategy.md`. P80 compared direct prompt-boundary,
+empty-summary, and post-reasoning label margins on the exact current Phoenix v3
+rank-16 adapter. Direct `Prediction:` logits won validation macro AUROC at
+`0.9382`, versus `0.9370` empty-summary, `0.9304` post-reasoning, and `0.9048`
+for generated binary scores. A frozen direct-only local-test confirmation
+scored `0.9342` AUROC (`0.9818` instructed, `0.8708` varied), with zero missing
+label logits. Select direct scoring for the first AUROC submission
+implementation; do not pay for reasoning generation merely because it is more
+training-matched. Use the normalized log-odds score
+`sigmoid(logit_1 - logit_0)` and keep the hard prediction separate. If
+post-reasoning scoring is revisited, remove the final generated `0|1` and score
+the labels at that position; never condition a rescore on the already-selected
+label token.
+
+Phoenix Wright 4.0 now implements that direct path in
+`experiments/heterogeneous_adapter_ensemble/phoenix_wright_v4_0.ipynb`. It is
+parked outside `submission/`, whose single notebook slot belongs to the sonic
+white-box line; move it and `phoenix_wright_v4.py` back into `submission/` to
+submit it. It retains the exact v3
+rank-16 adapter and renderer, requests `logits_to_keep=1`, and uses `0.15` only
+for the secondary binary column. NDIF full-unit tests selected length-aware
+batches `48/32/16` at `600/900` prompt tokens: the paired high-p95 unit ran
+`38.3s` versus `64.7s` at batch 32, with AUROC `0.75961` versus `0.76046`.
+Batch 64 OOMed against the remote roughly 29.4 GiB process allowance. Do not
+raise the short tier to 64, remove `logits_to_keep=1`, or claim exact score
+invariance across batch shapes.
+
 For development and training experiments, do not use NDIF; reserve NDIF for leaderboard evaluation/submission execution. Use local GPU Slurm jobs with vLLM for black-box judge experiments. Keep experiment code organized under `experiments/<method>/`, keep Slurm shell templates as `.sh` files, and write runtime logs under `logs/`; black-box Slurm jobs should redirect their main output to `logs/slurm/<method>/<split>-<job_id>.out` and automatically delete the temporary bootstrap file at `logs/slurm/%x-%j.bootstrap.out` after successful redirection. Store black-box experiment artifacts under `results/blackbox/`; per-run result directories are ignored, but `results/blackbox/leaderboard.md` is tracked and should show test-set results only. Default Slurm resources for these jobs are one `gpushort` GPU node with `--gpus-per-node=rtx_pro_6000:1`, `--cpus-per-task=1`, and 32 GB memory unless the user says otherwise. The cluster's 40 GB A100s are also sufficient for inference-only `Qwen/Qwen3.5-9B` BF16 evaluations with one rank-16 LoRA and a 4,096-token model context; when the RTX Pro 6000 queue is saturated, request `--gpus-per-node=a100:1` for this workload. A cold A100 vLLM 0.24 load/compile/CUDA-graph capture can be much slower than RTX: job `30159704` needed 29m40s for one startup plus nine 822-row conditions, so request at least 45 minutes for that shape unless the compile cache is known warm or fewer conditions are run. Do not generalize that memory result to training, larger models, or materially longer contexts without a separate memory check. For interactive black-box method development, prefer reserving a GPU node with `srun`, running one persistent vLLM server process, and pointing experiment clients at it over HTTP so model loading/compilation is paid once per session. Prefer direct `sbatch` templates first for unattended runs; add `submitit` only if Python-managed Slurm arrays become necessary. Slurm controller commands such as `sbatch`, `squeue`, `scancel`, and `sacct` should be run outside the sandbox automatically because sandboxed attempts cannot contact the controller.
 For prompt/logits judge sweeps, batch multiple prompt conditions inside a single
 Slurm job or one persistent vLLM session whenever practical, so Python import,
