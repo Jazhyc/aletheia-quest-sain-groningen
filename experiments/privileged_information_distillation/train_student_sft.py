@@ -14,8 +14,10 @@ from typing import Any
 import hydra
 import numpy as np
 import torch
+import torch.nn.functional as F
 from hydra.utils import get_original_cwd
 from omegaconf import DictConfig, OmegaConf
+from torch.utils.data import SequentialSampler
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -31,7 +33,7 @@ class CompletionOnlyCollator:
     def __init__(self, pad_token_id: int) -> None:
         self.pad_token_id = pad_token_id
 
-    def __call__(self, features: list[dict[str, list[int]]]) -> dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, Any]]) -> dict[str, torch.Tensor]:
         width = max(len(feature["input_ids"]) for feature in features)
         input_ids, attention_mask, labels = [], [], []
         for feature in features:
@@ -39,17 +41,136 @@ class CompletionOnlyCollator:
             input_ids.append(feature["input_ids"] + [self.pad_token_id] * padding)
             attention_mask.append([1] * len(feature["input_ids"]) + [0] * padding)
             labels.append(feature["labels"] + [-100] * padding)
-        return {
+        batch = {
             "input_ids": torch.tensor(input_ids, dtype=torch.long),
             "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
             "labels": torch.tensor(labels, dtype=torch.long),
         }
+        if "direct_input_ids" in features[0]:
+            direct_width = max(len(feature["direct_input_ids"]) for feature in features)
+            direct_input_ids, direct_attention_mask = [], []
+            for feature in features:
+                padding = direct_width - len(feature["direct_input_ids"])
+                direct_input_ids.append(
+                    feature["direct_input_ids"] + [self.pad_token_id] * padding
+                )
+                direct_attention_mask.append(
+                    [1] * len(feature["direct_input_ids"]) + [0] * padding
+                )
+            batch.update({
+                "direct_input_ids": torch.tensor(direct_input_ids, dtype=torch.long),
+                "direct_attention_mask": torch.tensor(
+                    direct_attention_mask, dtype=torch.long
+                ),
+                "binary_labels": torch.tensor(
+                    [feature["binary_label"] for feature in features],
+                    dtype=torch.long,
+                ),
+                "dataset_ids": torch.tensor(
+                    [feature["dataset_id"] for feature in features],
+                    dtype=torch.long,
+                ),
+            })
+        return batch
 
 
 REASONING_BLOCK_START = "\n\n<assistant_reasoning>\n"
 REASONING_BLOCK_END = "\n</assistant_reasoning>"
 SOURCE_PROMPT_TEMPLATE_KEY = "_source_prompt_template"
 LABEL_ONLY_TARGET_KEY = "_label_only_target"
+DIRECT_PREDICTION_PREFIX = "Prediction:"
+
+
+def binary_token_ids(tokenizer: Any) -> list[int]:
+    """Return the distinct single-token ids for literal binary predictions."""
+    ids = []
+    for text in ("0", "1"):
+        encoded = tokenizer.encode(text, add_special_tokens=False)
+        if len(encoded) != 1:
+            raise ValueError(
+                f"binary target {text!r} tokenized as {encoded}, expected one token"
+            )
+        ids.append(int(encoded[0]))
+    if len(set(ids)) != 2:
+        raise ValueError(f"binary targets must have distinct token ids, got {ids}")
+    return ids
+
+
+def order_records_for_paired_batches(
+    records: list[dict[str, Any]],
+    seed: int,
+) -> list[dict[str, Any]]:
+    """Interleave stable within-dataset positive/negative pairs for batch size two."""
+    by_dataset: dict[str, dict[int, list[dict[str, Any]]]] = {}
+    for record in records:
+        dataset = str(record.get("dataset", ""))
+        label = int(record["label"])
+        if label not in (0, 1):
+            raise ValueError(f"binary label required, got {label}")
+        by_dataset.setdefault(dataset, {0: [], 1: []})[label].append(record)
+
+    def digest(*parts: Any) -> bytes:
+        return hashlib.sha256(
+            "\0".join(str(part) for part in (seed, *parts)).encode("utf-8")
+        ).digest()
+
+    paired: list[tuple[bytes, dict[str, Any], dict[str, Any]]] = []
+    leftovers: list[tuple[bytes, dict[str, Any]]] = []
+    for dataset, groups in sorted(by_dataset.items()):
+        negative = sorted(
+            groups[0],
+            key=lambda record: digest(dataset, 0, record.get("index")),
+        )
+        positive = sorted(
+            groups[1],
+            key=lambda record: digest(dataset, 1, record.get("index")),
+        )
+        pair_count = min(len(negative), len(positive))
+        for pair_index, (negative_record, positive_record) in enumerate(
+            zip(negative[:pair_count], positive[:pair_count], strict=True)
+        ):
+            pair_key = digest(dataset, "pair", pair_index)
+            if pair_key[0] % 2:
+                negative_record, positive_record = positive_record, negative_record
+            paired.append((pair_key, negative_record, positive_record))
+        for record in negative[pair_count:] + positive[pair_count:]:
+            leftovers.append(
+                (digest(dataset, "leftover", record.get("index")), record)
+            )
+
+    ordered = [
+        record
+        for _, first, second in sorted(paired, key=lambda item: item[0])
+        for record in (first, second)
+    ]
+    ordered.extend(record for _, record in sorted(leftovers, key=lambda item: item[0]))
+    if len(ordered) != len(records) or {id(record) for record in ordered} != {
+        id(record) for record in records
+    }:
+        raise AssertionError("paired record ordering must preserve every input row once")
+    return ordered
+
+
+def pairwise_logistic_loss(
+    margins: torch.Tensor,
+    labels: torch.Tensor,
+    dataset_ids: torch.Tensor,
+    temperature: float = 1.0,
+) -> torch.Tensor:
+    """Rank positive margins above negatives from the same dataset."""
+    if temperature <= 0:
+        raise ValueError("pairwise temperature must be positive")
+    losses = []
+    for dataset_id in torch.unique(dataset_ids):
+        selected = dataset_ids == dataset_id
+        positives = margins[selected & (labels == 1)]
+        negatives = margins[selected & (labels == 0)]
+        if positives.numel() and negatives.numel():
+            differences = positives[:, None] - negatives[None, :]
+            losses.append(F.softplus(-differences / temperature).mean())
+    if not losses:
+        return margins.sum() * 0.0
+    return torch.stack(losses).mean()
 
 
 def has_reasoning_block(prompt: str) -> bool:
@@ -446,7 +567,9 @@ def tokenize_record(
     target_mode: str = "teacher",
     reasoning_dropout_probability: float = 0.0,
     reasoning_dropout_seed: int = 0,
-) -> dict[str, list[int]]:
+    include_direct_target: bool = False,
+    dataset_id: int | None = None,
+) -> dict[str, Any]:
     raw_prompt, _ = student_prompt_with_reasoning_dropout(
         record,
         reasoning_dropout_probability,
@@ -493,10 +616,25 @@ def tokenize_record(
     if len(target_ids) >= max_length:
         raise ValueError(f"target alone exceeds student.max_length for index={record['index']}")
     prompt_ids = prompt_ids[-(max_length - len(target_ids)):]
-    return {
+    tokenized: dict[str, Any] = {
         "input_ids": prompt_ids + target_ids,
         "labels": [-100] * len(prompt_ids) + target_ids,
     }
+    if include_direct_target:
+        if dataset_id is None:
+            raise ValueError("dataset_id is required for direct-target training")
+        direct_ids = tokenizer.encode(
+            prompt + DIRECT_PREDICTION_PREFIX,
+            add_special_tokens=False,
+        )[-max_length:]
+        if not direct_ids:
+            raise ValueError(f"empty direct prompt for index={record['index']}")
+        tokenized.update({
+            "direct_input_ids": direct_ids,
+            "binary_label": int(record["label"]),
+            "dataset_id": int(dataset_id),
+        })
+    return tokenized
 
 
 @hydra.main(
@@ -509,8 +647,91 @@ def main(cfg: DictConfig) -> None:
     from peft import LoraConfig, PeftModel, get_peft_model
     from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 
-    class MuonSFTTrainer(Trainer):
-        """Trainer using Muon for 2D LoRA matrices and AdamW otherwise."""
+    direct_loss_weight = float(OmegaConf.select(
+        cfg, "student.training.direct_loss_weight", default=0.0
+    ))
+    pairwise_loss_weight = float(OmegaConf.select(
+        cfg, "student.training.pairwise_loss_weight", default=0.0
+    ))
+    pairwise_temperature = float(OmegaConf.select(
+        cfg, "student.training.pairwise_temperature", default=1.0
+    ))
+    paired_batching = bool(OmegaConf.select(
+        cfg, "student.training.paired_batching", default=False
+    ))
+    if direct_loss_weight < 0 or pairwise_loss_weight < 0:
+        raise ValueError("auxiliary loss weights must be non-negative")
+    if pairwise_temperature <= 0:
+        raise ValueError("student.training.pairwise_temperature must be positive")
+    if pairwise_loss_weight and not paired_batching:
+        raise ValueError("pairwise loss requires student.training.paired_batching=true")
+    uses_direct_forward = bool(direct_loss_weight or pairwise_loss_weight)
+
+    class AuxiliarySFTTrainer(Trainer):
+        """Completion SFT with optional direct-label and within-dataset rank losses."""
+
+        def _get_train_sampler(self, train_dataset=None):
+            if paired_batching:
+                selected_dataset = (
+                    self.train_dataset if train_dataset is None else train_dataset
+                )
+                return SequentialSampler(selected_dataset)
+            return super()._get_train_sampler(train_dataset)
+
+        def compute_loss(
+            self,
+            model,
+            inputs,
+            return_outputs=False,
+            num_items_in_batch=None,
+        ):
+            direct_input_ids = inputs.pop("direct_input_ids", None)
+            direct_attention_mask = inputs.pop("direct_attention_mask", None)
+            binary_labels = inputs.pop("binary_labels", None)
+            dataset_ids = inputs.pop("dataset_ids", None)
+            outputs = model(**inputs)
+            loss = outputs.loss
+            if uses_direct_forward:
+                if any(value is None for value in (
+                    direct_input_ids,
+                    direct_attention_mask,
+                    binary_labels,
+                    dataset_ids,
+                )):
+                    raise ValueError("direct-target fields are missing from training batch")
+                direct_outputs = model(
+                    input_ids=direct_input_ids,
+                    attention_mask=direct_attention_mask,
+                    use_cache=False,
+                )
+                last_positions = direct_attention_mask.sum(dim=1) - 1
+                row_indices = torch.arange(
+                    direct_input_ids.shape[0],
+                    device=direct_input_ids.device,
+                )
+                next_logits = direct_outputs.logits[row_indices, last_positions]
+                label_ids = torch.tensor(
+                    self.binary_ids,
+                    device=next_logits.device,
+                    dtype=torch.long,
+                )
+                binary_logits = next_logits.index_select(-1, label_ids)
+                if direct_loss_weight:
+                    loss = loss + direct_loss_weight * F.cross_entropy(
+                        binary_logits.float(), binary_labels
+                    )
+                if pairwise_loss_weight:
+                    margins = binary_logits[:, 1].float() - binary_logits[:, 0].float()
+                    loss = loss + pairwise_loss_weight * pairwise_logistic_loss(
+                        margins,
+                        binary_labels,
+                        dataset_ids,
+                        pairwise_temperature,
+                    )
+            return (loss, outputs) if return_outputs else loss
+
+    class MuonAuxiliarySFTTrainer(AuxiliarySFTTrainer):
+        """Auxiliary SFT trainer using Muon for 2D LoRA matrices."""
 
         def create_optimizer(self) -> torch.optim.Optimizer:
             if self.optimizer is None:
@@ -654,9 +875,20 @@ def main(cfg: DictConfig) -> None:
     label_only_rows = sum(
         bool(record.get(LABEL_ONLY_TARGET_KEY)) for record in records
     )
+    if paired_batching:
+        if int(cfg.student.training.per_device_train_batch_size) != 2:
+            raise ValueError("paired batching currently requires per-device batch size 2")
+        records = order_records_for_paired_batches(records, int(cfg.seed))
+    dataset_id_by_name = {
+        name: dataset_id
+        for dataset_id, name in enumerate(sorted({
+            str(record.get("dataset", "")) for record in records
+        }))
+    }
     tokenizer = AutoTokenizer.from_pretrained(str(cfg.student.model))
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
+    direct_binary_ids = binary_token_ids(tokenizer) if uses_direct_forward else None
     reasoning_dropout_probability = float(
         OmegaConf.select(
             cfg, "student.reasoning_dropout_probability", default=0.0
@@ -709,6 +941,8 @@ def main(cfg: DictConfig) -> None:
             target_mode=str(cfg.student.target_mode),
             reasoning_dropout_probability=reasoning_dropout_probability,
             reasoning_dropout_seed=reasoning_dropout_seed,
+            include_direct_target=uses_direct_forward,
+            dataset_id=dataset_id_by_name[str(record.get("dataset", ""))],
         )
         for record in records
     ]
@@ -728,7 +962,11 @@ def main(cfg: DictConfig) -> None:
         f"dataset_name_contains={dataset_name_contains!r} "
         f"reasoning_rows={reasoning_rows} "
         f"reasoning_rows_dropped={reasoning_rows_dropped} "
-        f"reasoning_dropout_probability={reasoning_dropout_probability}"
+        f"reasoning_dropout_probability={reasoning_dropout_probability} "
+        f"direct_loss_weight={direct_loss_weight} "
+        f"pairwise_loss_weight={pairwise_loss_weight} "
+        f"pairwise_temperature={pairwise_temperature} "
+        f"paired_batching={paired_batching}"
     )
     rating_counts = Counter(
         record.get("rating") for record in records if record.get("rating") is not None
@@ -789,13 +1027,18 @@ def main(cfg: DictConfig) -> None:
     optimizer_name = str(cfg.student.training.optimizer)
     if optimizer_name not in {"adamw", "muon"}:
         raise ValueError(f"unknown student.training.optimizer={optimizer_name!r}")
-    trainer_cls = MuonSFTTrainer if optimizer_name == "muon" else Trainer
+    trainer_cls = (
+        MuonAuxiliarySFTTrainer
+        if optimizer_name == "muon"
+        else AuxiliarySFTTrainer
+    )
     trainer = trainer_cls(
         model=model,
         args=args,
         train_dataset=dataset,
         data_collator=CompletionOnlyCollator(tokenizer.pad_token_id),
     )
+    trainer.binary_ids = direct_binary_ids
     trainer.train()
     output_dir.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(output_dir)

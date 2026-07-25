@@ -10,11 +10,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from experiments.privileged_information_distillation.train_student_sft import (
+    CompletionOnlyCollator,
     LABEL_ONLY_TARGET_KEY,
     apply_label_only_manifest,
     has_reasoning_block,
     load_record_sources,
     load_records,
+    order_records_for_paired_batches,
+    pairwise_logistic_loss,
     select_rating_uncertainty_fraction,
     select_rating_uncertainty_with_certain_anchors,
     select_records_from_manifest,
@@ -533,6 +536,92 @@ def test_prediction_only_target_replaces_cached_reasoning_prompt() -> None:
     assert "NEW BINARY PROMPT\n\n<context>Evidence</context>" in decoded
     assert "OLD REASONING PROMPT" not in decoded
     assert supervised == "Prediction:1<eos>"
+
+
+def test_direct_target_uses_rendered_prompt_without_teacher_summary() -> None:
+    record = {
+        "dataset": "dev-varied-deception-model",
+        "index": 7,
+        "label": 1,
+        "student_prompt": "JUDGE\n\n<context>Evidence</context>",
+        "student_target": (
+            "<reasoning_summary>Teacher trace</reasoning_summary>\nPrediction:1"
+        ),
+    }
+
+    tokenized = tokenize_record(
+        record,
+        FakeTokenizer(),
+        1000,
+        include_direct_target=True,
+        dataset_id=3,
+    )
+    direct = "".join(chr(token) for token in tokenized["direct_input_ids"])
+
+    assert direct.endswith("Prediction:")
+    assert "Teacher trace" not in direct
+    assert tokenized["binary_label"] == 1
+    assert tokenized["dataset_id"] == 3
+
+
+def test_paired_order_puts_opposite_labels_from_same_dataset_together() -> None:
+    records = [
+        {"dataset": dataset, "index": f"{dataset}-{label}-{index}", "label": label}
+        for dataset in ("a", "b")
+        for label in (0, 1)
+        for index in range(3)
+    ]
+
+    ordered = order_records_for_paired_batches(records, seed=4)
+
+    assert len(ordered) == len(records)
+    assert {record["index"] for record in ordered} == {
+        record["index"] for record in records
+    }
+    for offset in range(0, len(ordered), 2):
+        first, second = ordered[offset:offset + 2]
+        assert first["dataset"] == second["dataset"]
+        assert first["label"] != second["label"]
+
+
+def test_pairwise_logistic_loss_rewards_correct_within_dataset_order() -> None:
+    labels = torch.tensor([0, 1, 0, 1])
+    dataset_ids = torch.tensor([0, 0, 1, 1])
+    correct = pairwise_logistic_loss(
+        torch.tensor([-2.0, 2.0, -1.0, 1.0]),
+        labels,
+        dataset_ids,
+    )
+    reversed_order = pairwise_logistic_loss(
+        torch.tensor([2.0, -2.0, 1.0, -1.0]),
+        labels,
+        dataset_ids,
+    )
+
+    assert correct < reversed_order
+
+
+def test_completion_collator_pads_direct_targets() -> None:
+    batch = CompletionOnlyCollator(pad_token_id=0)([
+        {
+            "input_ids": [1, 2],
+            "labels": [-100, 2],
+            "direct_input_ids": [3, 4, 5],
+            "binary_label": 0,
+            "dataset_id": 7,
+        },
+        {
+            "input_ids": [6],
+            "labels": [6],
+            "direct_input_ids": [8],
+            "binary_label": 1,
+            "dataset_id": 7,
+        },
+    ])
+
+    assert batch["direct_input_ids"].tolist() == [[3, 4, 5], [8, 0, 0]]
+    assert batch["direct_attention_mask"].tolist() == [[1, 1, 1], [1, 0, 0]]
+    assert batch["binary_labels"].tolist() == [0, 1]
 
 
 def test_label_only_manifest_row_omits_the_cached_teacher_summary() -> None:
