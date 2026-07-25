@@ -34,6 +34,8 @@ exec > >(tee -a "${LOG}") 2>&1
 
 PARENT_ADAPTER="results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/adapter"
 CANDIDATE_ADAPTER="results/blackbox/qwen9b_pid_liars_ood_gptoss_replay_continue_adamw2e5_v1/adapter"
+PARENT_ROOT="${PARENT_ADAPTER%/adapter}"
+CANDIDATE_ROOT="${CANDIDATE_ADAPTER%/adapter}"
 VALIDATION_RUN="validation_liars_ood_gptoss_v1"
 TEACHER_SERVER_PID=""
 
@@ -154,12 +156,12 @@ case "${PHASE}" in
     ;;
   analyze)
     require_paths \
-      "${PARENT_ADAPTER}/${VALIDATION_RUN}/result.json" \
-      "${CANDIDATE_ADAPTER}/${VALIDATION_RUN}/result.json" \
+      "${PARENT_ROOT}/${VALIDATION_RUN}/result.json" \
+      "${CANDIDATE_ROOT}/${VALIDATION_RUN}/result.json" \
       "${ARTIFACT_ROOT}/evaluation/result.json"
     python experiments/liars_bench_distillation/analyze_transfer.py \
-      --competition "baseline=${PARENT_ADAPTER}/${VALIDATION_RUN}/result.json" \
-      --competition "ood_gptoss=${CANDIDATE_ADAPTER}/${VALIDATION_RUN}/result.json" \
+      --competition "baseline=${PARENT_ROOT}/${VALIDATION_RUN}/result.json" \
+      --competition "ood_gptoss=${CANDIDATE_ROOT}/${VALIDATION_RUN}/result.json" \
       --external-result "${ARTIFACT_ROOT}/evaluation/result.json" \
       --max-competition-loss 0.0025 \
       --min-external-gain 0.02 \
