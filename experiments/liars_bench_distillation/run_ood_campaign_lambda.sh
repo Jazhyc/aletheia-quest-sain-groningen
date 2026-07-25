@@ -145,7 +145,7 @@ case "${PHASE}" in
     require_paths \
       "${PARENT_ADAPTER}/adapter_config.json" \
       "${CANDIDATE_ADAPTER}/adapter_config.json" \
-      "dev_splits/validation.csv"
+      "dev_splits/dry.validation.yaml"
     python experiments/privileged_information_distillation/evaluate_student_sft.py \
       --adapter-dir "${PARENT_ADAPTER}" \
       --adapter-dir "${CANDIDATE_ADAPTER}" \
