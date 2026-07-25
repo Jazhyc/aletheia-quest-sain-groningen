@@ -251,3 +251,74 @@ regenerating the entire cache. Run it first as a matched rank-16 varied-only,
 one-epoch AdamW `5e-5` ablation and compare it jointly with the original adapter
 in one vLLM session. Given known generated-evaluator drift, require more than a
 one- or two-row change before treating the result as a real improvement.
+
+## Frozen verified-46 training ablation
+
+The first training ablation uses only human-verified failures rather than the
+raw GPT-OSS screen. Its manifest contains the 30 usable structural failures and
+the 16 clear factual errors from the seeded manual sample: 46/2,877 selected
+rows (`1.60%`), comprising 41 positive and five negative targets. These rows
+receive `Prediction:<label>` as their entire supervised completion, so no token
+from the rejected teacher summary appears in either the model input or the
+loss. The other 2,831 targets are byte-for-byte unchanged.
+With the adapter tokenizer this removes 4,739/272,257 supervised completion
+tokens (`1.74%`): the selected rows fall from 4,923 teacher-target tokens to
+184 label-only tokens.
+
+The frozen config is `configs/pid_rationale_cleaning_verified46_v1.yaml`, and
+the exact-row manifest is
+`experiments/privileged_information_distillation/manifests/rationale_cleaning_verified46_v1.jsonl`.
+It holds the original model, prompt, varied-only subset, seed,
+rank-16/alpha-32 LoRA, attention/MLP targets, one AdamW epoch at `5e-5`, and
+effective batch size 32 fixed. Initial training job `30289845` stopped before
+optimization because the installed Transformers v5 API had removed the
+deprecated `warmup_ratio` argument; dependency job `30289847` was therefore
+cancelled without running. The compatibility repair passes the same `0.03`
+value through `warmup_steps`, whose v5 float-below-one behavior preserves the
+exact three-step warmup over 90 updates. Corrected training job `30289933` and
+dependent shared-session validation job `30289934` compare the cleaned adapter
+with the original varied-only adapter. This is a rationale-target ablation, not
+a relabeling or data-removal experiment.
+
+## Training and validation result
+
+Corrected job `30289933` trained all 2,877 rows for 90 optimizer updates in
+963.3 seconds and saved the expected rank-16 adapter. The first joint validation
+run completed as job `30289934`:
+
+| adapter position | model | overall BA | instructed BA | varied BA | parse errors |
+| --- | --- | ---: | ---: | ---: | ---: |
+| first | Original teacher targets | 0.9036 | 0.9792 | 0.8028 | 4 |
+| second | Verified-46 label-only cleaning | 0.9048 | 0.9792 | 0.8056 | 5 |
+
+That apparent `+0.0012` overall gain changed only five scored decisions: three
+fixes and two breaks, plus one extra honest-row truncation whose parse fallback
+remained the correct score zero. The changed explanations were not uniformly
+better. Cleaning correctly noticed the misspellings “Barry Levenson” and
+“Beatrice Potter,” but it also claimed that Canada still circulates a
+one-dollar bill and produced other confident factual confabulations.
+
+Because this is exactly the scale of known adapter-order drift, job `30289976`
+repeated the same comparison with reversed adapter order:
+
+| adapter position | model | overall BA | instructed BA | varied BA | parse errors |
+| --- | --- | ---: | ---: | ---: | ---: |
+| first | Verified-46 label-only cleaning | 0.9024 | 0.9750 | 0.8056 | 1 |
+| second | Original teacher targets | 0.9060 | 0.9771 | 0.8111 | 4 |
+
+Both models gained exactly `0.0024` overall BA when evaluated second. Averaging
+the two positions removes that shared positional shift:
+
+| model | mean overall BA | mean instructed BA | mean varied BA |
+| --- | ---: | ---: | ---: |
+| Original teacher targets | **0.9048** | **0.9781** | **0.8069** |
+| Verified-46 label-only cleaning | 0.9036 | 0.9771 | 0.8056 |
+| Cleaned minus original | -0.0012 | -0.0010 | -0.0014 |
+
+Matched-position scored comparisons also give one net regression in both
+positions: four fixes/five breaks when first and three fixes/four breaks when
+second. The candidate therefore fails the practical promotion criterion. The
+result supports the original forecast that these errors are real but too sparse
+and redundant for selective removal to produce a stable aggregate gain. Retain
+the original varied-only adapter, do not evaluate the cleaned adapter on local
+test, and do not broaden the filter to unverified GPT-OSS candidates.

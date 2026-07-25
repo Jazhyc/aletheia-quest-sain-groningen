@@ -2311,3 +2311,34 @@ This fails the frozen `+0.005` empty-control gate. Do not run local test, packag
 the index, increase LoRA rank, or reweight the curriculum from these validation
 rows. Balanced consumer training preserves weak real-versus-shuffled
 sensitivity but does not make retrieval better than no intervention.
+
+## Verified teacher-rationale cleaning (2026-07-25)
+
+A manual and GPT-OSS-assisted audit estimates that `3--4.5%` of the 2,877
+selected teacher summaries contain harmful factual, semantic, or privileged
+rationale errors. The raw model screen flags `6.47%`, but manual calibration
+finds many pedantic or incorrect corrections; the exact structural lower bound
+is `1.04%`. See `rationale_cleaning_audit.md` for the qualitative examples and
+full prevalence accounting.
+
+The frozen first ablation replaces only 46 manually verified bad summaries
+(41 positive, five negative) with label-only targets. It removes 4,739
+supervised tokens (`1.74%`) while keeping every row and authoritative label.
+Matched rank-16 one-epoch AdamW `5e-5` training completed as job `30289933`.
+Forward and reverse shared-session validations (`30289934`, `30289976`) show
+the expected adapter-position shift: both models gain exactly 0.0024 overall BA
+when evaluated second. Position-averaged results are:
+
+| model | overall BA | instructed BA | varied BA |
+| --- | ---: | ---: | ---: |
+| Original teacher targets | **0.9048** | **0.9781** | **0.8069** |
+| Verified-46 label-only cleaning | 0.9036 | 0.9771 | 0.8056 |
+
+Matched-position comparisons each produce one net regression. The forward run's
+nominal gain is only three fixes/two breaks plus one neutral extra parse failure,
+and qualitative inspection finds new confident factual hallucinations alongside
+two useful spelling-error detections. Retain the original teacher/default
+adapter, do not test the cleaned adapter, and do not expand the cleaning mask to
+unverified GPT-OSS flags. Teacher-rationale errors are real supervision defects,
+but selective removal at this prevalence does not measurably improve the
+aggregate judge.

@@ -256,6 +256,25 @@ After reviewing teacher artifacts, train the completion-only Qwen LoRA:
 sbatch experiments/privileged_information_distillation/run_student_sft.sh
 ```
 
+To remove a teacher summary without discarding its authoritative binary label,
+set `student.label_only_manifest` to a JSONL manifest containing exact
+`dataset`, `index`, and `label` keys. Selected rows use
+`Prediction:<label>` as their entire supervised completion; all other rows keep
+their cached teacher targets. The loader fails if a manifest row is missing,
+duplicated, or has a label that differs from the cached record. The frozen
+verified-rationale cleaning ablation is:
+
+```bash
+sbatch experiments/privileged_information_distillation/run_student_sft.sh \
+  --config-name pid_rationale_cleaning_verified46_v1
+```
+
+Job `30289933` completed this ablation. Forward/reverse shared-session
+validation (`30289934`, `30289976`) found no gain: position-averaged overall BA
+was 0.9036 for cleaning versus 0.9048 for the original adapter. Retain the
+original adapter; the config and manifest remain as a reproducible negative
+control.
+
 One-step GPU smoke before a full training run:
 
 ```bash
