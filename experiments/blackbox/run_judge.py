@@ -1286,10 +1286,17 @@ def fmt_submitted_at(value: object) -> str:
 
 
 def render_leaderboard(results_root: Path, output_path: Path) -> None:
-    records = [
-        json.loads(path.read_text())
-        for path in results_root.glob("*/*/result.json")
-    ]
+    records = []
+    for path in results_root.glob("*/*/result.json"):
+        try:
+            record = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"skipping incomplete result cache {path}: {exc}")
+            continue
+        if not isinstance(record, dict):
+            print(f"skipping non-object result cache {path}")
+            continue
+        records.append(record)
     records = [record for record in records if record.get("split") == "test"]
     records.sort(key=lambda row: str(row.get("submitted_at", "")), reverse=True)
 

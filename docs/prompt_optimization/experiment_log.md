@@ -3326,3 +3326,41 @@ direct-only local-test run scored **`0.9342` macro AUROC**, `0.9818`
 instructed, and `0.8708` varied. Its margin pass took `9.3s` with zero missing
 logits. Promote direct label margins to the submission-implementation stage;
 do not blend prefixes or restore reasoning generation based on test.
+
+### P82 direct semantic reasoning-intent validation (2026-07-26)
+
+The previously paused semantic intent-logit protocol ran as RTX Pro 6000 job
+`30297634`. Base `Qwen/Qwen3.5-9B` scored both frozen prompts in one load,
+using exact constrained next-token `0`/`1` probabilities and no autoregressive
+reasoning. The 1,644 prompt evaluations took `31.91s` after startup with zero
+parse failures. A separate empty historical result cache broke only the
+optional global leaderboard render after all member predictions were written;
+the renderer now skips incomplete caches.
+
+Against Phoenix 4.1's frozen direct margins on the nine trace-bearing
+validation units, the preregistered resolved-intent member scored `0.84889`
+macro AUROC alone. The fixed log-odds mean improved Phoenix from `0.86431` to
+**`0.88514`** (`+0.02083`), while nested grouped logistic reached `0.87875`.
+The primary blend emitted 351 unique scores over 360 rows, cross-label tie
+fraction `0.00028`, and no saturation. Keeping all 12 no-trace units exactly
+unchanged projects the 21-unit macro from `0.93815` to `0.94708`.
+
+The literal-intent diagnostic blend scored `0.88833`, but was not promoted over
+the frozen resolved-intent primary. Both preregistered gates passed, authorizing
+one unchanged local-test confirmation as job `30297674`.
+
+The test job completed in `2m27s` including cold startup; the 1,642 two-prompt
+evaluations took `30.68s`. On the nine trace-bearing test units, resolved intent
+scored `0.82986` AUROC alone and its frozen log-odds mean improved Phoenix
+`0.87083 -> 0.88764` (`+0.01681`). The diagnostic validation-fit logistic
+reached only `0.87847`. The primary emitted 350 unique scores over 360 rows,
+with cross-label tie fraction `0.00028` and no saturation. Keeping the 12
+no-trace units exactly unchanged projects full local-test macro AUROC
+`0.93423 -> 0.94143` (`+0.00720`).
+
+This confirms the fixed semantic blend locally and supports an NDIF
+implementation/paired runtime benchmark. A deployed version should run only
+the resolved prompt on trace-bearing rows, blend only the continuous `score`,
+and retain Phoenix's separate hard `deceptive` decision. It is not yet an
+official-distribution result: all local trace-bearing units are Qwen-family,
+and the earlier lexical reasoning ensemble failed to transfer.

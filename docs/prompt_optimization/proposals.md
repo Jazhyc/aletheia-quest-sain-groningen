@@ -4340,3 +4340,60 @@ Outcome:
   zero, so this is a low-regression OOD transfer bet, not a measured local
   validation improvement. Do not broaden the router or replace the frozen
   empty scaffold from confirmation.
+
+## P82: Direct Semantic Reasoning-Intent Ensemble
+
+Status: validation gate passed; frozen local-test confirmation confirmed.
+
+Question: can Phoenix 4.1 recover complementary private-intent signal without
+restoring autoregressive judge reasoning?
+
+Frozen design:
+
+- Keep Phoenix 4.1's exact rank-16 direct `Prediction:` margin as the regular
+  deception score.
+- On rows with final-assistant reasoning only, query unadapted
+  `Qwen/Qwen3.5-9B` under two frozen no-thinking semantic prompts:
+  `literal_deceptive_intent` as a diagnostic and `resolved_intent` as primary.
+  The primary requires that the assistant ultimately adopts a deceptive plan
+  and executes it in the visible output.
+- End each prompt at `Prediction:` and constrain the next token to exact
+  single-token `0`/`1` labels. Use normalized label probabilities; generate no
+  reasoning.
+- Retain Phoenix exactly on rows without reasoning. Do not use reasoning
+  availability, dataset, source, or organism as a fitted feature.
+- Blend only the continuous `score` column. Retain Phoenix's separate hard
+  `deceptive` prediction instead of thresholding the blend.
+- Report fixed probability mean, log-odds mean, maximum, and within-unit rank
+  average. The fixed resolved-intent log-odds mean is primary. Treat a nested
+  leave-one-dataset-unit-out logistic stack as a diagnostic only.
+- Select on varied validation macro AUROC. Advance only if resolved intent
+  alone reaches `0.80` AUROC and its fixed log-odds mean gains at least `0.005`
+  over Phoenix. Report uniqueness, cross-label ties, saturation, binary
+  diagnostics, and runtime. Run local test once only after passing.
+
+Validation outcome:
+
+- RTX Pro 6000 job `30297634` loaded Qwen once and scored 1,644 prompt
+  evaluations in `31.91s` after startup, with zero parse failures.
+- Phoenix direct, resolved intent, and their fixed log-odds mean scored
+  `0.86431`, `0.84889`, and **`0.88514`** macro AUROC on the nine
+  trace-bearing units. The `+0.02083` gain passes the frozen gate. Nested
+  logistic reached `0.87875`.
+- The primary blend produced 351 unique scores on 360 rows, macro cross-label
+  ties `0.00028`, and no saturation. Keeping the 12 no-trace units unchanged
+  projects full validation macro AUROC `0.93815 -> 0.94708`.
+- The literal diagnostic blend reached `0.88833`, but it is not selected post
+  hoc over the preregistered resolved-intent primary.
+- Frozen local-test job `30297674` completed in `2m27s` including cold startup;
+  1,642 two-prompt evaluations took `30.68s`. The resolved-intent member alone
+  scored `0.82986` test AUROC, while its unchanged log-odds mean improved
+  Phoenix `0.87083 -> 0.88764` (`+0.01681`) on the nine trace-bearing units.
+  The validation-fit logistic reached only `0.87847`.
+- The primary produced 350 unique test scores over 360 rows, cross-label tie
+  fraction `0.00028`, and no saturation. With the 12 no-trace units unchanged,
+  full test macro AUROC projects `0.93423 -> 0.94143` (`+0.00720`).
+- Implement only the resolved member on trace-bearing rows and benchmark it
+  against Phoenix 4.1 on a complete NDIF unit before submission. This local
+  confirmation is Qwen-only and does not erase the earlier reasoning n-gram
+  ensemble's official transfer failure.

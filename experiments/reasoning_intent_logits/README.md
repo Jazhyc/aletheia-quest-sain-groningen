@@ -1,7 +1,7 @@
 # Semantic Reasoning-Intent Logits
 
-Status: paused before GPU evaluation because suitable cluster nodes were
-unavailable. No validation or test result has been claimed.
+Status: validation passed the frozen AUROC gate, and the unchanged primary
+blend confirmed on local test.
 
 This experiment tests an untrained `Qwen/Qwen3.5-9B` specialist over private
 assistant reasoning. It is conditional by design: only trace-bearing rows are
@@ -25,21 +25,92 @@ Run validation:
 sbatch experiments/reasoning_intent_logits/run.sh split=validation
 ```
 
-Then analyze against the frozen rank-24 Phoenix validation cache:
+Then analyze against the frozen Phoenix 4.1 rank-16 direct-margin validation
+cache:
 
 ```bash
 python experiments/reasoning_intent_logits/analyze.py \
   --validation-phoenix \
-    results/blackbox/qwen9b_pid_varied_rank24_full_adamw5e5_v1/validation_rank24_full_v1/generations.jsonl \
+    results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/validation_phoenix_v3_auroc_margin_sweep_v1/generations.jsonl \
   --validation-intent-root \
     results/blackbox/qwen9b_reasoning_intent_logits_v1/validation/member_predictions \
   --output-dir results/blackbox/reasoning_intent_logits_phoenix_v1
 ```
 
-The resolved-intent member advances to frozen local test only if:
+The AUROC-first analyzer reports fixed probability-mean, log-odds-mean,
+maximum, and per-dataset rank-average blends plus a nested
+leave-one-dataset-unit-out logistic diagnostic. It also reports score
+uniqueness, cross-label ties, and saturation. The fixed log-odds mean is
+primary. The resolved-intent member advances to frozen local test only if:
 
-- standalone varied validation BA is at least `0.80`;
-- nested grouped-logistic BA improves rank-24 Phoenix by at least `0.005`; and
-- nested grouped-logistic FPR increases by no more than `0.05`.
+- standalone varied validation macro AUROC is at least `0.80`; and
+- fixed log-odds-mean varied macro AUROC improves Phoenix 4.1 direct margins by
+  at least `0.005`.
 
-Raw OR is reported as a diagnostic and is not the preferred combiner.
+Binary metrics and the nested logistic model remain diagnostics; they do not
+govern AUROC-first promotion. Raw OR is also reported as a diagnostic and is
+not the preferred combiner. A submission should use the blend only for the
+continuous `score` column and retain Phoenix 4.1's separate `deceptive` decision.
+
+## Validation outcome
+
+Slurm job `30297634` evaluated all 1,644 prompt/row pairs in one Qwen load.
+The one-token scoring pass took `31.91s` (`51.52` prompt evaluations/s) with
+zero parse failures. A separate zero-byte historical `result.json` caused the
+optional global leaderboard renderer to exit nonzero after this run's complete
+predictions and result had already been written; the renderer now skips
+incomplete caches.
+
+On the nine trace-bearing varied validation units:
+
+| member/blend | macro AUROC | delta vs Phoenix |
+| --- | ---: | ---: |
+| Phoenix 4.1 direct margin | `0.86431` | — |
+| literal intent alone | `0.85069` | `-0.01361` |
+| literal + Phoenix log-odds mean | **`0.88833`** | `+0.02403` |
+| resolved intent alone | `0.84889` | `-0.01542` |
+| resolved + Phoenix log-odds mean | **`0.88514`** | **`+0.02083`** |
+| resolved + Phoenix nested logistic | `0.87875` | `+0.01444` |
+
+The preregistered resolved-intent log-odds mean passed both gates: standalone
+AUROC exceeded `0.80`, and the blend gained more than `0.005`. It emitted 351
+distinct scores across 360 rows, with macro cross-label tie fraction
+`0.00028` and no extreme saturation. If the 12 no-trace units retain their
+exact Phoenix scores, the validation 21-unit macro projects from `0.93815` to
+`0.94708`.
+
+The literal member is a diagnostic control and is not promoted post hoc despite
+its slightly higher validation blend. The frozen resolved prompt and log-odds
+mean advanced unchanged to one local-test confirmation:
+
+```bash
+sbatch experiments/reasoning_intent_logits/run.sh split=test
+```
+
+## Frozen test outcome
+
+Slurm job `30297674` completed in `2m27s` including cold model startup. Its
+1,642 two-prompt evaluations took `30.68s` (`53.52` prompt evaluations/s).
+The deployed primary would issue only one intent prompt on the 360
+trace-bearing rows, rather than both prompts on all 821 rows; NDIF runtime still
+requires a paired full-unit benchmark.
+
+On the nine trace-bearing varied test units:
+
+| member/blend | macro AUROC | delta vs Phoenix |
+| --- | ---: | ---: |
+| Phoenix 4.1 direct margin | `0.87083` | — |
+| resolved intent alone | `0.82986` | `-0.04097` |
+| resolved + Phoenix log-odds mean | **`0.88764`** | **`+0.01681`** |
+| resolved + Phoenix nested logistic | `0.87847` | `+0.00764` |
+| literal + Phoenix log-odds mean, diagnostic | `0.89028` | `+0.01944` |
+
+The fixed primary therefore transferred without retuning and again beat the
+fitted diagnostic stack. It produced 350 unique scores across 360 rows, a
+macro cross-label tie fraction of `0.00028`, and no extreme saturation.
+Keeping the 12 no-trace units unchanged projects full 21-unit test macro AUROC
+from `0.93423` to **`0.94143`** (`+0.00720`).
+
+This supports an NDIF implementation/benchmark, not immediate leaderboard
+promotion: every local trace-bearing unit is Qwen-family, and the earlier
+reasoning n-gram ensemble failed to transfer to the official distribution.
