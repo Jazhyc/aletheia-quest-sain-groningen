@@ -4237,7 +4237,7 @@ Outcome:
 
 ## P80: AUROC-First Phoenix Label Margins
 
-Status: proposed after the 2026-07-25 metric amendment.
+Status: complete; direct label margins selected and confirmed.
 
 Question: can the current Phoenix v3 rank-16 reasoning-summary judge expose its
 latent continuous ranking without changing its trained decision rule?
@@ -4270,3 +4270,25 @@ Interpretation:
 - Existing varied-only adapter diagnostics establish feasibility but do not
   select the current Phoenix v3 method. The complete contract and prior
   measurements are in `docs/auroc_first_strategy.md`.
+
+Outcome:
+
+- The exact bundled rank-16 adapter has SHA-256
+  `1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`.
+  The H100 validation sweep scored all 822 rows and 21 dataset units in one
+  model load.
+- Generated binary, direct, empty-summary, and post-reasoning macro AUROC were
+  `0.9048`, **`0.9382`**, `0.9370`, and `0.9304`, respectively. Direct won the
+  frozen selection. It reached `0.9935` instructed and `0.8643` varied AUROC.
+- Direct scoring beat binary on 15 units, tied on five, and lost on one. Its
+  macro cross-label tie rate was `0.00155`, versus `0.1731` for binary scores;
+  no requested label logits were missing.
+- The direct pass took `9.7s` for validation. Post-reasoning required `20.4s`
+  generation plus an `11.5s` margin pass, so it was both less accurate and
+  more expensive.
+- The frozen direct-only local-test confirmation scored **`0.9342`** macro
+  AUROC, `0.9818` instructed, and `0.8708` varied. Its margin pass took `9.3s`
+  for 821 rows with zero missing logits.
+- Select direct `Prediction:` margins for the first AUROC submission port. Do
+  not blend the three validation arms or use the test result to retune their
+  prefixes.

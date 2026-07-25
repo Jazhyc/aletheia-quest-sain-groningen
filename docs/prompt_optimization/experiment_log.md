@@ -3249,3 +3249,25 @@ generated final digit and scores `0` versus `1` at that exact position. The
 direct conditions are speed ablations. Selection is validation macro AUROC,
 with one frozen local-test confirmation. See
 `docs/auroc_first_strategy.md`.
+
+### P80 Phoenix label-margin outcome (2026-07-25)
+
+The Lambda H100 loaded the exact current Phoenix v3 rank-16 adapter
+(`1407d885...d3978e`) once and scored 822 validation rows across 21 units.
+Macro AUROC was `0.9048` for generated binary scores, **`0.9382` for direct
+`Prediction:` margins**, `0.9370` for canonical empty-summary margins, and
+`0.9304` for post-reasoning margins. Direct reached `0.9935` instructed and
+`0.8643` varied AUROC. It beat binary on 15 units, tied on five, and lost on
+one.
+
+The binary score had only two values and a `0.1731` macro cross-label tie
+fraction. Direct produced 348 serialized values, reduced that tie fraction to
+`0.00155`, had no extreme saturation at `1e-6`, and had zero missing label
+logits. Its margin pass took `9.7s`; generation took `20.4s`, and the
+post-reasoning pass added `11.5s`.
+
+Direct was frozen before looking at the confirmation result. The 821-row
+direct-only local-test run scored **`0.9342` macro AUROC**, `0.9818`
+instructed, and `0.8708` varied. Its margin pass took `9.3s` with zero missing
+logits. Promote direct label margins to the submission-implementation stage;
+do not blend prefixes or restore reasoning generation based on test.

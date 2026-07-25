@@ -81,11 +81,11 @@ For malformed completions without a final decision, append the canonical
 `Prediction:` separator after the generated text and score there. Record this
 fallback separately; do not silently replace it with a binary zero.
 
-This is the preferred accuracy-oriented path because it preserves the
+This was the training-matched accuracy hypothesis because it preserves the
 reasoning behavior the adapter was trained to produce. Its cost is the decode
-plus a second one-token scoring pass. A later optimization may capture the two
-label logits at the decision step during generation, but only after the simpler
-two-pass implementation establishes equivalence.
+plus a second one-token scoring pass. P80 subsequently found that it ranked
+worse than direct logits; retain it as a measured control rather than the
+selected deployment path.
 
 ## Existing evidence
 
@@ -135,6 +135,38 @@ parse/fallback rate, and worst-dataset AUROC as operational gates. Report:
 After selection, freeze the method and run local test once. Do not use the test
 split to choose direct versus post-reasoning scoring.
 
+## P80 outcome
+
+The H100 validation sweep used the exact adapter bundled by Phoenix v3
+(SHA-256 `1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`)
+and 822 rows across 21 dataset units:
+
+| arm | macro AUROC | instructed AUROC | varied AUROC | scoring time |
+| --- | ---: | ---: | ---: | ---: |
+| generated binary | 0.9048 | 0.9792 | 0.8056 | 20.4s generation |
+| direct `Prediction:` | **0.9382** | 0.9935 | **0.8643** | **9.7s** |
+| empty summary | 0.9370 | **0.9944** | 0.8606 | 9.4s |
+| post-reasoning | 0.9304 | 0.9942 | 0.8453 | 11.5s after generation |
+
+Direct scoring beat the binary reference on 15 of 21 dataset units, tied on
+five, and lost on one. It reduced the macro positive/negative tie fraction from
+`0.1731` to `0.00155`, produced 348 distinct serialized scores, had no scores
+saturated below `1e-6` or above `1 - 1e-6`, and had zero missing label logits.
+The small `0.0011` direct-versus-empty aggregate edge came from better varied
+ranking; empty-summary was slightly better on instructed rows.
+
+The direct arm was frozen before confirmation. The direct-only 821-row local
+test run scored macro AUROC **`0.9342`**, instructed AUROC `0.9818`, and varied
+AUROC `0.8708`. Its margin pass took `9.3s` (`88.3` rows/s), produced 345
+distinct serialized scores, and had zero missing logits. At the
+validation-selected secondary threshold `0.15`, test BA was `0.8679`; threshold
+choice does not affect the selected AUROC result.
+
+Artifacts are under
+`results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/`
+in `validation_phoenix_v3_auroc_margin_sweep_v1/` and
+`test_phoenix_v3_auroc_margin_sweep_v1/`.
+
 ## Ensemble follow-up
 
 Once a single-member continuous path is established, rescore the existing judge
@@ -152,10 +184,12 @@ dataset/source-family holdouts before it is promoted.
 
 ## Recommended order
 
-1. Implement the matched validation sweep using the existing margin helpers.
-2. Prefer post-reasoning rescoring if it wins materially; otherwise choose the
-   empty-summary path for its lower cost.
-3. Port the selected score extraction into the single submission notebook and
-   keep `deceptive = score >= frozen_threshold` only for binary diagnostics.
+1. Port the selected direct `Prediction:` margin into the single submission
+   notebook without running reasoning generation.
+2. Keep the exact plain single-token `0`/`1` verbalizers and normalized
+   log-odds used by P80.
+3. Set the required binary decision separately; use the validation-selected
+   `0.15` threshold only if a binary diagnostic is needed.
 4. Rehearse with `python submit.py --dry --limit 32`, then a full dry run.
-5. Only then evaluate continuous multi-prompt or specialist blends.
+5. Only after the direct path works through NDIF, evaluate continuous
+   multi-prompt or specialist blends.

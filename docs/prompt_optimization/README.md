@@ -41,6 +41,12 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
+- P80 selected direct Phoenix `Prediction:` label margins for the next
+  AUROC-first submission implementation. On validation/test they scored
+  `0.9382/0.9342` macro AUROC with `9.7s/9.3s` margin passes and zero missing
+  logits. This path is not yet ported into the NDIF notebook; keep v3.0 as the
+  current executable submission until the direct LM-head trace passes dry-run
+  parity.
 - `submission/phoenix_wright_v3_0.ipynb` is the current legacy BA-first NDIF
   submission. It restores the original full-data Phoenix v2.1 rank-16
   privileged-information-distillation adapter and exact frozen v2.0 no-trace

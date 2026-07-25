@@ -855,6 +855,16 @@ implementation remains in commit `eabc519` on branch
 `experiment/pid-continuous-margin`; the updated experiment contract is in
 `docs/auroc_first_strategy.md`.
 
+P80 completed that matched rerun and added a true direct `Prediction:` arm.
+Validation macro AUROC was `0.9048` binary, **`0.9382` direct**, `0.9370`
+empty-summary, and `0.9304` post-reasoning. Direct required only a `9.7s`
+one-token margin pass, compared with `20.4s` generation plus `11.5s`
+post-reasoning scoring, and had zero missing logits. The frozen direct-only
+local-test confirmation scored **`0.9342` macro AUROC** (`0.9818` instructed,
+`0.8708` varied) in a `9.3s` margin pass. Direct label margins are therefore
+the selected first AUROC submission implementation; the generated reasoning
+path is retained as a rejected measured control.
+
 ## Rule-based claim-gated Wikidata follow-up
 
 A CPU-only extractor mapped explicit question forms to retained Wikidata
