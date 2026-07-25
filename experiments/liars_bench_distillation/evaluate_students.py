@@ -33,14 +33,28 @@ def parse_prediction(text: str) -> int | None:
     return int(matches[-1]) if matches else None
 
 
-def balanced_accuracy(rows: list[dict[str, Any]]) -> dict[str, float]:
+def balanced_accuracy(rows: list[dict[str, Any]]) -> dict[str, float | int | None]:
     tp = sum(row["label"] == row["prediction"] == 1 for row in rows)
     fn = sum(row["label"] == 1 and row["prediction"] == 0 for row in rows)
     fp = sum(row["label"] == 0 and row["prediction"] == 1 for row in rows)
     tn = sum(row["label"] == row["prediction"] == 0 for row in rows)
-    recall = tp / (tp + fn)
-    fpr = fp / (fp + tn)
-    return {"balanced_accuracy": (recall + 1 - fpr) / 2, "recall": recall, "fpr": fpr}
+    positive_rows = tp + fn
+    negative_rows = fp + tn
+    recall = tp / positive_rows if positive_rows else None
+    fpr = fp / negative_rows if negative_rows else None
+    balanced = (
+        (recall + 1 - fpr) / 2
+        if recall is not None and fpr is not None
+        else None
+    )
+    return {
+        "balanced_accuracy": balanced,
+        "accuracy": (tp + tn) / len(rows),
+        "recall": recall,
+        "fpr": fpr,
+        "positive_rows": positive_rows,
+        "negative_rows": negative_rows,
+    }
 
 
 def grouped_metrics(rows: list[dict[str, Any]], field: str) -> dict[str, Any]:

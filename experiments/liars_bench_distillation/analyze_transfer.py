@@ -118,6 +118,21 @@ def external_delta(
 ) -> dict[str, Any]:
     """Compute external macro and category deltas."""
     categories = sorted(baseline["per_category"])
+    cell_deltas = {}
+    cell_metrics = {}
+    for cell in sorted(baseline.get("per_category_source_model", {})):
+        if cell not in candidate.get("per_category_source_model", {}):
+            continue
+        baseline_cell = baseline["per_category_source_model"][cell]
+        candidate_cell = candidate["per_category_source_model"][cell]
+        metric = (
+            "balanced_accuracy"
+            if baseline_cell.get("balanced_accuracy") is not None
+            and candidate_cell.get("balanced_accuracy") is not None
+            else "accuracy"
+        )
+        cell_metrics[cell] = metric
+        cell_deltas[cell] = candidate_cell[metric] - baseline_cell[metric]
     return {
         "macro_category_balanced_accuracy": candidate[
             "macro_category_balanced_accuracy"
@@ -141,14 +156,8 @@ def external_delta(
             for model in sorted(baseline["per_source_model"])
             if model in candidate["per_source_model"]
         },
-        "category_source_model_deltas": {
-            cell: (
-                candidate["per_category_source_model"][cell]["balanced_accuracy"]
-                - baseline["per_category_source_model"][cell]["balanced_accuracy"]
-            )
-            for cell in sorted(baseline.get("per_category_source_model", {}))
-            if cell in candidate.get("per_category_source_model", {})
-        },
+        "category_source_model_deltas": cell_deltas,
+        "category_source_model_metrics": cell_metrics,
     }
 
 

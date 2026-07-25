@@ -38,7 +38,9 @@ leakage or summary-polarity conflict. Promote the adapter only if competition
 validation loses no more than `0.0025` BA and train-disjoint external macro BA
 gains at least `0.02`. No category may lose more than `0.02` BA and no
 source-model cell may lose more than `0.05`. A macro pass does not justify
-hiding a material response-mode regression.
+hiding a material response-mode regression. Category/source cells containing
+both labels use balanced accuracy; structurally one-class cells use ordinary
+accuracy and are marked as such in the analysis.
 
 This experiment tests whether a very small external-data mixture broadens the
 Phoenix student beyond factual instructed/Qwen-varied deception without

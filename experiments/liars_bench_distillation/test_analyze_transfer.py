@@ -14,6 +14,7 @@ from experiments.liars_bench_distillation.analyze_transfer import (
     paired_changes_grouped,
     passes_external_floors,
 )
+from experiments.liars_bench_distillation.evaluate_students import balanced_accuracy
 
 
 def write_rows(path: Path, predictions: list[int | None]) -> None:
@@ -114,3 +115,19 @@ def test_external_floors_reject_hidden_group_regression() -> None:
         minimum_source_model_delta=-0.05,
         minimum_category_source_model_delta=-0.06,
     )
+
+
+def test_one_class_group_reports_accuracy_and_undefined_balanced_accuracy() -> None:
+    metrics = balanced_accuracy([
+        {"label": 1, "prediction": 1},
+        {"label": 1, "prediction": 0},
+    ])
+
+    assert metrics == {
+        "balanced_accuracy": None,
+        "accuracy": 0.5,
+        "recall": 0.5,
+        "fpr": None,
+        "positive_rows": 2,
+        "negative_rows": 0,
+    }
