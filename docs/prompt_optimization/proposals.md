@@ -4298,3 +4298,45 @@ Outcome:
   but OOMed at 64; the deployed length-aware schedule is `48/32/16` at
   `600/900` tokens. See `docs/auroc_first_strategy.md` for the paired runtime
   and numerical-drift measurements.
+
+## P81: Continuous Knowledge-Report Specialist
+
+Status: complete; empty-summary base-Qwen margin confirmed and deployed in
+Phoenix 4.1.
+
+Question: can the exact P78 HP-KR router expose the strong base-Qwen
+`knowledge_report_type` specialist as a continuous AUROC score rather than a
+two-valued generated decision?
+
+Frozen design:
+
+- Preserve P78's exact explicit knowledge self-report rule and its exclusion of
+  harmful forced-choice tasks. Do not add category, source, organism, label, or
+  fitted n-gram features.
+- Keep Phoenix's direct rank-16 margin as the baseline.
+- Run base `Qwen/Qwen3.5-9B` without PEFT under the already selected
+  `knowledge_report_type` prompt.
+- Compare direct `Prediction:`, empty `<reasoning_summary>` plus `Prediction:`,
+  and post-reasoning label margins. Retain generated binary output as the
+  known-strong diagnostic.
+- Select on the frozen 100-row development HP-KR half only if AUROC gains at
+  least `0.05` over Phoenix, then run the selected arm on the untouched
+  100-row confirmation half.
+
+Outcome:
+
+- Development Phoenix, generated binary, direct, empty, and post-reasoning
+  AUROCs were `0.4348`, `0.8100`, `0.8894`, **`0.9002`**, and `0.8472`.
+  Empty-summary scoring was selected before confirmation.
+- Confirmation AUROCs were `0.4012`, `0.8600`, `0.9440`, **`0.9462`**, and
+  `0.8976`. The selected arm's BA was `0.8600`, and no requested label logits
+  were missing.
+- The selected arm emitted 92 unique development and 84 unique confirmation
+  scores. Its H100 margin passes took `1.31s` and `1.38s` after model load.
+- A one-row NDIF smoke verified the exact base-model/no-PEFT path,
+  `logits_to_keep=1`, and empty-summary prefix; it emitted `0.952574`.
+- Phoenix 4.1 deploys the route in
+  `submission/phoenix_wright_v4_1.ipynb`. Known competition coverage remains
+  zero, so this is a low-regression OOD transfer bet, not a measured local
+  validation improvement. Do not broaden the router or replace the frozen
+  empty scaffold from confirmation.

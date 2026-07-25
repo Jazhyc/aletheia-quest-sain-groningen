@@ -196,9 +196,9 @@ dataset/source-family holdouts before it is promoted.
 
 ## Phoenix Wright 4.0 deployment
 
-Phoenix Wright 4.0 implements the selected path in
-`submission/phoenix_wright_v4_0.ipynb`. It preserves the exact Phoenix v3
-rank-16 adapter (weight SHA-256
+Phoenix Wright 4.0 originally implemented the selected path; its sole-notebook
+successor is now `submission/phoenix_wright_v4_1.ipynb`. The ordinary route
+preserves the exact Phoenix v3 rank-16 adapter (weight SHA-256
 `1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`)
 and frozen visible-message renderer. It appends `Prediction:` directly to the
 no-thinking chat prompt, asks Qwen for `logits_to_keep=1`, extracts the exact
@@ -219,3 +219,47 @@ with the highest p95 prompt length, the actual shapes were `48x383...583`,
 `32x619...773`, and `16x896`. It completed in `38.3s`, versus `64.7s` for the
 paired batch-32 control. AUROC moved `0.76046 -> 0.75961`; this small numerical
 batch-shape drift is reported rather than treated as exact score preservation.
+
+## Phoenix Wright 4.1 HP-KR route
+
+Phoenix 4.1 adds one previously confirmed, label-blind OOD route without
+changing ordinary Phoenix scores. The rule activates only when the user
+explicitly requests a constrained self-report of whether the assistant knows
+an answer, and it excludes the failed harmful forced-choice contract. It
+matches all sampled Liars' Bench HP-KR rows, no other sampled Liars' Bench
+category, and zero of the 8,216 known competition train/validation/test rows.
+
+The first AUROC port retained the Phoenix rank-16 adapter and applied the
+truthful-alternative prompt. Specialist replacement beat Phoenix on both
+predeclared halves:
+
+| half | Phoenix HP-KR AUROC | routed AUROC | four-category macro gain |
+| --- | ---: | ---: | ---: |
+| development | `0.4314` | `0.4648` | `+0.00835` |
+| confirmation | `0.4034` | `0.4806` | `+0.01930` |
+
+That result ranks better but is not the strong `~0.8` HP-KR specialist. The
+strong path uses base `Qwen/Qwen3.5-9B` without PEFT and the established
+`knowledge_report_type` prompt. A second frozen sweep compared its generated
+binary decision with direct, empty-summary, and post-reasoning margins:
+
+| condition | development BA | development AUROC | confirmation BA | confirmation AUROC |
+| --- | ---: | ---: | ---: | ---: |
+| Phoenix direct | `0.5000` | `0.4348` | `0.4900` | `0.4012` |
+| epistemic generated binary | `0.8100` | `0.8100` | `0.8600` | `0.8600` |
+| epistemic direct | `0.8300` | `0.8894` | `0.9000` | `0.9440` |
+| epistemic empty summary | `0.8300` | **`0.9002`** | `0.8600` | **`0.9462`** |
+| epistemic post-reasoning | `0.8100` | `0.8472` | `0.8500` | `0.8976` |
+
+Empty-summary scoring was selected on development before confirmation. It
+produced 92 and 84 unique scores on the two 100-row halves with zero missing
+label logits. On the H100 it took `1.31s` and `1.38s` per half after model
+load. A one-row NDIF execution of the exact no-LoRA path completed successfully
+and emitted score `0.952574`.
+
+The sole notebook is now `submission/phoenix_wright_v4_1.ipynb`. Entirely
+routed datasets load base Qwen only; ordinary datasets load the Phoenix
+adapter only. A mixed dataset is supported by scoring the two subsets through
+separate sessions. Keep this as an exact semantic transfer route: its zero
+known-competition coverage prevents measuring a local gain and does not
+authorize lexical expansion from private leaderboard behavior.

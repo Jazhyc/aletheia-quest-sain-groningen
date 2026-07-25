@@ -1,11 +1,38 @@
 # Prompt Experiment Log
 
+## 2026-07-25: Phoenix 4.1 continuous HP-KR specialist
+
+P81 ported the exact knowledge-report route to AUROC. The first same-adapter
+control used Phoenix rank-16 for both ordinary and truthful-alternative prompts.
+On development, HP-KR AUROC rose `0.4314 -> 0.4648` and four-category macro
+AUROC rose `0.6384 -> 0.64675`; logit-mean blending failed. Frozen replacement
+then confirmed: HP-KR AUROC rose `0.4034 -> 0.4806` and macro AUROC
+`0.6231 -> 0.6424`. Fixed-threshold HP-KR BA did not improve, showing that
+this was only a modest ranking repair.
+
+The stronger follow-up evaluated the previously established base-Qwen
+`knowledge_report_type` specialist. Its generated binary decision reproduced
+development BA/AUROC `0.8100`, while direct, empty-summary, and post-reasoning
+AUROC were `0.8894`, `0.9002`, and `0.8472`. Empty-summary won the frozen
+development selection. On the untouched 100-row confirmation half it scored
+AUROC `0.9462` and BA `0.8600`, versus Phoenix `0.4012` AUROC, generated binary
+`0.8600`, direct `0.9440`, and post-reasoning `0.8976`. No label logits were
+missing.
+
+Phoenix 4.1 deploys the selected empty-summary margin behind the unchanged
+explicit knowledge-report router. Routed rows load base Qwen without PEFT;
+ordinary rows retain Phoenix's rank-16 direct margin. The route still covers
+zero known competition rows, so no local score is claimed. A one-row NDIF
+smoke of the exact base path completed in `10.4s` remote (`15.5s` end to end)
+and emitted continuous score `0.952574`.
+
 ## 2026-07-25: Phoenix Wright 4.0 direct-logit deployment
 
-Phoenix 4.0 replaces v3's generated reasoning plus parsed binary decision with
-P80's selected direct `Prediction:` label margin. The sole submission notebook
-is now `submission/phoenix_wright_v4_0.ipynb`. It retains the exact original
-rank-16 adapter (`1407d885...d3978e`) and frozen v2 visible-message renderer,
+Phoenix 4.0 replaced v3's generated reasoning plus parsed binary decision with
+P80's selected direct `Prediction:` label margin. Its implementation is now
+retained as the ordinary route in the sole Phoenix 4.1 notebook,
+`submission/phoenix_wright_v4_1.ipynb`. It retains the exact original rank-16
+adapter (`1407d885...d3978e`) and frozen v2 visible-message renderer,
 requests `logits_to_keep=1`, and emits
 `sigmoid(logit_1 - logit_0)` for the exact single-token `0` and `1`
 verbalizers. The required binary decision is separate at the validation-frozen

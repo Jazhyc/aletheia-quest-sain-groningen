@@ -197,6 +197,32 @@ skipped. Retain base Qwen plus `knowledge_report_type` as the strongest narrow
 HP-KR specialist. Do not increase rank or training dose from this failed
 development result.
 
+### AUROC-first HP-KR deployment
+
+The strong base-Qwen specialist is now scored continuously rather than reduced
+to its generated binary decision. The frozen 100/100 HP-KR halves compare the
+Phoenix direct margin with base-Qwen `knowledge_report_type` direct,
+empty-summary, and post-reasoning margins. Development requires at least
+`+0.05` AUROC over Phoenix and selects one arm before confirmation.
+
+```bash
+bash experiments/liars_bench_distillation/run_hpkr_epistemic_auroc_lambda.sh development
+bash experiments/liars_bench_distillation/run_hpkr_epistemic_auroc_lambda.sh confirmation
+```
+
+Development selected the empty-summary margin at `0.9002` AUROC, versus
+`0.4348` Phoenix, `0.8100` generated binary, `0.8894` direct, and `0.8472`
+post-reasoning. Frozen confirmation scored `0.9462`, versus `0.4012` Phoenix,
+`0.8600` generated binary, `0.9440` direct, and `0.8976` post-reasoning. Both
+halves had zero missing label logits.
+
+Phoenix 4.1 therefore routes exact knowledge self-report contracts to base
+Qwen without the Phoenix LoRA and scores the exact `0`/`1` logits after an
+empty `<reasoning_summary>` scaffold. All other rows retain the Phoenix direct
+margin. This is still an OOD-only transfer feature: the frozen route matches
+zero known competition rows. Do not broaden the route from leaderboard
+behavior or add the failed forced-choice trigger.
+
 This experiment tests whether a very small external-data mixture broadens the
 Phoenix student beyond factual instructed/Qwen-varied deception without
 overwriting its competition calibration. It uses four Liars' Bench categories

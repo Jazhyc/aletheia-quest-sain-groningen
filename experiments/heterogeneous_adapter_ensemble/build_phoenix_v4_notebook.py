@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the direct-label-logit Phoenix Wright 4.0 submission notebook."""
+"""Build the routed direct-label-logit Phoenix Wright 4.1 notebook."""
 
 from pathlib import Path
 
@@ -7,7 +7,7 @@ import nbformat
 
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUT = ROOT / "submission/phoenix_wright_v4_0.ipynb"
+OUTPUT = ROOT / "submission/phoenix_wright_v4_1.ipynb"
 
 
 def main() -> None:
@@ -22,13 +22,17 @@ def main() -> None:
     }
     notebook["cells"] = [
         nbformat.v4.new_markdown_cell(
-            """# Phoenix Wright v4.0
+            """# Phoenix Wright v4.1
 
-AUROC-first black-box deception judge using the frozen Phoenix v3 rank-16
+AUROC-first white-box deception judge using the frozen Phoenix v3 rank-16
 Qwen3.5-9B adapter. The notebook skips reasoning generation and reads the
 normalized next-token margin between the exact labels `0` and `1` immediately
 after `Prediction:`. The continuous margin is the submission score; a separately
-frozen threshold supplies the required binary decision."""
+frozen threshold supplies the required binary decision.
+
+An exact observable-contract router sends explicit knowledge self-reports to
+the confirmed base-Qwen `knowledge_report_type` specialist. Those rows use the
+empty-summary label margin; all other rows retain the Phoenix direct margin."""
         ),
         nbformat.v4.new_code_cell(
             """import contextlib
@@ -43,6 +47,8 @@ from phoenix_wright_v4 import (
     MEMBER_NAMES,
     binary_token_ids,
     build_direct_prompt,
+    build_epistemic_empty_prompt,
+    is_knowledge_report_request,
 )
 import util
 
@@ -67,7 +73,7 @@ NNSIGHT_LOCAL = os.environ.get("PHOENIX_NNSIGHT_LOCAL", "0").lower() in {"1", "t
 SUBMISSION_THRESHOLD = float(os.environ.get("PHOENIX_THRESHOLD", "0.15"))
 
 print(f"dataset={DATASET_NAME} limit={LIMIT}")
-print(f"method=phoenix_wright_v4.0 direct_binary_margin members={MEMBER_NAMES}")
+print(f"method=phoenix_wright_v4.1 routed_direct_binary_margin members={MEMBER_NAMES}")
 print(f"adapter_repo={ADAPTER_REPO}")
 print(
     f"batch={BATCH_SIZE}/{MEDIUM_BATCH_SIZE}/{LONG_BATCH_SIZE} "
@@ -81,20 +87,49 @@ print(
 except ImportError:
     from nnsight.modeling.language import LanguageModel
 
-adapter_source = BUNDLED_ADAPTER if NNSIGHT_LOCAL else ADAPTER_REPO
-model_kwargs = {"device_map": "auto", "dispatch": True, "dtype": "bfloat16"} if NNSIGHT_LOCAL else {}
-model = LanguageModel(JUDGE_MODEL, peft=adapter_source, **model_kwargs)
-tokenizer = model.tokenizer
-tokenizer.padding_side = "left"
-tokenizer.truncation_side = "left"
-if tokenizer.pad_token_id is None:
-    tokenizer.pad_token = tokenizer.eos_token
-
-BINARY_TOKEN_IDS = list(binary_token_ids(tokenizer))
+examples = util.load_examples(DATASET_NAME)
+n = len(examples) if LIMIT is None else min(LIMIT, len(examples))
+messages = list(examples["messages"][:n])
+indices = list(examples["index"][:n])
+knowledge_routes = np.asarray(
+    [is_knowledge_report_request(value) for value in messages],
+    dtype=bool,
+)
 print(
-    f"adapter={adapter_source} binary_token_ids={BINARY_TOKEN_IDS} "
-    f"pad_token_id={tokenizer.pad_token_id}"
-)"""
+    f"loaded={len(examples)} scoring={n} "
+    f"knowledge_routes={int(knowledge_routes.sum())}"
+)
+
+
+def load_judge(*, specialist):
+    model_kwargs = (
+        {"device_map": "auto", "dispatch": True, "dtype": "bfloat16"}
+        if NNSIGHT_LOCAL
+        else {}
+    )
+    if specialist:
+        active_model = LanguageModel(JUDGE_MODEL, **model_kwargs)
+        source = "base"
+    else:
+        adapter_source = BUNDLED_ADAPTER if NNSIGHT_LOCAL else ADAPTER_REPO
+        active_model = LanguageModel(
+            JUDGE_MODEL,
+            peft=adapter_source,
+            **model_kwargs,
+        )
+        source = adapter_source
+    active_tokenizer = active_model.tokenizer
+    active_tokenizer.padding_side = "left"
+    active_tokenizer.truncation_side = "left"
+    if active_tokenizer.pad_token_id is None:
+        active_tokenizer.pad_token = active_tokenizer.eos_token
+    label_ids = list(binary_token_ids(active_tokenizer))
+    print(
+        f"judge={'epistemic' if specialist else 'phoenix'} "
+        f"source={source} binary_token_ids={label_ids} "
+        f"pad_token_id={active_tokenizer.pad_token_id}"
+    )
+    return active_model, active_tokenizer, label_ids"""
         ),
         nbformat.v4.new_code_cell(
             """def make_position_batches(prompt_lengths):
@@ -117,17 +152,17 @@ print(
     return batches
 
 
-def score_prompts(prompts):
+def score_prompts(active_model, active_tokenizer, label_ids, prompts):
     if not prompts:
         return np.array([], dtype=float)
     prompt_lengths = [
-        len(tokenizer.encode(prompt, add_special_tokens=False))
+        len(active_tokenizer.encode(prompt, add_special_tokens=False))
         for prompt in prompts
     ]
     position_batches = make_position_batches(prompt_lengths)
     encoded_batches = []
     for positions in position_batches:
-        encoded = tokenizer(
+        encoded = active_tokenizer(
             [prompts[position] for position in positions],
             return_tensors="pt",
             padding=True,
@@ -145,7 +180,11 @@ def score_prompts(prompts):
     for group_start in range(0, len(encoded_batches), batches_per_session):
         group_stop = min(group_start + batches_per_session, len(encoded_batches))
         score_pieces = []
-        session = contextlib.nullcontext() if NNSIGHT_LOCAL else model.session(remote=True)
+        session = (
+            contextlib.nullcontext()
+            if NNSIGHT_LOCAL
+            else active_model.session(remote=True)
+        )
         shapes = [
             (len(positions), prompt_tokens)
             for _, positions, prompt_tokens in encoded_batches[group_start:group_stop]
@@ -157,12 +196,12 @@ def score_prompts(prompts):
         )
         with session:
             for encoded, _, _ in encoded_batches[group_start:group_stop]:
-                with model.trace({
+                with active_model.trace({
                     "input_ids": encoded["input_ids"],
                     "attention_mask": encoded["attention_mask"],
                     "logits_to_keep": 1,
                 }):
-                    label_logits = model.output.logits[:, -1, BINARY_TOKEN_IDS].float()
+                    label_logits = active_model.output.logits[:, -1, label_ids].float()
                     piece = torch.softmax(label_logits, dim=-1)[:, 1].detach().cpu()
                     score_pieces.append(piece)
             group_scores = torch.cat(score_pieces, dim=0).save()
@@ -178,24 +217,46 @@ def score_prompts(prompts):
     return np.clip(scores, 0.0, 1.0)
 
 
-def score_messages(messages):
-    prompts = [build_direct_prompt(value, tokenizer) for value in messages]
-    scores = score_prompts(prompts)
+def score_message_subset(messages, positions, *, specialist):
+    active_model, active_tokenizer, label_ids = load_judge(
+        specialist=specialist,
+    )
+    builder = build_epistemic_empty_prompt if specialist else build_direct_prompt
+    prompts = [
+        builder(messages[position], active_tokenizer)
+        for position in positions
+    ]
+    subset_scores = score_prompts(
+        active_model,
+        active_tokenizer,
+        label_ids,
+        prompts,
+    )
     print(
-        f"direct-margin: active={len(messages)} "
-        f"unique_scores={len(np.unique(scores))}",
+        f"{'epistemic-empty' if specialist else 'phoenix-direct'}: "
+        f"active={len(positions)} unique_scores={len(np.unique(subset_scores))}",
         flush=True,
     )
+    return subset_scores
+
+
+def score_messages(messages, route_flags):
+    scores = np.empty(len(messages), dtype=float)
+    for specialist, positions in (
+        (False, np.flatnonzero(~route_flags).tolist()),
+        (True, np.flatnonzero(route_flags).tolist()),
+    ):
+        if not positions:
+            continue
+        scores[positions] = score_message_subset(
+            messages,
+            positions,
+            specialist=specialist,
+        )
     return scores"""
         ),
         nbformat.v4.new_code_cell(
-            """examples = util.load_examples(DATASET_NAME)
-n = len(examples) if LIMIT is None else min(LIMIT, len(examples))
-messages = list(examples["messages"][:n])
-indices = list(examples["index"][:n])
-print(f"loaded={len(examples)} scoring={n}")
-
-scores = score_messages(messages)
+            """scores = score_messages(messages, knowledge_routes)
 print(
     f"score min={scores.min():.6f} mean={scores.mean():.6f} "
     f"max={scores.max():.6f} positives={int((scores >= SUBMISSION_THRESHOLD).sum())}"

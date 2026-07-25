@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute Phoenix 4.0 on NDIF for one reproducible batch-size condition."""
+"""Execute Phoenix 4.x on NDIF for one reproducible batch-size condition."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from nbclient import NotebookClient
 
 
 ROOT = Path(__file__).resolve().parents[2]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v4_0.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v4_1.ipynb"
 SUBMISSION_CSV = ROOT / "submission.csv"
 DEFAULT_DATASET = "aletheias-quest/dev-varied-deception-Qwen3.5-27B-None"
 
