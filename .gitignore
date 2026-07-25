@@ -30,6 +30,7 @@ venv/
 
 # Probe weights (regenerated from activations; large binary blobs)
 *.pt
+!submission/whitebox_probe/**/*.pt
 
 # sklearn serialized models
 *.joblib
