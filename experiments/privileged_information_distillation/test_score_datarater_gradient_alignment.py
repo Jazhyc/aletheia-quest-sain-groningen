@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import torch
 
@@ -9,8 +10,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from experiments.privileged_information_distillation.score_datarater_gradient_alignment import (
+    finite_difference_alignment,
     gradient_alignment,
     limit_records_balanced,
+    load_scored_rows,
     per_sequence_completion_loss,
     record_key,
     select_random_fraction,
@@ -125,6 +128,103 @@ def test_gradient_alignment_returns_dot_cosine_and_norm() -> None:
     assert abs(norm - 5**0.5) < 1e-7
 
 
+def test_finite_difference_alignment_matches_exact_directional_derivative() -> None:
+    class TinyLM(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.tensor([0.2, -0.1]))
+
+        def forward(
+            self,
+            input_ids: torch.Tensor,
+            attention_mask: torch.Tensor,
+        ) -> SimpleNamespace:
+            del attention_mask
+            logits = self.weight.view(1, 1, 2).expand(
+                input_ids.shape[0],
+                input_ids.shape[1],
+                2,
+            )
+            return SimpleNamespace(logits=logits)
+
+    model = TinyLM()
+    original_weight = model.weight.detach().clone()
+    input_ids = torch.zeros((2, 3), dtype=torch.long)
+    attention_mask = torch.ones_like(input_ids)
+    labels = torch.tensor([[-100, 0, 1], [-100, 1, 1]])
+    reference = [torch.tensor([0.3, -0.4])]
+    reference_norm = 0.5
+    losses, approximate_dots = finite_difference_alignment(
+        model,
+        [model.weight],
+        reference,
+        reference_norm,
+        (input_ids, attention_mask, labels),
+        epsilon=1e-3,
+    )
+
+    exact_dots = []
+    sequence_losses = per_sequence_completion_loss(
+        model(input_ids, attention_mask).logits,
+        labels,
+    )
+    for position in range(2):
+        gradient = torch.autograd.grad(
+            sequence_losses[position],
+            model.weight,
+            retain_graph=True,
+        )[0]
+        exact_dots.append(float(torch.sum(gradient * reference[0])))
+
+    assert len(losses) == 2
+    assert torch.allclose(
+        torch.tensor(approximate_dots),
+        torch.tensor(exact_dots),
+        atol=2e-4,
+        rtol=2e-3,
+    )
+    assert torch.equal(model.weight, original_weight)
+
+
+def test_finite_difference_alignment_restores_low_precision_parameters() -> None:
+    class TinyLM(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.weight = torch.nn.Parameter(
+                torch.tensor([0.203125, -0.1015625], dtype=torch.bfloat16)
+            )
+
+        def forward(
+            self,
+            input_ids: torch.Tensor,
+            attention_mask: torch.Tensor,
+        ) -> SimpleNamespace:
+            del attention_mask
+            logits = self.weight.float().view(1, 1, 2).expand(
+                input_ids.shape[0],
+                input_ids.shape[1],
+                2,
+            )
+            return SimpleNamespace(logits=logits)
+
+    model = TinyLM()
+    original_weight = model.weight.detach().clone()
+    finite_difference_alignment(
+        model,
+        [model.weight],
+        [torch.tensor([0.3, -0.4])],
+        0.5,
+        (
+            torch.zeros((1, 3), dtype=torch.long),
+            torch.ones((1, 3), dtype=torch.long),
+            torch.tensor([[-100, 0, 1]]),
+        ),
+        epsilon=0.1,
+    )
+
+    assert torch.equal(model.weight, original_weight)
+
+
 def test_write_jsonl_creates_strict_rows(tmp_path: Path) -> None:
     path = tmp_path / "nested" / "rows.jsonl"
     write_jsonl(path, [{"dataset": "d", "index": 1, "label": 0}])
@@ -134,3 +234,26 @@ def test_write_jsonl_creates_strict_rows(tmp_path: Path) -> None:
         "index": 1,
         "label": 0,
     }
+
+
+def test_load_scored_rows_supports_resume_and_rejects_duplicates(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "scores.jsonl"
+    row = {
+        "dataset": "d",
+        "index": 1,
+        "label": 0,
+        "gradient_cosine": 0.2,
+    }
+    write_jsonl(path, [row])
+
+    assert load_scored_rows(path) == {("d", 1): row}
+
+    write_jsonl(path, [row, row])
+    try:
+        load_scored_rows(path)
+    except ValueError as error:
+        assert "duplicate score row" in str(error)
+    else:
+        raise AssertionError("duplicate score checkpoints must fail")

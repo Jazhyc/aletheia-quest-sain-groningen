@@ -189,6 +189,22 @@ def write_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> None:
     path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows))
 
 
+def load_scored_rows(path: Path) -> dict[RecordKey, dict[str, Any]]:
+    """Load a partial score checkpoint and reject duplicate identities."""
+    if not path.is_file():
+        return {}
+    rows: dict[RecordKey, dict[str, Any]] = {}
+    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        key = str(row["dataset"]), row["index"]
+        if key in rows:
+            raise ValueError(f"duplicate score row at line {line_number}: {key}")
+        rows[key] = row
+    return rows
+
+
 def per_sequence_completion_loss(
     logits: torch.Tensor,
     labels: torch.Tensor,
@@ -236,6 +252,45 @@ def select_lora_parameters(
     return selected
 
 
+def records_tensors(
+    records: Sequence[dict[str, Any]],
+    tokenizer: Any,
+    max_length: int,
+    device: torch.device,
+    *,
+    prediction_only: bool,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Tokenize and right-pad records, then move tensors to the scoring GPU."""
+    if not records:
+        raise ValueError("cannot tokenize an empty record batch")
+    features = [
+        tokenize_record(
+            record,
+            tokenizer,
+            max_length,
+            target_mode="prediction_only" if prediction_only else "teacher",
+        )
+        for record in records
+    ]
+    width = max(len(feature["input_ids"]) for feature in features)
+    padded_ids, padded_labels, attention_masks = [], [], []
+    for feature in features:
+        padding = width - len(feature["input_ids"])
+        padded_ids.append(
+            feature["input_ids"] + [tokenizer.pad_token_id] * padding
+        )
+        padded_labels.append(feature["labels"] + [-100] * padding)
+        attention_masks.append([1] * len(feature["input_ids"]) + [0] * padding)
+    input_ids = torch.tensor(padded_ids, dtype=torch.long, device=device)
+    labels = torch.tensor(padded_labels, dtype=torch.long, device=device)
+    attention_mask = torch.tensor(
+        attention_masks,
+        dtype=torch.long,
+        device=device,
+    )
+    return input_ids, attention_mask, labels
+
+
 def record_tensors(
     record: dict[str, Any],
     tokenizer: Any,
@@ -244,17 +299,14 @@ def record_tensors(
     *,
     prediction_only: bool,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Tokenize one record and move its tensors to the scoring device."""
-    feature = tokenize_record(
-        record,
+    """Tokenize one record using the shared batch implementation."""
+    return records_tensors(
+        [record],
         tokenizer,
         max_length,
-        target_mode="prediction_only" if prediction_only else "teacher",
+        device,
+        prediction_only=prediction_only,
     )
-    input_ids = torch.tensor([feature["input_ids"]], dtype=torch.long, device=device)
-    labels = torch.tensor([feature["labels"]], dtype=torch.long, device=device)
-    attention_mask = torch.ones_like(input_ids)
-    return input_ids, attention_mask, labels
 
 
 def example_gradient(
@@ -292,6 +344,63 @@ def gradient_alignment(
     return dot, cosine, norm
 
 
+def finite_difference_alignment(
+    model: torch.nn.Module,
+    parameters: Sequence[torch.nn.Parameter],
+    meta_gradient: Sequence[torch.Tensor],
+    reference_norm: float,
+    tensors: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    epsilon: float,
+) -> tuple[list[float], list[float]]:
+    """Approximate per-row gradient dots with two batched no-grad forwards.
+
+    Moving parameters by ``-epsilon * normalized_meta_gradient`` changes each
+    loss by ``-epsilon * dot(example_gradient, normalized_meta_gradient)``.
+    Multiplying the directional derivative by the reference norm recovers the
+    raw one-step DataRater dot product, without a backward pass per example.
+    """
+    if epsilon <= 0.0:
+        raise ValueError("finite-difference epsilon must be positive")
+    input_ids, attention_mask, labels = tensors
+    with torch.no_grad():
+        baseline = per_sequence_completion_loss(
+            model(input_ids=input_ids, attention_mask=attention_mask).logits,
+            labels,
+        )
+        originals = [parameter.detach().clone() for parameter in parameters]
+        steps = [
+            (-epsilon * gradient / reference_norm).to(parameter.dtype)
+            for parameter, gradient in zip(
+                parameters,
+                meta_gradient,
+                strict=True,
+            )
+        ]
+        for parameter, step in zip(parameters, steps, strict=True):
+            parameter.add_(step)
+        try:
+            perturbed = per_sequence_completion_loss(
+                model(input_ids=input_ids, attention_mask=attention_mask).logits,
+                labels,
+            )
+        finally:
+            for parameter, original in zip(parameters, originals, strict=True):
+                parameter.copy_(original)
+    dots = (baseline - perturbed) * (reference_norm / epsilon)
+    return baseline.float().cpu().tolist(), dots.float().cpu().tolist()
+
+
+def batched(
+    records: Sequence[dict[str, Any]],
+    batch_size: int,
+) -> Iterable[Sequence[dict[str, Any]]]:
+    """Yield contiguous non-empty record batches."""
+    if batch_size <= 0:
+        raise ValueError("batch size must be positive")
+    for start in range(0, len(records), batch_size):
+        yield records[start : start + batch_size]
+
+
 def parse_fraction_list(raw: str) -> list[float]:
     """Parse comma-separated keep fractions."""
     values = [float(value) for value in raw.split(",") if value.strip()]
@@ -319,6 +428,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-length", type=int, default=2048)
     parser.add_argument("--lora-rank", type=int, default=16)
     parser.add_argument("--last-layers", type=int, default=1)
+    parser.add_argument(
+        "--scoring-mode",
+        choices=["finite_difference", "exact"],
+        default="finite_difference",
+    )
+    parser.add_argument("--meta-batch-size", type=int, default=4)
+    parser.add_argument("--candidate-batch-size", type=int, default=8)
+    parser.add_argument("--finite-difference-epsilon", type=float, default=0.01)
     parser.add_argument("--max-meta-records", type=int)
     parser.add_argument("--max-candidates", type=int)
     parser.add_argument("--log-every", type=int, default=25)
@@ -358,6 +475,8 @@ def main() -> None:
 
     if not torch.cuda.is_available():
         raise RuntimeError("DataRater gradient scoring requires a CUDA GPU")
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
     device = torch.device("cuda")
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     if tokenizer.pad_token_id is None:
@@ -397,23 +516,39 @@ def main() -> None:
 
     meta_gradient = [torch.zeros_like(parameter, dtype=torch.float32) for parameter in parameters]
     meta_losses: list[float] = []
-    for position, record in enumerate(meta_records, start=1):
-        loss, gradients = example_gradient(
-            model,
-            parameters,
-            record_tensors(
-                record,
-                tokenizer,
-                args.max_length,
-                device,
-                prediction_only=True,
-            ),
+    meta_completed = 0
+    for record_batch in batched(meta_records, args.meta_batch_size):
+        input_ids, attention_mask, labels = records_tensors(
+            record_batch,
+            tokenizer,
+            args.max_length,
+            device,
+            prediction_only=True,
         )
-        meta_losses.append(loss)
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+        sequence_losses = per_sequence_completion_loss(outputs.logits, labels)
+        loss = sequence_losses.mean()
+        gradients = torch.autograd.grad(
+            loss,
+            parameters,
+            create_graph=False,
+            retain_graph=False,
+            allow_unused=False,
+        )
+        batch_weight = len(record_batch) / len(meta_records)
+        meta_losses.extend(sequence_losses.detach().float().cpu().tolist())
         for accumulator, gradient in zip(meta_gradient, gradients, strict=True):
-            accumulator.add_(gradient / len(meta_records))
-        if position % args.log_every == 0 or position == len(meta_records):
-            print(f"meta {position}/{len(meta_records)} mean_loss={sum(meta_losses)/len(meta_losses):.6f}")
+            accumulator.add_(gradient.detach().float() * batch_weight)
+        meta_completed += len(record_batch)
+        if (
+            meta_completed % args.log_every < len(record_batch)
+            or meta_completed == len(meta_records)
+        ):
+            print(
+                f"meta {meta_completed}/{len(meta_records)} "
+                f"mean_loss={sum(meta_losses)/len(meta_losses):.6f}",
+                flush=True,
+            )
 
     reference_norm = math.sqrt(
         sum(float(torch.sum(gradient * gradient)) for gradient in meta_gradient)
@@ -422,43 +557,108 @@ def main() -> None:
         raise RuntimeError(f"invalid meta-gradient norm: {reference_norm}")
     print(f"meta_gradient_norm={reference_norm:.8f}")
 
-    scored_rows: list[dict[str, Any]] = []
-    for position, record in enumerate(candidate_records, start=1):
-        loss, gradients = example_gradient(
-            model,
-            parameters,
-            record_tensors(
-                record,
-                tokenizer,
-                args.max_length,
-                device,
-                prediction_only=False,
-            ),
-        )
-        dot, cosine, gradient_norm = gradient_alignment(
-            gradients,
-            meta_gradient,
-            reference_norm,
-        )
-        scored_rows.append(
-            {
-                **manifest_row(record),
-                "completion_loss": loss,
-                "gradient_dot": dot,
-                "gradient_cosine": cosine,
-                "gradient_norm": gradient_norm,
-            }
-        )
-        if position % args.log_every == 0 or position == len(candidate_records):
-            recent = scored_rows[-min(args.log_every, len(scored_rows)) :]
-            mean_cosine = sum(row["gradient_cosine"] for row in recent) / len(recent)
-            print(
-                f"candidate {position}/{len(candidate_records)} "
-                f"recent_mean_cosine={mean_cosine:.6f}"
-            )
-
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    write_jsonl(args.output_dir / "scores.jsonl", scored_rows)
+    scores_path = args.output_dir / "scores.jsonl"
+    scored_by_key = load_scored_rows(scores_path)
+    candidate_keys = {record_key(record) for record in candidate_records}
+    unexpected_keys = set(scored_by_key) - candidate_keys
+    if unexpected_keys:
+        raise ValueError(
+            f"score checkpoint contains {len(unexpected_keys)} rows outside "
+            "the current candidate set"
+        )
+    if scored_by_key:
+        print(f"resuming {len(scored_by_key)}/{len(candidate_records)} candidate scores")
+
+    newly_scored: list[dict[str, Any]] = []
+    with scores_path.open("a") as score_file:
+        pending_records = [
+            record
+            for record in candidate_records
+            if record_key(record) not in scored_by_key
+        ]
+        for record_batch in batched(
+            pending_records,
+            (
+                args.candidate_batch_size
+                if args.scoring_mode == "finite_difference"
+                else 1
+            ),
+        ):
+            if args.scoring_mode == "finite_difference":
+                losses, dots = finite_difference_alignment(
+                    model,
+                    parameters,
+                    meta_gradient,
+                    reference_norm,
+                    records_tensors(
+                        record_batch,
+                        tokenizer,
+                        args.max_length,
+                        device,
+                        prediction_only=False,
+                    ),
+                    args.finite_difference_epsilon,
+                )
+                batch_values = [
+                    (loss, dot, None, None)
+                    for loss, dot in zip(losses, dots, strict=True)
+                ]
+            else:
+                loss, gradients = example_gradient(
+                    model,
+                    parameters,
+                    record_tensors(
+                        record_batch[0],
+                        tokenizer,
+                        args.max_length,
+                        device,
+                        prediction_only=False,
+                    ),
+                )
+                dot, cosine, gradient_norm = gradient_alignment(
+                    gradients,
+                    meta_gradient,
+                    reference_norm,
+                )
+                batch_values = [(loss, dot, cosine, gradient_norm)]
+
+            for record, (
+                loss,
+                dot,
+                cosine,
+                gradient_norm,
+            ) in zip(record_batch, batch_values, strict=True):
+                key = record_key(record)
+                row = {
+                    **manifest_row(record),
+                    "completion_loss": loss,
+                    "gradient_dot": dot,
+                    "gradient_cosine": cosine,
+                    "gradient_norm": gradient_norm,
+                }
+                score_file.write(json.dumps(row, sort_keys=True) + "\n")
+                score_file.flush()
+                scored_by_key[key] = row
+                newly_scored.append(row)
+            completed = len(scored_by_key)
+            if (
+                completed % args.log_every < len(record_batch)
+                or completed == len(candidate_records)
+            ):
+                recent = newly_scored[-min(args.log_every, len(newly_scored)) :]
+                mean_dot = (
+                    sum(item["gradient_dot"] for item in recent) / len(recent)
+                    if recent
+                    else float("nan")
+                )
+                print(
+                    f"candidate {completed}/{len(candidate_records)} "
+                    f"recent_mean_dot={mean_dot:.6f}",
+                    flush=True,
+                )
+
+    scored_rows = [scored_by_key[record_key(record)] for record in candidate_records]
     write_jsonl(args.output_dir / "meta_manifest.jsonl", map(manifest_row, meta_records))
 
     score_maps = {
@@ -466,15 +666,16 @@ def main() -> None:
             (row["dataset"], row["index"]): float(row["gradient_dot"])
             for row in scored_rows
         },
-        "cosine": {
-            (row["dataset"], row["index"]): float(row["gradient_cosine"])
-            for row in scored_rows
-        },
         "loss": {
             (row["dataset"], row["index"]): float(row["completion_loss"])
             for row in scored_rows
         },
     }
+    if all(row["gradient_cosine"] is not None for row in scored_rows):
+        score_maps["cosine"] = {
+            (row["dataset"], row["index"]): float(row["gradient_cosine"])
+            for row in scored_rows
+        }
     manifest_counts: dict[str, int] = {}
     for keep_fraction in parse_fraction_list(args.keep_fractions):
         suffix = f"keep{int(round(100 * keep_fraction)):02d}"
@@ -512,6 +713,10 @@ def main() -> None:
         "candidate_records": len(candidate_records),
         "meta_loss_mean": sum(meta_losses) / len(meta_losses),
         "meta_gradient_norm": reference_norm,
+        "scoring_mode": args.scoring_mode,
+        "meta_batch_size": args.meta_batch_size,
+        "candidate_batch_size": args.candidate_batch_size,
+        "finite_difference_epsilon": args.finite_difference_epsilon,
         "selected_lora_parameters": [name for name, _ in named_parameters],
         "selected_lora_parameter_count": parameter_count,
         "manifest_counts": manifest_counts,
