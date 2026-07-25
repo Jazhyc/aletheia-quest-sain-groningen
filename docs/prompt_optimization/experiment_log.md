@@ -1,5 +1,25 @@
 # Prompt Experiment Log
 
+## 2026-07-25: Exact knowledge-report prompt router
+
+P78 kept the ordinary Truth Value Guard as the default and routed only explicit
+knowledge self-report contracts to P77's truthful-alternative prompt. On the
+400-row development half, knowledge-only raised macro BA
+`0.6300 -> 0.6825` and HP-KR `0.3700 -> 0.5800`; the other three categories
+were byte-for-byte inherited from control. Forced-choice-only missed the
+`+0.03` gain floor, and its Qwen cell lost `0.0696`, so neither it nor the union
+advanced.
+
+The frozen knowledge-only route then passed the untouched 400-row confirmation:
+macro BA rose `0.5950 -> 0.6725` and HP-KR `0.3400 -> 0.6500`. The 37 changed
+decisions were 34 fixes and three breaks. Every HP-KR source cell improved:
+Llama `+0.4500`, Mistral `+0.1146`, and Qwen `+0.4093`; parse errors moved
+`3 -> 4`. The exact rule covers zero of all 8,216 local competition rows
+(`0/6,573` train, `0/822` validation, `0/821` test), so current competition
+predictions are preserved by construction. Retain this as a dormant HP-KR
+specialist route. Do not broaden it with category/source n-grams or promote the
+failed forced-choice route.
+
 ## 2026-07-25: General semantic prompt sweep on Liars' Bench OOD modes
 
 P77 held the selected Phoenix rank-16 parent fixed and compared the unchanged

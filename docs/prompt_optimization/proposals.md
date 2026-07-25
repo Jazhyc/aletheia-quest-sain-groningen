@@ -4103,7 +4103,8 @@ Outcome:
 
 ## P78: Rule-Routed Truthful-Alternative Judge
 
-Status: preregistered; cached development composition pending.
+Status: knowledge-only route passed development and confirmation; retained as
+a dormant semantic specialist with zero current competition coverage.
 
 Question: can the regular Truth Value Guard remain the default while an exact
 observable-contract router applies P77's truthful-alternative prompt only to
@@ -4140,3 +4141,28 @@ Interpretation:
 - If knowledge-only passes while choice or the union fails, retain only the
   narrower epistemic contract. Do not loosen the family-cell gate to preserve
   P77's favorable aggregate.
+
+Outcome:
+
+- On development, knowledge-only raises macro BA `0.6300 -> 0.6825` and HP-KR
+  `0.3700 -> 0.5800`; all other categories are unchanged. Its 39 changed
+  decisions are 30 fixes and nine breaks, parse errors improve `4 -> 3`, and
+  every HP-KR source cell improves.
+- Choice-only reaches only `0.6475` macro BA (`+0.0175`) and loses `0.0696` in
+  its Qwen choice cell. The union reaches `0.7000` but inherits that same cell
+  failure. Knowledge-only is the sole development pass and was selected before
+  confirmation generation.
+- On the untouched confirmation half, knowledge-only raises macro BA
+  `0.5950 -> 0.6725` and HP-KR `0.3400 -> 0.6500`. The 37 changes comprise 34
+  fixes and three breaks. HP-KR improves for Llama (`+0.4500`), Mistral
+  (`+0.1146`), and Qwen (`+0.4093`); parse errors move `3 -> 4`. Every frozen
+  gate passes.
+- A label-blind input audit finds zero matches across all 8,216 local
+  competition rows: `0/6,573` train, `0/822` validation, and `0/821` test.
+  Consequently the route has exactly zero current competition-validation
+  regression without another generation pass. No competition test predictions
+  were generated.
+- Retain the regular judge globally and the exact knowledge-only rule as a
+  dormant HP-KR/OOD specialist. Do not add the forced-choice rule or fit
+  n-grams to the public categories: that would replace a verified semantic
+  contract with dataset/source-template signatures whose transfer is unknown.

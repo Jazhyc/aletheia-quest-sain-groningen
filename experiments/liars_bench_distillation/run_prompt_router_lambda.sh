@@ -5,7 +5,7 @@ set -euo pipefail
 
 PHASE="${1:-}"
 if [[ -z "${PHASE}" ]]; then
-  echo "usage: $0 development|select|confirmation|confirm" >&2
+  echo "usage: $0 development|select|confirmation|confirm|competition-audit" >&2
   exit 2
 fi
 
@@ -139,6 +139,20 @@ case "${PHASE}" in
     if [[ "${CONFIRMED}" != "${SELECTED}" ]]; then
       echo "development route did not pass confirmation"
     fi
+    ;;
+  competition-audit)
+    require_paths \
+      "${ARTIFACT_ROOT}/selection-confirmation.json" \
+      "dev_splits/dry.train.yaml" \
+      "dev_splits/dry.validation.yaml" \
+      "dev_splits/dry.test.yaml"
+    SELECTED="$(selected_route "${ARTIFACT_ROOT}/selection-confirmation.json")"
+    if [[ -z "${SELECTED}" ]]; then
+      echo "no route passed confirmation; competition audit is skipped"
+      exit 0
+    fi
+    python experiments/liars_bench_distillation/audit_prompt_router_competition.py \
+      --output "${ARTIFACT_ROOT}/competition-coverage.json"
     ;;
   *)
     echo "unknown phase: ${PHASE}" >&2

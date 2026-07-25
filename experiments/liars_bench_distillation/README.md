@@ -139,7 +139,23 @@ bash experiments/liars_bench_distillation/run_prompt_router_lambda.sh developmen
 bash experiments/liars_bench_distillation/run_prompt_router_lambda.sh select
 bash experiments/liars_bench_distillation/run_prompt_router_lambda.sh confirmation
 bash experiments/liars_bench_distillation/run_prompt_router_lambda.sh confirm
+bash experiments/liars_bench_distillation/run_prompt_router_lambda.sh competition-audit
 ```
+
+Knowledge-only is the selected route. On development it raises macro BA
+`0.6300 -> 0.6825` and HP-KR `0.3700 -> 0.5800`, with 30 fixes and nine breaks.
+Choice-only fails the aggregate gate and its Qwen cell loses `0.0696`; the union
+inherits that failure. On untouched confirmation, knowledge-only raises macro
+BA `0.5950 -> 0.6725` and HP-KR `0.3400 -> 0.6500`, with 34 fixes, three breaks,
+and source-cell gains of `+0.4500` Llama, `+0.1146` Mistral, and `+0.4093` Qwen.
+Parse errors move from three to four.
+
+The exact knowledge rule matches zero of the 6,573 train, 822 validation, and
+821 test inputs. Competition validation is therefore identical to the regular
+judge by construction; the audit does not generate test predictions. Retain
+this as a dormant OOD specialist for explicit knowledge-report contracts. Do
+not add the failed choice route or train an n-gram category router on public
+category/source templates.
 
 This experiment tests whether a very small external-data mixture broadens the
 Phoenix student beyond factual instructed/Qwen-varied deception without
