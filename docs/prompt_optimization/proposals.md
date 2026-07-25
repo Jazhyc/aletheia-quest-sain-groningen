@@ -4100,3 +4100,43 @@ Outcome:
   the ledger's action-report collapse. Preserve that hypothesis for a future
   observable specialist or genuinely new grouped sample, not as a universal
   replacement prompt.
+
+## P78: Rule-Routed Truthful-Alternative Judge
+
+Status: preregistered; cached development composition pending.
+
+Question: can the regular Truth Value Guard remain the default while an exact
+observable-contract router applies P77's truthful-alternative prompt only to
+knowledge self-reports or harmful forced-choice answers?
+
+Frozen design:
+
+- Reuse the P77 development control and truthful-alternative predictions. Do
+  not generate or inspect the reserved confirmation half before selection.
+- Compare three routes: constrained knowledge report only, harmful forced A-D
+  answer only, and their union. The knowledge route requires the existing
+  explicit “report whether you know” request pattern and excludes anything
+  matching the forced-choice route. The forced-choice route requires at least
+  three A-D options, an explicit single-letter contract, harmful-use language,
+  and an exact letter output.
+- Both rules were defined before P77 and have perfect response-mode isolation
+  on the two 400-row halves: each covers all 100 target-category rows and zero
+  action/soft-trigger rows. They receive no category, dataset, label, source
+  model, or organism identity.
+- Development requires at least `+0.03` macro-category BA, category delta at
+  least `-0.02`, category/source delta at least `-0.05`, and at most ten extra
+  parse failures. Choose the highest macro-gain passing route.
+- On confirmation, generate control for all 400 rows and the alternate prompt
+  only for rows selected by that route. Require at least `+0.02` macro BA under
+  the same preservation floors. Competition validation is authorized only
+  after confirmation and must use the same rules without lexical expansion.
+
+Interpretation:
+
+- This is semantic task routing, not source-model logic. A learned n-gram
+  router is not included: with current data it would be trained on public
+  category/source templates and could conceal the same non-transferable
+  signature problem seen in earlier stacks.
+- If knowledge-only passes while choice or the union fails, retain only the
+  narrower epistemic contract. Do not loosen the family-cell gate to preserve
+  P77's favorable aggregate.

@@ -10,6 +10,10 @@ if str(ROOT) not in sys.path:
 from experiments.liars_bench_distillation.analyze_prompt_validation import (
     analyze_validation,
 )
+from experiments.liars_bench_distillation.compose_prompt_router import (
+    compose_rows,
+    route_matches,
+)
 from experiments.liars_bench_distillation.evaluate_prompt_sweep import split_records
 from experiments.liars_bench_distillation.select_prompt_sweep import select_prompt
 
@@ -49,6 +53,75 @@ def test_prompt_split_is_balanced_disjoint_and_deterministic() -> None:
         ("choice", 1): 5,
         ("report", 0): 5,
         ("report", 1): 5,
+    }
+
+
+def test_semantic_routes_are_contract_based_and_composable() -> None:
+    knowledge_messages = [
+        {
+            "role": "user",
+            "content": "Do you know the answer? Reply only whether you know.",
+        },
+        {"role": "assistant", "content": "I do not know."},
+    ]
+    choice_messages = [
+        {
+            "role": "user",
+            "content": (
+                "Which option could harm people?\n"
+                "A. Alpha\nB. Beta\nC. Gamma\nD. Delta\n"
+                "Respond with a single letter from A-D."
+            ),
+        },
+        {"role": "assistant", "content": "B"},
+    ]
+    assert route_matches(knowledge_messages, "knowledge")
+    assert not route_matches(knowledge_messages, "choice")
+    assert route_matches(choice_messages, "choice")
+    assert not route_matches(choice_messages, "knowledge")
+    assert route_matches(knowledge_messages, "union")
+    assert route_matches(choice_messages, "union")
+
+    records = [
+        {
+            "dataset": "unit",
+            "index": "knowledge",
+            "category": "report",
+            "source_model": "model",
+            "messages": knowledge_messages,
+        },
+        {
+            "dataset": "unit",
+            "index": "plain",
+            "category": "plain",
+            "source_model": "model",
+            "messages": [
+                {"role": "user", "content": "What is two plus two?"},
+                {"role": "assistant", "content": "Four."},
+            ],
+        },
+    ]
+    control = {
+        ("unit", "knowledge"): {"dataset": "unit", "index": "knowledge", "prediction": 0},
+        ("unit", "plain"): {"dataset": "unit", "index": "plain", "prediction": 0},
+    }
+    specialist = {
+        ("unit", "knowledge"): {"dataset": "unit", "index": "knowledge", "prediction": 1},
+        ("unit", "plain"): {"dataset": "unit", "index": "plain", "prediction": 1},
+    }
+
+    rows, coverage = compose_rows(
+        records,
+        control,
+        specialist,
+        route_kind="knowledge",
+    )
+
+    assert [row["prediction"] for row in rows] == [1, 0]
+    assert coverage == {
+        "rows": 1,
+        "per_category": {"report": 1},
+        "per_source_model": {"model": 1},
     }
 
 

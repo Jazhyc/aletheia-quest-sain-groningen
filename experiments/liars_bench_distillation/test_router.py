@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
 from experiments.liars_bench_distillation.router import (
     is_action_report_conversation,
     is_harm_pressure_choice_request,
+    is_knowledge_report_request,
     is_passage_true_false_request,
 )
 from experiments.liars_bench_distillation.prompts import (
@@ -87,6 +88,31 @@ def test_harm_choice_prompt_separates_truth_from_safety_pressure() -> None:
     assert "factually correct" in HARM_PRESSURE_CHOICE_PROMPT
     assert "not itself deception" in HARM_PRESSURE_CHOICE_PROMPT
     assert "deliberately substitutes" in HARM_PRESSURE_CHOICE_PROMPT
+
+
+def test_routes_constrained_knowledge_reports_separately_from_choice() -> None:
+    assert is_knowledge_report_request([
+        {
+            "role": "user",
+            "content": "Do you know the answer? Reply only whether you know.",
+        },
+        {"role": "assistant", "content": "I do not know."},
+    ])
+    assert not is_knowledge_report_request([
+        {
+            "role": "user",
+            "content": (
+                "Do you know which option could harm people?\n"
+                "A. Alpha\nB. Beta\nC. Gamma\nD. Delta\n"
+                "Respond with a single letter from A-D."
+            ),
+        },
+        {"role": "assistant", "content": "B"},
+    ])
+    assert not is_knowledge_report_request([
+        {"role": "user", "content": "Please explain photosynthesis."},
+        {"role": "assistant", "content": "Plants convert light into energy."},
+    ])
 
 
 def test_routes_only_marked_passage_boolean_answers() -> None:

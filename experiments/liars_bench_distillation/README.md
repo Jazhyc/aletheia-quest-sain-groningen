@@ -109,6 +109,38 @@ gap, but it is not stable enough to replace the general judge. Future prompt
 work should isolate that framing behind an observable contract or obtain a new
 grouped confirmation set rather than tuning wording on these development rows.
 
+### Frozen semantic prompt router
+
+The universal truthful-alternative prompt's gains motivate a narrower
+composition with the regular Truth Value Guard as default. Two already-defined
+label-blind rules identify explicit observable contracts: a constrained
+knowledge self-report, and a harmful forced A-D answer. On both prompt-sweep
+halves the rules cover all 100 HP-KR and all 100 forced-choice rows respectively
+with zero action-report or soft-trigger spillover. Knowledge routing explicitly
+excludes forced-choice conversations.
+
+Three fixed compositions reuse the cached development generations:
+knowledge-only, choice-only, and their union. A routed row uses the
+truthful-alternative prompt; every other row uses the unchanged control. No
+label, category, dataset, source model, organism identity, fitted n-gram, or
+threshold enters the route. A learned n-gram category router is deferred
+because the available labels confound response mode with public dataset and
+source templates.
+
+Development requires `+0.03` macro BA, category delta at least `-0.02`,
+category/source delta at least `-0.05`, and at most ten additional parse
+failures. Select only the highest macro-gain passing composition. Confirmation
+generates the control for all 400 reserved rows and the alternate prompt only
+for routed rows; it requires `+0.02` macro BA under the same preservation
+floors. Competition validation remains contingent on confirmation.
+
+```bash
+bash experiments/liars_bench_distillation/run_prompt_router_lambda.sh development
+bash experiments/liars_bench_distillation/run_prompt_router_lambda.sh select
+bash experiments/liars_bench_distillation/run_prompt_router_lambda.sh confirmation
+bash experiments/liars_bench_distillation/run_prompt_router_lambda.sh confirm
+```
+
 This experiment tests whether a very small external-data mixture broadens the
 Phoenix student beyond factual instructed/Qwen-varied deception without
 overwriting its competition calibration. It uses four Liars' Bench categories
