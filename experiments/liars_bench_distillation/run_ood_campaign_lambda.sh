@@ -35,6 +35,7 @@ exec > >(tee -a "${LOG}") 2>&1
 PARENT_ADAPTER="results/blackbox/qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1/adapter"
 CANDIDATE_ADAPTER="results/blackbox/qwen9b_pid_liars_ood_gptoss_replay_continue_adamw2e5_v1/adapter"
 VALIDATION_RUN="validation_liars_ood_gptoss_v1"
+TEACHER_SERVER_PID=""
 
 EXCLUSIONS=(
   "results/blackbox/liars_bench_pid_aug_v1/teacher/train.jsonl"
@@ -72,10 +73,12 @@ run_teacher() {
     --gpu-memory-utilization 0.9 \
     --enable-prefix-caching \
     >"${server_log}" 2>&1 &
-  local server_pid=$!
+  TEACHER_SERVER_PID=$!
   cleanup_teacher() {
-    kill "${server_pid}" 2>/dev/null || true
-    wait "${server_pid}" 2>/dev/null || true
+    if [[ -n "${TEACHER_SERVER_PID}" ]]; then
+      kill "${TEACHER_SERVER_PID}" 2>/dev/null || true
+      wait "${TEACHER_SERVER_PID}" 2>/dev/null || true
+    fi
   }
   trap cleanup_teacher EXIT
 
@@ -84,7 +87,7 @@ run_teacher() {
     if curl -fsS "${api_base}/models" >/dev/null 2>&1; then
       break
     fi
-    if ! kill -0 "${server_pid}" 2>/dev/null; then
+    if ! kill -0 "${TEACHER_SERVER_PID}" 2>/dev/null; then
       echo "GPT-OSS server exited during startup; see ${server_log}" >&2
       exit 1
     fi
