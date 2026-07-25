@@ -1717,6 +1717,18 @@ exposure/LR path. HP-KR and Insider Trading were previously inspected over
 their complete public categories, so this evaluation is train-disjoint rather
 than a never-inspected benchmark.
 
+A follow-up held those parent weights fixed and varied only the general
+inference rubric on a preregistered 400-row development half. The unchanged
+control scored `0.6300` macro BA; mode-first, claim-ledger, and
+truthful-alternative prompts scored `0.6550`, `0.6600`, and `0.6975`.
+Truthful-alternative gained `0.070` choice and `0.210` HP-KR BA with action
+`-0.010` and soft trigger unchanged, but it breached the frozen
+category/source floor on Qwen choice (`-0.0696`) and Gemma action (`-0.0556`),
+as well as two small soft-trigger cells. No prompt advanced, so the untouched
+400-row confirmation half and competition validation were not queried. This
+shows more learnable movement from inference semantics than from the larger
+weight update, while still rejecting a universal replacement prompt.
+
 These results favor model-agnostic semantic routing over small weight updates:
 use one existing call, require an explicit observable report contract, and
 change the judging question rather than infer a hidden category or organism

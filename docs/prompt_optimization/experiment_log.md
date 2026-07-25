@@ -1,5 +1,28 @@
 # Prompt Experiment Log
 
+## 2026-07-25: General semantic prompt sweep on Liars' Bench OOD modes
+
+P77 held the selected Phoenix rank-16 parent fixed and compared the unchanged
+Truth Value Guard against three general prompts on a preregistered 400-row
+development half of the existing Liars' Bench spectrum. The other 400 rows
+were reserved for confirmation.
+
+| prompt | macro BA | choice | HP-KR | action | soft trigger | parse |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| control | .6300 | .650 | .370 | .590 | .910 | 4 |
+| mode-first | .6550 | .610 | .480 | .650 | .880 | 9 |
+| claim ledger | .6600 | .640 | .590 | .500 | .910 | 1 |
+| truthful alternative | **.6975** | **.720** | .580 | .580 | **.910** | 4 |
+
+Truthful-alternative changed 95 decisions, making 61 fixes and 34 breaks. It
+passed the aggregate and category gates, but failed the frozen
+category/source-model floor: Qwen choice lost `0.0696`, Gemma action lost
+`0.0556`, and two small soft-trigger family cells lost `0.125`. No condition
+was selected. Confirmation and competition validation were intentionally
+skipped, leaving those rows untouched. The result supports the truthful-
+alternative contrast as a possible narrow specialist mechanism, not as a
+stable universal prompt.
+
 ## 2026-07-17: First-complete-rating decode stop (Qwen-9B validation)
 
 Stopping after the first exact retained `Rating: 1…7` passes its frozen generated

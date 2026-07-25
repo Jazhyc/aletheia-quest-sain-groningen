@@ -4041,7 +4041,7 @@ Decision:
 
 ## P77: General Semantic Prompt Sweep on Liars' Bench OOD Modes
 
-Status: preregistered; development generation pending.
+Status: development gate failed; confirmation and validation skipped.
 
 Question: after a fourfold GPT-OSS continuation changed the rank-16 weights but
 none of 800 external decisions, can a single model-agnostic inference rubric
@@ -4079,3 +4079,24 @@ Interpretation:
 - A failure closes this small universal-wording branch, not all prompt work.
   Existing exact semantic specialists and larger-judge results remain distinct
   hypotheses.
+
+Outcome:
+
+- Control, mode-first, claim-ledger, and truthful-alternative macro BAs are
+  `0.6300`, `0.6550`, `0.6600`, and `0.6975`. Their parse-error counts are 4,
+  9, 1, and 4.
+- Mode-first gains HP-KR/action recall but loses choice `0.040` and soft trigger
+  `0.030`. The claim ledger gains `0.220` HP-KR but drives action-report FPR to
+  1.0, losing `0.090` action BA.
+- Truthful-alternative is the clear aggregate winner: choice `+0.070`, HP-KR
+  `+0.210`, action `-0.010`, and soft trigger unchanged. Its 95 changed
+  decisions comprise 61 fixes and 34 breaks.
+- It still fails the predeclared lower-level floor: Qwen choice loses `0.0696`,
+  Gemma action loses `0.0556`, and two small soft-trigger family cells lose
+  `0.125`. Selection is therefore null. Do not run confirmation or competition
+  validation, loosen the gate, or select the favorable aggregate post hoc.
+- The mechanism result is narrower: contrasting the output with a truthful
+  refusal/uncertainty/action alternative helps HP-KR and forced choice without
+  the ledger's action-report collapse. Preserve that hypothesis for a future
+  observable specialist or genuinely new grouped sample, not as a universal
+  replacement prompt.

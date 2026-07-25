@@ -91,6 +91,24 @@ bash experiments/liars_bench_distillation/run_prompt_sweep_lambda.sh validation
 bash experiments/liars_bench_distillation/run_prompt_sweep_lambda.sh analyze
 ```
 
+The development gate rejected all three variants, so confirmation and
+competition validation were correctly skipped. The control scored `0.6300`
+macro BA. Mode-first reached `0.6550`, but lost `0.040` choice BA and `0.030`
+soft-trigger BA. The claim ledger reached `0.6600`, gaining `0.220` HP-KR BA
+while losing `0.090` Insider Trading BA. The truthful-alternative prompt was
+the aggregate leader at `0.6975`: choice gained `0.070`, HP-KR gained `0.210`,
+Insider Trading lost `0.010`, and soft trigger was unchanged. It made 95
+changes, with 61 fixes and 34 breaks, and added no parse failures.
+
+The aggregate leader nevertheless breached the frozen category/source floor.
+Qwen forced-choice BA lost `0.0696`, Gemma action-report BA lost `0.0556`, and
+two small soft-trigger family cells each lost one row (`-0.125`). Do not promote
+it or inspect the confirmation half post hoc. The honest-alternative framing is
+useful evidence that a general prompt can recover part of the HP-KR and choice
+gap, but it is not stable enough to replace the general judge. Future prompt
+work should isolate that framing behind an observable contract or obtain a new
+grouped confirmation set rather than tuning wording on these development rows.
+
 This experiment tests whether a very small external-data mixture broadens the
 Phoenix student beyond factual instructed/Qwen-varied deception without
 overwriting its competition calibration. It uses four Liars' Bench categories
