@@ -282,6 +282,34 @@ def write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
     temporary.replace(path)
 
 
+def exclusion_ids(paths: list[Path]) -> set[str]:
+    """Load normalized Liars' Bench sample IDs from prior JSONL artifacts."""
+    excluded: set[str] = set()
+    for path in paths:
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            category = str(
+                record.get("category")
+                or str(record.get("dataset", "")).removeprefix("liars-bench/")
+            )
+            sample_id = record.get("sample_id", record.get("index"))
+            if not category or sample_id is None:
+                raise ValueError(
+                    f"{path}:{line_number} lacks a Liars' Bench category/sample ID"
+                )
+            sample_id = str(sample_id)
+            excluded.add(
+                sample_id
+                if sample_id.startswith(f"{category}:")
+                else f"{category}:{sample_id}"
+            )
+    return excluded
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--api-base", required=True)
@@ -301,12 +329,23 @@ def main() -> None:
     parser.add_argument("--minimum-output-chars", type=int, default=0)
     parser.add_argument("--minimum-output-sentences", type=int, default=0)
     parser.add_argument(
+        "--exclude-artifact",
+        type=Path,
+        action="append",
+        default=[],
+        help=(
+            "Prior JSONL artifact whose Liars' Bench rows must be excluded. "
+            "May be repeated."
+        ),
+    )
+    parser.add_argument(
         "--context-truncation", choices=("head_tail", "tail"), default="head_tail"
     )
     args = parser.parse_args()
 
     config = OmegaConf.load(ROOT / "configs/privileged_information_distillation.yaml")
     student_prompt_template = str(config.student.prompt)
+    excluded = exclusion_ids(args.exclude_artifact)
     train_parts, eval_parts = [], []
     for offset, category in enumerate(args.categories.split(",")):
         frame = load_category(category, args.liars_root)
@@ -316,14 +355,21 @@ def main() -> None:
             minimum_sentences=args.minimum_output_sentences,
         )
         train = stable_sample(
-            frame, per_label=args.per_label_train, seed=args.seed + offset
+            frame,
+            per_label=args.per_label_train,
+            seed=args.seed + offset,
+            excluded_ids=excluded,
         )
         evaluation = stable_sample(
             frame,
             per_label=args.per_label_eval,
             seed=args.seed + 1000 + offset,
-            excluded_ids=set(train["sample_id"]),
+            excluded_ids=excluded | set(train["sample_id"]),
         )
+        if set(train["sample_id"]) & excluded:
+            raise RuntimeError(f"prior-artifact leakage in {category} training rows")
+        if set(evaluation["sample_id"]) & (excluded | set(train["sample_id"])):
+            raise RuntimeError(f"prior/train leakage in {category} evaluation rows")
         train_parts.append(train)
         eval_parts.append(evaluation)
         print(
@@ -434,7 +480,8 @@ def main() -> None:
     write_jsonl(args.eval_artifact, eval_records)
     print(
         f"wrote teacher={args.artifact} parsed={parsed_count}/{len(records)} "
-        f"evaluation={args.eval_artifact} eval_rows={len(eval_records)}",
+        f"evaluation={args.eval_artifact} eval_rows={len(eval_records)} "
+        f"excluded_prior_rows={len(excluded)}",
         flush=True,
     )
 

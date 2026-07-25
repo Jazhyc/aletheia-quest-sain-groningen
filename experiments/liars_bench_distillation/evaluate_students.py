@@ -50,6 +50,15 @@ def grouped_metrics(rows: list[dict[str, Any]], field: str) -> dict[str, Any]:
     return {name: balanced_accuracy(group) for name, group in sorted(groups.items())}
 
 
+def category_source_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Report category/source-model cells without relying on hidden metadata."""
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        key = f"{row['category']}::{row['source_model']}"
+        groups[key].append(row)
+    return {name: balanced_accuracy(group) for name, group in sorted(groups.items())}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--eval-artifact", type=Path, required=True)
@@ -177,6 +186,7 @@ def main() -> None:
             "metrics": balanced_accuracy(evaluated),
             "per_category": per_category,
             "per_source_model": grouped_metrics(evaluated, "source_model"),
+            "per_category_source_model": category_source_metrics(evaluated),
             "parse_errors": sum(row["parse_error"] for row in evaluated),
             "score_seconds": elapsed,
         }
@@ -216,6 +226,7 @@ def main() -> None:
             "metrics": balanced_accuracy(routed),
             "per_category": routed_categories,
             "per_source_model": grouped_metrics(routed, "source_model"),
+            "per_category_source_model": category_source_metrics(routed),
             "specialist_parse_errors": sum(
                 row["parse_error"] for row in specialist_records
             ),
@@ -245,6 +256,7 @@ def main() -> None:
         "metrics": balanced_accuracy(base_routed),
         "per_category": base_categories,
         "per_source_model": grouped_metrics(base_routed, "source_model"),
+        "per_category_source_model": category_source_metrics(base_routed),
         "specialist_score_seconds": base_elapsed,
     }
     print(
@@ -272,6 +284,7 @@ def main() -> None:
                 "metrics": balanced_accuracy(routed),
                 "per_category": categories,
                 "per_source_model": grouped_metrics(routed, "source_model"),
+                "per_category_source_model": category_source_metrics(routed),
                 "parse_errors": sum(row["parse_error"] for row in routed),
             }
         print(

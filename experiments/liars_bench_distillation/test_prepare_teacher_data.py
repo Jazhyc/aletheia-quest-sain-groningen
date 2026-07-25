@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sys
 
@@ -11,6 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from experiments.liars_bench_distillation.prepare_teacher_data import (
+    exclusion_ids,
     filter_output_structure,
     final_assistant_output,
     make_teacher_row,
@@ -18,6 +20,38 @@ from experiments.liars_bench_distillation.prepare_teacher_data import (
     json_safe,
     stable_sample,
 )
+
+
+def test_exclusion_ids_accepts_teacher_and_evaluation_shapes(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher.jsonl"
+    teacher.write_text(
+        json.dumps({
+            "dataset": "liars-bench/soft-trigger",
+            "index": "soft-trigger:12",
+        })
+        + "\n"
+    )
+    evaluation = tmp_path / "evaluation.jsonl"
+    evaluation.write_text(
+        json.dumps({
+            "category": "insider-trading",
+            "sample_id": "insider-trading:34",
+        })
+        + "\n"
+        + json.dumps({
+            "category": "harm-pressure-choice",
+            "index": 56,
+        })
+        + "\n"
+    )
+
+    assert exclusion_ids([teacher, evaluation]) == {
+        "soft-trigger:12",
+        "insider-trading:34",
+        "harm-pressure-choice:56",
+    }
 
 
 def test_json_safe_handles_numpy_arrays_and_scalars() -> None:

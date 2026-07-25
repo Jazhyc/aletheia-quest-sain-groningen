@@ -1,5 +1,45 @@
 # Liars' Bench privileged augmentation
 
+## GPT-OSS OOD scale-up
+
+The next campaign holds the selected Phoenix student, rank-16 continuation
+recipe, and GPT-OSS teacher prompt fixed while increasing only the amount of
+cross-scenario Liars' Bench supervision. It samples 128 rows per label from
+each of harm-pressure choice, harm-pressure knowledge report, Insider Trading,
+and soft trigger, for 1,024 teacher targets total. A separate 100 rows per
+label/category (800 total) is frozen for evaluation.
+
+This is an OOD-coverage experiment, not a claim that the public category
+mixture matches private Notus. Training continues the selected varied-only
+adapter for one epoch at AdamW `2e-5` and replays the same 10% Qwen-varied cache.
+The parent adapter is the causal baseline; do not compare against the old
+10%-data adapter.
+
+The sampler excludes the original 256-row teacher cache, its 800-row evaluation,
+the frozen category-signature sample, the second heavy-spectrum confirmation,
+and the focused soft-trigger confirmations. HP-KR and Insider Trading have
+already been evaluated over their complete public categories, so the new
+evaluation is train-disjoint and avoids focused prior samples but cannot be
+described as a never-inspected benchmark.
+
+Run individual phases on the persistent Lambda H100:
+
+```bash
+bash experiments/liars_bench_distillation/run_ood_campaign_lambda.sh teacher
+bash experiments/liars_bench_distillation/run_ood_campaign_lambda.sh train
+bash experiments/liars_bench_distillation/run_ood_campaign_lambda.sh external-eval
+bash experiments/liars_bench_distillation/run_ood_campaign_lambda.sh validation
+bash experiments/liars_bench_distillation/run_ood_campaign_lambda.sh analyze
+```
+
+The teacher audit still requires at least 90% usable coverage, no more than 5%
+usable-label imbalance per category, and no more than 5% privileged-language
+leakage or summary-polarity conflict. Promote the adapter only if competition
+validation loses no more than `0.0025` BA and train-disjoint external macro BA
+gains at least `0.02`. No category may lose more than `0.02` BA and no
+source-model cell may lose more than `0.05`. A macro pass does not justify
+hiding a material response-mode regression.
+
 This experiment tests whether a very small external-data mixture broadens the
 Phoenix student beyond factual instructed/Qwen-varied deception without
 overwriting its competition calibration. It uses four Liars' Bench categories

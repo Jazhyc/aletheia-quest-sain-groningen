@@ -12,6 +12,7 @@ from experiments.liars_bench_distillation.analyze_transfer import (
     accepts_action_route,
     paired_changes,
     paired_changes_grouped,
+    passes_external_floors,
 )
 
 
@@ -89,3 +90,27 @@ def test_grouped_external_changes_preserve_fix_break_counts(tmp_path: Path) -> N
         "model-a": {"changes": 1, "fixes": 0, "breaks": 1},
         "model-b": {"changes": 1, "fixes": 1, "breaks": 0},
     }
+
+
+def test_external_floors_reject_hidden_group_regression() -> None:
+    delta = {
+        "category_deltas": {"choice": 0.05, "action": -0.021},
+        "source_model_deltas": {"qwen": 0.03, "mistral": -0.04},
+        "category_source_model_deltas": {
+            "choice::qwen": 0.03,
+            "action::mistral": -0.051,
+        },
+    }
+
+    assert not passes_external_floors(
+        delta,
+        minimum_category_delta=-0.02,
+        minimum_source_model_delta=-0.05,
+        minimum_category_source_model_delta=-0.05,
+    )
+    assert passes_external_floors(
+        delta,
+        minimum_category_delta=-0.03,
+        minimum_source_model_delta=-0.05,
+        minimum_category_source_model_delta=-0.06,
+    )
