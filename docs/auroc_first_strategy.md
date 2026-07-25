@@ -193,3 +193,29 @@ dataset/source-family holdouts before it is promoted.
 4. Rehearse with `python submit.py --dry --limit 32`, then a full dry run.
 5. Only after the direct path works through NDIF, evaluate continuous
    multi-prompt or specialist blends.
+
+## Phoenix Wright 4.0 deployment
+
+Phoenix Wright 4.0 implements the selected path in
+`submission/phoenix_wright_v4_0.ipynb`. It preserves the exact Phoenix v3
+rank-16 adapter (weight SHA-256
+`1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`)
+and frozen visible-message renderer. It appends `Prediction:` directly to the
+no-thinking chat prompt, asks Qwen for `logits_to_keep=1`, extracts the exact
+single-token `0` and `1` logits, and writes
+`sigmoid(logit_1 - logit_0)` as `score`. No reasoning generation or output
+parsing remains. The secondary `deceptive` column uses the validation-frozen
+threshold `0.15`.
+
+An NDIF run on all 400 rows of
+`dev-varied-deception-Qwen3.5-27B-None` completed at batch 32 in `102.1s`,
+emitting 82 distinct scores over `[0.00218, 0.95257]` and AUROC `0.93946`.
+Batch 48 completed in `51.8s` with AUROC `0.93943`; batch 64 failed with a
+real CUDA OOM against NDIF's roughly 29.4 GiB process allowance. Do not use 64.
+
+The selected deployment schedule is length-aware: batch 48 through 600 prompt
+tokens, batch 32 through 900, and batch 16 above 900. On the public varied unit
+with the highest p95 prompt length, the actual shapes were `48x383...583`,
+`32x619...773`, and `16x896`. It completed in `38.3s`, versus `64.7s` for the
+paired batch-32 control. AUROC moved `0.76046 -> 0.75961`; this small numerical
+batch-shape drift is reported rather than treated as exact score preservation.

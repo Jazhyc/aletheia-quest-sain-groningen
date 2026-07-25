@@ -60,6 +60,16 @@ post-reasoning scoring is revisited, remove the final generated `0|1` and score
 the labels at that position; never condition a rescore on the already-selected
 label token.
 
+Phoenix Wright 4.0 now implements that direct path in the sole submission
+notebook `submission/phoenix_wright_v4_0.ipynb`. It retains the exact v3
+rank-16 adapter and renderer, requests `logits_to_keep=1`, and uses `0.15` only
+for the secondary binary column. NDIF full-unit tests selected length-aware
+batches `48/32/16` at `600/900` prompt tokens: the paired high-p95 unit ran
+`38.3s` versus `64.7s` at batch 32, with AUROC `0.75961` versus `0.76046`.
+Batch 64 OOMed against the remote roughly 29.4 GiB process allowance. Do not
+raise the short tier to 64, remove `logits_to_keep=1`, or claim exact score
+invariance across batch shapes.
+
 For development and training experiments, do not use NDIF; reserve NDIF for leaderboard evaluation/submission execution. Use local GPU Slurm jobs with vLLM for black-box judge experiments. Keep experiment code organized under `experiments/<method>/`, keep Slurm shell templates as `.sh` files, and write runtime logs under `logs/`; black-box Slurm jobs should redirect their main output to `logs/slurm/<method>/<split>-<job_id>.out` and automatically delete the temporary bootstrap file at `logs/slurm/%x-%j.bootstrap.out` after successful redirection. Store black-box experiment artifacts under `results/blackbox/`; per-run result directories are ignored, but `results/blackbox/leaderboard.md` is tracked and should show test-set results only. Default Slurm resources for these jobs are one `gpushort` GPU node with `--gpus-per-node=rtx_pro_6000:1`, `--cpus-per-task=1`, and 32 GB memory unless the user says otherwise. The cluster's 40 GB A100s are also sufficient for inference-only `Qwen/Qwen3.5-9B` BF16 evaluations with one rank-16 LoRA and a 4,096-token model context; when the RTX Pro 6000 queue is saturated, request `--gpus-per-node=a100:1` for this workload. A cold A100 vLLM 0.24 load/compile/CUDA-graph capture can be much slower than RTX: job `30159704` needed 29m40s for one startup plus nine 822-row conditions, so request at least 45 minutes for that shape unless the compile cache is known warm or fewer conditions are run. Do not generalize that memory result to training, larger models, or materially longer contexts without a separate memory check. For interactive black-box method development, prefer reserving a GPU node with `srun`, running one persistent vLLM server process, and pointing experiment clients at it over HTTP so model loading/compilation is paid once per session. Prefer direct `sbatch` templates first for unattended runs; add `submitit` only if Python-managed Slurm arrays become necessary. Slurm controller commands such as `sbatch`, `squeue`, `scancel`, and `sacct` should be run outside the sandbox automatically because sandboxed attempts cannot contact the controller.
 For prompt/logits judge sweeps, batch multiple prompt conditions inside a single
 Slurm job or one persistent vLLM session whenever practical, so Python import,

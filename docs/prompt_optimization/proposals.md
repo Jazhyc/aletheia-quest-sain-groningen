@@ -4292,3 +4292,9 @@ Outcome:
 - Select direct `Prediction:` margins for the first AUROC submission port. Do
   not blend the three validation arms or use the test result to retune their
   prefixes.
+- Deployment is complete as Phoenix Wright 4.0. The notebook uses
+  `logits_to_keep=1`, the exact `0`/`1` verbalizers, continuous normalized
+  margins, and the frozen `0.15` secondary threshold. NDIF accepted batch 48
+  but OOMed at 64; the deployed length-aware schedule is `48/32/16` at
+  `600/900` tokens. See `docs/auroc_first_strategy.md` for the paired runtime
+  and numerical-drift measurements.

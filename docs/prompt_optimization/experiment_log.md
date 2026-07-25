@@ -1,5 +1,33 @@
 # Prompt Experiment Log
 
+## 2026-07-25: Phoenix Wright 4.0 direct-logit deployment
+
+Phoenix 4.0 replaces v3's generated reasoning plus parsed binary decision with
+P80's selected direct `Prediction:` label margin. The sole submission notebook
+is now `submission/phoenix_wright_v4_0.ipynb`. It retains the exact original
+rank-16 adapter (`1407d885...d3978e`) and frozen v2 visible-message renderer,
+requests `logits_to_keep=1`, and emits
+`sigmoid(logit_1 - logit_0)` for the exact single-token `0` and `1`
+verbalizers. The required binary decision is separate at the validation-frozen
+threshold `0.15`.
+
+The corrected direct NNsight notebook passed one-row dry-run execution on the
+first 13 public units, including both Gemma units and the varied-Qwen base unit,
+before the intentionally slow 21-unit matrix was stopped at the user's request.
+Full 400-row NDIF benchmarks then established the capacity boundary. Batch 32
+completed the public varied-Qwen base unit in `102.1s` with AUROC `0.93946`;
+batch 48 completed in `51.8s` with AUROC `0.93943`; batch 64 failed with CUDA
+OOM under the remote 29.4 GiB process allowance. The scores were continuous
+(82/83 unique values), not binary.
+
+A length-aware `48/32/16` schedule at `600/900` token boundaries completed the
+highest-p95 public varied unit with shapes `48x383...583`, `32x619...773`, and
+`16x896`. It took `38.3s` versus `64.7s` for the paired batch-32 control.
+AUROC moved `0.76046 -> 0.75961`, mean absolute score drift was `0.00309`, and
+four decisions differed at threshold `0.15`. Retain the dynamic schedule for
+its 40.9% paired speedup, but do not claim batch-shape numerical identity.
+Never raise the short tier to 64 without a new NDIF memory result.
+
 ## 2026-07-25: Rank-1 HP-KR specialist
 
 P79 trained three fresh rank-1/alpha-2 Qwen specialists on 256 disjoint,
