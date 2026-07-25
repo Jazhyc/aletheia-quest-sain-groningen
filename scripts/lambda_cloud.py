@@ -34,6 +34,8 @@ CAMPAIGN_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
 SSH_KEY_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 REMOTE_ROOT = "Aletheias-Quest-Competition"
 REMOTE_SECRETS_FILE = ".config/aletheia/secrets.env"
+REMOTE_RUNTIME_FILE = ".config/aletheia/runtime.env"
+VLLM_SMOKE_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 ALLOWED_REMOTE_SECRETS = frozenset(
     {
         "HF_TOKEN",
@@ -579,6 +581,10 @@ def ssh_argv(private_key: Path, ip: str) -> list[str]:
         f"UserKnownHostsFile={KNOWN_HOSTS}",
         "-o",
         "ConnectTimeout=15",
+        "-o",
+        "ServerAliveInterval=15",
+        "-o",
+        "ServerAliveCountMax=20",
         f"ubuntu@{ip}",
     ]
 
@@ -611,7 +617,8 @@ def command_ssh(args: argparse.Namespace, client: LambdaCloudClient) -> None:
         command = args.command
         if command[0] == "--":
             command = command[1:]
-        argv.extend(command)
+        if command:
+            argv.append(shlex.join(command))
     run_checked(argv)
 
 
@@ -633,8 +640,10 @@ df -h / | awk 'NR == 2 {print $4}'
 
 def command_compute_probe(args: argparse.Namespace, client: LambdaCloudClient) -> None:
     private_key, instance = active_ssh_target(args, client)
-    remote_script = """set -eu
-python3 - <<'PY'
+    remote_script = f"""set -eu
+source "$HOME/{REMOTE_RUNTIME_FILE}"
+cd "$HOME/{REMOTE_ROOT}"
+python - <<'PY'
 import time
 
 import torch
@@ -652,14 +661,64 @@ result = torch.mm(left, right)
 torch.cuda.synchronize()
 elapsed = time.perf_counter() - started
 tflops = (2 * size**3) / elapsed / 1e12
-print(f"torch={torch.__version__}")
-print(f"gpu={torch.cuda.get_device_name(0)}")
-print(f"matrix_size={size}")
-print(f"elapsed_seconds={elapsed:.6f}")
-print(f"estimated_tflops={tflops:.1f}")
-print(f"checksum={result[0, 0].item():.6f}")
-print(f"peak_allocated_gib={torch.cuda.max_memory_allocated() / 2**30:.2f}")
+print(f"torch={{torch.__version__}}")
+print(f"gpu={{torch.cuda.get_device_name(0)}}")
+print(f"matrix_size={{size}}")
+print(f"elapsed_seconds={{elapsed:.6f}}")
+print(f"estimated_tflops={{tflops:.1f}}")
+print(f"checksum={{result[0, 0].item():.6f}}")
+print(f"peak_allocated_gib={{torch.cuda.max_memory_allocated() / 2**30:.2f}}")
 PY
+"""
+    argv = ssh_argv(private_key, instance["ip"]) + ["bash", "-s"]
+    run_checked(argv, input_text=remote_script)
+
+
+def command_vllm_smoke(args: argparse.Namespace, client: LambdaCloudClient) -> None:
+    private_key, instance = active_ssh_target(args, client)
+    remote_script = f"""set -euo pipefail
+source "$HOME/{REMOTE_RUNTIME_FILE}"
+if [ -f "$HOME/{REMOTE_SECRETS_FILE}" ]; then
+    source "$HOME/{REMOTE_SECRETS_FILE}"
+fi
+export PYTHONUNBUFFERED=1
+export VLLM_ENABLE_V1_MULTIPROCESSING=0
+cd "$HOME/{REMOTE_ROOT}"
+mkdir -p logs/lambda/vllm-smoke
+log_path="logs/lambda/vllm-smoke/latest.log"
+status_path="logs/lambda/vllm-smoke/latest.status"
+set +e
+.venv/bin/python - >"$log_path" 2>&1 <<'PY'
+from vllm import LLM, SamplingParams
+
+model_id = "{VLLM_SMOKE_MODEL}"
+model = LLM(
+    model=model_id,
+    dtype="bfloat16",
+    max_model_len=512,
+    gpu_memory_utilization=0.20,
+    enforce_eager=True,
+)
+outputs = model.generate(
+    ["Reply with exactly LAMBDA_OK."],
+    SamplingParams(temperature=0.0, max_tokens=16),
+)
+text = outputs[0].outputs[0].text.strip()
+if not text:
+    raise SystemExit("vLLM returned an empty completion")
+print(f"model={{model_id}}")
+print(f"completion={{text!r}}")
+print("vllm_smoke=ok")
+PY
+status=$?
+set -e
+printf '%s\\n' "$status" >"$status_path"
+if [ "$status" -ne 0 ]; then
+    tail -n 40 "$log_path" >&2
+    printf 'vllm_smoke_exit=%s\\n' "$status" >&2
+    exit "$status"
+fi
+cat "$log_path"
 """
     argv = ssh_argv(private_key, instance["ip"]) + ["bash", "-s"]
     run_checked(argv, input_text=remote_script)
@@ -790,6 +849,9 @@ def command_bootstrap(args: argparse.Namespace, client: LambdaCloudClient) -> No
     remote_script = f"""set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 export UV_CACHE_DIR="$HOME/.cache/uv"
+if [ -d /usr/local/cuda-13.0/compat ]; then
+    export LD_LIBRARY_PATH="/usr/local/cuda-13.0/compat${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
+fi
 if ! command -v uv >/dev/null 2>&1; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
@@ -797,6 +859,20 @@ export PATH="$HOME/.local/bin:$PATH"
 cd "$HOME/{REMOTE_ROOT}"
 uv python install 3.12
 UV_PROJECT_ENVIRONMENT=.venv uv sync --python 3.12 --locked
+umask 077
+mkdir -p "$HOME/.config/aletheia" "$HOME/.cache/aletheia"
+cat > "$HOME/{REMOTE_RUNTIME_FILE}" <<'EOF'
+export PATH="$HOME/{REMOTE_ROOT}/.venv/bin:$HOME/.local/bin:$PATH"
+export UV_CACHE_DIR="$HOME/.cache/uv"
+export SCRATCH="$HOME/.cache/aletheia"
+export HF_HOME="$SCRATCH/huggingface"
+export HF_HUB_CACHE="$HF_HOME/hub"
+export HF_DATASETS_CACHE="$HF_HOME/datasets"
+if [ -d /usr/local/cuda-13.0/compat ]; then
+    export LD_LIBRARY_PATH="/usr/local/cuda-13.0/compat${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
+fi
+EOF
+chmod 600 "$HOME/{REMOTE_RUNTIME_FILE}"
 .venv/bin/python - <<'PY'
 import platform
 import torch
@@ -809,6 +885,7 @@ print(f"cuda_available={{torch.cuda.is_available()}}")
 if not torch.cuda.is_available():
     raise SystemExit("CUDA is not available to PyTorch")
 print(f"gpu={{torch.cuda.get_device_name(0)}}")
+print(f"cuda_runtime={{torch.version.cuda}}")
 PY
 """
     argv = ssh_argv(private_key, instance["ip"]) + ["bash", "-s"]
@@ -1031,6 +1108,14 @@ def build_parser() -> argparse.ArgumentParser:
     compute_parser.add_argument("--campaign", required=True)
     add_private_key_argument(compute_parser)
     compute_parser.set_defaults(handler=command_compute_probe)
+
+    vllm_parser = subparsers.add_parser(
+        "vllm-smoke",
+        help=f"run fixed inference with {VLLM_SMOKE_MODEL}",
+    )
+    vllm_parser.add_argument("--campaign", required=True)
+    add_private_key_argument(vllm_parser)
+    vllm_parser.set_defaults(handler=command_vllm_smoke)
 
     sync_parser = subparsers.add_parser(
         "sync-code", help="copy code while excluding secrets, caches, logs, and results"

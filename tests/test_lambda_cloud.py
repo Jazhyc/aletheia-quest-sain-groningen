@@ -5,6 +5,7 @@ import json
 import os
 import urllib.error
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -134,6 +135,43 @@ def test_remote_secret_payload_is_allowlisted_and_shell_quoted() -> None:
         lambda_cloud.build_remote_secret_payload(["LAMBDA_API_KEY"])
     with pytest.raises(lambda_cloud.LambdaCloudError, match="non-allowlisted"):
         lambda_cloud.build_remote_secret_payload(["NDIF_API_KEY"])
+
+
+def test_ssh_command_is_one_shell_quoted_remote_argument() -> None:
+    args = SimpleNamespace(
+        command=["--", "bash", "-lc", "printf '%s\\n' 'hello world'"],
+    )
+    with (
+        patch.object(
+            lambda_cloud,
+            "active_ssh_target",
+            return_value=(Path("/tmp/test-key"), {"ip": "192.0.2.1"}),
+        ),
+        patch.object(lambda_cloud, "run_checked") as run_checked,
+    ):
+        lambda_cloud.command_ssh(args, object())
+
+    argv = run_checked.call_args.args[0]
+    assert argv[-1] == """bash -lc 'printf '"'"'%s\\n'"'"' '"'"'hello world'"'"''"""
+    assert "ServerAliveInterval=15" in argv
+    assert "ServerAliveCountMax=20" in argv
+
+
+def test_compute_probe_renders_project_environment_script() -> None:
+    with (
+        patch.object(
+            lambda_cloud,
+            "active_ssh_target",
+            return_value=(Path("/tmp/test-key"), {"ip": "192.0.2.1"}),
+        ),
+        patch.object(lambda_cloud, "run_checked") as run_checked,
+    ):
+        lambda_cloud.command_compute_probe(SimpleNamespace(), object())
+
+    script = run_checked.call_args.kwargs["input_text"]
+    assert 'source "$HOME/.config/aletheia/runtime.env"' in script
+    assert 'cd "$HOME/Aletheias-Quest-Competition"' in script
+    assert 'print(f"torch={torch.__version__}")' in script
 
 
 def test_public_key_fingerprint_matches_openssh_shape() -> None:

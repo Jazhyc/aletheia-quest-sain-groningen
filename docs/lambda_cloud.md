@@ -67,7 +67,15 @@ Launch exactly one named campaign after reviewing the returned hourly price:
 
 .venv/bin/python scripts/lambda_cloud.py compute-probe \
   --campaign qwen-prompt-sweep
+
+.venv/bin/python scripts/lambda_cloud.py vllm-smoke \
+  --campaign qwen-prompt-sweep
 ```
+
+`compute-probe` uses the locked project environment, while `vllm-smoke` loads
+the public `Qwen/Qwen2.5-0.5B-Instruct` checkpoint and generates one completion.
+The first vLLM start compiles kernels; keeping the campaign instance preserves
+those caches for later runs.
 
 `launch` is idempotent by campaign name: if the campaign instance already
 exists, it reports that instance instead of launching another billable GPU.
@@ -106,8 +114,15 @@ reproducible campaign transfer. `sync-code` transfers the working tree but
 refuses a dirty tree unless `--include-uncommitted` is explicitly supplied.
 
 `bootstrap` installs a managed Python 3.12 with `uv`, performs `uv sync
---locked`, and checks that PyTorch and vLLM can see the GPU. Copy any required
-ignored input artifact explicitly:
+--locked`, and checks that PyTorch and vLLM can see the GPU. It writes
+Lambda-specific cache and CUDA compatibility settings to
+`~/.config/aletheia/runtime.env`. Source that file before running experiments:
+
+```bash
+source ~/.config/aletheia/runtime.env
+```
+
+Copy any required ignored input artifact explicitly:
 
 ```bash
 .venv/bin/python scripts/lambda_cloud.py push \
