@@ -157,6 +157,33 @@ this as a dormant OOD specialist for explicit knowledge-report contracts. Do
 not add the failed choice route or train an n-gram category router on public
 category/source templates.
 
+### Rank-1 HP-KR specialist follow-up
+
+P79 asks whether a small task-specific update adds value beyond the strongest
+existing HP-KR prompt. It trains fresh rank-1/alpha-2 Qwen adapters only on the
+256 disjoint, label-balanced GPT-OSS HP-KR summaries from the scale-up cache.
+The regular rank-16 Phoenix adapter remains the default judge; this adapter is
+eligible only behind the already confirmed explicit knowledge-report rule.
+
+Three candidates vary only training dose: one epoch at `5e-5`, three epochs at
+`5e-5`, and three epochs at `1e-4`. All use the established
+`knowledge_report_type` prompt during training and inference, all projection
+targets, effective batch size 32, and the same 100/100 development/confirmation
+split as P78. Development compares against base Qwen with that strong prompt
+in the same vLLM session. A candidate advances only for at least `+0.02` HP-KR
+BA, every source-family delta at least `-0.05`, and no more than five additional
+parse errors. Confirmation requires `+0.01` under the same floors. The
+rank-16 truthful-alternative route is reported as a reference but is not the
+selection baseline.
+
+```bash
+bash experiments/liars_bench_distillation/run_hpkr_rank1_specialist_lambda.sh train
+bash experiments/liars_bench_distillation/run_hpkr_rank1_specialist_lambda.sh development
+bash experiments/liars_bench_distillation/run_hpkr_rank1_specialist_lambda.sh select
+bash experiments/liars_bench_distillation/run_hpkr_rank1_specialist_lambda.sh confirmation
+bash experiments/liars_bench_distillation/run_hpkr_rank1_specialist_lambda.sh confirm
+```
+
 This experiment tests whether a very small external-data mixture broadens the
 Phoenix student beyond factual instructed/Qwen-varied deception without
 overwriting its competition calibration. It uses four Liars' Bench categories

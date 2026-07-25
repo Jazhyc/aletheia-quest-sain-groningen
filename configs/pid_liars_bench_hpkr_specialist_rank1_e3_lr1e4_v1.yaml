@@ -1,0 +1,11 @@
+# @package _global_
+
+defaults:
+  - pid_liars_bench_hpkr_specialist_rank1_e3_lr5e5_v1
+  - _self_
+
+method: qwen9b_pid_liars_hpkr_specialist_rank1_e3_lr1e4_v1
+
+student:
+  training:
+    learning_rate: 1.0e-4

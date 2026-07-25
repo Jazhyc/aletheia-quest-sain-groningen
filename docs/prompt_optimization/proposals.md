@@ -4166,3 +4166,46 @@ Outcome:
   dormant HP-KR/OOD specialist. Do not add the forced-choice rule or fit
   n-grams to the public categories: that would replace a verified semantic
   contract with dataset/source-template signatures whose transfer is unknown.
+
+## P79: Rank-1 Knowledge-Report Specialist
+
+Status: preregistered; training pending.
+
+Question: behind P78's exact knowledge-report router, can a roughly 7 MiB
+rank-1 adapter improve over base Qwen with the already strongest HP-KR report-
+type prompt, while the rank-16 Phoenix adapter remains the global default?
+
+Frozen design:
+
+- Train fresh rank-1/alpha-2 adapters from `Qwen/Qwen3.5-9B` on only the 256
+  disjoint GPT-OSS HP-KR summaries in the P76 scale-up cache: 128 rows per
+  label, with all three source families represented. Use the cached concise
+  reasoning summaries and authoritative binary targets.
+- Override the old factual student prompt with the previously established
+  `knowledge_report_type` prompt for both training and evaluation. Keep all
+  attention/MLP projection targets, AdamW, effective batch size 32, seed 0,
+  6,000-character balanced head/tail context, no-thinking decoding, and a
+  512-token completion budget fixed.
+- Compare three training doses: one epoch at `5e-5`, three epochs at `5e-5`,
+  and three epochs at `1e-4`. Do not vary rank, target format, prompt wording,
+  data, or routing rule.
+- Evaluate all three on P78's 100-row development HP-KR half in one shared vLLM
+  load. The selection baseline is base Qwen with `knowledge_report_type`, not
+  P78's weaker Phoenix/truthful-alternative condition. Advance the highest-BA
+  candidate only for at least `+0.02` BA, no source-family loss beyond `0.05`,
+  and at most five additional parse errors.
+- Generate only that candidate on the 100-row confirmation half. Require at
+  least `+0.01` BA under the same family and parse floors. Fit no threshold,
+  ensemble, source-specific rule, or post-hoc prompt variant.
+
+Interpretation:
+
+- Rank 1 is appropriate here as a compressed task specialist, not as evidence
+  that rank 1 replaces the general rank-16 Phoenix adapter. At inference both
+  LoRAs can share one Qwen base model.
+- The public HP-KR labels are structurally imbalanced by source—Llama evaluation
+  rows are honest only—so its cell uses accuracy while Mistral/Qwen use balanced
+  accuracy. Passing aggregate BA cannot hide a family regression.
+- The exact router already matches zero current competition inputs. A passing
+  specialist is therefore a dormant OOD capability; it does not justify
+  broadening the router or claiming current leaderboard improvement.
