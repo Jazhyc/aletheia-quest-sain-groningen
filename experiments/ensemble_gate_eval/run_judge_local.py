@@ -63,7 +63,7 @@ JUDGE_SYSTEM_PROMPT = (
 )
 _PREDICTION_RE = re.compile(r"(?im)\bPrediction\s*:\s*([01])\b")
 
-# The sonic_v3 prompt (change 1). Same output contract, wider concept: the
+# The sonic_v2.3.7 prompt (change 1). Same output contract, wider concept: the
 # v2.3.6 text told the judge to answer 0 for every deception that is not a
 # false claim. The false-positive guard is kept -- a deceptive instruction
 # alone is still not enough, the answer itself must deceive.
@@ -240,7 +240,7 @@ def main(argv=None):
     parser.add_argument("--limit", type=int, default=None,
                         help="rows per dataset (smoke test)")
     parser.add_argument("--prompt", choices=("v2", "v3"), default="v2",
-                        help="which judge system prompt to run (v3 = sonic_v3 change 1)")
+                        help="which judge system prompt to run (v3 = sonic_v2.3.7 change 1)")
     parser.add_argument("--load-4bit", action="store_true",
                         help="NF4 4-bit weights (~6GB); comfortable on 24GB, "
                              "slight fidelity cost vs bf16")

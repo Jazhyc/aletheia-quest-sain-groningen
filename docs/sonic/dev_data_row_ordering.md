@@ -1,6 +1,6 @@
 # The dev datasets are ordered honest-first
 
-Found on 2026-07-24 while evaluating sonic_v3. It invalidates any evaluation
+Found on 2026-07-24 while evaluating sonic_v2.3.7. It invalidates any evaluation
 that takes a prefix of a dev dataset.
 
 ## The fact
@@ -40,7 +40,7 @@ classes then breaks, and it breaks quietly:
 
 ## What this broke
 
-Two sonic_v3 measurements, both of which looked like product faults and were
+Two sonic_v2.3.7 measurements, both of which looked like product faults and were
 not:
 
 1. `python submit.py --dry --limit 20` reported `Bal.Acc — AUROC — Recall —`

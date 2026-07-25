@@ -11,13 +11,14 @@ opaque public labels returned by the Space.
 ## Current Status
 
 - Team: `SAIN Groningen`
-- **Pending: `sonic_v3.ipynb`, submitted 2026-07-25. Result not in yet.**
+- **Built but never submitted: `sonic_v2.3.7.ipynb` (prepared 2026-07-25).**
+  Renamed from its original name on 2026-07-25. It has no official score.
   Weights-only change against v2.3.6: the nemotron and qwen probes now come from
   one shared trunk trained across all three families; gemma keeps its existing
   single-family probe. Every executable line of the notebook is identical to
   `sonic_v2.3.6.ipynb`. Full dry run on all 21 dev datasets was clean (mean BA
   `0.9490` / AUROC `0.9868`, in-sample, no dataset below AUROC `0.90`).
-  See `docs/sonic/sonic_v3.md`.
+  See `docs/sonic/sonic_v2_3_7.md`.
   - **Notus / gemma is the control unit.** Its probe is unchanged, so if it
     moves while Nemotron and Qwen also move, per-unit noise is larger than we
     assumed and nothing can be attributed to the shared trunk.

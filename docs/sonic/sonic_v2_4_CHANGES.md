@@ -3,18 +3,18 @@
 > **Status: abandoned. This version does not exist as a submission.**
 >
 > sonic_v2.4 was a set of ideas, not a release. It was never sent to the
-> leaderboard. It has no score. The current version is **sonic_v3**; read
-> `sonic_v3.md` instead.
+> leaderboard. It has no score. The current version is **sonic_v2.3.7**; read
+> `sonic_v2_3_7.md` instead.
 >
 > What happened to its two changes:
 >
 > - **The contrastive probe was built, measured and rejected.** It is worse than
 >   the current probe on its own, and fusing the two gives `+0.014` on the worst
 >   organism for a second forward pass and twice the activation download. See
->   `sonic_v3.md` section 7.2 and
+>   `sonic_v2_3_7.md` section 7.2 and
 >   `experiments/contrastive_probe/EVALUATION.md`.
 > - **Spread-modulated gate trust was never measured.** It is still an untested
->   idea. It is not in sonic_v3.
+>   idea. It is not in sonic_v2.3.7.
 >
 > Keep this document for the reasoning behind those two ideas. Do not treat any
 > number or instruction in it as current. The notebook it names now lives at

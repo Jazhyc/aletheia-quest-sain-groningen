@@ -1,6 +1,6 @@
 """Compare two judge system prompts on identical rows.
 
-This isolates sonic_v3 change 1. Both arms come from `run_judge_local.py` with
+This isolates sonic_v2.3.7 change 1. Both arms come from `run_judge_local.py` with
 the same model, adapter, precision, rows and batching -- only the system prompt
 differs -- so any movement here is the prompt and nothing else.
 

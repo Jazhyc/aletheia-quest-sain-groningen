@@ -1,6 +1,6 @@
-# sonic_v3
+# sonic_v2.3.7
 
-This document tells you how sonic_v3 works. You do not need to read the
+This document tells you how sonic_v2.3.7 works. You do not need to read the
 documents for the earlier versions. This document is self-contained.
 
 This document uses Simplified Technical English (ASD-STE100). The sentences are
@@ -8,7 +8,7 @@ short. Each sentence gives one idea. The terms are constant: "the probe", "the
 judge", "the gate", "the trunk", "the projection", "the score", "the threshold",
 "the family", and "the organism".
 
-**In one line:** sonic_v3 is the sonic_v2.3.6 notebook with new probe weights.
+**In one line:** sonic_v2.3.7 is the sonic_v2.3.6 notebook with new probe weights.
 The probe for nemotron and qwen now comes from one shared trunk trained on all
 three families. Nothing else changes.
 
@@ -16,7 +16,7 @@ three families. Nothing else changes.
 leaderboard returns the per-unit table, record it in
 `docs/official_submissions.md` and update section 8 of this document.
 
-In `submission/sonic_v3.ipynb` every executable line is identical to
+In `submission/sonic_v2.3.7.ipynb` every executable line is identical to
 `sonic_v2.3.6.ipynb`. Only the title text and two comment blocks differ, and
 they describe this version. Every functional change is in the weight files. The
 full dry run passed. See section 9.
@@ -54,7 +54,7 @@ Section 11 explains what that assumption broke.
 
 ---
 
-## 2. Why we made sonic_v3
+## 2. Why we made sonic_v2.3.7
 
 sonic_v2.3.5 is our best submission. It scored balanced accuracy `0.853750` and
 AUROC `0.876333`. The first team is EleutherAI with `Tiresias.ipynb`. They
@@ -90,7 +90,7 @@ only ever moved Iris. Notus is limited by the detectors.
 
 ## 3. The two detectors
 
-sonic_v3 uses two detectors. They read different things. This is why the gate
+sonic_v2.3.7 uses two detectors. They read different things. This is why the gate
 can mix them.
 
 ### 3.1 The probe (white-box)
@@ -392,10 +392,10 @@ guard now has three outcomes instead of two.
 
 ---
 
-## 6. What sonic_v3 does not change
+## 6. What sonic_v2.3.7 does not change
 
 - The gate. It stays at sonic_v2.3.6, byte for byte.
-- The notebook code. Every executable line of `sonic_v3.ipynb` is identical to
+- The notebook code. Every executable line of `sonic_v2.3.7.ipynb` is identical to
   `sonic_v2.3.6.ipynb`. Only prose changed.
 - The judge model, the LoRA adapter and the judge prompt.
 - The rank blend and the threshold rule.
@@ -405,7 +405,7 @@ guard now has three outcomes instead of two.
 - The budget-aware judge retry and the median-split fallback.
 - The gemma probe weights.
 
-No executable line changes, so sonic_v3 adds no new sandbox surface.
+No executable line changes, so sonic_v2.3.7 adds no new sandbox surface.
 
 ---
 
@@ -526,7 +526,7 @@ accuracy `0.7700` at AUROC `0.9872`. The order of the rows is near-perfect. The
 judge returned one class only, so `rate` fell back to `0.5` against a true
 prevalence of `0.074`. The gate then flagged about half the rows: recall
 `1.0000`, false positive rate `0.4600`. This behaviour is identical in
-sonic_v2.3.5. sonic_v3 does not touch that path.
+sonic_v2.3.5. sonic_v2.3.7 does not touch that path.
 
 ```
 SONIC_FORCE_JUDGE=1 python submit.py --dry
@@ -534,7 +534,7 @@ SONIC_FORCE_JUDGE=1 python submit.py --dry
 
 ---
 
-## 9. How to build and check sonic_v3
+## 9. How to build and check sonic_v2.3.7
 
 1. Train and export the weights.
 
@@ -545,7 +545,7 @@ SONIC_FORCE_JUDGE=1 python submit.py --dry
    This fits the trunk on every dev row, exports nemotron and qwen, verifies
    parity, and backs up the old weights. It does not touch gemma.
 
-2. Copy `sonic_v2.3.6.ipynb` to `submission/sonic_v3.ipynb`. Change no code in
+2. Copy `sonic_v2.3.6.ipynb` to `submission/sonic_v2.3.7.ipynb`. Change no code in
    it. Update only the title and the comments. Keep one notebook in
    `submission/`; the dry runner needs exactly one.
 
@@ -586,7 +586,7 @@ Notus / Qwen is 42.5% of the gap.
 **A mix of two detectors stays between the two detectors.** The gate cannot make
 signal that neither detector has.
 
-**Expected leaderboard effect: small.** sonic_v3 addresses the largest single
+**Expected leaderboard effect: small.** sonic_v2.3.7 addresses the largest single
 cell and takes a low-conviction bet on the second. It does not close a `0.138`
 AUROC gap on its own.
 
@@ -647,4 +647,4 @@ The notebook needs no rollback. It is identical to sonic_v2.3.6.
 | Weight export and parity check | `experiments/nonlinear_probe/export_multifamily_probe.py` |
 | Judge prompt A/B | `experiments/ensemble_gate_eval/compare_judge_prompts.py` |
 | Gate as pure functions | `experiments/ensemble_gate_eval/gate.py` |
-| Full dry run log | `logs/sonic_v3_dry_full.log` |
+| Full dry run log | `logs/sonic_v2_3_7_dry_full.log` |
