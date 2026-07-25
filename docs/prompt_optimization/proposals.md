@@ -4038,3 +4038,44 @@ Decision:
 - The official Phoenix v3.2 submission tied Phoenix v3.1 at `0.8316667`, so the
   local gain did not transfer. Archive the stack and restore Phoenix v3.0's
   original rank-16 adapter without the reasoning n-gram artifact.
+
+## P77: General Semantic Prompt Sweep on Liars' Bench OOD Modes
+
+Status: preregistered; development generation pending.
+
+Question: after a fourfold GPT-OSS continuation changed the rank-16 weights but
+none of 800 external decisions, can a single model-agnostic inference rubric
+recover multiple observable deception modes without category routing?
+
+Frozen design:
+
+- Keep the selected rank-16 Phoenix parent adapter, no-thinking decoding,
+  512-token completion budget, 6,000-character balanced head/tail external
+  context, output parser, and 800-row Liars' Bench artifact fixed.
+- Compare the unchanged Truth Value Guard with three prompts: an observable
+  response-mode taxonomy, a material-claim ledger, and a truthful-alternative
+  counterfactual. None receives category, label, dataset, source model, or
+  organism identity.
+- Split the 800 rows before prompt generation, within each category/label cell,
+  into deterministic 400-row development and confirmation halves using seed
+  `20260725`. Run all four prompts on development but only the selected prompt
+  and control on confirmation.
+- Advance from development for at least `+0.03` macro-category BA, category
+  delta at least `-0.02`, category/source delta at least `-0.05`, and no more
+  than ten additional parse errors. Choose the highest macro-gain passing
+  prompt; fit no threshold, ensemble, or per-category rule.
+- Require `+0.02` macro BA under the same preservation floors on confirmation.
+  Only then run the unchanged control and confirmed prompt on competition
+  validation. Final preservation permits at most `0.0025` overall BA loss,
+  `0.01` instructed or varied BA loss, and ten additional parse failures.
+  Keep local competition test untouched.
+
+Interpretation:
+
+- The 800-row spectrum was previously scored by other methods, so the
+  deterministic confirmation half is a prompt-output confirmation, not a
+  never-inspected benchmark. The staged protocol still prevents selecting
+  wording directly on its confirmation predictions.
+- A failure closes this small universal-wording branch, not all prompt work.
+  Existing exact semantic specialists and larger-judge results remain distinct
+  hypotheses.

@@ -58,6 +58,39 @@ fourfold did not move the decision boundary, so missing exposure at this scale
 is no longer the leading explanation. Observable semantic prompts and stronger
 judge capacity remain better-supported directions.
 
+### Frozen general-prompt follow-up
+
+The next experiment keeps the selected parent adapter fixed and changes only
+the general inference prompt. It compares the unchanged Truth Value Guard with
+three model-agnostic variants: observable response-mode classification, a
+material-claim ledger, and a truthful-alternative counterfactual. Every prompt
+uses the same conversation view, deterministic decoding, 512-token allowance,
+and output parser. No category name, source model, organism identity, or label
+is visible to the judge.
+
+The previously scored 800-row artifact is now a development resource, not a
+fresh holdout. Before generating any prompt variants it is deterministically
+split within each category/label cell into 400 development and 400 confirmation
+rows. All four prompts run on development. A non-control prompt advances only
+for at least `+0.03` macro-category BA, no category loss beyond `0.02`, no
+category/source loss beyond `0.05`, and at most ten additional parse failures.
+Only the best passing prompt runs on confirmation, where it must gain at least
+`0.02` under the same preservation floors. Competition validation is run only
+after that independent confirmation and permits at most `0.0025` overall BA
+loss, `0.01` instructed or varied BA loss, and ten additional parse failures.
+Local competition test remains untouched.
+
+Run the phases on the persistent Lambda H100:
+
+```bash
+bash experiments/liars_bench_distillation/run_prompt_sweep_lambda.sh development
+bash experiments/liars_bench_distillation/run_prompt_sweep_lambda.sh select
+bash experiments/liars_bench_distillation/run_prompt_sweep_lambda.sh confirmation
+bash experiments/liars_bench_distillation/run_prompt_sweep_lambda.sh confirm
+bash experiments/liars_bench_distillation/run_prompt_sweep_lambda.sh validation
+bash experiments/liars_bench_distillation/run_prompt_sweep_lambda.sh analyze
+```
+
 This experiment tests whether a very small external-data mixture broadens the
 Phoenix student beyond factual instructed/Qwen-varied deception without
 overwriting its competition calibration. It uses four Liars' Bench categories
