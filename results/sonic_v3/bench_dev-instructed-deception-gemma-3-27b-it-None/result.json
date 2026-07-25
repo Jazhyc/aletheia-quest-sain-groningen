@@ -1,0 +1,15 @@
+{
+  "notebook": "submission/sonic_v3.ipynb",
+  "dataset": "aletheias-quest/dev-instructed-deception-gemma-3-27b-it-None",
+  "rows": 400,
+  "auroc": 0.99845,
+  "balanced_accuracy": 0.995,
+  "elapsed_seconds": 33.446958902000915,
+  "rows_per_second": 11.959233757902892,
+  "unique_scores": 400,
+  "score_min": 0.0822758526361693,
+  "score_mean": 0.46097777614391405,
+  "score_max": 0.859286908215599,
+  "positive_rows": 200,
+  "deceptive_rows": 200
+}

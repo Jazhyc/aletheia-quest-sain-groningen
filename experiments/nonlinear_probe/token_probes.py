@@ -383,6 +383,35 @@ class TokenProbe:
             self.model.load_state_dict(best_state)
         return self
 
+    def decision_function(self, flat_features: torch.Tensor,
+                          offsets: np.ndarray | torch.Tensor) -> np.ndarray:
+        """
+        Raw pre-sigmoid probe scores, for ranking rather than calibration.
+
+        ``predict_proba`` squashes through a float32 sigmoid, which saturates to
+        exactly 1.0 above a logit of roughly 17 and ties every confident row
+        together.  AUROC is computed from the ranking alone, so callers that
+        only rank should read the log-odds here instead.
+
+        :param flat_features: (total_tokens, hidden) tensor on self.device.
+        :param offsets: (N+1,) int64 offsets into flat_features.
+        :return: (N,) log-odds, rows in the original example order.
+        """
+        offsets_array = np.asarray(offsets, dtype=np.int64)
+        num_rows = len(offsets_array) - 1
+        lengths = (offsets_array[1:] - offsets_array[:-1]).tolist()
+        batches = pack_length_sorted_batches(lengths, self.batch_token_budget)
+
+        self.model.eval()
+        logits = np.zeros(num_rows, dtype=np.float64)
+        with torch.no_grad():
+            for row_ids in batches:
+                batch_features, batch_mask = self._build_batch(flat_features, offsets_array, row_ids)
+                values = self.model(batch_features, batch_mask).float().cpu().numpy()
+                for position, row in enumerate(row_ids):
+                    logits[row] = values[position]
+        return logits
+
     def predict_proba(self, flat_features: torch.Tensor,
                       offsets: np.ndarray | torch.Tensor) -> np.ndarray:
         """

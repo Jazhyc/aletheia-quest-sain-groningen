@@ -1,0 +1,15 @@
+{
+  "lambda_blend": 0.35,
+  "lambda_base_if_split": 0.4,
+  "lambda_lora_if_split": 0.35,
+  "probe_logit_sd": {
+    "qwen": 4.186061504676724,
+    "gemma": 6.465989988719272,
+    "nemotron": 2.193969169186576
+  },
+  "default_probe_sd": 4.2820068875275235,
+  "judge_margin_sd": 1.199755138011975,
+  "threshold_blend": 0.5,
+  "threshold_probe_only": 0.5,
+  "threshold_judge_only": 0.53
+}
