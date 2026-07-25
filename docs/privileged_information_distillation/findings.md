@@ -74,6 +74,38 @@ fields so a later controlled ablation can remove:
 Compare the unfiltered baseline against a filtered retrain only if the student
 shows the corresponding error modes on validation or local test.
 
+### Teacher-rationale cleaning audit (2026-07-25)
+
+The deferred semantic audit is now complete. Exact checks plus manual review
+find 30 unusable summaries among the 2,877 selected varied-only targets
+(`1.04%`; `2.09%` of positive targets), plus three positive parser failures
+that were already excluded. Six summaries justify deception only because the
+assistant disobeyed an instruction to lie; three of those visibly mention
+privileged information. The selected rank-16 adapter predicts zero on 26/30 of
+the unusable positive training rows, so the contradiction is behaviorally
+visible.
+
+Label-blind GPT-OSS audit job `30287922` parsed 6,561/6,570 full-cache rows and
+screened 186/2,877 selected summaries (`6.47%`) for masking. Its 147 selected
+factual flags have only moderate precision: a seeded random manual sample found
+16/30 clear errors, three arguable/minor cases, and 11 false or pedantic
+corrections. It also called all eight hand-verified supporting-detail misses
+factually sound, confirming correlated same-model blind spots. Combining the
+exact lower bound with the calibrated factual screen puts the practical
+prevalence near `3--4.5%`; retain `1.04%` as the firm lower bound and `6.47%`
+only as a review upper bound.
+
+Do not delete these rows or remove reasoning globally. The matched
+prediction-only student lost 5.24 local-test BA points, and prior teacher-prompt,
+teacher-model, reasoning-trace, and data-fraction controls show that
+better-looking summaries rarely change binary decisions. The next controlled
+ablation should retain every authoritative binary label but mask summary loss
+only for independently verified bad rationales. The strict 30-row stratum has
+an optimistic arithmetic ceiling near `+0.45` overall BA point; a realistic
+prior remains `0--0.5`, potentially negative. See
+[`rationale_cleaning_audit.md`](rationale_cleaning_audit.md) for examples,
+screen calibration, and the broader engineering ceiling.
+
 ## Student SFT learning-rate sweep
 
 Four one-epoch rank-16 LoRA students were trained with AdamW and evaluated in a

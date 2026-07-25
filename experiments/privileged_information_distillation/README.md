@@ -23,6 +23,19 @@ separate label-aware reconciliation pass. See
 frozen experimental contract and commands. It is not a selected submission
 method.
 
+The original GPT-OSS summary cache can be screened without exposing its labels
+to the auditing model:
+
+```bash
+sbatch experiments/privileged_information_distillation/run_teacher_rationale_audit.sh
+```
+
+The audit writes ignored row-level generations and an aggregate report under
+`results/blackbox/qwen9b_pid_rationale_cleaning_audit_v1/`. Treat
+`confident_error` and label-conflict flags as review candidates rather than
+automatic relabeling; GPT-OSS shares blind spots with the teacher that produced
+the cache.
+
 ## Data contract
 
 Teacher output must be:

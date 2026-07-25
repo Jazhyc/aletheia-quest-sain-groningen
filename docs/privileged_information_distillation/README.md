@@ -5,6 +5,12 @@ The source-grounded two-stage atomic-audit ablation is specified in
 audit before revealing the label and preserves audit/label conflicts rather than
 reproducing the rejected factual-error cascade.
 
+The original privileged-summary cache's semantic quality and the expected value
+of selective rationale cleaning are audited in
+[`rationale_cleaning_audit.md`](rationale_cleaning_audit.md). Its GPT-OSS screen
+is label-blind; authoritative labels are crossed with the audit only after
+generation.
+
 This directory is the durable record for the GPT-OSS-to-Qwen privileged-
 information distillation track. Keep method rationale, prompt/data contracts,
 teacher-cache provenance, trace audits, student training outcomes, and later
@@ -81,6 +87,8 @@ audit with `parse_error=true` and are automatically excluded from SFT.
 - Teacher generation: `experiments/privileged_information_distillation/generate_teacher_data.py`
 - Harmony extraction/parser: `experiments/privileged_information_distillation/core.py`
 - Student SFT: `experiments/privileged_information_distillation/train_student_sft.py`
+- Label-blind rationale audit:
+  `experiments/privileged_information_distillation/audit_teacher_rationales.py`
 
 Teacher cache generation is prompt-aware and resumable. Existing traces are
 reused only when their dataset/index, label, teacher prompt, and student prompt
@@ -89,6 +97,7 @@ match exactly.
 ```bash
 sbatch experiments/privileged_information_distillation/run_teacher.sh
 sbatch experiments/privileged_information_distillation/run_student_sft.sh
+sbatch experiments/privileged_information_distillation/run_teacher_rationale_audit.sh
 ```
 
 See [findings.md](findings.md) for the current quality audit and experimental
