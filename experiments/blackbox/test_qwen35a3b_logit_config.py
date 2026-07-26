@@ -6,6 +6,8 @@ from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
 from experiments.blackbox.run_judge import (
+    missing_requested_token_ids,
+    normalize_rating_probs,
     strip_terminal_generated_rating,
     vllm_kwargs_from_config,
 )
@@ -181,3 +183,11 @@ def test_terminal_generated_rating_is_removed_before_rescore() -> None:
         rating_min=1,
         rating_max=7,
     ) == (incomplete, None)
+
+
+def test_soft_rating_distribution_is_normalized_and_auditable() -> None:
+    assert normalize_rating_probs({1: 1.0, 2: 3.0}) == {1: 0.25, 2: 0.75}
+    assert missing_requested_token_ids(
+        {11: -0.1, 13: -2.0},
+        [11, 12, 13],
+    ) == [12]

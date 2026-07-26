@@ -484,6 +484,23 @@ def rating_probs_from_logprobs(
     }
 
 
+def normalize_rating_probs(probs: dict[int, float]) -> dict[int, float]:
+    """Normalize an ordinal rating distribution for compact cache storage."""
+    total = sum(probs.values())
+    if total <= 0:
+        return {rating: 0.0 for rating in probs}
+    return {rating: probability / total for rating, probability in probs.items()}
+
+
+def missing_requested_token_ids(
+    first_token_logprobs: dict[Any, Any],
+    requested_token_ids: list[int],
+) -> list[int]:
+    """Return explicitly requested token ids absent from a vLLM logprob row."""
+    available = {int(token_id) for token_id in first_token_logprobs}
+    return sorted(set(requested_token_ids) - available)
+
+
 def target_probs_from_logprobs(
     first_token_logprobs: dict[Any, Any],
     *,
@@ -1001,6 +1018,10 @@ class OfflineVllmStructuredJudge:
                 ratings=self.ratings,
                 missing_logprob=self.missing_logprob,
             )
+            missing_token_ids = missing_requested_token_ids(
+                first_token_logprobs,
+                self.all_rating_ids,
+            )
             score = score_from_rating_probs(
                 probs,
                 rating_min=self.rating_min,
@@ -1013,6 +1034,8 @@ class OfflineVllmStructuredJudge:
                 "rating": best_rating,
                 "parse_error": False,
                 "score": score,
+                "rating_probs": normalize_rating_probs(probs),
+                "missing_rating_token_ids": missing_token_ids,
                 "text": reasoning,
                 "removed_terminal_rating": removed_rating,
             })
