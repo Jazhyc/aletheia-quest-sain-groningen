@@ -1,5 +1,36 @@
 # Prompt Experiment Log
 
+## 2026-07-26: Base-Qwen bounded database planner
+
+P85 used hosted base `Qwen/Qwen3.5-9B` as a semantic planner over at most 12
+literal facts from the frozen Wikidata index. Its strict output named at most
+three candidate IDs, grounded each in an exact response quote, and classified
+the fact as supporting or contradicting. Qwen could not emit free-form facts or
+SQL.
+
+Full planner job `30298663` processed 2,700 train/validation rows in `134.0s`.
+On 282 GPT-OSS-valid validation rows it emitted 30 plans; 25 contained a
+decisive fact, giving 0.833 row precision and 0.500 recall over the 50 rows with
+reachable decisive candidates. On 49 question groups absent from training, all
+five emitted facts were decisive and recovered 5/7 reachable rows. Nineteen
+decisive retrievals were outside the selected rule method's coverage.
+
+Frozen downstream job `30298676` appended these sparse facts to the exact
+Phoenix rank-16 prompt and read direct `Prediction:` margins. Cached Phoenix,
+real replacement, shuffled replacement, and Phoenix/real mean-log-odds scored
+macro AUROC `0.93815`, `0.93673`, `0.93732`, and `0.93768`. The 31 active rows
+had zero missing logits and took `5.37s` to score. Real facts lowered deception
+scores more on deceptive rows (`-0.0689`) than honest rows (`-0.0320`).
+
+The planner solved more retrieval, but most selected facts supported some claim
+in the response. Eight deceptive active rows received only supporting evidence
+and only one received counterevidence. Objective factual support must not
+exonerate a belief-based deceptive response. Close the evidence-conditioned
+Phoenix path and do not run local test. Future work may treat database
+contradiction as a separate positive-only member, but the current contradiction
+coverage is only 7/268 labeled training emissions and 1/31 validation
+emissions.
+
 ## 2026-07-26: Phoenix 4.2 exclusive harm route and intent margin
 
 Phoenix 4.2 packages P83's rank-1 resolved-intent empty-summary margin for

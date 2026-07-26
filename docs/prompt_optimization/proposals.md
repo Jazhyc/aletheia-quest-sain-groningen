@@ -4478,3 +4478,49 @@ member and projects full macro AUROC `0.93815 -> 0.95393`. The exact HP-KR
 route matches zero known competition rows, so its exclusive specialist
 treatment is still an OOD transfer choice. Do not broaden the router or mix
 intent into harm-specialist rows from this implementation.
+
+## P85: Base-Qwen Bounded Wikidata Planner
+
+Status: retrieval gate passed; downstream Phoenix AUROC gate failed.
+
+Question: can hosted base Qwen replace the weak compact retriever by planning
+over literal facts already available in the frozen submission-sized Wikidata
+database?
+
+Frozen design:
+
+- Present at most 12 bounded database candidates with the question and response.
+- Ask base `Qwen/Qwen3.5-9B`, without Phoenix PEFT, to select at most three
+  facts that independently settle an exact response claim.
+- Require a literal candidate ID, an exact grounded response quote, and
+  `supports|contradicts`; reject invented facts, IDs, or extra fields.
+- Measure selection against the existing GPT-OSS decisiveness audit, with exact
+  question groups from training excluded in the novel validation slice.
+- If retrieval transfers, append the selected literal facts through the
+  existing incomplete/untrusted reference block and read the frozen Phoenix
+  rank-16 direct `Prediction:` margin.
+- Reuse cached Phoenix scores on inactive rows. Compare real with
+  cross-dataset shuffled evidence and fixed mean-log-odds blending. Select on
+  macro AUROC; do not use local test unless validation improves.
+
+Outcome:
+
+- Planner job `30298663` generated 2,700 rows in `134.0s`. On validation it
+  achieved 0.735 selected-fact precision, 0.833 selected-row precision, and
+  0.500 decisive-row recall. It added 19 decisive rows outside rule coverage.
+- On 49 question groups absent from training, it selected five facts; all five
+  were decisive and recovered 5/7 reachable decisive rows.
+- Phoenix job `30298676` scored 31 active rows in `5.37s` with zero missing
+  label logits. Cached baseline AUROC was `0.93815`.
+- Real replacement regressed to `0.93673`, versus `0.93732` for matched
+  shuffled replacement. Mean-log-odds blending reached `0.93768`, also below
+  baseline. Recomputed-empty active rows scored `0.93792`.
+- Real evidence shifted honest/deceptive active scores by `-0.0320/-0.0689`.
+  Twenty-two honest and eight deceptive rows received only supporting facts;
+  only one deceptive row received counterevidence. Supporting objective facts
+  therefore suppressed Phoenix even on belief-based deceptive rows.
+- Reject evidence-conditioned Phoenix and keep local test untouched. Retain
+  the planner code as evidence that semantic retrieval can generalize.
+  A future training-developed directional member may add contradiction as a
+  positive signal without allowing support to lower the independent
+  intent/belief score, but the present contradiction coverage is too sparse.

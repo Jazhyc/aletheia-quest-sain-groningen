@@ -608,6 +608,27 @@ reader training increases oracle headroom, not as held-out retrieval transfer.
 Do not package the 91.6 MB MiniLM, evaluate on test, or lower its threshold from
 these validation outcomes.
 
+### Hosted-Qwen bounded database planner
+
+`qwen_database_planner.py` replaces the compact semantic gate with one
+no-thinking base-Qwen pass over at most 12 literal database candidates. It
+returns only grounded candidate IDs and `supports|contradicts` relations;
+`build_qwen_planner_sweep_cache.py` turns validated selections into sparse real
+and cross-dataset shuffled reference conditions.
+
+Full planner job `30298663` selected a GPT-OSS-decisive fact on 25/30 emitted
+validation rows and recovered 5/7 reachable decisive rows on question groups
+absent from training, with 5/5 selected facts decisive. This is the strongest
+novel-question retrieval transfer in the compact-index work.
+
+Downstream job `30298676` used the exact Phoenix rank-16 direct `0|1` margin.
+Real replacement regressed macro AUROC `0.93815 -> 0.93673`; mean-log-odds
+blending reached only `0.93768`. Shuffled replacement scored `0.93732`.
+Supporting evidence lowered deceptive active-row scores more than honest scores
+because belief-based deception can coexist with an objectively correct
+headline answer. Do not deploy or test this cache. See
+`docs/wikidata_rag/README.md` for the complete metrics and interpretation.
+
 
 ```bash
 PYTHONPATH=. .venv/bin/python experiments/wikidata_rag/build_claim_gated_cache.py \

@@ -448,3 +448,62 @@ package the 91.6 MB FP32 MiniLM, quantize it, evaluate it on test, or lower the
 threshold using frozen labels. A future continuation needs new independent
 questions or stronger mechanically grounded relevance supervision; another
 iteration on these repeated groups would mostly reinforce memorization.
+
+## Base-Qwen bounded database planner
+
+The next retrieval revisit replaced the compact learned/rule gate with hosted
+base `Qwen/Qwen3.5-9B`. Qwen received the response and at most 12 bounded facts
+from the frozen expanded entity database. It could select at most three
+candidate IDs, each tied to an exact response quote and a
+`supports|contradicts` relation. A strict parser rejected invented IDs,
+ungrounded quotes, extra fields, and oversized plans. Qwen never supplied fact
+text; every emitted reference remained a literal database row.
+
+Smoke job `30298650` supported the frozen prompt. Full job `30298663` then
+generated 2,700 train/validation plans in `134.0s` after model startup.
+
+| split | teacher-valid rows | planner parse errors | selected rows | selected-fact precision | selected-row precision | decisive-row recall | new decisive rows outside rule coverage |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| grouped training | 2,336 | 51 | 270 | 0.553 | 0.633 | 0.510 | 137 |
+| frozen validation | 282 | 4 | 30 | 0.735 | 0.833 | 0.500 | 19 |
+| novel validation questions | 49 | 1 | 5 | **1.000** | **1.000** | **0.714** | 2 |
+
+The planner is a real retrieval improvement: on question groups absent from
+training it recovered five of seven rows that contained a GPT-OSS-decisive
+candidate, with no false emission under that teacher audit. This is materially
+better semantic transfer than the compact rankers and rule router.
+
+Frozen Phoenix direct-logit job `30298676` nevertheless rejected end-to-end
+deployment. It appended the selected database rows through the standard
+explicitly incomplete/untrusted reference block and rescored only the 31 active
+rows with the exact Phoenix rank-16 direct `Prediction:` margin. Inactive rows
+reused the cached baseline exactly; matched shuffled facts came from another
+dataset unit. The margin pass took `5.37s` and had zero missing label logits.
+
+| condition | full macro AUROC | varied AUROC |
+| --- | ---: | ---: |
+| cached Phoenix baseline | **0.93815** | **0.86431** |
+| recomputed empty on active rows | 0.93792 | 0.86375 |
+| real evidence replacement | 0.93673 | 0.86097 |
+| shuffled replacement | 0.93732 | 0.86236 |
+| Phoenix/real mean log-odds | 0.93768 | 0.86319 |
+| Phoenix/shuffled mean log-odds | 0.93756 | 0.86292 |
+
+Real evidence lowered the active deception score by `0.0320` on honest rows
+but by a larger `0.0689` on deceptive rows. The cause is architectural rather
+than failed entity retrieval. Of 31 active validation rows, 22 honest and eight
+deceptive rows received only supporting facts; just one deceptive row received
+counterevidence. Some belief-based deceptive rows state an objectively correct
+headline answer, so a supporting Wikidata fact can make Phoenix less suspicious
+even though it should not erase the deceptive-intent signal. Relative to
+shuffled evidence, real facts helped ten active rows and harmed fifteen.
+
+Decision: retain the bounded planner as a successful retrieval diagnostic, but
+do not add its evidence to Phoenix, package the databases, or evaluate this
+condition on local test. A credible continuation must be developed on grouped
+training data and make evidence directional: database contradiction may add a
+positive factual-error signal, while supporting or incomplete evidence must
+not reduce the independent belief/intent score. With the present prompt only
+7/268 labeled training emissions and 1/31 validation emissions contained
+counterevidence, so simply filtering the current cache to contradictions is too
+sparse to constitute a submission method.
