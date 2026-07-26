@@ -1,5 +1,39 @@
 # Prompt Experiment Log
 
+## 2026-07-26: Continuous action-report specialist
+
+P86 tested the frozen action-report prompt as a continuous AUROC specialist
+behind the existing executed-action/report-contract router. The exact Phoenix
+rank-16 adapter, 4,500-character head/tail renderer, 2,048-token deployment
+cap, and single-token `0|1` verbalizers were held fixed. Only the prompt and
+label-margin position varied. The 200-row Liars' Bench Insider Trading artifact
+was split 100/100 within label; these halves were untouched for continuous
+margin selection, although the prompt itself has prior binary evidence.
+
+A100 development job `30298917` compared ordinary Phoenix direct margins,
+generated action decisions, and action direct, empty-summary, and
+post-reasoning margins. Their AUROCs were `0.5030`, `0.6200`, `0.7610`,
+**`0.7974`**, and `0.7056`. Empty-summary won the frozen selection, gaining
+`+0.2944` over Phoenix. Every evaluable source-family AUROC improved; Kimi was
+one-class and therefore had no family AUROC. The selected arm emitted 73 unique
+scores with zero missing label logits.
+
+Frozen confirmation job `30298919` reproduced the result: empty-summary scored
+**`0.8148`** AUROC versus `0.4158` for Phoenix and `0.7800` for generated
+binary. It emitted 83 unique scores with zero missing logits, and improved
+Gemma, Llama, and Mistral AUROC by `+0.3143`, `+0.4130`, and `+0.5110`.
+The selected one-token pass took `13.9s` for 100 rows after model startup;
+reasoning generation is not part of the selected path.
+
+One development row required the frozen deployment-equivalent left truncation:
+the action prompt was 3,358 tokens and retained its final 2,048. Confirmation
+had no truncated rows. Both completed jobs preserved all 100/100 router hits.
+This passes the external AUROC and family-preservation gates and supports a
+narrow action-report route. Do not generalize it to ordinary finance
+conversations. Before submission, port the empty-summary prompt substitution
+into the existing Phoenix-backed session, exclude routed rows from the intent
+member, and run an exact NDIF route/parity rehearsal.
+
 ## 2026-07-26: Base-Qwen bounded database planner
 
 P85 used hosted base `Qwen/Qwen3.5-9B` as a semantic planner over at most 12

@@ -4524,3 +4524,49 @@ Outcome:
   A future training-developed directional member may add contradiction as a
   positive signal without allowing support to lower the independent
   intent/belief score, but the present contradiction coverage is too sparse.
+
+## P86: Continuous Action-Report Specialist
+
+Status: empty-summary margins selected; frozen confirmation passed.
+
+Question: can the existing observable action-report route recover Insider
+Trading ranking signal under the AUROC-first metric without training another
+adapter or generating reasoning at deployment?
+
+Frozen design:
+
+- Use the existing router that requires evidence of an executed action, an
+  explicit report/disclosure contract, and a final recipient-facing report.
+- Keep the exact Phoenix rank-16 adapter, action prompt, 4,500-character
+  head/tail renderer, and 2,048-token deployment-equivalent left truncation.
+- Compare ordinary Phoenix direct margins with action-prompt direct,
+  empty-summary, and post-reasoning margins. Retain generated binary decisions
+  only as a diagnostic.
+- Split the frozen 200-row action artifact 100/100 within label. Select on
+  development only for at least `+0.05` aggregate AUROC and no evaluable source
+  family losing more than `0.05` AUROC. Run only the selected arm on
+  confirmation.
+- This is a continuous-readout confirmation, not a pristine prompt
+  confirmation: the frozen action prompt already had binary evaluations on
+  these public rows.
+
+Outcome:
+
+- Development Phoenix, generated binary, action direct, empty-summary, and
+  post-reasoning AUROCs were `0.5030`, `0.6200`, `0.7610`, **`0.7974`**, and
+  `0.7056`. Empty-summary gained `+0.2944` and improved every evaluable source
+  family, so it passed the frozen selection.
+- Confirmation reproduced the ranking gain: selected empty-summary reached
+  **`0.8148`** AUROC versus `0.4158` Phoenix and `0.7800` generated binary.
+  Gemma, Llama, and Mistral gained `+0.3143`, `+0.4130`, and `+0.5110` AUROC;
+  Kimi was one-class in both halves.
+- Selected scores were continuous: 73/100 and 83/100 unique on development
+  and confirmation, with zero missing label logits. The confirmation margin
+  pass took `13.9s` after model startup.
+- One development prompt exceeded the input cap (3,358 tokens) and used the
+  frozen final-2,048-token truncation; confirmation had no truncated rows.
+  Router coverage remained 100/100 in both halves.
+- Retain the empty-summary action specialist for a Phoenix deployment port.
+  Routed action rows should use this prompt exclusively, remain on the same
+  Phoenix adapter/session, and be excluded from the reasoning-intent blend.
+  Require route/parity tests and an NDIF smoke before claiming deployment.

@@ -223,6 +223,30 @@ margin. This is still an OOD-only transfer feature: the frozen route matches
 zero known competition rows. Do not broaden the route from leaderboard
 behavior or add the failed forced-choice trigger.
 
+### AUROC-first action-report evaluation
+
+The frozen action prompt was subsequently ported to continuous label margins
+using the unchanged Phoenix rank-16 adapter. The existing 200-row Insider
+Trading artifact was split 100/100 within label. This supplies a new
+continuous-readout selection and confirmation, not a pristine prompt holdout:
+the action wording already had binary evidence on these public rows.
+
+A100 development job `30298917` scored ordinary Phoenix direct, generated
+binary, action direct, action empty-summary, and action post-reasoning at
+AUROC `0.5030`, `0.6200`, `0.7610`, **`0.7974`**, and `0.7056`.
+Empty-summary passed the frozen `+0.05` aggregate gain and source-family
+preservation gates. Confirmation job `30298919` reproduced `0.8148` AUROC
+versus `0.4158` Phoenix and `0.7800` generated binary, with 83 unique scores
+and zero missing logits. Every source family with both labels improved.
+
+The selected path requires no reasoning generation and no new adapter: routed
+rows substitute the action prompt plus empty `<reasoning_summary>` scaffold
+inside the existing Phoenix-backed margin pass. The evaluator exactly
+left-truncates prompts to the final 2,048 tokens; one development row required
+this and confirmation required none. Before adding it to the sole notebook,
+keep the action route exclusive from the intent member and run exact route,
+ordinary-score parity, and NDIF execution checks.
+
 This experiment tests whether a very small external-data mixture broadens the
 Phoenix student beyond factual instructed/Qwen-varied deception without
 overwriting its competition calibration. It uses four Liars' Bench categories
