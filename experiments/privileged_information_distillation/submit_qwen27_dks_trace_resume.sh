@@ -1,5 +1,6 @@
 #!/bin/bash
-# Submit the frozen full-trace Qwen-27B D/K/S distillation workflow.
+# Resume after the complete 4,096-token generation artifact, retrying only
+# incomplete rows before cache construction and student training.
 
 set -euo pipefail
 
@@ -16,26 +17,33 @@ submit_id() {
   printf '%s' "${submitted%%;*}"
 }
 
-GENERATION_METHOD="qwen27b_reason_ensemble_dks_member4096_softtrain_v1"
+EXPORT_WORKTREE="ALL,QWEN27_DKS_WORKTREE=${WORKTREE_ROOT}"
+RETRY_METHOD="qwen27b_reason_ensemble_dks_member8192_softtrain_retry_v1"
 CACHE_METHOD="qwen27b_dks_full_trace_soft_teacher_v1"
 STUDENT_METHOD="qwen9b_pid_qwen27_dks_fulltrace_soft90_v1"
 SMOKE_METHOD="${STUDENT_METHOD}_smoke"
-EXPORT_WORKTREE="ALL,QWEN27_DKS_WORKTREE=${WORKTREE_ROOT}"
 
-GENERATION="$(submit_id \
-  --job-name=aq-q27-dks-traces \
-  --time=03:50:00 \
+PREP="$(submit_id \
+  --export="${EXPORT_WORKTREE}" \
+  "${WORKTREE_ROOT}/experiments/privileged_information_distillation/run_qwen27_dks_retry_split.sh")"
+
+RETRY="$(submit_id \
+  --job-name=aq-q27-dks-retry \
+  --time=02:00:00 \
+  --dependency="afterok:${PREP}" \
   "${PROJECT_ROOT}/experiments/blackbox/run_judge.sh" \
   --config-path "${WORKTREE_ROOT}/configs/judge_ensemble" \
   --config-name blackbox_reasoning_qwen27b_ensemble_dks_member4096_v1 \
-  "method=${GENERATION_METHOD}" \
+  "method=${RETRY_METHOD}" \
   split=train \
-  +dataset_name_contains=varied-deception \
-  judge.max_prompt_chars=3000)"
+  "splits_dir=results/blackbox/${RETRY_METHOD}/retry_split" \
+  judge.max_prompt_chars=3000 \
+  judge.max_tokens=8192 \
+  judge.max_model_len=12288)"
 
 CACHE="$(submit_id \
   --job-name=aq-q27-dks-cache \
-  --dependency="afterok:${GENERATION}" \
+  --dependency="afterok:${RETRY}" \
   --export="${EXPORT_WORKTREE}" \
   "${WORKTREE_ROOT}/experiments/privileged_information_distillation/run_qwen27_dks_trace_target_build.sh")"
 
@@ -76,7 +84,8 @@ EVAL="$(submit_id \
   --continuous-margin-condition reasoning \
   --aggregate-max)"
 
-printf 'qwen27_trace_generation=%s\n' "${GENERATION}"
+printf 'retry_split=%s\n' "${PREP}"
+printf 'qwen27_trace_retry=%s\n' "${RETRY}"
 printf 'trace_cache=%s\n' "${CACHE}"
 printf 'student_smoke=%s\n' "${SMOKE}"
 printf 'student_full=%s\n' "${STUDENT}"

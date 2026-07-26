@@ -140,6 +140,16 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         load_jsonl(args.generations),
         ("dataset", "index", "ensemble_member"),
     )
+    retry_records = (
+        load_jsonl(args.retry_generations)
+        if args.retry_generations is not None
+        else []
+    )
+    retry_generations = keyed(
+        retry_records,
+        ("dataset", "index", "ensemble_member"),
+    )
+    generations.update(retry_generations)
     distributions = keyed(
         load_jsonl(args.direct_distributions),
         ("dataset", "index", "ensemble_member"),
@@ -259,6 +269,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
 
     audit = {
         "base_rows": len(base_rows),
+        "retry_member_targets": len(retry_generations),
         "complete_rows": len(complete_keys),
         "train_rows": len(train_keys),
         "train_member_targets": len(train_records),
@@ -286,6 +297,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--generations", type=Path, required=True)
+    parser.add_argument("--retry-generations", type=Path)
     parser.add_argument("--generation-config", type=Path, required=True)
     parser.add_argument("--direct-distributions", type=Path, required=True)
     parser.add_argument("--base-teacher", type=Path, required=True)

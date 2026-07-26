@@ -4968,7 +4968,8 @@ Frozen student:
 - Train a new rank-16/alpha-32 LoRA on `Qwen/Qwen3.5-9B`; do not initialize
   from Phoenix or the earlier privileged-summary adapter.
 - Use one epoch of AdamW at `5e-5`, effective batch size 32, and maximum
-  sequence length 8,192.
+  sequence length 12,288. This accommodates selective 8,192-token retries for
+  initially truncated teacher traces without truncating their completion.
 - Apply ordinary completion-only next-token loss to the entire member trace.
   Add weight-1 KL from the student's seven logits after the same prompt plus
   `Rating:` to the teacher's normalized 1--7 probabilities.

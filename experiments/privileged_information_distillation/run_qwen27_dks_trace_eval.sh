@@ -24,6 +24,6 @@ export HF_HOME="${HF_HOME:-${SCRATCH:-/scratch/${USER}}/.huggingface}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
 export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"
 
-WORKTREE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+WORKTREE_ROOT="${QWEN27_DKS_WORKTREE:?missing QWEN27_DKS_WORKTREE}"
 python "${WORKTREE_ROOT}/experiments/privileged_information_distillation/evaluate_student_sft.py" \
   "$@"
