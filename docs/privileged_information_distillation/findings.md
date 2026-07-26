@@ -2569,3 +2569,29 @@ direct-CE/rank results from their separate Lambda session. Do not run local
 test, promote the adapter, or tune soft-target normalization, temperature,
 weight, or data selection on this validation result. The dense teacher's better
 ordering did not transfer through this auxiliary direct-margin objective.
+
+## Frozen full-trace Qwen-27B D/K/S follow-up (2026-07-26)
+
+The direct-only P91 loss barely changed the student's ranking and did not teach
+the teacher's inference procedure. The next matched experiment therefore uses a
+new rank-16 adapter and distills each Qwen3.5-27B D/K/S member end to end.
+
+- Generate all three 4,096-token-budget member traces for the 2,877 usable
+  varied-deception rows, using the exact D/K/S prompts and 3,000-character
+  context view.
+- Retain a row only when all three completions parse, close `</think>`, fit the
+  4,096-token target cap, and have a complete audited direct distribution.
+- Preserve each full completion verbatim. Do not inject the ground-truth label,
+  filter teacher/label conflicts, or replace the generated rating.
+- Split whole dataset/index rows 90/10 within dataset/label strata. Every
+  selected row contributes exactly three member-specific training examples.
+- Train Qwen3.5-9B for one epoch with AdamW `5e-5`, rank 16/alpha 32, effective
+  batch size 32, completion SFT, and weight-1 seven-way KL at direct `Rating:`.
+- Evaluate the held-out rows with all three prompts. Report max-aggregated
+  generated-rating AUROC and max-aggregated direct expected-rating AUROC,
+  alongside member results, parse/length failures, score uniqueness, ties, and
+  per-dataset AUROC.
+
+This is a reasoning-imitation ablation, not a continuation of P91's binary
+normalization sweep. Do not choose members or remove label-conflicting traces
+after inspecting held-out results.

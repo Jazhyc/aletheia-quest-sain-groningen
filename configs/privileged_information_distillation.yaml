@@ -99,6 +99,7 @@ student:
     pairwise_loss_weight: 0.0
     pairwise_temperature: 1.0
     soft_loss_weight: 0.0
+    ordinal_soft_loss_weight: 0.0
     paired_batching: false
 
 hydra:

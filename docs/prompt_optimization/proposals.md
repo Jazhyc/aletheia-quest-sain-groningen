@@ -4941,3 +4941,49 @@ Cache and student launch:
   Lambda session. The `+0.000060` matched-session gain fails the frozen
   `+0.005` promotion gate by two orders of magnitude. Do not evaluate local
   test, tune the normalization/loss weight, or promote this soft student.
+
+## P92: Full Qwen-27B D/K/S Trace and Ordinal Soft Distillation
+
+Question: does the stronger Qwen3.5-27B teacher transfer only when the student
+learns its full reasoning trajectories, rather than receiving an auxiliary
+binary boundary target beside unrelated GPT-OSS summaries?
+
+Frozen data contract:
+
+- Use the exact details, known-fact, and scrutiny prompts from the Qwen-27B
+  DKS4096 judge. Generate each member independently on all 2,877 usable
+  varied-deception training rows with the existing 3,000-character view.
+- The target is the complete raw Qwen-27B completion, including the native
+  `<think>...</think>` block, visible answer, and final `Rating:` line.
+  Ground-truth labels must not be written into, substituted into, or used to
+  filter these completions.
+- Pair every generated member trace with the same member's audited direct
+  seven-way rating distribution. Do not max members before training.
+- Require complete three-member coverage per dataset/index. Make a stable
+  90/10 row-level holdout within dataset/label strata so all three traces for a
+  row remain together.
+
+Frozen student:
+
+- Train a new rank-16/alpha-32 LoRA on `Qwen/Qwen3.5-9B`; do not initialize
+  from Phoenix or the earlier privileged-summary adapter.
+- Use one epoch of AdamW at `5e-5`, effective batch size 32, and maximum
+  sequence length 8,192.
+- Apply ordinary completion-only next-token loss to the entire member trace.
+  Add weight-1 KL from the student's seven logits after the same prompt plus
+  `Rating:` to the teacher's normalized 1--7 probabilities.
+- Keep all three member examples, including teacher/label conflicts. Labels
+  are retained only for the row-stratified split and evaluation.
+
+Evaluation:
+
+- First audit a 96-target smoke run for finite losses, memory safety, and
+  complete adapter output before launching the full adapter.
+- On the frozen row holdout, run all three prompts and max aggregate them.
+  Report generated-rating and direct expected-rating macro/per-dataset AUROC,
+  instructed/varied slices where present, parse and length failures, unique
+  scores, and cross-label ties.
+- The direct expected-rating path is the deployment-relevant no-reasoning
+  readout; generated ratings diagnose whether the student actually learned to
+  execute the distilled chains. Do not select between those paths or the three
+  members post hoc.

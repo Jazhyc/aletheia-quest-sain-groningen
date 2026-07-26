@@ -76,6 +76,11 @@ class CompletionOnlyCollator:
                     [feature["soft_target"] for feature in features],
                     dtype=torch.float32,
                 )
+            if "soft_rating_probs" in features[0]:
+                batch["soft_rating_targets"] = torch.tensor(
+                    [feature["soft_rating_probs"] for feature in features],
+                    dtype=torch.float32,
+                )
         return batch
 
 
@@ -84,6 +89,7 @@ REASONING_BLOCK_END = "\n</assistant_reasoning>"
 SOURCE_PROMPT_TEMPLATE_KEY = "_source_prompt_template"
 LABEL_ONLY_TARGET_KEY = "_label_only_target"
 DIRECT_PREDICTION_PREFIX = "Prediction:"
+DIRECT_RATING_PREFIX = "Rating:"
 SOFT_TARGET_KEY = "_soft_target"
 
 
@@ -99,6 +105,21 @@ def binary_token_ids(tokenizer: Any) -> list[int]:
         ids.append(int(encoded[0]))
     if len(set(ids)) != 2:
         raise ValueError(f"binary targets must have distinct token ids, got {ids}")
+    return ids
+
+
+def rating_token_ids(tokenizer: Any) -> list[int]:
+    """Return distinct single-token ids for literal ratings one through seven."""
+    ids = []
+    for text in map(str, range(1, 8)):
+        encoded = tokenizer.encode(text, add_special_tokens=False)
+        if len(encoded) != 1:
+            raise ValueError(
+                f"rating target {text!r} tokenized as {encoded}, expected one token"
+            )
+        ids.append(int(encoded[0]))
+    if len(set(ids)) != 7:
+        raise ValueError(f"rating targets must have distinct token ids, got {ids}")
     return ids
 
 
@@ -190,6 +211,34 @@ def soft_binary_distillation_loss(
         raise ValueError("soft targets must have shape (batch,)")
     margins = binary_logits[:, 1].float() - binary_logits[:, 0].float()
     return F.binary_cross_entropy_with_logits(margins, soft_targets.float())
+
+
+def soft_rating_distillation_loss(
+    rating_logits: torch.Tensor,
+    soft_targets: torch.Tensor,
+) -> torch.Tensor:
+    """Match a seven-way teacher rating distribution at the direct boundary."""
+    if rating_logits.ndim != 2 or rating_logits.shape[1] != 7:
+        raise ValueError("rating logits must have shape (batch, 7)")
+    if soft_targets.shape != rating_logits.shape:
+        raise ValueError("soft rating targets must have shape (batch, 7)")
+    targets = soft_targets.float()
+    if not torch.isfinite(targets).all():
+        raise ValueError("soft rating targets must be finite")
+    if (targets < 0).any():
+        raise ValueError("soft rating targets must be non-negative")
+    if not torch.allclose(
+        targets.sum(dim=1),
+        torch.ones(targets.shape[0], device=targets.device),
+        atol=1e-5,
+        rtol=1e-5,
+    ):
+        raise ValueError("soft rating targets must normalize row-wise")
+    return F.kl_div(
+        F.log_softmax(rating_logits.float(), dim=-1),
+        targets,
+        reduction="batchmean",
+    )
 
 
 def attach_soft_teacher_targets(
@@ -623,6 +672,7 @@ def tokenize_record(
     reasoning_dropout_probability: float = 0.0,
     reasoning_dropout_seed: int = 0,
     include_direct_target: bool = False,
+    direct_target_prefix: str = DIRECT_PREDICTION_PREFIX,
     dataset_id: int | None = None,
 ) -> dict[str, Any]:
     raw_prompt, _ = student_prompt_with_reasoning_dropout(
@@ -679,7 +729,7 @@ def tokenize_record(
         if dataset_id is None:
             raise ValueError("dataset_id is required for direct-target training")
         direct_ids = tokenizer.encode(
-            prompt + DIRECT_PREDICTION_PREFIX,
+            prompt + direct_target_prefix,
             add_special_tokens=False,
         )[-max_length:]
         if not direct_ids:
@@ -691,6 +741,11 @@ def tokenize_record(
         })
         if SOFT_TARGET_KEY in record:
             tokenized["soft_target"] = float(record[SOFT_TARGET_KEY])
+        if "soft_rating_probs" in record:
+            probabilities = record["soft_rating_probs"]
+            tokenized["soft_rating_probs"] = [
+                float(probabilities[str(rating)]) for rating in range(1, 8)
+            ]
     return tokenized
 
 
@@ -713,20 +768,37 @@ def main(cfg: DictConfig) -> None:
     soft_loss_weight = float(OmegaConf.select(
         cfg, "student.training.soft_loss_weight", default=0.0
     ))
+    ordinal_soft_loss_weight = float(OmegaConf.select(
+        cfg, "student.training.ordinal_soft_loss_weight", default=0.0
+    ))
     pairwise_temperature = float(OmegaConf.select(
         cfg, "student.training.pairwise_temperature", default=1.0
     ))
     paired_batching = bool(OmegaConf.select(
         cfg, "student.training.paired_batching", default=False
     ))
-    if direct_loss_weight < 0 or pairwise_loss_weight < 0 or soft_loss_weight < 0:
+    if any(weight < 0 for weight in (
+        direct_loss_weight,
+        pairwise_loss_weight,
+        soft_loss_weight,
+        ordinal_soft_loss_weight,
+    )):
         raise ValueError("auxiliary loss weights must be non-negative")
+    if ordinal_soft_loss_weight and (
+        direct_loss_weight or pairwise_loss_weight or soft_loss_weight
+    ):
+        raise ValueError(
+            "ordinal soft loss cannot be combined with binary auxiliary losses"
+        )
     if pairwise_temperature <= 0:
         raise ValueError("student.training.pairwise_temperature must be positive")
     if pairwise_loss_weight and not paired_batching:
         raise ValueError("pairwise loss requires student.training.paired_batching=true")
     uses_direct_forward = bool(
-        direct_loss_weight or pairwise_loss_weight or soft_loss_weight
+        direct_loss_weight
+        or pairwise_loss_weight
+        or soft_loss_weight
+        or ordinal_soft_loss_weight
     )
 
     class AuxiliarySFTTrainer(Trainer):
@@ -752,6 +824,7 @@ def main(cfg: DictConfig) -> None:
             binary_labels = inputs.pop("binary_labels", None)
             dataset_ids = inputs.pop("dataset_ids", None)
             soft_targets = inputs.pop("soft_targets", None)
+            soft_rating_targets = inputs.pop("soft_rating_targets", None)
             outputs = model(**inputs)
             loss = outputs.loss
             if uses_direct_forward:
@@ -774,17 +847,19 @@ def main(cfg: DictConfig) -> None:
                 )
                 next_logits = direct_outputs.logits[row_indices, last_positions]
                 label_ids = torch.tensor(
-                    self.binary_ids,
+                    self.direct_target_ids,
                     device=next_logits.device,
                     dtype=torch.long,
                 )
-                binary_logits = next_logits.index_select(-1, label_ids)
+                direct_logits = next_logits.index_select(-1, label_ids)
                 if direct_loss_weight:
                     loss = loss + direct_loss_weight * F.cross_entropy(
-                        binary_logits.float(), binary_labels
+                        direct_logits.float(), binary_labels
                     )
                 if pairwise_loss_weight:
-                    margins = binary_logits[:, 1].float() - binary_logits[:, 0].float()
+                    margins = (
+                        direct_logits[:, 1].float() - direct_logits[:, 0].float()
+                    )
                     loss = loss + pairwise_loss_weight * pairwise_logistic_loss(
                         margins,
                         binary_labels,
@@ -797,8 +872,21 @@ def main(cfg: DictConfig) -> None:
                             "soft targets are missing from training batch"
                         )
                     loss = loss + soft_loss_weight * soft_binary_distillation_loss(
-                        binary_logits,
+                        direct_logits,
                         soft_targets,
+                    )
+                if ordinal_soft_loss_weight:
+                    if soft_rating_targets is None:
+                        raise ValueError(
+                            "soft rating targets are missing from training batch"
+                        )
+                    loss = (
+                        loss
+                        + ordinal_soft_loss_weight
+                        * soft_rating_distillation_loss(
+                            direct_logits,
+                            soft_rating_targets,
+                        )
                     )
             return (loss, outputs) if return_outputs else loss
 
@@ -976,7 +1064,13 @@ def main(cfg: DictConfig) -> None:
     tokenizer = AutoTokenizer.from_pretrained(str(cfg.student.model))
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
-    direct_binary_ids = binary_token_ids(tokenizer) if uses_direct_forward else None
+    direct_target_ids = None
+    direct_target_prefix = DIRECT_PREDICTION_PREFIX
+    if ordinal_soft_loss_weight:
+        direct_target_ids = rating_token_ids(tokenizer)
+        direct_target_prefix = DIRECT_RATING_PREFIX
+    elif uses_direct_forward:
+        direct_target_ids = binary_token_ids(tokenizer)
     reasoning_dropout_probability = float(
         OmegaConf.select(
             cfg, "student.reasoning_dropout_probability", default=0.0
@@ -1030,6 +1124,7 @@ def main(cfg: DictConfig) -> None:
             reasoning_dropout_probability=reasoning_dropout_probability,
             reasoning_dropout_seed=reasoning_dropout_seed,
             include_direct_target=uses_direct_forward,
+            direct_target_prefix=direct_target_prefix,
             dataset_id=dataset_id_by_name[str(record.get("dataset", ""))],
         )
         for record in records
@@ -1054,6 +1149,7 @@ def main(cfg: DictConfig) -> None:
         f"direct_loss_weight={direct_loss_weight} "
         f"pairwise_loss_weight={pairwise_loss_weight} "
         f"soft_loss_weight={soft_loss_weight} "
+        f"ordinal_soft_loss_weight={ordinal_soft_loss_weight} "
         f"soft_teacher_artifact={soft_teacher_artifact} "
         f"pairwise_temperature={pairwise_temperature} "
         f"paired_batching={paired_batching}"
@@ -1128,7 +1224,7 @@ def main(cfg: DictConfig) -> None:
         train_dataset=dataset,
         data_collator=CompletionOnlyCollator(tokenizer.pad_token_id),
     )
-    trainer.binary_ids = direct_binary_ids
+    trainer.direct_target_ids = direct_target_ids
     trainer.train()
     output_dir.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(output_dir)
