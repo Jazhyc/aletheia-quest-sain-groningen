@@ -300,3 +300,28 @@ those rows from intent has no effect on the local projection and avoids an
 unvalidated specialist interaction. A one-row trace-bearing NDIF notebook test
 passed end to end in `221.82s`, including separate Phoenix and intent remote
 sessions.
+
+## Phoenix Wright 4.3 exclusive action-report route
+
+Phoenix 4.3 adds P86's continuous action-report specialist without another
+model or adapter. The exact executed-action/report-contract router selects the
+frozen action prompt and an empty `<reasoning_summary>` margin on the existing
+Phoenix rank-16 adapter. Ordinary and action prompts are scored together in the
+same Phoenix pass. Action rows are excluded from the resolved-intent blend, and
+the base-Qwen HP-KR route retains precedence and remains exclusive.
+
+On the frozen 100-row development half, the action empty-summary margin scored
+`0.7974` AUROC versus `0.5030` for Phoenix direct. Frozen confirmation reproduced
+`0.8148` versus `0.4158`, with 83 unique scores, zero missing logits, and positive
+AUROC changes for every source family with both labels. The action wording had
+prior binary evidence on these public rows, so this is a new continuous-readout
+confirmation rather than a pristine prompt confirmation.
+
+A label-blind audit found zero action-route matches in all 8,216 known
+competition train/validation/test rows. Phoenix 4.3 therefore preserves the
+entire known 4.2 score vector and targets only possible hidden OOD coverage. An
+exact three-row synthetic NDIF notebook smoke activated one action route and no
+harm or intent routes, completed in `69.52s`, and gave two duplicated ordinary
+rows identical scores with absolute delta `0.0`. The action score itself is not
+an accuracy measurement; the smoke establishes remote execution, route
+selection, and ordinary-path parity.

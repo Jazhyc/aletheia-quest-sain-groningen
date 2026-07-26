@@ -34,6 +34,14 @@ conversations. Before submission, port the empty-summary prompt substitution
 into the existing Phoenix-backed session, exclude routed rows from the intent
 member, and run an exact NDIF route/parity rehearsal.
 
+Phoenix Wright 4.3 now implements that port in the sole notebook
+`submission/phoenix_wright_v4_3.ipynb`. Action and ordinary prompts share the
+same rank-16 Phoenix pass; action rows are excluded from the intent member, and
+the base-Qwen HP-KR route retains precedence. A label-blind audit matched zero
+of all 8,216 known competition rows. The synthetic three-row NDIF notebook
+rehearsal completed in `69.52s`, activated exactly one action route, and
+reproduced two duplicate ordinary scores with absolute delta `0.0`.
+
 ## 2026-07-26: Base-Qwen bounded database planner
 
 P85 used hosted base `Qwen/Qwen3.5-9B` as a semantic planner over at most 12

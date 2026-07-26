@@ -4570,3 +4570,8 @@ Outcome:
   Routed action rows should use this prompt exclusively, remain on the same
   Phoenix adapter/session, and be excluded from the reasoning-intent blend.
   Require route/parity tests and an NDIF smoke before claiming deployment.
+- Phoenix Wright 4.3 implements this exact design. A full local split audit
+  matched zero of 8,216 known competition rows, so the known 4.2 score vector
+  remains unchanged. A synthetic three-row NDIF notebook smoke activated one
+  action route, excluded intent despite an available reasoning trace, and
+  preserved duplicate ordinary scores exactly (`0.0` absolute delta).

@@ -20,9 +20,19 @@ from experiments.blackbox.run_judge import (
     load_split_config,
 )
 from experiments.liars_bench_distillation.compose_prompt_router import route_matches
+from experiments.liars_bench_distillation.router import (
+    is_action_report_conversation,
+)
 
 
-ROUTES = ("knowledge", "choice", "union")
+ROUTES = ("knowledge", "choice", "union", "action")
+
+
+def matches(messages: Any, route: str) -> bool:
+    """Dispatch legacy prompt routes plus the Phoenix 4.3 action route."""
+    if route == "action":
+        return is_action_report_conversation(messages)
+    return route_matches(messages, route)
 
 
 def coverage(examples: list[dict[str, Any]], route: str) -> dict[str, Any]:
@@ -30,7 +40,7 @@ def coverage(examples: list[dict[str, Any]], route: str) -> dict[str, Any]:
     keys = []
     datasets: Counter[str] = Counter()
     for example in examples:
-        if route_matches(example["messages"], route):
+        if matches(example["messages"], route):
             keys.append([str(example["dataset"]), example["index"]])
             datasets[str(example["dataset"])] += 1
     return {

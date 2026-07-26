@@ -247,6 +247,13 @@ this and confirmation required none. Before adding it to the sole notebook,
 keep the action route exclusive from the intent member and run exact route,
 ordinary-score parity, and NDIF execution checks.
 
+Phoenix Wright 4.3 completes that deployment. The action and ordinary prompts
+share one Phoenix rank-16 pass, while HP-KR keeps exclusive precedence and
+action rows cannot enter the intent blend. The action router matches zero of
+all 8,216 known competition rows. A synthetic three-row NDIF notebook run
+activated exactly one action route, completed in `69.52s`, and returned
+identical scores for duplicate ordinary rows.
+
 This experiment tests whether a very small external-data mixture broadens the
 Phoenix student beyond factual instructed/Qwen-varied deception without
 overwriting its competition calibration. It uses four Liars' Bench categories

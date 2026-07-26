@@ -51,8 +51,6 @@ from phoenix_wright_v4 import (
     MEMBER_NAMES,
     binary_token_ids,
     blend_intent_route_scores,
-    build_action_empty_prompt,
-    build_direct_prompt,
     build_epistemic_empty_prompt,
     build_exclusive_route_flags,
     build_intent_empty_prompt,
@@ -334,6 +332,15 @@ util.write_submission(
 )"""
         ),
     ]
+    cell_ids = (
+        "phoenix-v4-3-overview",
+        "phoenix-v4-3-configuration",
+        "phoenix-v4-3-routes-and-models",
+        "phoenix-v4-3-scoring",
+        "phoenix-v4-3-output",
+    )
+    for cell, cell_id in zip(notebook["cells"], cell_ids, strict=True):
+        cell["id"] = cell_id
     nbformat.write(notebook, OUTPUT)
     print(OUTPUT)
 
