@@ -3691,3 +3691,10 @@ zero missing requested token IDs. The 822 max-aggregated scores again have 819
 unique values and three ties. P91 therefore authorizes direct dense-27B D/K/S
 training targets for the 2,880 varied-deception training rows and a matched
 Qwen-9B reasoning-summary SFT student with an auxiliary soft-target loss.
+
+The authorized cache run filters `dry.train.yaml` by the exact
+`varied-deception` substring, then evaluates all three P91 members over the
+resulting nine units and 2,880 rows. Promotion to student training requires
+8,640 unique member records, complete three-member row coverage, zero parse
+errors or missing logits, and normalized distributions. Score normalization
+must remain label-blind.

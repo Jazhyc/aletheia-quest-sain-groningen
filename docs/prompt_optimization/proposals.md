@@ -4874,3 +4874,17 @@ Audit result and decision:
   training rows, preserving dataset/index/member identity. Then train the
   selected varied-only GPT-OSS reasoning-summary SFT recipe with one added
   soft-target loss. Do not include teacher reasoning or replace hard labels.
+
+Training-cache contract:
+
+- Filter the existing `dry.train.yaml` declarations by the exact substring
+  `varied-deception`, yielding nine dataset units and 2,880 rows. Score all
+  three direct D/K/S members in member-major order with the audited P91 config.
+- Require 8,640 unique dataset/index/member records, zero parse errors, zero
+  missing requested logits, normalized seven-way distributions, and complete
+  three-member coverage for every row. Preserve authoritative labels only for
+  identity/audit; do not use them to transform the teacher scores.
+- Aggregate each row by the same maximum expected-rating score used at
+  validation and retain the selected member's normalized ordinal distribution.
+  Compute any centering/temperature statistics from training scores without
+  labels and record them in the derived cache manifest.

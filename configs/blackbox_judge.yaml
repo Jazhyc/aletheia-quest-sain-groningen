@@ -10,6 +10,8 @@ splits_dir: dev_splits
 output_dir: results/blackbox
 leaderboard: ${output_dir}/leaderboard.md
 limit: null
+# Optional label-blind dataset-name slice for train-cache generation.
+dataset_name_contains: null
 retrieval_cache: null
 seed: 0
 

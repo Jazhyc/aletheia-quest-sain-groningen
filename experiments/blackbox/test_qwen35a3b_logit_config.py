@@ -8,6 +8,7 @@ from omegaconf import OmegaConf
 
 from experiments.blackbox.run_judge import (
     OfflineVllmRatingJudge,
+    filter_dataset_configs,
     missing_requested_token_ids,
     normalize_rating_probs,
     strip_terminal_generated_rating,
@@ -245,3 +246,24 @@ def test_direct_logit_judge_records_soft_distribution_and_missing_ids() -> None:
     assert len(judge.generations) == 1
     assert judge.generations[0]["missing_rating_token_ids"] == [13]
     assert abs(sum(judge.generations[0]["rating_probs"].values()) - 1.0) < 1e-12
+
+
+def test_dataset_name_filter_selects_varied_slice_and_rejects_empty() -> None:
+    datasets = [
+        SimpleNamespace(name="dev-instructed-deception-a"),
+        SimpleNamespace(name="dev-varied-deception-a"),
+        SimpleNamespace(name="dev-varied-deception-b"),
+    ]
+
+    selected = filter_dataset_configs(datasets, "varied-deception")
+
+    assert [dataset.name for dataset in selected] == [
+        "dev-varied-deception-a",
+        "dev-varied-deception-b",
+    ]
+    try:
+        filter_dataset_configs(datasets, "missing-slice")
+    except ValueError as exc:
+        assert "matched no datasets" in str(exc)
+    else:
+        raise AssertionError("empty dataset filter should fail")

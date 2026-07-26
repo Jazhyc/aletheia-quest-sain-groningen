@@ -84,6 +84,21 @@ def load_split_config(path: Path, base: Path) -> list[DatasetConfig]:
     return datasets
 
 
+def filter_dataset_configs(
+    datasets: list[DatasetConfig],
+    name_contains: str | None,
+) -> list[DatasetConfig]:
+    """Select a declared dataset-name slice and fail on an empty match."""
+    if name_contains is None:
+        return datasets
+    selected = [dataset for dataset in datasets if name_contains in dataset.name]
+    if not selected:
+        raise ValueError(
+            f"dataset_name_contains={name_contains!r} matched no datasets"
+        )
+    return selected
+
+
 def load_label_subset(cfg: DatasetConfig) -> pd.DataFrame:
     uri = Path(cfg.labels_uri)
     if cfg.labels_uri.endswith(".csv") and uri.exists():
@@ -1537,7 +1552,14 @@ def main(cfg: DictConfig) -> None:
     references = load_retrieval_cache(
         None if retrieval_cache is None else resolve_path(str(retrieval_cache), original_cwd)
     )
-    datasets = load_split_config(split_config, original_cwd)
+    datasets = filter_dataset_configs(
+        load_split_config(split_config, original_cwd),
+        (
+            None
+            if OmegaConf.select(cfg, "dataset_name_contains", default=None) is None
+            else str(cfg.dataset_name_contains)
+        ),
+    )
     few_shot_prefix = build_few_shot_prefix(
         resolve_path(str(cfg.splits_dir), original_cwd),
         split=str(cfg.shots.split),
