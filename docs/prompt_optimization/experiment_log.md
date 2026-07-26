@@ -3364,3 +3364,24 @@ the resolved prompt on trace-bearing rows, blend only the continuous `score`,
 and retain Phoenix's separate hard `deceptive` decision. It is not yet an
 official-distribution result: all local trace-bearing units are Qwen-family,
 and the earlier lexical reasoning ensemble failed to transfer.
+
+### P83 rank-1 resolved-intent margins (2026-07-26)
+
+The historical rank-1/alpha-2 resolved-intent adapter was evaluated as a
+continuous specialist instead of generating its trained reasoning summary.
+RTX Pro 6000 job `30297707` scored direct and empty-summary `0|1` margins on
+validation with zero missing logits. Standalone intent AUROC was `0.89125`
+direct and `0.88597` empty, versus `0.84889` for P82's unadapted-Qwen member.
+
+For the actual Phoenix ensemble, the fixed empty-summary log-odds mean won:
+trace-unit AUROC improved `0.86431 -> 0.90111`, versus `0.89750` for the direct
+log-odds mean and `0.88514` for P82's selected base-Qwen blend. It produced 358
+unique scores over 360 rows and zero cross-label ties. With no-trace units
+unchanged, full validation macro projects `0.93815 -> 0.95393`.
+
+The selected empty-summary pass took `24.03s` over all 822 rows; deployment
+would query only 360 trace-bearing rows. A retrospective combination with the
+adapter's historical generated binary decisions also improved eight of nine
+units on both validation and test, reaching varied AUROC `0.89792` and
+`0.90139`, but this is diagnostic rather than a frozen continuous test.
+Job `30297739` runs only the validation-selected empty-summary margin on test.

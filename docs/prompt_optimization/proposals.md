@@ -4397,3 +4397,38 @@ Validation outcome:
   against Phoenix 4.1 on a complete NDIF unit before submission. This local
   confirmation is Qwen-only and does not erase the earlier reasoning n-gram
   ensemble's official transfer failure.
+
+## P83: Rank-1 Resolved-Intent Label Margins
+
+Status: validation selected empty-summary margins; frozen test queued.
+
+Question: does the existing rank-1 resolved-intent adapter improve the
+AUROC-first P82 ensemble when its label margins are read without generating a
+reasoning summary?
+
+Frozen comparison:
+
+- Reuse the exact `qwen9b_heterogeneous_resolved_intent_rank1_v1` rank-1/alpha-2
+  adapter trained on P66's 288-row trace-bearing manifest.
+- Compare direct `Prediction:` and an empty `<reasoning_summary>` scaffold on
+  validation. Both constrain the next token to `0|1`; neither generates
+  reasoning.
+- Combine each continuous intent score with Phoenix 4.1 direct margins using
+  the same fixed probability and log-odds means used by P82. Select on
+  trace-unit macro AUROC and keep no-trace rows and the hard `deceptive` column
+  unchanged.
+
+Validation outcome:
+
+- Job `30297707` returned zero missing margins. Direct and empty-summary intent
+  AUROC were `0.89125` and `0.88597`, both materially above base Qwen's
+  `0.84889`.
+- Empty-summary plus Phoenix log-odds mean was best at **`0.90111`**, improving
+  Phoenix `+0.03681` and P82's base-Qwen blend `+0.01597`. Direct log-odds mean
+  reached `0.89750`.
+- The selected blend emitted 358 unique scores over 360 rows with zero
+  cross-label ties. Keeping 12 no-trace units unchanged projects full
+  validation macro AUROC `0.93815 -> 0.95393`.
+- Empty-summary scoring took `24.03s` for all 822 rows; a submission would
+  query only the 360 trace-bearing rows. Frozen test job `30297739` evaluates
+  the selected condition only.

@@ -114,3 +114,37 @@ from `0.93423` to **`0.94143`** (`+0.00720`).
 This supports an NDIF implementation/benchmark, not immediate leaderboard
 promotion: every local trace-bearing unit is Qwen-family, and the earlier
 reasoning n-gram ensemble failed to transfer to the official distribution.
+
+## Rank-1 intent-adapter follow-up
+
+The historical `qwen9b_heterogeneous_resolved_intent_rank1_v1` adapter is a
+rank-1/alpha-2 LoRA trained on 288 trace-bearing rows under the same resolved
+intent objective. Validation job `30297707` compared direct and empty-summary
+label margins without generating a reasoning summary.
+
+On the nine trace-bearing validation units:
+
+| intent member / Phoenix blend | macro AUROC |
+| --- | ---: |
+| base-Qwen resolved intent | `0.84889` |
+| rank-1 direct margin | `0.89125` |
+| rank-1 empty-summary margin | `0.88597` |
+| Phoenix + rank-1 direct probability mean | `0.89861` |
+| Phoenix + rank-1 direct log-odds mean | `0.89750` |
+| Phoenix + rank-1 empty-summary log-odds mean | **`0.90111`** |
+
+The adapter therefore materially improves the semantic member. The
+empty-summary/log-odds blend is selected because blend AUROC, rather than
+standalone intent AUROC, is the target. It has 358 unique scores over 360 rows
+and zero cross-label ties. Keeping no-trace units unchanged projects full
+validation macro AUROC `0.93815 -> 0.95393`, versus `0.94708` for the selected
+base-Qwen blend.
+
+The selected empty-summary pass scored all 822 rows in `24.03s` with zero
+missing label logits. Deployment would score only the 360 trace-bearing rows.
+As a retrospective diagnostic, combining Phoenix with the adapter's historical
+generated binary decisions scored `0.89792` validation and `0.90139` test
+varied AUROC, improving eight of nine units on each split. That result supports
+complementarity but does not replace the frozen continuous-margin confirmation.
+Test job `30297739` evaluates only the validation-selected empty-summary
+condition.
