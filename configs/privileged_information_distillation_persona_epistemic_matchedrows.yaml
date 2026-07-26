@@ -1,0 +1,21 @@
+# @package _global_
+#
+# Final matched-row student for the persona-aware PI ablation. The teacher
+# cache is selectively retried at 4,096 and then 8,192 tokens before training.
+# The manifest fixes the student to the exact 2,877 dataset/index keys used by
+# the original varied-only control, removing teacher parse coverage as a
+# confound.
+
+defaults:
+  - privileged_information_distillation_persona_epistemic_variedonly
+  - _self_
+
+method: qwen9b_pid_persona_epistemic_matchedrows_adamw5e5_v1
+output_dir: results/blackbox/${method}
+
+teacher:
+  artifact: results/blackbox/qwen9b_pid_persona_epistemic_variedonly_adamw5e5_v1/teacher/train.jsonl
+
+student:
+  selection_manifest: results/blackbox/qwen9b_pid_persona_epistemic_variedonly_adamw5e5_v1/teacher/control_usable_manifest.jsonl
+  output_dir: ${output_dir}/adapter

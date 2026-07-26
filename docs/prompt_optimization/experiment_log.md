@@ -1,5 +1,47 @@
 # Prompt Experiment Log
 
+## 2026-07-26: End-to-end persona privileged distillation
+
+P90 tested whether P89's persona wording failed because it was out of
+distribution for the selected privileged-information student. GPT-OSS-120B
+regenerated all 2,880 varied-only summaries with the authoritative label and
+narrow underlying-assistant knowledge-report rule. Qwen3.5-9B then received
+the same rule in its student prompt under the frozen rank-16/alpha-32,
+one-epoch AdamW `5e-5` recipe.
+
+The initial 2,048-token teacher pass parsed 2,873/2,880 traces. Selective
+4,096- and 8,192-token retries recovered all seven failures. Only 16/2,880
+summaries exactly matched the old cache. The final student was restricted to
+the exact 2,877 dataset/index keys used by the original varied-only adapter,
+removing parse coverage as a confound.
+
+Shared-session validation crossed both weight sets and both inference prompts,
+scoring only direct continuous `Prediction:0|1` margins:
+
+| weights / prompt | macro AUROC | delta | instructed | varied |
+| --- | ---: | ---: | ---: | ---: |
+| Existing PI / control | **`0.937560`** | — | **`0.993437`** | **`0.863056`** |
+| Existing PI / persona | `0.937024` | `-0.000536` | `0.992500` | **`0.863056`** |
+| Persona PI / control | `0.937262` | `-0.000298` | **`0.993437`** | `0.862361` |
+| Persona PI / persona | `0.936905` | `-0.000655` | `0.992500` | `0.862778` |
+
+All 3,288 direct-margin evaluations across both adapters were present. Conditions
+produced 349--356 unique scores over 822 rows. On the frozen 75-row persona
+stratum, the matched endpoint's pooled AUROC rose from `0.878936` to `0.881559`,
+but available-dataset macro AUROC fell from `0.845238` to `0.841497`. The
+endpoint improved 8 dataset units, tied 6, and regressed 7, including a
+`-0.04375` varied-unit change.
+
+Thus matched distillation does not rescue the prompt. Reject the persona
+teacher/student pair, do not run local test or leaderboard confirmation, and
+leave Phoenix and the HP-KR route unchanged. This is evidence against the
+specific transferable wording, not proof that opaque Notus lacks roleplay
+examples.
+
+Teacher jobs `30300121`, `30300390`, and `30300408`, final student job
+`30300409`, and validation job `30300410` completed successfully. The final
+student trained in `18m39s`; validation completed in `4m23s`.
+
 ## 2026-07-26: Persona belief-holder prompt sweep
 
 P89 tested whether the general Qwen3.5-9B Truth Value Guard should explicitly
