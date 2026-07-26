@@ -590,6 +590,20 @@ Keep the submission package pruned: `submit.py` excludes `.env`, `.uv-cache`,
 `results/`, `logs/`, and `dev_splits/` so credentials and local experiment
 artifacts are not uploaded. Before submitting, verify there is exactly one
 notebook in `submission/` and that the packaged zip is small.
+
+AUROC-aware privileged-distillation loss finding from 2026-07-26: a matched
+varied-only rank-16 H100 sweep retained reasoning-summary SFT and compared a
+paired control (`0.938155` validation macro direct-margin AUROC), direct binary
+CE (`0.938274`), and direct CE plus within-dataset pairwise logistic loss at
+weights `0.1` and `0.3` (both `0.938214`). The largest delta was only
+`+0.000119`, far below the frozen `+0.005` promotion threshold; direct CE did
+not improve varied AUROC, and both ranking weights were indistinguishable.
+Do not test, deploy, or tune more pairwise weights. Retain the original
+reasoning-summary SFT loss and use direct logits only at inference. The Lambda
+fallback-kernel execution took about 32 minutes for the control and 64--66
+minutes per auxiliary arm, so optimize kernels/direct-prefix batching before
+any future multi-objective training sweep.
+
 After a real submission is accepted, poll its stream or status for about two
 minutes to catch an immediate rejection or crash, then stop polling and hand
 the run back to the user. Do not babysit a queued or long-running leaderboard

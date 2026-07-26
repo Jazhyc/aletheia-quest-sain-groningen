@@ -2476,3 +2476,50 @@ learned rater. This negative result rejects the current one-step,
 initialization-state, last-block approximation for this already curated,
 Qwen-only varied cache; it does not establish that the paper's much more
 expensive full DataRater algorithm would fail in another regime.
+
+## AUROC-aware direct and pairwise student losses (2026-07-26)
+
+A matched four-arm Lambda H100 ablation tested whether the strong direct-logit
+ranking signal could be improved during SFT without removing the useful GPT-OSS
+reasoning-summary supervision. Every arm retained the selected varied-only
+rank-16/alpha-32 recipe: all 2,877 usable rows, one epoch, AdamW `5e-5`, and
+effective batch size 32. Stable within-dataset positive/negative pairing covered
+2,874 rows; the three unmatched negatives retained their ordinary supervised
+loss but contributed no pairwise term.
+
+The auxiliary direct loss scores literal `0`/`1` logits after the rendered
+prompt plus `Prediction:`. Ranking uses
+`softplus(-(margin_positive - margin_negative))` within each dataset. The four
+objectives were reasoning-summary SFT alone, reasoning plus direct CE, and
+reasoning plus direct CE with pairwise weights `0.1` or `0.3`. Shared validation
+loaded all four adapters once and evaluated only the direct continuous margin:
+
+| objective | macro AUROC | delta | instructed AUROC | varied AUROC |
+| --- | ---: | ---: | ---: | ---: |
+| Paired reasoning control | `0.938155` | — | `0.993542` | `0.864306` |
+| + direct CE | **`0.938274`** | `+0.000119` | **`0.993750`** | `0.864306` |
+| + direct CE + rank `0.1` | `0.938214` | `+0.000060` | `0.993542` | **`0.864444`** |
+| + direct CE + rank `0.3` | `0.938214` | `+0.000060` | `0.993542` | **`0.864444`** |
+
+All four had direct-margin missing count zero and identical fixed-`0.5`
+balanced accuracy `0.7833`. The evaluator intentionally generated only one
+token, so its 822 generated-output parse errors are irrelevant to the direct
+margin. Compact `result.json` and `margin_analysis.json` artifacts are stored
+under each method's `validation_direct_margin/` directory in
+`results/blackbox/`; full per-row artifacts remain on the persistent Lambda
+campaign instance.
+
+This is a clear negative result under the frozen `+0.005` promotion rule. The
+largest apparent gain is one ten-thousandth and comes only from instructed
+rows; the ranking weights are numerically indistinguishable and do not improve
+overall AUROC over direct CE. Do not run test, promote these adapters, or tune
+more pairwise weights on validation. Retain reasoning-summary SFT and direct
+logit inference, but leave the training loss unchanged.
+
+The implementation is also expensive in the current Lambda environment. The
+paired control took roughly 32 minutes for 90 optimizer steps, while each
+auxiliary arm took about 64--66 minutes because it performs a second Qwen
+forward per microbatch. Transformers reported that Qwen's optional fast linear-
+attention dependencies were absent and used its torch fallback. Before any
+future multi-objective sweep, test those kernels and batch the shorter direct
+prefix pass more efficiently rather than repeating this execution shape.

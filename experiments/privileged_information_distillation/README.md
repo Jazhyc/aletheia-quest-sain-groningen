@@ -651,6 +651,19 @@ immediately before its final prediction token. The latter requires one extra
 scoring pass but measures the margin after the distilled reasoning rather than
 asking the model to classify out of format.
 
+The matched AUROC-loss ablation keeps reasoning-summary supervision while
+optionally adding direct binary CE and within-dataset pairwise logistic loss:
+
+```bash
+bash experiments/privileged_information_distillation/run_auroc_loss_ablation_lambda.sh
+```
+
+It trains the paired reasoning control, direct-CE arm, and pairwise weights
+`0.1`/`0.3`, then evaluates all four adapters in one shared vLLM session. The
+2026-07-26 run found no material validation improvement; see
+`docs/privileged_information_distillation/findings.md`. Do not repeat the full
+sweep without first changing the execution path or hypothesis.
+
 Inspect fixed-half thresholds, exact per-dataset top-half classification, score
 quantiles, and a coarse diagnostic threshold sweep from the saved artifact:
 
