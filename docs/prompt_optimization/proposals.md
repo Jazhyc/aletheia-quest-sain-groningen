@@ -4917,3 +4917,13 @@ Cache and student launch:
   `qwen9b_pid_qwen27_direct_soft_varied_v1`. Do not change its loss weight,
   normalization, optimizer, learning rate, epoch count, or data selection
   while it is running.
+- Student job `30299836` completed successfully in `32m35s` on one RTX Pro
+  6000. The trainer consumed all 2,877 joined rows for one epoch and 90
+  optimizer steps, reporting `1905s` trainer runtime and final train loss
+  `18.38`. The saved rank-16 adapter weight SHA-256 is
+  `466a476e2c0f05c83d8f4e627fb3e47d4274c16d5574ac5f57ae5468dd8fb2d3`.
+- Frozen full-validation job `30299897` compares its direct `Prediction:`
+  margin in one shared vLLM session with the paired reasoning-only control,
+  direct-CE arm, and rank-loss `0.1`/`0.3` arms. Apply the existing `+0.005`
+  macro-AUROC promotion rule and report scenario/per-dataset AUROC,
+  uniqueness/ties, and missing logits before deciding on local test.
