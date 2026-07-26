@@ -4804,3 +4804,38 @@ Outcome:
   rejects both tested reasoning-conditioned ordinal soft teachers; retain the
   generated dense-27B ratings only as black-box teacher evidence, not as a
   distillation target selected after seeing this validation result.
+
+## P91: Dense Qwen-27B Direct-Logit Soft-Teacher Gate
+
+Status: validation gate queued.
+
+Question: does dense Qwen3.5-27B expose a stronger continuous teacher ordering
+at the direct D/K/S prompt boundary, without generated reasoning?
+
+Rationale and isolation:
+
+- P90 rejects only the distribution after the teacher's generated reasoning.
+  Phoenix direct scoring beat its own empty-summary and post-reasoning
+  boundaries, so post-reasoning failure does not establish that the dense
+  teacher's direct boundary is weak.
+- Replace only Qwen3.5-9B with dense Qwen3.5-27B in
+  `qwen_reason_ensemble_dks3072_logit_v1`. Keep the three prompts, 3,000
+  character context view, 1--7 verbalizers, max aggregation, dataset order,
+  and deterministic one-token scoring fixed.
+- Use BF16 on one RTX Pro 6000, a 4,096-token model cap, text-only loading, and
+  skipped multimodal profiling. These are engine-shape controls, not prompt or
+  score changes.
+
+Frozen gate:
+
+- Report macro, instructed, varied, and per-dataset AUROC; score uniqueness and
+  ties; missing target logits; and scoring-only runtime.
+- Authorize a varied-only training-score cache only if macro AUROC reaches
+  Phoenix direct (`0.938155`), instructed and varied AUROC each lose no more
+  than `0.005` relative to `0.993542/0.864306`, all 822 row scores are
+  continuous, and no requested rating logits are missing.
+- A passing training cache must preserve the ordinary GPT-OSS
+  reasoning-summary SFT target and authoritative binary label. Add only a
+  temperature-softened auxiliary loss at the student's direct `Prediction:`
+  boundary. Do not generate or distill dense-teacher reasoning, and do not
+  select a varied-only teacher from a failed overall gate.

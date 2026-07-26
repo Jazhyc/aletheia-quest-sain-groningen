@@ -1,0 +1,19 @@
+# @package _global_
+# Exact dense Qwen3.5-27B model swap for the frozen direct-logit D/K/S teacher gate.
+
+defaults:
+  - blackbox_reasoning_ensemble_dks3072_logit_v1
+  - _self_
+
+method: qwen27b_reason_ensemble_dks3072_logit_v1
+
+judge:
+  model: Qwen/Qwen3.5-27B
+  served_model: qwen27b-judge
+  max_model_len: 4096
+  # P90 loaded 51.1 GiB of weights. This shorter engine cap leaves ample
+  # KV-cache room on one 96 GB RTX Pro 6000.
+  max_num_seqs: 512
+  tensor_parallel_size: 1
+  language_model_only: true
+  skip_mm_profiling: true

@@ -3666,3 +3666,11 @@ than a binary-looking or missing-logit artifact. Reject the dense Qwen-27B
 post-reasoning distribution and do not generate training scores or train the
 soft-target student. P89 and P90 together close the tested
 reasoning-conditioned ordinal soft-distillation branch.
+
+The remaining clean dense-teacher test is P91: an exact Qwen3.5-27B model swap
+of the frozen direct-logit D/K/S control. This is distinct from P90 because
+Phoenix direct logits outperformed its post-reasoning boundary. Prompts,
+verbalizers, context view, aggregation, ordering, and deterministic scoring
+remain fixed. A training cache is authorized only at `>=0.938155` macro AUROC,
+no more than `0.005` instructed or varied loss versus Phoenix direct, 822
+continuous row scores, and zero missing requested logits.

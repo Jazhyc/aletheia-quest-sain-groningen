@@ -61,6 +61,25 @@ def test_qwen35a3b_teacher_gate_fits_one_rtx_pro_6000() -> None:
     assert candidate.judge.skip_mm_profiling is True
 
 
+def test_qwen27b_direct_teacher_gate_is_an_exact_dense_model_swap() -> None:
+    baseline = compose_ensemble(
+        "blackbox_reasoning_ensemble_dks3072_logit_v1"
+    )
+    candidate = compose_ensemble(
+        "blackbox_reasoning_ensemble_dks3072_logit_qwen27b_v1"
+    )
+
+    assert candidate.judge.model == "Qwen/Qwen3.5-27B"
+    assert candidate.judge.mode == "logits"
+    assert candidate.judge.max_model_len == 4096
+    assert candidate.judge.max_num_seqs == 512
+    assert candidate.judge.tensor_parallel_size == 1
+    assert candidate.judge.language_model_only is True
+    assert candidate.judge.skip_mm_profiling is True
+    assert candidate.ensemble == baseline.ensemble
+    assert candidate.scoring == baseline.scoring
+
+
 def test_text_only_controls_are_forwarded_to_vllm() -> None:
     kwargs = vllm_kwargs_from_config(
         model_name="Qwen/Qwen3.5-35B-A3B",
