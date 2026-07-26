@@ -1,0 +1,11 @@
+{
+  "architecture": "transformer",
+  "layer": 46,
+  "hidden_dim": 5376,
+  "d_model": 128,
+  "n_heads": 4,
+  "dim_feedforward": 256,
+  "n_blocks": 2,
+  "dropout": 0.1,
+  "batch_token_budget": 8192
+}

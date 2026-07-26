@@ -129,18 +129,65 @@ class MultiFamilyProbe:
             mask[position, :end - start] = True
         return (padded - mean) / std * mask.unsqueeze(-1), mask
 
-    def fit(self, family_data: dict) -> "MultiFamilyProbe":
+    def _split_rows(self, rows: np.ndarray, labels: np.ndarray,
+                    groups: np.ndarray | None) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Choose the early-stopping validation rows for one family.
+
+        With ``groups`` the split holds out whole groups, so no organism (or
+        scenario, or adapter cell) appears on both sides. This is the point of
+        the grouped mode: early stopping then selects the checkpoint that
+        generalizes off the training groups instead of the one that best fits
+        rows drawn from the very organisms it trained on.
+
+        Without ``groups`` it falls back to the historical label-stratified
+        random row split, which measures in-distribution fit only.
+
+        :param rows: Row positions for this family.
+        :param labels: Binary labels aligned with ``rows``.
+        :param groups: Group id per row, or None for the random split.
+        :return: ``(train_rows, validation_rows)``; validation may be empty
+            when the family is too small or single-class to split.
+        """
+        from sklearn.model_selection import GroupShuffleSplit, train_test_split
+
+        # A family with one class or too few rows cannot be stratified; keep
+        # it whole in training rather than dropping it.
+        stratify = labels if len(np.unique(labels)) > 1 else None
+        if len(rows) < 10 or stratify is None:
+            return rows, rows[:0]
+
+        if groups is None:
+            return train_test_split(rows, test_size=self.validation_fraction,
+                                    random_state=self.seed, stratify=stratify)
+
+        # A single group cannot be held out without emptying training.
+        if len(np.unique(groups)) < 2:
+            return rows, rows[:0]
+        splitter = GroupShuffleSplit(n_splits=1, test_size=self.validation_fraction,
+                                     random_state=self.seed)
+        train_positions, val_positions = next(splitter.split(rows, labels, groups))
+        return rows[train_positions], rows[val_positions]
+
+    def fit(self, family_data: dict, family_groups: dict | None = None,
+            family_weights: dict | None = None) -> "MultiFamilyProbe":
         """
         :param family_data: Maps family name to ``(flat_features, offsets,
             labels)``; ``flat_features`` is a (total_tokens, hidden) tensor
             already on self.device.
+        :param family_groups: Optional map from family name to a per-row group
+            id array. When given, the early-stopping split holds out whole
+            groups rather than random rows -- see :meth:`_split_rows`.
+        :param family_weights: Optional map from family name to a per-row
+            weight array applied to the training loss. Used to stop
+            adapter-bearing rows, which are 83% of the dev corpus, from
+            dominating the base-model rows that the counted Notus units
+            actually resemble.
         :return: self, with the best-validation-loss weights loaded.
         """
-        from sklearn.model_selection import train_test_split
-
         torch.manual_seed(self.seed)
         train_batches, val_batches = [], []
-        label_tensors, positives, total = {}, 0, 0
+        label_tensors, weight_tensors, positives, total = {}, {}, 0, 0
 
         for family, (flat_features, offsets, labels) in family_data.items():
             offsets_array = np.asarray(offsets, dtype=np.int64)
@@ -149,16 +196,15 @@ class MultiFamilyProbe:
             positives += int(labels_array.sum())
             total += len(labels_array)
 
+            weights = None if family_weights is None else family_weights.get(family)
+            weight_tensors[family] = (
+                torch.ones(len(labels_array), dtype=torch.float32) if weights is None
+                else torch.from_numpy(np.asarray(weights, dtype=np.float32)))
+
             rows = np.arange(len(labels_array))
-            # A family with one class or too few rows cannot be stratified; keep
-            # it whole in training rather than dropping it.
-            stratify = labels_array if len(np.unique(labels_array)) > 1 else None
-            if len(rows) < 10 or stratify is None:
-                family_train, family_val = rows, rows[:0]
-            else:
-                family_train, family_val = train_test_split(
-                    rows, test_size=self.validation_fraction,
-                    random_state=self.seed, stratify=stratify)
+            groups = None if family_groups is None else family_groups.get(family)
+            groups_array = None if groups is None else np.asarray(groups)
+            family_train, family_val = self._split_rows(rows, labels_array, groups_array)
 
             mean, std = streaming_token_moments(flat_features, offsets_array, family_train)
             self.moments[family] = (mean.to(self.device), std.to(self.device))
@@ -177,7 +223,9 @@ class MultiFamilyProbe:
                                      weight_decay=self.weight_decay)
         positive_weight = torch.tensor(
             [(total - positives) / max(1, positives)], device=self.device)
-        deception_loss = nn.BCEWithLogitsLoss(pos_weight=positive_weight)
+        # reduction="none" so per-row weights can be applied before averaging;
+        # with all-ones weights this is identical to the previous mean loss.
+        deception_loss = nn.BCEWithLogitsLoss(pos_weight=positive_weight, reduction="none")
         unweighted_loss = nn.BCEWithLogitsLoss()
         generator = np.random.default_rng(self.seed)
 
@@ -193,7 +241,9 @@ class MultiFamilyProbe:
                     family, flat_features, np.asarray(offsets, dtype=np.int64), row_ids)
                 optimizer.zero_grad()
                 logits = self.model(family, batch_features, batch_mask)
-                loss = deception_loss(logits, label_tensors[family][row_ids].to(self.device))
+                per_row = deception_loss(logits, label_tensors[family][row_ids].to(self.device))
+                row_weights = weight_tensors[family][row_ids].to(self.device)
+                loss = (per_row * row_weights).sum() / row_weights.sum().clamp(min=1e-8)
                 loss.backward()
                 optimizer.step()
 

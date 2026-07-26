@@ -1,0 +1,15 @@
+{
+  "notebook": "submission/sonic_v3_1.ipynb",
+  "dataset": "aletheias-quest/dev-instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None",
+  "rows": 216,
+  "auroc": 0.9503124999999999,
+  "balanced_accuracy": 0.85,
+  "elapsed_seconds": 51.2815595450229,
+  "rows_per_second": 4.212040388716371,
+  "unique_scores": 216,
+  "score_min": 0.0078768003975718,
+  "score_mean": 0.0803722155049269,
+  "score_max": 0.5423692684655782,
+  "positive_rows": 22,
+  "deceptive_rows": 16
+}

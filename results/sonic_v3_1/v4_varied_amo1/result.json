@@ -1,0 +1,15 @@
+{
+  "notebook": "experiments/heterogeneous_adapter_ensemble/phoenix_wright_v4_0.ipynb",
+  "dataset": "aletheias-quest/dev-varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1",
+  "rows": 400,
+  "auroc": 0.7621249999999998,
+  "balanced_accuracy": 0.6825,
+  "elapsed_seconds": 40.05151223699795,
+  "rows_per_second": 9.987138503861443,
+  "unique_scores": 72,
+  "score_min": 0.0023231625091284,
+  "score_mean": 0.1913800319901202,
+  "score_max": 0.9465966820716858,
+  "positive_rows": 139,
+  "deceptive_rows": 200
+}

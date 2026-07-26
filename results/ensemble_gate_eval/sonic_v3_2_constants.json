@@ -1,0 +1,53 @@
+{
+  "rule": "judge_z + (BASE_CAP + clip(judge_z*probe_z/AGREEMENT_SCALE,0,1) * (MAX_CAP-BASE_CAP)) * tanh(PROBE_GAIN * probe_z)",
+  "judge_margin_sd": 1.199755138011975,
+  "judge_ulp": 0.125,
+  "judge_step_z": 0.10418792638565248,
+  "base_cap_steps": 2.0,
+  "base_cap": 0.20837585277130496,
+  "max_cap_steps": 4.0,
+  "max_cap": 0.41675170554260993,
+  "agreement_scale": 3.0,
+  "probe_gain": 1.0,
+  "probe_logit_mean": {
+    "nemotron": -3.2186061611606016,
+    "qwen": -0.25166166366445586,
+    "gemma": -1.968125202258428
+  },
+  "probe_logit_sd": {
+    "nemotron": 2.1939692650621225,
+    "qwen": 4.157805340296084,
+    "gemma": 4.34205824026173
+  },
+  "default_probe_mean": -1.812797675694495,
+  "default_probe_sd": 3.564610948539979,
+  "threshold_judge_margin": 0.0,
+  "threshold_probe_only": 0.5,
+  "validation": {
+    "probe @ 0.70": {
+      "judge": 0.9509350000000001,
+      "v3_1_delta": 0.0021262500000000075,
+      "v3_2_delta": 0.001960000000000006,
+      "v3_2_worst_fold": -0.0023499999999999632
+    },
+    "probe @ 0.76": {
+      "judge": 0.9509350000000001,
+      "v3_1_delta": 0.0035649999999999905,
+      "v3_2_delta": 0.0036474999999999923,
+      "v3_2_worst_fold": -0.0012125000000000608
+    },
+    "probe @ 0.85": {
+      "judge": 0.9509350000000001,
+      "v3_1_delta": 0.006254999999999994,
+      "v3_2_delta": 0.006503749999999986,
+      "v3_2_worst_fold": -0.0008124999999999938
+    },
+    "probe as-is": {
+      "judge": 0.9509350000000001,
+      "v3_1_delta": 0.007606249999999981,
+      "v3_2_delta": 0.007917499999999994,
+      "v3_2_worst_fold": 3.7500000000023626e-05
+    }
+  },
+  "threshold_score": 0.2
+}

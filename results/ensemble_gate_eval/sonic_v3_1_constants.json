@@ -1,0 +1,60 @@
+{
+  "rule": "judge_z + PROBE_CAP * tanh(PROBE_GAIN * (probe_logit - PROBE_MEAN) / PROBE_SD)",
+  "judge_margin_sd": 1.199755138011975,
+  "judge_ulp": 0.125,
+  "judge_step_z": 0.10418792638565248,
+  "probe_cap_steps": 2.0,
+  "probe_cap": 0.20837585277130496,
+  "probe_gain": 1.0,
+  "probe_logit_mean": {
+    "nemotron": -3.2186061611606016,
+    "qwen": -0.25166166366445586,
+    "gemma": -1.968125202258428
+  },
+  "probe_logit_sd": {
+    "nemotron": 2.1939692650621225,
+    "qwen": 4.157805340296084,
+    "gemma": 4.34205824026173
+  },
+  "default_probe_mean": -1.812797675694495,
+  "default_probe_sd": 3.564610948539979,
+  "threshold_judge_margin": 0.0,
+  "threshold_probe_only": 0.5,
+  "validation": {
+    "probe @ 0.7": {
+      "judge": 0.9509350000000001,
+      "v3_blend_delta": -0.17859875,
+      "v3_1_delta": 0.0024349999999999927,
+      "v3_1_worst_fold_delta": -0.0031874999999998987
+    },
+    "probe @ 0.76": {
+      "judge": 0.9509350000000001,
+      "v3_blend_delta": -0.1117475,
+      "v3_1_delta": 0.004219999999999985,
+      "v3_1_worst_fold_delta": -0.0010625000000000773
+    },
+    "probe @ 0.85": {
+      "judge": 0.9509350000000001,
+      "v3_blend_delta": -0.037166250000000005,
+      "v3_1_delta": 0.005978750000000021,
+      "v3_1_worst_fold_delta": -0.0005875000000000741
+    },
+    "probe as-is": {
+      "judge": 0.9509350000000001,
+      "v3_blend_delta": 0.017489999999999985,
+      "v3_1_delta": 0.007606249999999981,
+      "v3_1_worst_fold_delta": 6.249999999996536e-05
+    }
+  },
+  "threshold_score": 0.2,
+  "threshold_score_fit": {
+    "mean_balanced_accuracy": 0.853125,
+    "units": [
+      "varied-qwen-base",
+      "varied-qwen-a-mo-1",
+      "instr-gemma-base",
+      "instr-nemotron-base"
+    ],
+    "source": "NDIF benchmark runs, fitted offline"
+  }
+}

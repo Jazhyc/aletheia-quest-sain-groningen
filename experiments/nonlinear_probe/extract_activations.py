@@ -6,9 +6,15 @@ For one competition dataset, run every row through the generating organism
 layers to an .npz on disk. Downstream probe training (linear sweeps, MLPs,
 attention poolers) then reads the cache and never touches a GPU again.
 
-The organism loads on a LOCAL GPU by default (the team NDIF key is
-submission-only and has no development access); `--remote` switches to one
-batched NDIF session should dev access ever be granted.
+The organism loads on a LOCAL GPU by default; `--remote` switches to one
+batched NDIF session.
+
+The team NDIF key HAS dev-trace access (verified 2026-07-12 and again
+2026-07-26 against `https://aletheias.api.ndif.us`), so `--remote` works from
+any machine with the root `.env` loaded. This matters for
+`NVIDIA-Nemotron-3-Super-120B`: at ~240 GB in bf16 it does not fit the single
+96 GB Hábrók GPU, so remote is the only route for that family. The 27B qwen and
+gemma organisms fit locally and are cheaper to extract on Hábrók.
 
 Usage (on Hábrók, from the repo root):
 

@@ -1,0 +1,15 @@
+{
+  "notebook": "submission/sonic_v3_1.ipynb",
+  "dataset": "aletheias-quest/dev-varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1",
+  "rows": 400,
+  "auroc": 0.7881499999999999,
+  "balanced_accuracy": 0.615,
+  "elapsed_seconds": 67.89013819699176,
+  "rows_per_second": 5.8918719363827154,
+  "unique_scores": 400,
+  "score_min": 0.0055910179786241,
+  "score_mean": 0.21627071872178896,
+  "score_max": 0.9290651821858764,
+  "positive_rows": 52,
+  "deceptive_rows": 200
+}

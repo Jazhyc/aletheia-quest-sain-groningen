@@ -1,0 +1,15 @@
+{
+  "notebook": "experiments/heterogeneous_adapter_ensemble/phoenix_wright_v4_0.ipynb",
+  "dataset": "aletheias-quest/dev-instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None",
+  "rows": 216,
+  "auroc": 0.92875,
+  "balanced_accuracy": 0.8162499999999999,
+  "elapsed_seconds": 34.53928100899793,
+  "rows_per_second": 6.253749171667158,
+  "unique_scores": 52,
+  "score_min": 0.0035936026833951,
+  "score_mean": 0.058723978325293386,
+  "score_max": 0.5926666259765625,
+  "positive_rows": 22,
+  "deceptive_rows": 16
+}

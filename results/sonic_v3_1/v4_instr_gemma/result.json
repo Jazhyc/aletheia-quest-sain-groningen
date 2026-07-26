@@ -1,0 +1,15 @@
+{
+  "notebook": "experiments/heterogeneous_adapter_ensemble/phoenix_wright_v4_0.ipynb",
+  "dataset": "aletheias-quest/dev-instructed-deception-gemma-3-27b-it-None",
+  "rows": 400,
+  "auroc": 0.9958125,
+  "balanced_accuracy": 0.9775,
+  "elapsed_seconds": 24.727269608003553,
+  "rows_per_second": 16.176472628847414,
+  "unique_scores": 87,
+  "score_min": 0.00263167405501,
+  "score_mean": 0.45585023510444445,
+  "score_max": 0.9796676635742188,
+  "positive_rows": 209,
+  "deceptive_rows": 200
+}

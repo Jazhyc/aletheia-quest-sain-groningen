@@ -1,8 +1,9 @@
 # sonic v3 — direct-logit judge, fixed blend, no batch statistics
 
-> Status: built, dry-run on NDIF, **not submitted**. It has no official score.
-> The previous version is `sonic_v2.3.7` (also not submitted). The last scored
-> submission is `sonic_v2.3.5` at BA `0.853750` / AUROC `0.876333`.
+> Status: **submitted 2026-07-26 00:41.** Official headline AUROC `0.862417` /
+> BA `0.621250`, runtime 29m57s. **Regressed** against the pure judge
+> (phoenix_wright_v4 at `0.893817`). Superseded by `sonic_v3_1.ipynb` at
+> `0.902083`. See `docs/official_submissions.md` for the counted-unit breakdown.
 
 ## Why v3 exists
 
