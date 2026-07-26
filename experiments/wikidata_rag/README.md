@@ -695,6 +695,46 @@ bootstrap intervals for real-minus-empty and real-minus-shuffled are
 evidence that consumer reuse helps slightly; do not run local test or start a
 rank ablation from it.
 
+### Guarded polarity supervision
+
+The original GPT-OSS polarity cache was not suitable for training: the teacher
+often copied a database value into `claim_quote`, and occasionally assigned the
+opposite polarity despite explaining the right relation. The guarded follow-up
+therefore starts only from the frozen polarity-blind `decisive` candidates and
+labels one candidate per prompt. It extracts separate exact response and
+database spans, asks for a value comparison rather than a polarity label, and
+derives `supports|contradicts` only after exact-source validation. Contradictions
+on a frozen list of normally multi-valued predicates are vetoed.
+
+Jobs `30299307` and `30299348` ran a 64-train-candidate plus complete
+63-validation-candidate smoke. A 512-token generation cap truncated 102/127
+Harmony finals and is not usable. At 1,024 tokens, train produced 35 supports,
+10 contradictions, and 19 abstentions, with 58/64 exact-source-valid records.
+Validation produced 25 supports, 14 contradictions, and 24 abstentions, with
+52/63 exact-source-valid records. The remaining validation failures were two
+truncated JSON objects and nine quotes that dropped source markdown or otherwise
+failed the exact-substring contract; the old database-to-response copying bug
+did not pass the validator.
+
+The contradiction precision gate still failed. Manual audit found three clear
+wrong-entity contradictions: a television-series `The Odd Couple` candidate was
+used against the play, and two US-city Carthage candidates were used against
+ancient Carthage. `Sears Building` versus `Sears Tower` was additionally
+borderline. Thus only 10--11/14 accepted validation contradictions were
+defensible (71--79%), well below a high-precision retrieval target. All three
+clear wrong-entity errors occurred on hidden honest rows; the other 11 accepted
+contradictions occurred on deceptive rows. This association is diagnostic only:
+supporting headline evidence also occurred on deceptive rows whose poison was
+tangential, so polarity is not a deception label.
+
+`build_polarity_distillation.py` can pair a real grounded contradiction with a
+counterfactual support twin, and the prepared rank-4 recipe requires at least 20
+fit-bucket pairs. The smoke supplied only three pairs across two fit question
+groups. No adapter was trained, the queued full teacher pass (`30299361`) was
+cancelled, and no local-test evaluation was made. Improve entity-sense and
+modifier completeness before reopening the rank-4 path; simply collecting more
+of the present labels would scale the same false contradictions.
+
 
 ```bash
 PYTHONPATH=. .venv/bin/python experiments/wikidata_rag/build_claim_gated_cache.py \
