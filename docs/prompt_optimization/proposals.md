@@ -4807,7 +4807,8 @@ Outcome:
 
 ## P91: Dense Qwen-27B Direct-Logit Soft-Teacher Gate
 
-Status: validation gate queued.
+Status: primary validation passes the AUROC and continuity gates; explicit
+missing-logit audit rerun queued before training-cache authorization.
 
 Question: does dense Qwen3.5-27B expose a stronger continuous teacher ordering
 at the direct D/K/S prompt boundary, without generated reasoning?
@@ -4839,3 +4840,21 @@ Frozen gate:
   temperature-softened auxiliary loss at the student's direct `Prediction:`
   boundary. Do not generate or distill dense-teacher reasoning, and do not
   select a varied-only teacher from a failed overall gate.
+
+Primary result:
+
+- Job `30299761` completed in 5m55s on one RTX Pro 6000. The one-token scoring
+  pass took `132.7s` for 2,466 prompt evaluations (`18.6` prompts/s).
+- Macro AUROC was `0.94500`, split `0.99417` instructed and `0.87944` varied.
+  This beats Phoenix direct by `0.00685` macro and `0.01514` varied AUROC,
+  while instructed improves by `0.00062`. All three accuracy gates pass.
+- The max-aggregated scores have 819 unique values over 822 rows with three
+  repeated-score ties. Their narrow absolute range near 0.5 reflects the
+  normalized ordinal expectation; AUROC uses their ordering.
+- The historical logits runner did not persist the explicitly requested token
+  set, so job `30299761` cannot prove the frozen zero-missing-logit clause from
+  its artifact alone. Before authorizing train-cache generation, rerun the
+  exact validation condition with per-prompt normalized seven-way
+  distributions and missing-token IDs recorded. Require the audited run to
+  satisfy the same AUROC/scenario gates and report zero missing IDs. Do not
+  infer this final gate merely from the primary scores.

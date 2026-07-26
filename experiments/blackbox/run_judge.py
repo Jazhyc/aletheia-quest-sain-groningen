@@ -648,6 +648,8 @@ class OfflineVllmRatingJudge:
         self.missing_logprob = missing_logprob
         self.ratings = list(range(rating_min, rating_max + 1))
         self.targets: list[dict[str, Any]] | None = None
+        self.generations: list[dict[str, Any]] = []
+        self.parse_error_count = 0
 
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         if logit_targets:
@@ -685,18 +687,43 @@ class OfflineVllmRatingJudge:
     def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
         scores = np.full(len(prompts), np.nan, dtype=float)
         outputs = generate_with_optional_batches(self.llm, prompts, self.sampling, batch_size)
+        self.generations = []
+        self.parse_error_count = 0
 
         for offset, output in enumerate(outputs):
             if not output.outputs or not output.outputs[0].logprobs:
+                self.parse_error_count += 1
+                self.generations.append({
+                    "offset": offset,
+                    "parse_error": True,
+                    "score": 0.5,
+                    "missing_rating_token_ids": self.all_rating_ids,
+                })
                 continue
             first_token_logprobs = output.outputs[0].logprobs[0] or {}
+            missing_token_ids = missing_requested_token_ids(
+                first_token_logprobs,
+                self.all_rating_ids,
+            )
             if self.targets is not None:
                 target_probs = target_probs_from_logprobs(
                     first_token_logprobs,
                     targets=self.targets,
                     missing_logprob=self.missing_logprob,
                 )
-                scores[offset] = score_from_target_probs(target_probs, self.targets)
+                score = score_from_target_probs(target_probs, self.targets)
+                total = sum(target_probs.values())
+                normalized_targets = {
+                    name: (probability / total if total > 0 else 0.0)
+                    for name, probability in target_probs.items()
+                }
+                record = {
+                    "offset": offset,
+                    "parse_error": False,
+                    "score": score,
+                    "target_probs": normalized_targets,
+                    "missing_rating_token_ids": missing_token_ids,
+                }
             else:
                 probs = rating_probs_from_logprobs(
                     first_token_logprobs,
@@ -704,11 +731,20 @@ class OfflineVllmRatingJudge:
                     ratings=self.ratings,
                     missing_logprob=self.missing_logprob,
                 )
-                scores[offset] = score_from_rating_probs(
+                score = score_from_rating_probs(
                     probs,
                     rating_min=self.rating_min,
                     rating_max=self.rating_max,
                 )
+                record = {
+                    "offset": offset,
+                    "parse_error": False,
+                    "score": score,
+                    "rating_probs": normalize_rating_probs(probs),
+                    "missing_rating_token_ids": missing_token_ids,
+                }
+            scores[offset] = score
+            self.generations.append(record)
         return np.nan_to_num(scores, nan=0.5)
 
 

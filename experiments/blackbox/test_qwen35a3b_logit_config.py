@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
 from experiments.blackbox.run_judge import (
+    OfflineVllmRatingJudge,
     missing_requested_token_ids,
     normalize_rating_probs,
     strip_terminal_generated_rating,
@@ -210,3 +212,36 @@ def test_soft_rating_distribution_is_normalized_and_auditable() -> None:
         {11: -0.1, 13: -2.0},
         [11, 12, 13],
     ) == [12]
+
+
+def test_direct_logit_judge_records_soft_distribution_and_missing_ids() -> None:
+    class FakeLlm:
+        @staticmethod
+        def generate(prompts, sampling):
+            del prompts, sampling
+            return [
+                SimpleNamespace(
+                    outputs=[
+                        SimpleNamespace(logprobs=[{11: -0.25, 12: -1.25}])
+                    ]
+                )
+            ]
+
+    judge = OfflineVllmRatingJudge.__new__(OfflineVllmRatingJudge)
+    judge.llm = FakeLlm()
+    judge.sampling = object()
+    judge.rating_min = 1
+    judge.rating_max = 2
+    judge.missing_logprob = -30.0
+    judge.ratings = [1, 2]
+    judge.targets = None
+    judge.all_rating_ids = [11, 12, 13]
+    judge.ids_by_rating = {1: [11], 2: [12, 13]}
+
+    scores = judge.score_prompts(["prompt"], batch_size=None)
+
+    assert scores.shape == (1,)
+    assert judge.parse_error_count == 0
+    assert len(judge.generations) == 1
+    assert judge.generations[0]["missing_rating_token_ids"] == [13]
+    assert abs(sum(judge.generations[0]["rating_probs"].values()) - 1.0) < 1e-12

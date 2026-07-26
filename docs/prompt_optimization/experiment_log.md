@@ -3674,3 +3674,12 @@ verbalizers, context view, aggregation, ordering, and deterministic scoring
 remain fixed. A training cache is authorized only at `>=0.938155` macro AUROC,
 no more than `0.005` instructed or varied loss versus Phoenix direct, 822
 continuous row scores, and zero missing requested logits.
+
+Primary P91 job `30299761` completed in 5m55s. Its `132.7s` scoring pass
+reached `0.94500` macro AUROC, `0.99417` instructed, and `0.87944` varied,
+passing the Phoenix-relative accuracy gates. It produced 819 unique scores over
+822 rows with three ties. The old direct-logit artifact does not retain the
+requested token IDs, however, so it cannot establish the frozen zero-missing
+clause. The runner now records normalized ordinal distributions and absent
+requested IDs for direct logits. An exact audit rerun must reproduce the pass
+and find zero missing IDs before any training-cache work begins.
