@@ -4626,3 +4626,12 @@ Outcome:
 - Reject both rank-1 checkpoints and do not run local test. Retain the scoring
   prompt for retrieval analysis. More epochs or repeated teacher-cache
   iterations are not supported by the held-out trend.
+- Direct candidate-oracle job `30299003` further separates retrieval from
+  reader utility. Recomputed-empty, forced semantic retrieval, label-aware
+  decisive utility, and label-aware any-candidate utility scored `0.93839`,
+  `0.93649`, `0.94113`, and `0.97482` macro AUROC. The corresponding uplifts
+  are `-0.00190`, `+0.00274`, and `+0.03643`.
+- Do not cite the last number as retrieval headroom: its oracle uses true
+  deception labels, and only 16/252 selected facts are teacher-decisive. The
+  decisive-only label-aware ceiling is small, while ordinary semantic
+  retrieval remains harmful without a directional evidence consumer.

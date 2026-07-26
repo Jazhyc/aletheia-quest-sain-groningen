@@ -149,6 +149,15 @@ def extract_binary_scores(outputs: list[Any], token_ids: list[int]) -> list[floa
     return scores
 
 
+def scoring_prefix(chat: str, prefix_mode: str) -> str:
+    """Append the requested label position to a rendered user prompt."""
+    if prefix_mode == "direct":
+        return chat + "Prediction:"
+    if prefix_mode == "empty-summary":
+        return chat + EMPTY_REASONING_PREFIX
+    raise ValueError(f"unsupported prefix mode: {prefix_mode}")
+
+
 def score_rows(
     llm: Any,
     sampling: Any,
@@ -158,6 +167,7 @@ def score_rows(
     tokenizer: Any,
     *,
     batch_size: int,
+    prefix_mode: str = "empty-summary",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     token_ids = binary_token_ids(tokenizer)
     controls = rotated_controls(rows)
@@ -180,7 +190,7 @@ def score_rows(
                 add_generation_prompt=True,
                 enable_thinking=False,
             )
-            rendered.append(chat + EMPTY_REASONING_PREFIX)
+            rendered.append(scoring_prefix(chat, prefix_mode))
             requests.append((row_number, kind, candidate_number, reference))
 
     scores: list[float] = []
@@ -230,6 +240,7 @@ def score_rows(
         "rows": len(rows),
         "candidate_prefixes": sum(len(row["candidates"]) for row in rows),
         "total_prefixes": len(rendered),
+        "prefix_mode": prefix_mode,
         "score_seconds": elapsed,
         "prefixes_per_second": len(rendered) / elapsed,
     }
@@ -253,6 +264,12 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=512)
     parser.add_argument("--max-model-len", type=int, default=4096)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9)
+    parser.add_argument(
+        "--prefix-mode",
+        choices=("empty-summary", "direct"),
+        default="empty-summary",
+        help="Label position to score; the default preserves historical runs.",
+    )
     args = parser.parse_args()
 
     adapter_dir = args.adapter_dir.resolve()
@@ -303,6 +320,7 @@ def main() -> None:
         enable_prefix_caching=True,
         max_lora_rank=int(config["student"]["lora"]["r"]),
         max_model_len=args.max_model_len,
+        max_num_seqs=args.batch_size,
     )
     binary_ids = binary_token_ids(tokenizer)
     sampling = SamplingParams(
@@ -316,6 +334,7 @@ def main() -> None:
     scored, timing = score_rows(
         llm, sampling, request, rows, prompt_by_key, tokenizer,
         batch_size=args.batch_size,
+        prefix_mode=args.prefix_mode,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
@@ -327,6 +346,7 @@ def main() -> None:
         scored, timing = score_rows(
             llm, sampling, request, validation_rows, validation_prompts, tokenizer,
             batch_size=args.batch_size,
+            prefix_mode=args.prefix_mode,
         )
         args.validation_output.parent.mkdir(parents=True, exist_ok=True)
         args.validation_output.write_text(

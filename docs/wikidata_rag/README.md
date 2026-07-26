@@ -567,3 +567,35 @@ frozen Phoenix baseline. Reject both trained adapters and leave local test
 untouched. Retain the base scoring prompt as a retrieval diagnostic; further
 adapter exposure on these repeated question groups is more likely to memorize
 the teacher cache than to improve transfer.
+
+### Current Phoenix oracle headroom
+
+Job `30299003` scored all 4,202 bounded validation candidates at Phoenix's
+selected direct `Prediction:` position. The 4,922 empty/candidate/shuffled
+prefixes took `178.6s` after startup, with no missing label logits. Three
+different oracles must not be conflated:
+
+- `semantic retrieval` knows only which facts GPT-OSS labeled decisive. It
+  forces the first decisive fact on the 50 reachable rows and does not inspect
+  the deception label.
+- `semantic utility` additionally knows the deception label and may choose the
+  most helpful decisive fact or abstain.
+- `any-candidate utility` knows the deception label and may choose any bounded
+  candidate or abstain. This is a reader-perturbation ceiling, not a retriever.
+
+| condition | full macro AUROC | uplift vs recomputed empty | varied AUROC | varied uplift |
+| --- | ---: | ---: | ---: | ---: |
+| cached Phoenix baseline | 0.93815 | — | 0.86431 | — |
+| recomputed direct empty | 0.93839 | — | 0.86486 | — |
+| semantic retrieval oracle | 0.93649 | **-0.00190** | 0.86042 | **-0.00444** |
+| label-aware semantic utility oracle | 0.94113 | **+0.00274** | 0.87125 | **+0.00639** |
+| label-aware any-candidate utility oracle | 0.97482 | **+0.03643** | 0.94986 | **+0.08500** |
+
+The large final row is not factual-retrieval headroom. It uses the true
+deception label on every row, and among its 252 selected facts only 16 are
+GPT-OSS-decisive; 119 are labeled irrelevant, 50 relevant-but-insufficient,
+and 67 have no semantic audit. It exploits candidate-specific movement in the
+reader score. Even the label-aware oracle restricted to genuinely decisive
+facts buys only `+0.00274` macro AUROC. Thus the present bottleneck is not
+recoverable by an oracle retriever alone; Phoenix needs a directional,
+evidence-aware consumer before semantic retrieval can create reliable uplift.

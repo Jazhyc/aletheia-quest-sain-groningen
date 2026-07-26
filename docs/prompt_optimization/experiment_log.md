@@ -1,5 +1,33 @@
 # Prompt Experiment Log
 
+## 2026-07-26: Direct Phoenix candidate-oracle headroom
+
+The P87 follow-up scored all 4,202 bounded validation candidates against the
+exact Phoenix direct `Prediction:` margin. A matched recomputed-empty condition
+was included for all 360 varied rows, while the 12 instructed units remained
+on their cached Phoenix scores. A utility oracle here maximizes correct-label
+probability per row; it is not a literal AUROC-maximizing oracle, which would
+be trivial once labels are exposed.
+
+A perfect semantic retriever that forces one GPT-OSS-decisive fact on each of
+50 reachable rows reduced macro AUROC `0.93839 -> 0.93649`
+(`-0.00190`) and varied AUROC `0.86486 -> 0.86042` (`-0.00444`). If the oracle
+also knows the deception label and may choose the best decisive fact or
+abstain, macro rises only to `0.94113` (`+0.00274`) and varied to `0.87125`
+(`+0.00639`).
+
+Allowing the label-aware oracle to select any candidate raises macro AUROC to
+`0.97482` (`+0.03643`) and varied AUROC to `0.94986` (`+0.08500`). This is not
+retrieval headroom: of 252 selected facts, only 16 are teacher-decisive, while
+119 are labeled irrelevant, 50 relevant-but-insufficient, and 67 unaudited.
+The oracle is exploiting reader-specific prompt perturbations. The result
+confirms that improving fact retrieval alone cannot realize the apparent
+utility ceiling; the missing component is a consumer with directional,
+fact-grounded evidence use.
+
+Job `30299003` completed in `8m49s`. Direct scoring of 4,922 prefixes took
+`178.6s` after startup, with zero missing label logits.
+
 ## 2026-07-26: Rank-1 Qwen database retriever
 
 P87 transferred the strongest earlier compact-retriever objective to hosted

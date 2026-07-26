@@ -659,6 +659,20 @@ that sparse plan without another model pass. Exact Phoenix job `30298951`
 scored real replacement at `0.93762` macro AUROC and mean-log-odds blending at
 `0.93792`, both below the `0.93815` baseline. No local-test run was made.
 
+`run_phoenix_candidate_oracle.sh` scores every bounded fact at Phoenix's direct
+label boundary and `analyze_phoenix_candidate_oracle.py` separates retrieval
+from label-aware reader-utility ceilings. Job `30299003` found:
+
+| oracle | macro AUROC | uplift vs recomputed empty |
+| --- | ---: | ---: |
+| semantic retrieval only | 0.93649 | -0.00190 |
+| decisive fact plus label-aware abstention | 0.94113 | +0.00274 |
+| any candidate plus label-aware abstention | 0.97482 | +0.03643 |
+
+The last condition selects only 16 decisive facts among 252 evidence uses and
+is not a retrieval result. Treat `+0.00274`, not `+0.03643`, as the optimistic
+consumer-compatible headroom from the audited decisive candidate set.
+
 
 ```bash
 PYTHONPATH=. .venv/bin/python experiments/wikidata_rag/build_claim_gated_cache.py \

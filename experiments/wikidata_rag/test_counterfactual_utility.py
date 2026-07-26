@@ -9,6 +9,7 @@ from experiments.wikidata_rag.build_utility_sweep_cache import deranged_donors
 from experiments.wikidata_rag.score_counterfactual_utility import (
     correct_log_probability,
     rotated_controls,
+    scoring_prefix,
 )
 from experiments.wikidata_rag.train_utility_retriever import (
     build_examples,
@@ -50,6 +51,11 @@ def test_correct_log_probability_is_label_symmetric() -> None:
         correct_log_probability(0.8, 1), correct_log_probability(0.2, 0)
     )
     assert correct_log_probability(0.8, 1) > correct_log_probability(0.2, 1)
+
+
+def test_scoring_prefix_preserves_historical_default_and_supports_direct() -> None:
+    assert scoring_prefix("chat", "direct") == "chatPrediction:"
+    assert "<reasoning_summary>" in scoring_prefix("chat", "empty-summary")
 
 
 def test_rotated_controls_never_use_the_same_question_group() -> None:
