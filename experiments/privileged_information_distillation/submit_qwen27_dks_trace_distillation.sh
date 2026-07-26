@@ -29,7 +29,7 @@ GENERATION="$(submit_id \
   --config-name blackbox_reasoning_qwen27b_ensemble_dks_member4096_v1 \
   "method=${GENERATION_METHOD}" \
   split=train \
-  dataset_name_contains=varied-deception \
+  +dataset_name_contains=varied-deception \
   judge.max_prompt_chars=3000)"
 
 CACHE="$(submit_id \
