@@ -3603,10 +3603,23 @@ the unused vision path. The shared runner now exposes vLLM's
 defaults for historical configs. Replacement job `30299507` uses both
 text-only controls and the now-cached weights.
 
-The replacement must report macro/per-dataset AUROC, instructed/varied AUROC,
-continuous-score diagnostics, missing target logits, and scoring time before
-any training cache is authorized. The minimum teacher gate is Phoenix direct's
-`0.938155` validation macro AUROC with no more than `0.005` loss in either
-scenario; `+0.005` macro is preferred before student training. If it passes,
-the next stage will cache only compact soft scores and retain the existing
-GPT-OSS reasoning-summary SFT loss.
+Replacement job `30299507` completed successfully. vLLM spent about 39 minutes
+after model load in compilation/FlashInfer MoE autotuning, then scored all
+2,466 prompt evaluations in `31.0s` (`26.5` rows/s). The result had zero parse
+errors, 820 unique scores over 822 rows, and two repeated-score ties. Macro
+AUROC was `0.90833`, split `0.98188` instructed and `0.81028` varied, versus
+`0.92714` for the Qwen-9B direct-logit D/K/S control and `0.93815` for Phoenix
+direct. The direct MoE margin fails the teacher gate and must not be cached or
+distilled.
+
+That result is not a matched comparison with the strong dense-27B D/K/S
+teacher: `qwen27b_reason_ensemble_dks_member4096_v1` generates as many as 4,096
+reasoning tokens before parsing its rating and scored `0.94417` validation
+macro AUROC. Follow-up job `30299593` is an exact 35B-A3B model swap of that
+generated-reasoning condition. It retains the prompts, token budget,
+member-major order, aggregation, and scoring, while eager execution and
+disabled FlashInfer autotuning avoid repeating the pathological cold-start
+tuner. This run determines whether the sparse model is a useful reasoning
+teacher; it does not revive the rejected direct margins. If it passes, a later
+cache must obtain soft logits before the final rating without conditioning on
+the already generated label.

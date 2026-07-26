@@ -531,6 +531,8 @@ def vllm_kwargs_from_config(
     max_num_seqs: int | None,
     language_model_only: bool,
     skip_mm_profiling: bool,
+    enforce_eager: bool,
+    enable_flashinfer_autotune: bool | None,
     spec_method: str | None,
     spec_model: str | None,
     spec_tokens: int | None,
@@ -543,10 +545,12 @@ def vllm_kwargs_from_config(
         "trust_remote_code": trust_remote_code,
         "language_model_only": language_model_only,
         "skip_mm_profiling": skip_mm_profiling,
+        "enforce_eager": enforce_eager,
     }
     optional = {
         "max_model_len": max_model_len,
         "max_num_seqs": max_num_seqs,
+        "enable_flashinfer_autotune": enable_flashinfer_autotune,
         "spec_method": spec_method,
         "spec_model": spec_model,
         "spec_tokens": spec_tokens,
@@ -591,6 +595,8 @@ class OfflineVllmRatingJudge:
         max_num_seqs: int | None,
         language_model_only: bool,
         skip_mm_profiling: bool,
+        enforce_eager: bool,
+        enable_flashinfer_autotune: bool | None,
         spec_method: str | None,
         spec_model: str | None,
         spec_tokens: int | None,
@@ -625,6 +631,8 @@ class OfflineVllmRatingJudge:
             max_num_seqs=max_num_seqs,
             language_model_only=language_model_only,
             skip_mm_profiling=skip_mm_profiling,
+            enforce_eager=enforce_eager,
+            enable_flashinfer_autotune=enable_flashinfer_autotune,
             spec_method=spec_method,
             spec_model=spec_model,
             spec_tokens=spec_tokens,
@@ -683,6 +691,8 @@ class OfflineVllmGenerateJudge:
         max_num_seqs: int | None,
         language_model_only: bool,
         skip_mm_profiling: bool,
+        enforce_eager: bool,
+        enable_flashinfer_autotune: bool | None,
         spec_method: str | None,
         spec_model: str | None,
         spec_tokens: int | None,
@@ -716,6 +726,8 @@ class OfflineVllmGenerateJudge:
             max_num_seqs=max_num_seqs,
             language_model_only=language_model_only,
             skip_mm_profiling=skip_mm_profiling,
+            enforce_eager=enforce_eager,
+            enable_flashinfer_autotune=enable_flashinfer_autotune,
             spec_method=spec_method,
             spec_model=spec_model,
             spec_tokens=spec_tokens,
@@ -795,6 +807,8 @@ class OfflineVllmStructuredJudge:
         max_num_seqs: int | None,
         language_model_only: bool,
         skip_mm_profiling: bool,
+        enforce_eager: bool,
+        enable_flashinfer_autotune: bool | None,
         spec_method: str | None,
         spec_model: str | None,
         spec_tokens: int | None,
@@ -835,6 +849,8 @@ class OfflineVllmStructuredJudge:
             max_num_seqs=max_num_seqs,
             language_model_only=language_model_only,
             skip_mm_profiling=skip_mm_profiling,
+            enforce_eager=enforce_eager,
+            enable_flashinfer_autotune=enable_flashinfer_autotune,
             spec_method=spec_method,
             spec_model=spec_model,
             spec_tokens=spec_tokens,
@@ -1143,6 +1159,12 @@ def build_judge(cfg: DictConfig):
             ),
             "skip_mm_profiling": bool(
                 OmegaConf.select(cfg, "judge.skip_mm_profiling", default=False)
+            ),
+            "enforce_eager": bool(
+                OmegaConf.select(cfg, "judge.enforce_eager", default=False)
+            ),
+            "enable_flashinfer_autotune": OmegaConf.select(
+                cfg, "judge.enable_flashinfer_autotune", default=None
             ),
             "spec_method": None if cfg.judge.spec_method is None else str(cfg.judge.spec_method),
             "spec_model": None if cfg.judge.spec_model is None else str(cfg.judge.spec_model),

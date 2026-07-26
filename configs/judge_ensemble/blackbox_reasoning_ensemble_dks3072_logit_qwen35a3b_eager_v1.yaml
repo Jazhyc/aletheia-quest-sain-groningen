@@ -1,0 +1,15 @@
+# @package _global_
+# Frozen fallback for pathological Qwen3.5-35B-A3B CUDA-graph startup.
+
+defaults:
+  - blackbox_reasoning_ensemble_dks3072_logit_qwen35a3b_v1
+  - _self_
+
+method: qwen35a3b_reason_ensemble_dks3072_logit_eager_v1
+
+judge:
+  enforce_eager: true
+  # vLLM 0.24 can spend tens of minutes autotuning the BF16 MoE kernels at
+  # the 16,384-token scheduler budget. Use its default heuristic for this
+  # quality gate; scoring time remains measured separately.
+  enable_flashinfer_autotune: false

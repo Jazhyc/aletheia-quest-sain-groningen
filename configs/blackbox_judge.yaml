@@ -41,6 +41,8 @@ judge:
   # vision tower. Keep the shared default false for exact historical parity.
   language_model_only: false
   skip_mm_profiling: false
+  enforce_eager: false
+  enable_flashinfer_autotune: null
   # Our formatted conversations are character-truncated far below Qwen's advertised
   # 262k context. Cap vLLM's KV-cache planning to keep startup/memory reasonable.
   max_model_len: 16384

@@ -4675,7 +4675,8 @@ Outcome:
 
 ## P89: Qwen3.5-35B-A3B Soft-Teacher Gate
 
-Status: frozen validation gate running as Slurm job `30299507`.
+Status: direct-logit gate rejected; matched 4,096-token reasoning gate running
+as Slurm job `30299593`.
 
 Question: can the sparse `Qwen/Qwen3.5-35B-A3B` replace dense Qwen3.5-27B as
 the source of continuous teacher targets for a direct-margin Qwen3.5-9B
@@ -4718,3 +4719,25 @@ Frozen first gate:
 - Select the student on direct Qwen-9B macro AUROC. A binary-label CE/pairwise
   control already failed to improve AUROC, so any promotion must come from the
   teacher's soft ordering rather than another hard-label objective.
+
+Direct-gate result:
+
+- Job `30299507` completed on one RTX Pro 6000. The score pass took `31.0s`
+  for 822 rows and 2,466 prompt evaluations (`26.5` rows/s), with zero parse
+  errors, 820 unique scores, and two repeated-score ties.
+- Macro AUROC was only `0.90833`: `0.98188` instructed and `0.81028` varied.
+  This is below Phoenix direct (`0.93815`) and the matched Qwen-9B direct-logit
+  D/K/S control (`0.92714`). Do not cache or distill these direct MoE margins.
+- This does not compare like-for-like with the strong dense-27B D/K/S teacher,
+  which generates up to 4,096 reasoning tokens before its rating. Job
+  `30299593` therefore freezes an exact model swap of
+  `qwen27b_reason_ensemble_dks_member4096_v1`, retaining its prompts,
+  generation budget, member-major order, max aggregation, and scoring. The
+  sparse run uses eager execution and disables FlashInfer autotuning solely to
+  avoid the 39-minute cold-start tuner seen in the direct gate.
+- Authorize soft-target cache design only if the reasoning-enabled sparse
+  teacher is competitive with the dense-27B validation AUROC (`0.94417`) and
+  preserves varied ordering. Its generated discrete ratings are a teacher
+  quality gate, not yet the soft targets: a passing follow-up must rescore the
+  teacher's rating distribution before the selected label without
+  conditioning on that label.

@@ -18,3 +18,4 @@ judge:
   tensor_parallel_size: 1
   language_model_only: true
   skip_mm_profiling: true
+  enforce_eager: false

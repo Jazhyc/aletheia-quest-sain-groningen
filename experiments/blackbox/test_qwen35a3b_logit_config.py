@@ -67,6 +67,8 @@ def test_text_only_controls_are_forwarded_to_vllm() -> None:
         max_num_seqs=128,
         language_model_only=True,
         skip_mm_profiling=True,
+        enforce_eager=False,
+        enable_flashinfer_autotune=None,
         spec_method=None,
         spec_model=None,
         spec_tokens=None,
@@ -74,3 +76,51 @@ def test_text_only_controls_are_forwarded_to_vllm() -> None:
 
     assert kwargs["language_model_only"] is True
     assert kwargs["skip_mm_profiling"] is True
+    assert kwargs["enforce_eager"] is False
+    assert "enable_flashinfer_autotune" not in kwargs
+
+
+def test_eager_fallback_changes_only_runtime_mode() -> None:
+    compiled = compose_ensemble(
+        "blackbox_reasoning_ensemble_dks3072_logit_qwen35a3b_v1"
+    )
+    eager = compose_ensemble(
+        "blackbox_reasoning_ensemble_dks3072_logit_qwen35a3b_eager_v1"
+    )
+
+    assert eager.judge.model == compiled.judge.model
+    assert eager.judge.language_model_only == compiled.judge.language_model_only
+    assert eager.judge.skip_mm_profiling == compiled.judge.skip_mm_profiling
+    assert eager.judge.enforce_eager is True
+    assert compiled.judge.enforce_eager is False
+    assert eager.judge.enable_flashinfer_autotune is False
+    assert OmegaConf.select(
+        compiled, "judge.enable_flashinfer_autotune", default=None
+    ) is None
+    assert eager.ensemble.members == compiled.ensemble.members
+    assert eager.ensemble.aggregation == compiled.ensemble.aggregation
+    assert eager.scoring == compiled.scoring
+
+
+def test_qwen35a3b_reasoning_gate_is_a_matched_27b_model_swap() -> None:
+    dense = compose_ensemble(
+        "blackbox_reasoning_qwen27b_ensemble_dks_member4096_v1"
+    )
+    sparse = compose_ensemble(
+        "blackbox_reasoning_qwen35a3b_ensemble_dks_member4096_v1"
+    )
+
+    assert dense.judge.model == "Qwen/Qwen3.5-27B"
+    assert sparse.judge.model == "Qwen/Qwen3.5-35B-A3B"
+    assert sparse.judge.mode == dense.judge.mode == "generate"
+    assert sparse.judge.max_tokens == dense.judge.max_tokens == 4096
+    assert sparse.judge.max_prompt_chars == dense.judge.max_prompt_chars
+    assert sparse.judge.temperature == dense.judge.temperature
+    assert sparse.ensemble.members == dense.ensemble.members
+    assert sparse.ensemble.order == dense.ensemble.order == "member"
+    assert sparse.ensemble.aggregation == dense.ensemble.aggregation == "max"
+    assert sparse.scoring == dense.scoring
+    assert sparse.judge.language_model_only is True
+    assert sparse.judge.skip_mm_profiling is True
+    assert sparse.judge.enforce_eager is True
+    assert sparse.judge.enable_flashinfer_autotune is False
