@@ -629,6 +629,36 @@ because belief-based deception can coexist with an objectively correct
 headline answer. Do not deploy or test this cache. See
 `docs/wikidata_rag/README.md` for the complete metrics and interpretation.
 
+### Rank-1 Qwen decisiveness distillation
+
+`build_qwen_retriever_distillation.py` converts the GPT-OSS candidate audit
+into same-row decisive/nondecisive pairs and negative-only anchors for frozen
+planner false positives. `evaluate_qwen_retriever_rank1.py` reads direct
+`Prediction:0|1` logits, calibrates only on the frozen question-group bucket,
+and reports candidate ranking plus sparse emission metrics. The teacher target
+contains no deception labels.
+
+```bash
+sbatch --gpus-per-node=a100:1 \
+  experiments/wikidata_rag/run_qwen_retriever_rank1.sh
+
+sbatch --gpus-per-node=a100:1 \
+  experiments/wikidata_rag/run_evaluate_qwen_retriever_rank1.sh
+```
+
+The one-epoch rank-1/alpha-2 adapter was effectively inert: validation
+candidate AUROC changed `0.92717 -> 0.92722`, novel-question AUROC changed
+`0.86758 -> 0.86773`, and its calibrated emissions were identical to base
+Qwen. A three-epoch control moved more but reduced validation AUROC to
+`0.92625` and novel-question AUROC to `0.86256`. Do not promote either adapter.
+
+The unadapted scoring prompt remains useful as a second-stage filter. It kept
+18/34 planner facts, 17 of them decisive, for `0.944` fact precision and
+`0.340` decisive-row recall. `filter_qwen_planner_by_scores.py` materializes
+that sparse plan without another model pass. Exact Phoenix job `30298951`
+scored real replacement at `0.93762` macro AUROC and mean-log-odds blending at
+`0.93792`, both below the `0.93815` baseline. No local-test run was made.
+
 
 ```bash
 PYTHONPATH=. .venv/bin/python experiments/wikidata_rag/build_claim_gated_cache.py \

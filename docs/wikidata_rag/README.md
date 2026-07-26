@@ -507,3 +507,63 @@ not reduce the independent belief/intent score. With the present prompt only
 7/268 labeled training emissions and 1/31 validation emissions contained
 counterevidence, so simply filtering the current cache to contradictions is too
 sparse to constitute a submission method.
+
+## Rank-1 Qwen decisiveness retriever
+
+The follow-up tested whether the strongest parts of the earlier compact
+retriever program transfer to Qwen itself. The useful prior supervision was
+semantic GPT-OSS decisiveness, with same-row hard negatives; lexical overlap,
+synthetic targets, reader-utility targets, larger cross-encoders, and repeated
+retriever/reader alternation had not transferred reliably. The Qwen target is
+therefore deliberately narrow: predict `1` when a literal database fact, by
+itself, settles the response's direct answer, whether by support or
+contradiction. It never receives the competition deception label.
+
+GPT-OSS candidate audits supplied 230 positive/negative pairs from the same
+row. Seventy-four additional negative-only anchors were frozen planner false
+positives. Exact question groups were split by a frozen SHA-1 bucket: three
+buckets fit the adapter, one selected an absolute-score threshold at minimum
+0.8 precision, and one was an untouched internal diagnostic. The resulting
+534 records cover 101 fit question groups. Training uses rank 1, alpha 2 over
+the language attention and MLP projections, direct binary loss plus a same-pair
+ranking loss, and no deception labels.
+
+Jobs `30298726` and `30298742` trained and evaluated the one-epoch adapter.
+Its scores were effectively the base model's scores: on validation only
+175/3,097 candidate probabilities changed, with mean absolute change
+`0.000169`, maximum `0.0312`, and correlation `0.99995`. A controlled
+three-epoch exposure (`30298817`, `30298821`) moved the model more, but moved
+held-out ranking in the wrong direction.
+
+| scorer | internal candidate AUROC | validation candidate AUROC | novel-question AUROC | emitted precision | decisive-row recall |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| frozen base Qwen | 0.92983 | 0.92717 | 0.86758 | 0.840 | 0.420 |
+| rank-1, one epoch | 0.92975 | 0.92722 | 0.86773 | 0.840 | 0.420 |
+| rank-1, three epochs | 0.93037 | 0.92625 | 0.86256 | 0.826 | 0.380 |
+
+The prompt itself is useful as a high-precision second stage. Applying the
+base-Qwen threshold only to the bounded planner's selected facts reduced 34
+facts to 18, of which 17 were GPT-OSS-decisive: selected-fact precision rose
+from `0.735` to `0.944`, while decisive-row recall fell from `0.500` to
+`0.340`. This gain must be attributed to the pointwise Qwen prompt, not the
+rank-1 update.
+
+Frozen Phoenix job `30298951` tested those 18 prompt-filtered rows. It had zero
+missing label logits and scored the 54 real/shuffled/empty prompts in `6.89s`
+after startup.
+
+| condition | full macro AUROC | varied AUROC |
+| --- | ---: | ---: |
+| cached Phoenix baseline | **0.93815** | **0.86431** |
+| recomputed empty on active rows | 0.93804 | 0.86403 |
+| filtered real replacement | 0.93762 | 0.86306 |
+| filtered shuffled replacement | 0.93696 | 0.86153 |
+| Phoenix/filtered-real mean log-odds | 0.93792 | 0.86375 |
+| Phoenix/filtered-shuffled mean log-odds | 0.93768 | 0.86319 |
+
+Filtering makes real evidence outperform shuffled evidence and recovers part
+of the unfiltered regression, but neither replacement nor blending beats the
+frozen Phoenix baseline. Reject both trained adapters and leave local test
+untouched. Retain the base scoring prompt as a retrieval diagnostic; further
+adapter exposure on these repeated question groups is more likely to memorize
+the teacher cache than to improve transfer.

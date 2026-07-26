@@ -1,5 +1,39 @@
 # Prompt Experiment Log
 
+## 2026-07-26: Rank-1 Qwen database retriever
+
+P87 transferred the strongest earlier compact-retriever objective to hosted
+Qwen: GPT-OSS semantic decisiveness, same-row hard negatives, and an explicit
+abstention threshold. The target predicts whether one literal database fact
+settles the direct answer; support and contradiction are both positive, and no
+deception label is used. The rank-1/alpha-2 adapter trains direct `0|1` loss
+plus a within-pair ranking loss over 230 pairs and 74 planner false-positive
+anchors. Exact question groups were frozen into fit, calibration, and internal
+diagnostic buckets.
+
+One-epoch jobs `30298726`/`30298742` showed that the adapter was nearly inert.
+Validation candidate AUROC was `0.92722` versus `0.92717` for base Qwen, and
+novel-question AUROC was `0.86773` versus `0.86758`. Only 175/3,097 validation
+candidate scores changed, with mean absolute delta `0.000169`. Calibrated
+precision/recall were identical at `0.840/0.420`.
+
+A controlled three-epoch run (`30298817`/`30298821`) rejected undertraining as
+the explanation. It moved the adapter but reduced validation AUROC to
+`0.92625`, novel-question AUROC to `0.86256`, and emission
+precision/recall to `0.826/0.380`. The untouched internal candidate AUROC rose
+slightly (`0.92983 -> 0.93037`) while average precision fell, which does not
+override the held-out validation regression.
+
+The base scoring prompt did clean the frozen planner cache: it retained 18/34
+facts, 17 GPT-OSS-decisive, raising selected-fact precision
+`0.735 -> 0.944` at recall `0.340`. Downstream Phoenix job `30298951` then
+tested the exact 18-row cache. Baseline, recomputed empty, real replacement,
+shuffled replacement, and Phoenix/real mean-log-odds AUROCs were `0.93815`,
+`0.93804`, `0.93762`, `0.93696`, and `0.93792`. Real now beats shuffled, so
+the semantic filter is meaningful, but neither selected composition beats
+baseline. Reject the adapter and evidence-conditioned Phoenix; keep local test
+untouched.
+
 ## 2026-07-26: Continuous action-report specialist
 
 P86 tested the frozen action-report prompt as a continuous AUROC specialist

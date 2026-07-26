@@ -4575,3 +4575,54 @@ Outcome:
   remains unchanged. A synthetic three-row NDIF notebook smoke activated one
   action route, excluded intent despite an available reasoning trace, and
   preserved duplicate ordinary scores exactly (`0.0` absolute delta).
+
+## P87: Rank-1 Qwen Database Retriever
+
+Status: semantic prompt retained as a diagnostic; adapter and downstream route
+rejected.
+
+Question: can the earlier retriever's best teacher objective be transferred to
+a rank-1 Qwen adapter that cheaply scores bounded database candidates?
+
+Frozen design:
+
+- Use the existing GPT-OSS candidate audit and define a positive as a fact that
+  by itself settles the response's direct answer. Both support and
+  contradiction are positive; relevant-but-insufficient and irrelevant facts
+  are negative.
+- Pair every fit positive with a same-row hard negative, prioritizing frozen
+  planner mistakes. Add negative-only anchors for planner false positives on
+  rows without a decisive fact.
+- Do not expose deception labels. Split exact question groups by frozen SHA-1
+  bucket into fit, calibration, and internal diagnostic partitions.
+- Train rank 1, alpha 2 across the language attention and MLP projections with
+  direct binary loss plus within-pair ranking loss. Select an absolute score
+  threshold only on the calibration bucket at minimum 0.8 precision.
+- Compare base Qwen, one epoch, and a controlled three-epoch exposure on
+  candidate AUROC/AP, novel questions, top-1 retrieval, and calibrated
+  precision/recall.
+- If the scoring stage cleans the planner cache, rerun the exact Phoenix
+  direct-margin real/shuffled/empty comparison. Do not touch local test unless
+  validation macro AUROC improves.
+
+Outcome:
+
+- The teacher contains 534 records: 230 positive/negative pairs and 74
+  negative-only planner anchors across 101 fit question groups.
+- One-epoch jobs `30298726`/`30298742` were effectively identical to base:
+  validation candidate AUROC `0.92717 -> 0.92722`, novel-question AUROC
+  `0.86758 -> 0.86773`, and unchanged emission precision/recall
+  `0.840/0.420`. Mean validation score delta was only `0.000169`.
+- Three-epoch jobs `30298817`/`30298821` moved the model in the wrong
+  direction: validation AUROC `0.92625`, novel-question AUROC `0.86256`, and
+  emission precision/recall `0.826/0.380`.
+- Base-Qwen prompt filtering retained 18/34 planner facts, 17 decisive. This
+  raises fact precision `0.735 -> 0.944` while lowering decisive-row recall
+  `0.500 -> 0.340`. Attribute this to the prompt, not the adapter.
+- Exact downstream job `30298951` scored cached baseline, real replacement,
+  shuffled replacement, and Phoenix/real mean-log-odds at `0.93815`,
+  `0.93762`, `0.93696`, and `0.93792` macro AUROC. Real evidence now beats
+  shuffled, but neither deployment composition passes the baseline gate.
+- Reject both rank-1 checkpoints and do not run local test. Retain the scoring
+  prompt for retrieval analysis. More epochs or repeated teacher-cache
+  iterations are not supported by the held-out trend.
