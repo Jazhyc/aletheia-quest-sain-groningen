@@ -2,18 +2,13 @@
 
 Timing is scoring-only wall time: it excludes vLLM startup/model load/compile and dataset preparation.
 Submitted timestamps are UTC.
-Rows with cached text-probe components report the logits scoring wall time; CPU n-gram inference is negligible.
-The continuous hybrid row reuses cached member outputs, so it has no comparable end-to-end scoring time.
 
 | submitted_at | method | AUROC | bal_acc | recall | FPR | score_time | rows/s |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 2026-07-25 18:10:37 | phoenix_v3_direct_margin_v1 | 0.9342 | 0.8679 | 0.8333 | 0.0976 | 9.3s | 88.3/s |
-| 2026-07-20 20:41:00 | qwen9b_heterogeneous_ngram_stack_v1 | 0.9608 | 0.9298 | 0.9190 | 0.0595 | 163.7s | 5.0/s |
+| 2026-07-25 23:45:22 | qwen9b_reasoning_intent_logits_v1 | 0.8505 | 0.6202 | 0.2524 | 0.0119 | 30.7s | 26.8/s |
 | 2026-07-17 02:02:26 | qwen9b_reason_ensemble_dks_first_rating_stop_v1 | 0.9332 | 0.9310 | 0.8881 | 0.0262 | 528.3s | 1.6/s |
 | 2026-07-17 00:23:59 | qwen27b_reason_ensemble_dks_member4096_v1 | 0.9573 | 0.9464 | 0.9357 | 0.0429 | 1484.5s | 0.6/s |
-| 2026-07-16 08:56:33 | continuous_hybrid_locked_test_v1 | 0.9571 | 0.9298 | 0.8976 | 0.0381 | - | - |
 | 2026-07-16 08:54:51 | continuous_hybrid_dks3072_logits_v1 | 0.9014 | 0.8726 | 0.7857 | 0.0405 | 77.7s | 10.6/s |
-| 2026-07-15 23:15:04 | qwen9b_pid_reasoning4000_summary_binary_or_locked_v1 | 0.9274 | 0.9274 | 0.8929 | 0.0381 | 69.0s | 11.9/s |
 | 2026-07-11 16:32:24 | qwen9b_pid_varied_grpo_ep2_v1 | 0.9048 | 0.9048 | 0.8310 | 0.0214 | 147.4s | 5.6/s |
 | 2026-07-11 15:55:23 | gpt_oss_120b_reason_ensemble_dks_member4096_v1 | 0.9465 | 0.9345 | 0.9000 | 0.0310 | 104.0s | 7.9/s |
 | 2026-07-11 03:35:07 | gpt_oss_120b_nothink_truth_value_v1 | 0.9391 | 0.9310 | 0.8976 | 0.0357 | 25.2s | 32.6/s |
@@ -35,7 +30,19 @@ The continuous hybrid row reuses cached member outputs, so it has no comparable 
 | 2026-07-03 14:21:30 | qwen_structured_reason_budget_2048 | 0.9185 | 0.8762 | 0.7667 | 0.0143 | 384.4s | 2.1/s |
 | 2026-07-03 01:50:21 | qwen_reason_v1 | 0.9092 | 0.9095 | 0.8357 | 0.0167 | 428.2s | 1.9/s |
 | 2026-07-03 00:21:22 | qwen_judge_v1 | 0.8657 | 0.6393 | 0.3048 | 0.0262 | 12.4s | 66.4/s |
+| - | qwen9b_pid_varied_rank24_full_adamw5e5_v1 | - | - | - | - | - | - |
 | - | qwen9b_privileged_gptoss120b_summary_adamwlr5e5_v1 | - | - | - | - | - | - |
+| - | continuous_hybrid_locked_test_v1 | 0.9571 | 0.9298 | 0.8976 | 0.0381 | - | - |
+| - | qwen9b_pid_family_coverage_varied10_adamw5e5_v1 | - | - | - | - | - | - |
 | - | qwen9b_pid_varied_muonlr1e4_ep2_v1 | - | - | - | - | - | - |
 | - | qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1 | - | - | - | - | - | - |
+| - | qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1 | - | - | - | - | - | - |
+| - | qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1 | - | - | - | - | - | - |
+| - | qwen9b_heterogeneous_resolved_intent_rank1_v1 | - | - | - | - | - | - |
+| - | qwen9b_heterogeneous_resolved_intent_rank1_v1 | - | - | - | - | - | - |
 | - | qwen9b_pid_predictiononly_variedonly_adamwlr5e5_v1 | - | - | - | - | - | - |
+| - | qwen9b_heterogeneous_incorrectness_rank1_v1 | - | - | - | - | - | - |
+| - | qwen9b_pid_specialist_material_rank1_v1 | - | - | - | - | - | - |
+| - | qwen9b_pid_varied_datafrac10_adamw5e5_v1 | - | - | - | - | - | - |
+| - | qwen9b_pid_teacher_polarity_guard_variedonly_v1 | - | - | - | - | - | - |
+| - | qwen9b_pid_reasoning_headtail2400_variedonly_adamw5e5_v1 | - | - | - | - | - | - |
