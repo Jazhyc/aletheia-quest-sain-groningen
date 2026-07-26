@@ -4752,3 +4752,33 @@ Direct-gate result:
   scenario gates. Do not cache training targets or train a Qwen-9B student from
   this teacher. Never rescore while leaving the already sampled terminal
   rating in context.
+
+## P90: Dense Qwen-27B Post-Reasoning Soft Targets
+
+Status: validation gate queued.
+
+Question: does the stronger dense Qwen3.5-27B teacher expose a useful
+continuous rating distribution after its frozen D/K/S reasoning traces?
+
+Frozen protocol:
+
+- Reuse the exact 2,466 validation traces from
+  `qwen27b_reason_ensemble_dks_member4096_v1`. Validate dataset, row, label,
+  ensemble-member name, and member index against the current evaluation order.
+- Remove a terminal sampled `Rating: 1--7` before rescoring so the distribution
+  is not conditioned on the teacher's already selected label. Keep incomplete
+  or length-capped reasoning byte-for-byte.
+- Score the full 1--7 distribution at that boundary with the same dense
+  Qwen3.5-27B model, prompts, chat template, member-major order, and max
+  aggregation. Generate exactly one constrained token per trace.
+- Report macro, instructed, varied, and per-dataset AUROC; score uniqueness and
+  ties; removed-rating coverage; missing target logits; and scoring-only time.
+- Authorize a training-score cache only if continuous macro AUROC is at least
+  the generated dense-teacher result (`0.94417`), instructed and varied AUROC
+  each lose no more than `0.005` relative to `0.99792/0.87250`, all 822 row
+  scores are continuous, and no target logits are missing.
+- If the gate passes, cache compact per-row ordinal distributions on the
+  varied-only training set and add a temperature-softened loss at the
+  Qwen3.5-9B student's direct `Prediction:` boundary while retaining the
+  selected GPT-OSS reasoning-summary SFT loss. Do not replace the authoritative
+  binary labels or copy teacher private reasoning into student targets.

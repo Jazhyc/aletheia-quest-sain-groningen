@@ -146,6 +146,24 @@ def test_postreason_gate_reuses_frozen_reasoning_without_selected_label() -> Non
     )
 
 
+def test_qwen27_postreason_gate_is_the_matched_dense_teacher_rescore() -> None:
+    generated = compose_ensemble(
+        "blackbox_reasoning_qwen27b_ensemble_dks_member4096_v1"
+    )
+    rescored = compose_ensemble(
+        "blackbox_reasoning_qwen27b_ensemble_dks_member4096_postreason_logits_v1"
+    )
+
+    assert rescored.judge.mode == "structured"
+    assert rescored.judge.model == "Qwen/Qwen3.5-27B"
+    assert rescored.judge.model == generated.judge.model
+    assert rescored.ensemble == generated.ensemble
+    assert rescored.scoring == generated.scoring
+    assert rescored.judge.reasoning_cache_path.endswith(
+        "qwen27b_reason_ensemble_dks_member4096_v1/validation/generations.jsonl"
+    )
+
+
 def test_terminal_generated_rating_is_removed_before_rescore() -> None:
     reasoning = "Check the claims carefully.\n\n**Final Rating:** **6**"
     stripped, rating = strip_terminal_generated_rating(

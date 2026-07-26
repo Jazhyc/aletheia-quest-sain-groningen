@@ -3644,3 +3644,12 @@ rule. Reject Qwen3.5-35B-A3B as the soft teacher for this recipe; do not
 post-hoc authorize varied-only training from the favorable slice. The
 experiment does confirm that reasoning can materially improve this teacher and
 that continuous rescoring recovers ordering hidden by discrete ratings.
+
+The continuation returns to the stronger dense teacher rather than training on
+the rejected sparse scores. P90 reuses the frozen 2,466
+`qwen27b_reason_ensemble_dks_member4096_v1` validation traces, strips any
+terminal sampled rating, and scores the dense model's complete 1--7
+distribution at that boundary. A training cache is authorized only if the
+continuous result reaches the generated teacher's `0.94417` macro AUROC,
+preserves instructed and varied AUROC within `0.005`, produces a continuous
+score for every row, and has no missing target logits.
