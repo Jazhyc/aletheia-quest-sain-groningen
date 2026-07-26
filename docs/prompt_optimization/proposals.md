@@ -4335,8 +4335,8 @@ Outcome:
   scores. Its H100 margin passes took `1.31s` and `1.38s` after model load.
 - A one-row NDIF smoke verified the exact base-model/no-PEFT path,
   `logits_to_keep=1`, and empty-summary prefix; it emitted `0.952574`.
-- Phoenix 4.1 deploys the route in
-  `submission/phoenix_wright_v4_1.ipynb`. Known competition coverage remains
+- Phoenix 4.1 originally deployed the route; it remains unchanged and exclusive
+  in `submission/phoenix_wright_v4_2.ipynb`. Known competition coverage remains
   zero, so this is a low-regression OOD transfer bet, not a measured local
   validation improvement. Do not broaden the router or replace the frozen
   empty scaffold from confirmation.
@@ -4400,7 +4400,7 @@ Validation outcome:
 
 ## P83: Rank-1 Resolved-Intent Label Margins
 
-Status: validation selected empty-summary margins; frozen test queued.
+Status: validation selected empty-summary margins; frozen test confirmed.
 
 Question: does the existing rank-1 resolved-intent adapter improve the
 AUROC-first P82 ensemble when its label margins are read without generating a
@@ -4429,6 +4429,52 @@ Validation outcome:
 - The selected blend emitted 358 unique scores over 360 rows with zero
   cross-label ties. Keeping 12 no-trace units unchanged projects full
   validation macro AUROC `0.93815 -> 0.95393`.
-- Empty-summary scoring took `24.03s` for all 822 rows; a submission would
-  query only the 360 trace-bearing rows. Frozen test job `30297739` evaluates
-  the selected condition only.
+- Empty-summary scoring took `24.03s` for all 822 validation rows; a submission
+  queries only the 360 trace-bearing rows.
+- Frozen test job `30297739` scored intent at `0.88819` and the selected blend
+  at **`0.90417`** on the nine trace-bearing units, versus `0.87083` Phoenix
+  (`+0.03333`). Seven units improved and two regressed. The full 21-unit
+  projection is `0.93423 -> 0.94851`; the blend had 358 unique scores and zero
+  cross-label ties.
+- Matched validation no-LoRA job `30297742` scored `0.88139` standalone and
+  `0.90028` blended, nearly tying the adapter's `0.88597` and `0.90111`.
+  Therefore the rank-1-specific improvement over its exact prompt control is
+  small, despite the frozen adapter path's strong test transfer.
+
+## P84: Phoenix 4.2 Exclusive Harm Route and Intent Margin
+
+Status: implemented; trace-bearing remote smoke passed.
+
+Question: can the selected rank-1 intent margin add a complementary ranking
+signal without paying its cost or transfer risk on ordinary Phoenix rows?
+
+Frozen deployment:
+
+- Preserve Phoenix 4.1's exact HP-KR semantic router and its exclusion of the
+  rejected forced-choice harm contract.
+- Preserve the base-Qwen `knowledge_report_type` empty-summary harm specialist
+  as the only judge on those routed rows; never invoke intent there.
+- On non-harm rows with a final-assistant reasoning trace, run P83's rank-1
+  resolved-intent adapter with its selected empty-summary margin.
+- Combine Phoenix and intent on those eligible non-harm rows with the fixed
+  mean log-odds rule.
+- Leave non-harm no-trace continuous scores exactly on Phoenix 4.1 and derive
+  the hard `deceptive` column from the unblended Phoenix/specialist score.
+- Load each judge lazily, so the harm specialist runs only on harm rows and
+  intent runs only on eligible non-harm rows.
+
+Implementation:
+
+- The sole notebook is `submission/phoenix_wright_v4_2.ipynb`.
+- The exact rank-1 adapter is bundled under
+  `submission/phoenix_wright_v4_adapters/resolved_intent/`.
+- Unit tests compare the intent renderer with the training pipeline and verify
+  route masking, mean-log-odds composition, and hard-score separation.
+- A one-row trace-bearing NDIF notebook test passed in `221.82s`, exercising
+  both remote adapter sessions and the final composition.
+
+P83's trace-bearing varied-unit validation result motivates the non-harm
+member and projects full macro AUROC `0.93815 -> 0.95393`. The exact HP-KR
+route matches zero known competition rows, so its exclusive specialist
+treatment is still an OOD transfer choice. Do not broaden the router or mix
+intent into harm-specialist rows from this implementation.

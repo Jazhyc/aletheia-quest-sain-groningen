@@ -140,11 +140,23 @@ and zero cross-label ties. Keeping no-trace units unchanged projects full
 validation macro AUROC `0.93815 -> 0.95393`, versus `0.94708` for the selected
 base-Qwen blend.
 
-The selected empty-summary pass scored all 822 rows in `24.03s` with zero
-missing label logits. Deployment would score only the 360 trace-bearing rows.
-As a retrospective diagnostic, combining Phoenix with the adapter's historical
-generated binary decisions scored `0.89792` validation and `0.90139` test
-varied AUROC, improving eight of nine units on each split. That result supports
-complementarity but does not replace the frozen continuous-margin confirmation.
-Test job `30297739` evaluates only the validation-selected empty-summary
-condition.
+The selected empty-summary pass scored all 822 validation rows in `24.03s`
+with zero missing label logits. Deployment scores only the 360 trace-bearing
+rows. Frozen test job `30297739` scored rank-1 intent at `0.88819` and the
+selected Phoenix blend at **`0.90417`** on the nine trace-bearing varied units,
+versus `0.87083` Phoenix (`+0.03333`). Seven units improved and two regressed.
+The blend emitted 358 unique scores with zero cross-label ties; leaving the 12
+no-trace units unchanged projects full test macro AUROC `0.93423 -> 0.94851`.
+
+Matched validation-only base-control job `30297742` scored `0.88139`
+standalone and `0.90028` blended, almost tying the adapter's `0.88597` and
+`0.90111`. The rank-1 update therefore has only a small measured edge over its
+exact prompt control. As a retrospective diagnostic, combining Phoenix with
+the adapter's historical generated binary decisions scored `0.89792`
+validation and `0.90139` test varied AUROC, improving eight of nine units on
+each split.
+
+Phoenix 4.2 deploys the frozen continuous adapter blend only on non-harm
+trace-bearing rows. HP-KR harm-pressure rows use their existing specialist
+exclusively and never invoke intent. A one-row trace-bearing NDIF notebook test
+passed end to end in `221.82s`.

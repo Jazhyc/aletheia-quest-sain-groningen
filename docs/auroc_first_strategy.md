@@ -197,7 +197,7 @@ dataset/source-family holdouts before it is promoted.
 ## Phoenix Wright 4.0 deployment
 
 Phoenix Wright 4.0 originally implemented the selected path; its sole-notebook
-successor is now `submission/phoenix_wright_v4_1.ipynb`. The ordinary route
+successor is now `submission/phoenix_wright_v4_2.ipynb`. The ordinary route
 preserves the exact Phoenix v3 rank-16 adapter (weight SHA-256
 `1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`)
 and frozen visible-message renderer. It appends `Prediction:` directly to the
@@ -257,9 +257,46 @@ label logits. On the H100 it took `1.31s` and `1.38s` per half after model
 load. A one-row NDIF execution of the exact no-LoRA path completed successfully
 and emitted score `0.952574`.
 
-The sole notebook is now `submission/phoenix_wright_v4_1.ipynb`. Entirely
-routed datasets load base Qwen only; ordinary datasets load the Phoenix
-adapter only. A mixed dataset is supported by scoring the two subsets through
-separate sessions. Keep this as an exact semantic transfer route: its zero
-known-competition coverage prevents measuring a local gain and does not
-authorize lexical expansion from private leaderboard behavior.
+Phoenix 4.2 retains this exact base-Qwen specialist and router. Keep it as an
+exact semantic transfer route: its zero known-competition coverage prevents
+measuring a local gain and does not authorize lexical expansion from private
+leaderboard behavior.
+
+## Phoenix Wright 4.2 exclusive harm route plus intent augmentation
+
+Phoenix 4.2 adds the selected P83 rank-1 resolved-intent margin on eligible
+non-harm rows while keeping the Phoenix 4.1 HP-KR route exclusive:
+
+- HP-KR harm-pressure rows use only the base-Qwen `knowledge_report_type`
+  empty-summary specialist; the intent judge is never invoked for them;
+- non-harm rows with a final-assistant reasoning trace retain the Phoenix
+  rank-16 direct score and also receive the rank-1/alpha-2 resolved-intent
+  empty-summary margin;
+- those two non-harm margins are combined by a fixed mean in log-odds space;
+- non-harm rows without reasoning retain the exact Phoenix direct score;
+- the required `deceptive` column remains the thresholded unblended
+  Phoenix/specialist decision, so the intent member changes only AUROC ranking.
+
+The intent renderer is the training renderer exactly: the merged conversation
+uses a 3,000-character tail, the optional final-assistant reasoning uses a
+4,000-character tail, and the score is read after an empty
+`<reasoning_summary>` scaffold. The 7.3 MB adapter is bundled under
+`submission/phoenix_wright_v4_adapters/resolved_intent/`; the complete
+submission directory remains below the 200 MB package limit.
+
+P83 established complementarity on the nine trace-bearing varied units:
+empty-summary rank-1 intent plus Phoenix improved macro AUROC from `0.86431`
+to `0.90111` there, projecting full validation macro AUROC `0.93815 ->
+0.95393` when the 12 no-trace units remain unchanged. Frozen test confirmation
+improved the nine trace-bearing units from `0.87083` to `0.90417` and projected
+full test macro AUROC `0.93423 -> 0.94851`; seven of nine units improved, the
+blend had 358 unique scores over 360 rows, and there were zero cross-label
+ties. A matched validation-only no-LoRA control nearly tied the adapter
+(`0.90028` versus `0.90111` blend AUROC), so the rank-1-specific advantage is
+small even though the frozen adapter path transferred.
+
+The exact HP-KR route still matches zero known competition rows, so excluding
+those rows from intent has no effect on the local projection and avoids an
+unvalidated specialist interaction. A one-row trace-bearing NDIF notebook test
+passed end to end in `221.82s`, including separate Phoenix and intent remote
+sessions.

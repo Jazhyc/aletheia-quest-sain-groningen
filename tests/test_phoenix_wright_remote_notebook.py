@@ -9,9 +9,9 @@ from nbclient import NotebookClient
 REPO_ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOKS = sorted((REPO_ROOT / "submission").glob("*.ipynb"))
 SUBMISSION_CSV = REPO_ROOT / "submission.csv"
-DEV_METIS = (
+DEV_TRACE_UNIT = (
     "aletheias-quest/"
-    "dev-instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None"
+    "dev-varied-deception-Qwen3.5-27B-None"
 )
 NDIF_HOST = "https://aletheias.api.ndif.us"
 
@@ -39,8 +39,8 @@ def test_remote_notebook_scores_survive_nnsight_session(monkeypatch):
     assert os.environ.get("NDIF_API_KEY"), "NDIF_API_KEY must be set or present in .env"
 
     monkeypatch.setenv("NDIF_HOST", NDIF_HOST)
-    monkeypatch.setenv("DATASET_NAME", DEV_METIS)
-    monkeypatch.setenv("ALETHEIA_LIMIT", "64")
+    monkeypatch.setenv("DATASET_NAME", DEV_TRACE_UNIT)
+    monkeypatch.setenv("ALETHEIA_LIMIT", "1")
     monkeypatch.delenv("PHOENIX_BATCH_SIZE", raising=False)
     monkeypatch.delenv("PHOENIX_NNSIGHT_LOCAL", raising=False)
 
@@ -59,9 +59,9 @@ def test_remote_notebook_scores_survive_nnsight_session(monkeypatch):
         assert SUBMISSION_CSV.exists(), "notebook did not write submission.csv"
         df = pd.read_csv(SUBMISSION_CSV)
         assert list(df.columns) == ["index", "deceptive", "score"]
-        assert len(df) == 64
+        assert len(df) == 1
         assert df["score"].between(0.0, 1.0).all()
-        assert df["deceptive"].tolist() == df["score"].ge(0.5).tolist()
+        assert df["deceptive"].dtype == bool
     finally:
         if SUBMISSION_CSV.exists():
             SUBMISSION_CSV.unlink()

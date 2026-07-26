@@ -1,5 +1,36 @@
 # Prompt Experiment Log
 
+## 2026-07-26: Phoenix 4.2 exclusive harm route and intent margin
+
+Phoenix 4.2 packages P83's rank-1 resolved-intent empty-summary margin for
+non-harm rows with a final-assistant reasoning trace. Those rows combine the
+Phoenix rank-16 direct score with intent through a fixed mean in log-odds
+space. Phoenix 4.1's HP-KR harm-pressure route remains exclusive: routed rows
+use only the base-Qwen `knowledge_report_type` empty-summary specialist and
+never invoke the intent judge. Non-harm no-trace rows retain Phoenix directly.
+The hard `deceptive` output remains the unblended Phoenix/specialist decision.
+
+The implementation uses the exact rank-1 training renderer and bundles its
+7.3 MB adapter. Route and parity tests confirm that the earlier forced-choice
+harm contract remains excluded, harm and intent routes are disjoint, and
+ineligible continuous scores are unchanged. The HP-KR router covers zero known
+competition rows, so its exclusive treatment does not change P83's local
+projection; it prevents applying the intent member to an unvalidated OOD
+specialist distribution.
+
+Frozen rank-1 test job `30297739` scored the nine trace-bearing varied units at
+`0.88819` intent AUROC and `0.90417` Phoenix-plus-intent AUROC, versus
+`0.87083` Phoenix alone. Seven of nine units improved; the full 21-unit
+projection rose `0.93423 -> 0.94851`. The blend emitted 358 unique scores over
+360 rows with zero cross-label ties. Matched validation-only base-control job
+`30297742` nearly tied the adapter blend (`0.90028` versus `0.90111`), so the
+rank-1 update itself has only a small measured validation edge over its exact
+prompt control.
+
+The exact one-row trace-bearing notebook path passed NDIF in `221.82s`,
+exercising separate Phoenix and rank-1 remote sessions, next-token logits,
+mean-log-odds composition, and the separately retained hard prediction.
+
 ## 2026-07-25: Phoenix 4.1 continuous HP-KR specialist
 
 P81 ported the exact knowledge-report route to AUROC. The first same-adapter
@@ -30,8 +61,8 @@ and emitted continuous score `0.952574`.
 
 Phoenix 4.0 replaced v3's generated reasoning plus parsed binary decision with
 P80's selected direct `Prediction:` label margin. Its implementation is now
-retained as the ordinary route in the sole Phoenix 4.1 notebook,
-`submission/phoenix_wright_v4_1.ipynb`. It retains the exact original rank-16
+retained as the ordinary route in the sole Phoenix 4.2 notebook,
+`submission/phoenix_wright_v4_2.ipynb`. It retains the exact original rank-16
 adapter (`1407d885...d3978e`) and frozen v2 visible-message renderer,
 requests `logits_to_keep=1`, and emits
 `sigmoid(logit_1 - logit_0)` for the exact single-token `0` and `1`

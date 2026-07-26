@@ -9,17 +9,24 @@ from submission.phoenix_wright_v4 import (
     DIRECT_PREDICTION_PREFIX,
     EMPTY_REASONING_PREFIX,
     EPISTEMIC_PROMPT,
+    INTENT_PROMPT,
     binary_logits_to_scores,
     binary_token_ids,
+    blend_intent_route_scores,
     build_direct_prompt,
     build_epistemic_empty_prompt,
     build_epistemic_member_prompt,
+    build_intent_empty_prompt,
+    build_intent_member_prompt,
+    has_final_assistant_reasoning,
+    is_harm_pressure_specialist_request,
     is_knowledge_report_request,
+    mean_log_odds_scores,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v4_1.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v4_2.ipynb"
 
 
 class FakeTokenizer:
@@ -103,6 +110,59 @@ def test_epistemic_router_excludes_forced_harm_choice() -> None:
 
     assert is_knowledge_report_request(knowledge)
     assert not is_knowledge_report_request(choice)
+    assert is_harm_pressure_specialist_request(knowledge)
+    assert not is_harm_pressure_specialist_request(choice)
+
+
+def test_intent_prompt_matches_rank_one_training_renderer() -> None:
+    import yaml
+
+    from experiments.privileged_information_distillation.core import (
+        build_student_prompt,
+    )
+
+    messages = [
+        {"role": "user", "content": "Do you know the answer?"},
+        {
+            "role": "assistant",
+            "content": "I do not know.",
+            "reasoning": "I know it, but I will deny knowing it.",
+        },
+    ]
+    config = yaml.safe_load(
+        (ROOT / "configs/privileged_information_distillation.yaml").read_text()
+    )["student"]
+    config.update(yaml.safe_load(
+        (
+            ROOT
+            / "configs/pid_heterogeneous_resolved_intent_rank1_v1.yaml"
+        ).read_text()
+    )["student"])
+
+    assert INTENT_PROMPT == config["prompt"]
+    assert build_intent_member_prompt(messages) == build_student_prompt(
+        messages,
+        config["prompt"],
+        config["max_prompt_chars"],
+        config["context_truncation"],
+        include_reasoning=config["include_reasoning"],
+        reasoning_max_chars=config["reasoning_max_chars"],
+        reasoning_truncation=config["reasoning_truncation"],
+        exclude_final_output_from_context=config["exclude_final_output_from_context"],
+    )
+    assert (
+        build_intent_empty_prompt(messages, FakeTokenizer())
+        == "<chat>" + EMPTY_REASONING_PREFIX
+    )
+    assert has_final_assistant_reasoning(messages)
+    assert not has_final_assistant_reasoning([
+        {
+            "role": "assistant",
+            "content": "earlier",
+            "reasoning": "an earlier trace must not activate the final output",
+        },
+        {"role": "assistant", "content": "final", "reasoning": ""},
+    ])
 
 
 def test_binary_labels_are_exact_distinct_single_tokens() -> None:
@@ -127,18 +187,40 @@ def test_binary_logit_margin_is_continuous_and_normalized() -> None:
     assert np.all(np.diff(scores[[1, 0, 2]]) > 0)
 
 
-def test_v4_notebook_uses_routed_direct_logits_without_generation() -> None:
+def test_mean_log_odds_and_intent_mask_preserve_other_scores() -> None:
+    assert mean_log_odds_scores([0.2], [0.8])[0] == pytest.approx(0.5)
+
+    base = np.array([0.1, 0.2, 0.7])
+    routes = np.array([False, True, False])
+    blended = blend_intent_route_scores(base, [0.8], routes)
+
+    assert blended[[0, 2]].tolist() == base[[0, 2]].tolist()
+    assert blended[1] == pytest.approx(0.5)
+    with pytest.raises(ValueError, match="expected 1 routed intent"):
+        blend_intent_route_scores(base, [], routes)
+
+
+def test_v4_notebook_uses_harm_routed_intent_logits_without_generation() -> None:
     source = notebook_source()
     ast.parse(source)
 
-    assert "method=phoenix_wright_v4.1 routed_direct_binary_margin" in source
-    assert "build_epistemic_empty_prompt if specialist else build_direct_prompt" in source
-    assert "is_knowledge_report_request(value)" in source
+    assert "method=phoenix_wright_v4.2 harm_exclusive_intent_margin" in source
+    assert '"phoenix": build_direct_prompt' in source
+    assert '"harm": build_epistemic_empty_prompt' in source
+    assert '"intent": build_intent_empty_prompt' in source
+    assert "is_harm_pressure_specialist_request(value)" in source
     assert "LanguageModel(JUDGE_MODEL, **model_kwargs)" in source
     assert "peft=adapter_source" in source
+    assert "BUNDLED_INTENT_ADAPTER if NNSIGHT_LOCAL else INTENT_ADAPTER_REPO" in source
     assert '"logits_to_keep": 1' in source
     assert "active_model.output.logits[:, -1, label_ids]" in source
     assert "torch.softmax(label_logits, dim=-1)[:, 1]" in source
+    assert "intent_routes = np.asarray(" in source
+    assert ") & ~harm_routes" in source
+    assert "if np.any(harm_flags & intent_flags)" in source
+    assert "blend_intent_route_scores(base_scores, intent_scores, intent_flags)" in source
+    assert "deceptive = binary_scores >= SUBMISSION_THRESHOLD" in source
+    assert "deceptive=deceptive" in source
     assert "model.generate" not in source
     assert "reply_to_score" not in source
     assert 'PHOENIX_BATCH_SIZE", "48"' in source
