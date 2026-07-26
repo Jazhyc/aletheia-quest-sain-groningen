@@ -3587,3 +3587,18 @@ adapter's historical generated binary decisions also improved eight of nine
 units on both validation and test, reaching varied AUROC `0.89792` and
 `0.90139`, but this is diagnostic rather than a frozen continuous test.
 Job `30297739` runs only the validation-selected empty-summary margin on test.
+## 2026-07-26: Qwen3.5-35B-A3B soft-teacher gate
+
+The first margin-distillation gate replaces only Qwen3.5-9B with
+`Qwen/Qwen3.5-35B-A3B` in the frozen direct-logit D/K/S ensemble. The sparse
+checkpoint has 35B total and approximately 3B active parameters, but retains
+roughly 72 GB of BF16 weights; the run therefore uses one 96 GB RTX Pro 6000,
+a 4,096-token engine cap, and 128 maximum sequences.
+
+Slurm job `30299486` is pending. It must report macro/per-dataset AUROC,
+instructed/varied AUROC, continuous-score diagnostics, missing target logits,
+and scoring time before any training cache is authorized. The minimum teacher
+gate is Phoenix direct's `0.938155` validation macro AUROC with no more than
+`0.005` loss in either scenario; `+0.005` macro is preferred before student
+training. If it passes, the next stage will cache only compact soft scores and
+retain the existing GPT-OSS reasoning-summary SFT loss.

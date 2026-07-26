@@ -4672,3 +4672,48 @@ Outcome:
   not a submission candidate. Do not run local test or fine-tune yet. The
   matched consumer is already rank 16; a future rank-4 run would increase the
   rank-1 retriever's capacity, not this consumer's.
+
+## P89: Qwen3.5-35B-A3B Soft-Teacher Gate
+
+Status: frozen validation gate submitted as Slurm job `30299486`.
+
+Question: can the sparse `Qwen/Qwen3.5-35B-A3B` replace dense Qwen3.5-27B as
+the source of continuous teacher targets for a direct-margin Qwen3.5-9B
+student?
+
+Rationale:
+
+- The checkpoint has 35B total parameters but activates about 3B per token.
+  Its BF16 weights still require roughly 72 GB of device memory, but one 96 GB
+  RTX Pro 6000 should hold the model while sparse expert execution may reduce
+  scoring time substantially relative to dense 27B.
+- The official Qwen benchmark table generally places dense 27B slightly ahead
+  on knowledge and reasoning. Active parameter count therefore motivates a
+  runtime hypothesis, not an accuracy assumption.
+- A same-family Qwen-27B privileged-summary student already tied the GPT-OSS
+  summary baseline. The new signal must be continuous teacher ordering rather
+  than another prose-summary swap.
+
+Frozen first gate:
+
+- Replace only the model in the existing direct-logit D/K/S validation
+  ensemble. Keep all three prompts, 1--7 verbalizers, max aggregation,
+  3,000-character context view, deterministic scoring, labels, and dataset
+  order fixed.
+- Use BF16 on one RTX Pro 6000 with a 4,096-token engine cap and 128 maximum
+  sequences. Record cold startup separately from the 2,466-prompt score pass.
+- Compare macro and per-dataset AUROC, instructed/varied AUROC, score
+  uniqueness/ties, missing target logits, and runtime against the frozen
+  Qwen-9B logit row and Phoenix direct margins.
+- Authorize a train-score cache only if the MoE reaches at least Phoenix's
+  `0.938155` validation macro AUROC, loses no more than `0.005` instructed or
+  varied AUROC relative to Phoenix, has zero missing target logits, and
+  produces continuous scores. Prefer a `+0.005` macro gain before paying for
+  student training.
+- If it passes, cache only the compact ordinal distribution or normalized
+  margin for training rows. Retain GPT-OSS reasoning-summary SFT and add a
+  temperature-softened teacher loss at the student's direct `Prediction:`
+  boundary. Do not copy the MoE's private thinking or replace the summary loss.
+- Select the student on direct Qwen-9B macro AUROC. A binary-label CE/pairwise
+  control already failed to improve AUROC, so any promotion must come from the
+  teacher's soft ordering rather than another hard-label objective.
