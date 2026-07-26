@@ -4903,3 +4903,17 @@ Frozen student objective:
 - Evaluate direct continuous margins on full validation and compare with the
   matched reasoning-only control and earlier hard-label CE/rank ablations.
   Do not tune normalization or loss weight from this validation result.
+
+Cache and student launch:
+
+- Cache job `30299814` completed in 10m43s. Its `554.4s` score pass produced
+  exactly 8,640 audited member records and 2,880 complete rows across all nine
+  varied training units. The derived cache passed every structural gate.
+- Label-blind aggregation selected the max-score member and measured global
+  teacher-logit mean `2.8358148179e-05` and population standard deviation
+  `7.77782138099e-05`. The resulting targets span
+  `0.103406--0.982934`; all 2,877 usable GPT-OSS summary rows join exactly.
+- Frozen student job `30299836` trains
+  `qwen9b_pid_qwen27_direct_soft_varied_v1`. Do not change its loss weight,
+  normalization, optimizer, learning rate, epoch count, or data selection
+  while it is running.

@@ -3705,3 +3705,11 @@ with the global training-cache mean and population standard deviation without
 labels; sigmoid of that standardized logit is the soft binary target. Add BCE
 at the student's direct `Prediction:` margin with weight `1.0` while preserving
 the selected varied-only one-epoch AdamW `5e-5` reasoning-summary recipe.
+
+Training-cache job `30299814` completed in 10m43s and passed all gates: 8,640
+member records, 2,880 rows, and complete three-member coverage across nine
+varied units. Label-blind aggregation gives teacher-logit mean
+`2.8358148179e-05`, population standard deviation `7.77782138099e-05`, and
+soft targets spanning `0.103406--0.982934`. All 2,877 usable GPT-OSS summary
+rows join exactly. Frozen student job `30299836` is running with the
+predeclared weight-1 soft BCE plus unchanged reasoning-summary SFT.
