@@ -26,12 +26,17 @@ fi
 
 SPLIT="${1:-validation}"
 if [[ "${SPLIT}" != "validation" && "${SPLIT}" != "test" ]]; then
-  echo "usage: sbatch $0 [validation|test]" >&2
+  echo "usage: sbatch $0 [validation|test] [adapter|base]" >&2
+  exit 2
+fi
+MODEL_CONTROL="${2:-adapter}"
+if [[ "${MODEL_CONTROL}" != "adapter" && "${MODEL_CONTROL}" != "base" ]]; then
+  echo "usage: sbatch $0 [validation|test] [adapter|base]" >&2
   exit 2
 fi
 
 METHOD_LOG_DIR="logs/slurm/reasoning_intent_logits"
-METHOD_LOG_FILE="${METHOD_LOG_DIR}/${SPLIT}-rank1-margin-${SLURM_JOB_ID}.out"
+METHOD_LOG_FILE="${METHOD_LOG_DIR}/${SPLIT}-rank1-margin-${MODEL_CONTROL}-${SLURM_JOB_ID}.out"
 BOOTSTRAP_LOG_FILE="logs/slurm/${SLURM_JOB_NAME}-${SLURM_JOB_ID}.bootstrap.out"
 mkdir -p "${METHOD_LOG_DIR}"
 echo "Redirecting Slurm job output to ${METHOD_LOG_FILE}"
@@ -46,6 +51,11 @@ else
   RUN_NAME="test_empty_intent_margin_v1"
   MARGIN_CONDITIONS=(empty)
 fi
+CONTROL_ARGS=()
+if [[ "${MODEL_CONTROL}" == "base" ]]; then
+  RUN_NAME="${RUN_NAME}_base_control"
+  CONTROL_ARGS+=(--base-model-control)
+fi
 
 MARGIN_ARGS=()
 for condition in "${MARGIN_CONDITIONS[@]}"; do
@@ -58,4 +68,5 @@ python experiments/privileged_information_distillation/evaluate_student_sft.py \
   --run-name "${RUN_NAME}" \
   --max-new-tokens 1 \
   --continuous-margins \
+  "${CONTROL_ARGS[@]}" \
   "${MARGIN_ARGS[@]}"

@@ -21,6 +21,7 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     continuous_margin_prompts,
     final_after_thinking,
     load_retrieval_cache,
+    lora_request_or_none,
     max_aggregate_evaluations,
     parse_reasoning_input_condition,
     parse_prompt_condition,
@@ -46,6 +47,12 @@ def test_vllm_max_lora_rank_rounds_capacity_up_to_supported_value() -> None:
     assert vllm_max_lora_rank([1]) == 1
     assert vllm_max_lora_rank([1, 4]) == 8
     assert vllm_max_lora_rank([8, 16]) == 16
+
+
+def test_base_model_control_omits_lora_request_without_importing_vllm(
+    tmp_path: Path,
+) -> None:
+    assert lora_request_or_none(tmp_path / "adapter", 1, use_lora=False) is None
 
 
 def test_parse_prediction_uses_last_explicit_prediction() -> None:

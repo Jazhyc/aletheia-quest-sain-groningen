@@ -465,6 +465,20 @@ def load_records(
     return pd.DataFrame(rows)
 
 
+def lora_request_or_none(
+    adapter_dir: Path,
+    lora_id: int,
+    *,
+    use_lora: bool,
+) -> Any | None:
+    """Construct a vLLM LoRA request unless this is a matched base control."""
+    if not use_lora:
+        return None
+    from vllm.lora.request import LoRARequest
+
+    return LoRARequest(adapter_dir.parent.name, lora_id, adapter_dir.as_posix())
+
+
 def evaluate_adapter(
     llm: Any,
     sampling: Any,
@@ -480,10 +494,9 @@ def evaluate_adapter(
     direct_prefix: str = DIRECT_PREDICTION_PREFIX,
     empty_reasoning_prefix: str = EMPTY_REASONING_PREFIX,
     require_closed_thinking: bool = False,
+    use_lora: bool = True,
 ) -> tuple[pd.DataFrame, dict[str, float | int]]:
-    from vllm.lora.request import LoRARequest
-
-    request = LoRARequest(adapter_dir.parent.name, lora_id, adapter_dir.as_posix())
+    request = lora_request_or_none(adapter_dir, lora_id, use_lora=use_lora)
     started = time.time()
     outputs = llm.generate(records["prompt"].tolist(), sampling, lora_request=request)
     elapsed = time.time() - started
@@ -699,6 +712,11 @@ def main() -> None:
             "repeat to score only selected margin conditions; defaults to all "
             "three when --continuous-margins is enabled"
         ),
+    )
+    parser.add_argument(
+        "--base-model-control",
+        action="store_true",
+        help="use the saved adapter prompt/tokenizer without applying its LoRA weights",
     )
     parser.add_argument(
         "--prompt-without-reasoning-config",
@@ -917,6 +935,7 @@ def main() -> None:
                 binary_ids=binary_ids,
                 margin_conditions=margin_conditions,
                 require_closed_thinking=bool(enable_thinking),
+                use_lora=not args.base_model_control,
             )
             evaluated_by_condition[condition_name] = evaluated
             timing_by_condition[condition_name] = timing
@@ -1000,6 +1019,7 @@ def main() -> None:
                 "max_new_tokens": condition_max_tokens or args.max_new_tokens,
                 "retrieval_cache": retrieval_path.as_posix() if retrieval_path else None,
                 "reasoning_visibility": args.reasoning_visibility,
+                "base_model_control": args.base_model_control,
                 "prompt_without_reasoning_config": (
                     args.prompt_without_reasoning_config.resolve().as_posix()
                     if args.prompt_without_reasoning_config is not None
