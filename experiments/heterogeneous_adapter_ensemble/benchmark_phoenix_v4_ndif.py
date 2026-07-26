@@ -16,7 +16,7 @@ from nbclient import NotebookClient
 
 
 ROOT = Path(__file__).resolve().parents[2]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v4_1.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v4_3.ipynb"
 SUBMISSION_CSV = ROOT / "submission.csv"
 DEFAULT_DATASET = "aletheias-quest/dev-varied-deception-Qwen3.5-27B-None"
 
