@@ -45,6 +45,7 @@ student:
   init_adapter: null
   target_mode: teacher
   teacher_sources: null
+  soft_teacher_artifact: null
   override_cached_prompt: false
   train_limit: null
   train_fraction: 1.0
@@ -97,6 +98,7 @@ student:
     direct_loss_weight: 0.0
     pairwise_loss_weight: 0.0
     pairwise_temperature: 1.0
+    soft_loss_weight: 0.0
     paired_batching: false
 
 hydra:

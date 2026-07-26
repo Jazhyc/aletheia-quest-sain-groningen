@@ -3698,3 +3698,10 @@ resulting nine units and 2,880 rows. Promotion to student training requires
 8,640 unique member records, complete three-member row coverage, zero parse
 errors or missing logits, and normalized distributions. Score normalization
 must remain label-blind.
+
+The student ablation is frozen before cache completion. Select the max-score
+member per row, transform its expected-rating score to log-odds, and normalize
+with the global training-cache mean and population standard deviation without
+labels; sigmoid of that standardized logit is the soft binary target. Add BCE
+at the student's direct `Prediction:` margin with weight `1.0` while preserving
+the selected varied-only one-epoch AdamW `5e-5` reasoning-summary recipe.

@@ -71,6 +71,11 @@ class CompletionOnlyCollator:
                     dtype=torch.long,
                 ),
             })
+            if "soft_target" in features[0]:
+                batch["soft_targets"] = torch.tensor(
+                    [feature["soft_target"] for feature in features],
+                    dtype=torch.float32,
+                )
         return batch
 
 
@@ -79,6 +84,7 @@ REASONING_BLOCK_END = "\n</assistant_reasoning>"
 SOURCE_PROMPT_TEMPLATE_KEY = "_source_prompt_template"
 LABEL_ONLY_TARGET_KEY = "_label_only_target"
 DIRECT_PREDICTION_PREFIX = "Prediction:"
+SOFT_TARGET_KEY = "_soft_target"
 
 
 def binary_token_ids(tokenizer: Any) -> list[int]:
@@ -171,6 +177,55 @@ def pairwise_logistic_loss(
     if not losses:
         return margins.sum() * 0.0
     return torch.stack(losses).mean()
+
+
+def soft_binary_distillation_loss(
+    binary_logits: torch.Tensor,
+    soft_targets: torch.Tensor,
+) -> torch.Tensor:
+    """Match a continuous teacher target at the direct binary boundary."""
+    if binary_logits.ndim != 2 or binary_logits.shape[1] != 2:
+        raise ValueError("binary logits must have shape (batch, 2)")
+    if soft_targets.shape != binary_logits.shape[:1]:
+        raise ValueError("soft targets must have shape (batch,)")
+    margins = binary_logits[:, 1].float() - binary_logits[:, 0].float()
+    return F.binary_cross_entropy_with_logits(margins, soft_targets.float())
+
+
+def attach_soft_teacher_targets(
+    records: list[dict[str, Any]],
+    artifact: Path,
+) -> list[dict[str, Any]]:
+    """Join a complete derived soft-target cache by dataset and row index."""
+    targets: dict[tuple[str, Any], tuple[int, float]] = {}
+    for line_number, line in enumerate(artifact.read_text().splitlines(), start=1):
+        if not line.strip():
+            continue
+        target = json.loads(line)
+        key = (str(target["dataset"]), target["index"])
+        if key in targets:
+            raise ValueError(f"duplicate soft target at line {line_number}: {key}")
+        value = float(target["soft_target"])
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"soft target outside [0, 1] for {key}: {value}")
+        targets[key] = (int(target["label"]), value)
+    if not targets:
+        raise ValueError(f"soft teacher artifact is empty: {artifact}")
+
+    attached = []
+    for record in records:
+        key = (str(record.get("dataset", "")), record.get("index"))
+        if key not in targets:
+            raise ValueError(f"soft teacher artifact is missing training row {key}")
+        label, value = targets[key]
+        if label != int(record["label"]):
+            raise ValueError(
+                f"soft teacher label mismatch for {key}: {label} != {record['label']}"
+            )
+        selected = dict(record)
+        selected[SOFT_TARGET_KEY] = value
+        attached.append(selected)
+    return attached
 
 
 def has_reasoning_block(prompt: str) -> bool:
@@ -634,6 +689,8 @@ def tokenize_record(
             "binary_label": int(record["label"]),
             "dataset_id": int(dataset_id),
         })
+        if SOFT_TARGET_KEY in record:
+            tokenized["soft_target"] = float(record[SOFT_TARGET_KEY])
     return tokenized
 
 
@@ -653,19 +710,24 @@ def main(cfg: DictConfig) -> None:
     pairwise_loss_weight = float(OmegaConf.select(
         cfg, "student.training.pairwise_loss_weight", default=0.0
     ))
+    soft_loss_weight = float(OmegaConf.select(
+        cfg, "student.training.soft_loss_weight", default=0.0
+    ))
     pairwise_temperature = float(OmegaConf.select(
         cfg, "student.training.pairwise_temperature", default=1.0
     ))
     paired_batching = bool(OmegaConf.select(
         cfg, "student.training.paired_batching", default=False
     ))
-    if direct_loss_weight < 0 or pairwise_loss_weight < 0:
+    if direct_loss_weight < 0 or pairwise_loss_weight < 0 or soft_loss_weight < 0:
         raise ValueError("auxiliary loss weights must be non-negative")
     if pairwise_temperature <= 0:
         raise ValueError("student.training.pairwise_temperature must be positive")
     if pairwise_loss_weight and not paired_batching:
         raise ValueError("pairwise loss requires student.training.paired_batching=true")
-    uses_direct_forward = bool(direct_loss_weight or pairwise_loss_weight)
+    uses_direct_forward = bool(
+        direct_loss_weight or pairwise_loss_weight or soft_loss_weight
+    )
 
     class AuxiliarySFTTrainer(Trainer):
         """Completion SFT with optional direct-label and within-dataset rank losses."""
@@ -689,6 +751,7 @@ def main(cfg: DictConfig) -> None:
             direct_attention_mask = inputs.pop("direct_attention_mask", None)
             binary_labels = inputs.pop("binary_labels", None)
             dataset_ids = inputs.pop("dataset_ids", None)
+            soft_targets = inputs.pop("soft_targets", None)
             outputs = model(**inputs)
             loss = outputs.loss
             if uses_direct_forward:
@@ -727,6 +790,15 @@ def main(cfg: DictConfig) -> None:
                         binary_labels,
                         dataset_ids,
                         pairwise_temperature,
+                    )
+                if soft_loss_weight:
+                    if soft_targets is None:
+                        raise ValueError(
+                            "soft targets are missing from training batch"
+                        )
+                    loss = loss + soft_loss_weight * soft_binary_distillation_loss(
+                        binary_logits,
+                        soft_targets,
                     )
             return (loss, outputs) if return_outputs else loss
 
@@ -872,6 +944,22 @@ def main(cfg: DictConfig) -> None:
         if not label_only_path.is_absolute():
             label_only_path = root / label_only_path
         records = apply_label_only_manifest(records, label_only_path)
+    soft_teacher_artifact = OmegaConf.select(
+        cfg, "student.soft_teacher_artifact", default=None
+    )
+    if soft_loss_weight:
+        if soft_teacher_artifact is None:
+            raise ValueError(
+                "student.soft_teacher_artifact is required when soft loss is enabled"
+            )
+        soft_teacher_path = Path(str(soft_teacher_artifact))
+        if not soft_teacher_path.is_absolute():
+            soft_teacher_path = root / soft_teacher_path
+        records = attach_soft_teacher_targets(records, soft_teacher_path)
+    elif soft_teacher_artifact is not None:
+        raise ValueError(
+            "student.soft_teacher_artifact requires a positive soft_loss_weight"
+        )
     label_only_rows = sum(
         bool(record.get(LABEL_ONLY_TARGET_KEY)) for record in records
     )
@@ -965,6 +1053,8 @@ def main(cfg: DictConfig) -> None:
         f"reasoning_dropout_probability={reasoning_dropout_probability} "
         f"direct_loss_weight={direct_loss_weight} "
         f"pairwise_loss_weight={pairwise_loss_weight} "
+        f"soft_loss_weight={soft_loss_weight} "
+        f"soft_teacher_artifact={soft_teacher_artifact} "
         f"pairwise_temperature={pairwise_temperature} "
         f"paired_batching={paired_batching}"
     )

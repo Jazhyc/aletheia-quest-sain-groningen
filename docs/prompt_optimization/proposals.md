@@ -4888,3 +4888,18 @@ Training-cache contract:
   validation and retain the selected member's normalized ordinal distribution.
   Compute any centering/temperature statistics from training scores without
   labels and record them in the derived cache manifest.
+
+Frozen student objective:
+
+- Convert the selected expected-rating score to log-odds, subtract the global
+  training-cache mean, and divide by the global population standard deviation.
+  Apply sigmoid to obtain the binary soft target. This label-blind temperature
+  normalization preserves teacher ordering while avoiding the raw scores'
+  numerically tiny range around 0.5.
+- Add binary cross-entropy against that target at the Qwen-9B direct
+  `Prediction:` margin with weight `1.0`. Keep the selected varied-only
+  one-epoch AdamW `5e-5`, rank-16/alpha-32, effective-batch-32 recipe and its
+  ordinary completion-only GPT-OSS summary loss unchanged.
+- Evaluate direct continuous margins on full validation and compare with the
+  matched reasoning-only control and earlier hard-label CE/rank ablations.
+  Do not tune normalization or loss weight from this validation result.
