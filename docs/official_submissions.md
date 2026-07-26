@@ -29,6 +29,12 @@ opaque public labels returned by the Space.
   transfers. Notus is essentially flat (`-0.0003` vs v4), which is the design
   goal — the probe's influence is bounded at two judge quantization steps so it
   cannot overturn confident judge rankings.
+- **`sonic_v3_3_mini.ipynb`: probe-only diagnostic, AUROC `0.775208` / BA `0.657500`**
+  (2026-07-26 18:57). Judge removed; every counted row is the bare probe. Shared
+  trunk with `balanced` recipe, all three families including gemma. Gains `+0.0203`
+  AUROC over `sonic_v1`'s probe-only run. Confirms the probe does not transfer to
+  Notus (mean AUROC `0.5586`) and the judge is the only lever that moves it. See
+  "Sonic v3.3-mini counted detail".
 - **`sonic_v3.ipynb` regressed: AUROC `0.862417` / BA `0.621250` (2026-07-26
   00:41).** The regression is entirely Notus. See "Sonic v3 counted detail".
 - Under the amended metric the headline is **mean AUROC over the six counted
@@ -87,6 +93,7 @@ recent runs have not been added without a fresh authenticated API query.
 | submitted at (UTC) | notebook | method / local mapping | tag | BA | AUROC | recall | FPR | runtime |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | 2026-07-26 14:52 | `sonic_v3_2.ipynb` | agreement-modulated cap: `score = sigmoid(judge_z + cap × tanh(PROBE_GAIN × probe_z))` with `cap = BASE_CAP + clip(judge_z × probe_z / 3, 0, 1) × (MAX_CAP − BASE_CAP)`, 2 judge steps when probe and judge disagree, 4 when they agree; threshold `0.20` (**best official on both metrics**) | white | 0.831250 | 0.903050 | — | — | 1799s |
+| 2026-07-26 18:57 | `sonic_v3_3_mini.ipynb` | **probe-only diagnostic.** Shared-trunk transformer probe, balanced training recipe (grouped early-stopping split + base-row upweighting), all three families on one trunk including gemma; `sigmoid(probe_z)` at frozen `0.5` threshold, no judge, no gate | white | 0.657500 | 0.775208 | — | — | 1035s |
 | 2026-07-26 13:21 | `phoenix_wright_v4_3.ipynb` | direct-label-logit judge, no probe; every counted and uncounted row identical to v4_2 | black | 0.815417 | 0.893817 | — | — | 1228s |
 | 2026-07-26 12:55 | `sonic_v3_1.ipynb` | capped-nudge probe/judge: `score = sigmoid(judge_z + PROBE_CAP × tanh(PROBE_GAIN × probe_z))`, probe influence bounded at 2 judge bf16 steps, threshold 0.20 fitted on NDIF benchmarks | white | 0.825833 | 0.902083 | — | — | 1746s |
 | 2026-07-26 03:06 | `phoenix_wright_v4_2.ipynb` | direct-label-logit judge, no probe; identical counted rows to v4_0/v4_1 | black | 0.815417 | 0.893817 | — | — | 1123s |
@@ -232,6 +239,118 @@ essentially unchanged from v3.1's `-0.0206`. **The agreement gate does not fix
 the base-model tiebreaking problem**; it only avoids making it worse. That is
 the same defect that caps Notus, and it is where the remaining `-0.0421` to
 Tiresias lives.
+
+### Sonic v3.3-mini counted detail — the probe alone
+
+Submitted 2026-07-26 18:57. Headline AUROC `0.775208` / BA `0.657500`, runtime
+17m15s (1035s). **This is a diagnostic, not a competitive entry.** The judge is
+removed entirely so every counted row reflects the *probe alone*. `sonic_v1`
+was the last probe-only run (AUROC `0.7549`); this run measures the cumulative
+effect of every probe change since then — the shared trunk, the `balanced`
+training recipe (grouped early-stopping split + base-row upweighting), layer 46,
+and the `MultiFamilyProbe` architecture carrying all three families on one trunk.
+
+**Design.** `token_probe -> sigmoid((probe_logit - PROBE_LOGIT_MEAN) / PROBE_LOGIT_SD)`,
+frozen `0.5` threshold standardised per-family. No judge, no gate, no batch
+statistics. Probe weights exported from one shared trunk fitted on all 8,216 dev
+rows with the `balanced` recipe. Constants frozen offline from NDIF benchmark
+runs. Full local benchmark: `docs/sonic/sonic_v3_3_prototyping.md`.
+
+**Why this run exists.** Every local dev fold is easier than every Notus unit.
+The probe's counted per-unit behaviour — especially on base-model data where it
+is weakest — cannot be measured any other way. The configuration deliberately
+includes gemma on the shared trunk, which every local measurement said was worse
+(3-seed sweep `-0.0168 / -0.0158 / -0.0107`, leave-one-cell-out `-0.0123` to
+`-0.0199`), so one run reads the trunk for all three families at once.
+
+**Counted Notus/Iris per unit.**
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Notus | `Nemotron-120B` / `None` | 0.5850 | 0.5943 | 0.8050 | 0.6350 |
+| Dataset Notus | `Qwen3.5-27B` / `None` | 0.5300 | 0.6007 | 0.2650 | 0.2050 |
+| Dataset Notus | `gemma-3-27b-it` / `None` | 0.5000 | 0.4808 | 0.0000 | 0.0000 |
+| Dataset Iris | `Nemotron-120B` / `g-st` | 0.9325 | 0.9917 | 0.9700 | 0.1050 |
+| Dataset Iris | `Qwen3.5-27B` / `g-st` | 0.8975 | 0.9982 | 0.8000 | 0.0050 |
+| Dataset Iris | `gemma-3-27b-it` / `g-st-2` | 0.5000 | 0.9856 | 0.0000 | 0.0000 |
+
+| | Notus mean | Iris mean | headline |
+| --- | ---: | ---: | ---: |
+| AUROC | 0.5586 | 0.9918 | 0.7752 |
+| BA | 0.5383 | 0.7767 | 0.6575 |
+
+**What the results say.**
+
+1. **Gemma on the shared trunk is fine.** Despite a 3-seed local sweep showing
+   the trunk worse for gemma by `-0.0107` to `-0.0168`, the counted numbers do
+   not single it out. Iris/gemma AUROC `0.9856` — effectively saturated, same as
+   the other two families. Notus/gemma `0.4808` is actually above `sonic_v1`'s
+   probe-only `0.3526`. The trunk serves all three families.
+
+2. **Notus is the bottleneck, and the probe alone cannot fix it.** Notus AUROC
+   `0.5586` — below `sonic_v1`'s `0.7577`, but that is because v1's Notus
+   benefit came from the *judge's* continuous scores (Notus was ranked by the
+   judge with a convex blend even in v1). Here the judge is removed entirely,
+   so this is the bare probe on base-model data. The `~0.20` gap to the blended
+   sonic family is the judge's contribution to Notus ranking, confirmed on the
+   private split. The probe does not transfer to base-model-only distributed data.
+
+3. **Iris is saturated.** AUROC `0.9918` across all three families, matching
+   `sonic_v1`'s `0.9911` on Iris/gemma. The probe sees g-st organisms cleanly.
+   The BA collapse on Iris/gemma (`0.5000` at AUROC `0.9856`, recall `0.0000`,
+   FPR `0.0000`) is the `sonic_v1`/`v2.3` "near-perfect ranking, useless
+   threshold" signature — the frozen `0.5` cut sits too high for gemma's
+   probe-logit distribution off-distribution. This is a threshold artefact, not
+   a ranking failure; every blended sonic run's calibrated threshold fixes it.
+
+4. **The probe alone gains `+0.0203` AUROC over sonic_v1.** From `0.7549` to
+   `0.7752`. The balanced recipe, shared trunk, and architecture are incremental
+   wins that do not touch the actual failure mode (Notus base-model transfer).
+   The judge remains the only lever that meaningfully moves Notus.
+
+5. **The shared trunk is ready.** It serves all three families simultaneously
+   on an official run. A future weights-only swap into v3.2's scoring rule is
+   low-risk — the probe's ranking is tested, and the calibration thresholds
+   that the blended runs use would absorb the `balanced` recipe's shift in
+   logit scale.
+
+**Uncounted reference rows.**
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Metis | `Nemotron-120B` / `None` | 0.9500 | 1.0000 | 1.0000 | 0.1000 |
+| Dataset Metis | `Qwen3.5-27B` / `None` | 0.9975 | 1.0000 | 0.9950 | 0.0000 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-1` | 0.9921 | 0.9998 | 0.9942 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-3` | 0.9975 | 0.9999 | 1.0000 | 0.0050 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-4` | 0.9950 | 1.0000 | 0.9900 | 0.0000 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-5` | 0.9925 | 0.9998 | 0.9900 | 0.0050 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-6` | 0.9867 | 0.9997 | 0.9784 | 0.0050 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-7` | 0.9946 | 0.9999 | 0.9891 | 0.0000 |
+| Dataset Metis | `Qwen3.5-27B` / `b-mo-qwen3.5-27b` | 0.9938 | 0.9999 | 0.9925 | 0.0050 |
+| Dataset Metis | `Qwen3.5-27B` / `c-mo-qwen3.5-27b` | 0.9925 | 0.9997 | 0.9950 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `g-st-qwen3.5-27b` | 0.9950 | 1.0000 | 0.9950 | 0.0050 |
+| Dataset Metis | `gemma-3-27b-it` / `None` | 0.9400 | 0.9767 | 1.0000 | 0.1200 |
+| Dataset Metis | `gemma-3-27b-it` / `g-st-gemma-3-27b-it-2` | 0.8950 | 0.9293 | 0.9850 | 0.1950 |
+| Dataset Metis | `gemma-3-27b-it` / `s-mo-gemma-3-27b-it` | 0.9600 | 0.9879 | 0.9950 | 0.0750 |
+| Dataset Eunomia | `Qwen3.5-27B` / `None` | 0.9698 | 0.9906 | 0.9464 | 0.0069 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-1` | 0.8255 | 0.8868 | 0.8571 | 0.2062 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-3` | 0.7438 | 0.8086 | 0.7538 | 0.2663 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-4` | 0.8291 | 0.9020 | 0.8333 | 0.1752 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-5` | 0.8876 | 0.9689 | 0.8974 | 0.1222 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-6` | 0.8173 | 0.9061 | 0.7917 | 0.1571 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-7` | 0.8223 | 0.9076 | 0.8488 | 0.2042 |
+| Dataset Eunomia | `Qwen3.5-27B` / `b-mo-qwen3.5-27b` | 0.9123 | 0.9674 | 0.9100 | 0.0855 |
+| Dataset Eunomia | `Qwen3.5-27B` / `c-mo-qwen3.5-27b` | 0.9295 | 0.9796 | 0.9590 | 0.1000 |
+
+Eunomia is the probe's weak regime among the reference datasets: the adapter
+units (a-mo-3 at AUROC `0.8086`, a-mo-1 at `0.8868`) degrade from Metis's
+near-saturated `0.9997--1.0000`, showing the probe's sensitivity to the
+scenario axis when the prompt distribution shifts. The local `varied/adapter`
+split scored `0.9034` under the `balanced` recipe; the private Eunomia adapter
+units range `0.8086--0.9689`, confirming the dev split is systematically easier.
+The base unit (`Qwen3.5-27B` / `None`) holds at AUROC `0.9906` — the probe
+transfers to Eunomia base models but degrades on Eunomia adapters, the opposite
+of the Notus pattern where base models are the failure.
 
 ### Sonic v3.1 capped-nudge — the judge ranks, the probe refines
 

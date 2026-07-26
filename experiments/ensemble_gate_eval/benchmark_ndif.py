@@ -33,14 +33,40 @@ DEFAULT_DATASET = "aletheias-quest/dev-varied-deception-Qwen3.5-27B-None"
 
 
 def load_labels(dataset: str) -> dict[str, bool]:
-    """Return ``index -> deceptive`` for one dev dataset from the manifest."""
+    """
+    Return ``index -> deceptive`` for one dev dataset.
+
+    Prefers the local manifest, then falls back to the dataset's sibling
+    ``-labels`` repo on the Hub. The fallback matters: the most useful
+    benchmarks are the datasets deliberately kept OUT of
+    ``dev_splits/manifest.csv`` (the two ``g-st`` sets), because no shipped
+    probe has trained on them and they are therefore leakage-free.
+
+    :param dataset: Full HF dataset id.
+    :return: Mapping from stringified row index to the deceptive flag.
+    :raises SystemExit: If neither source yields labels.
+    """
     labels = {}
     with open(MANIFEST) as handle:
         for row in csv.DictReader(handle):
             if row["dataset"] == dataset:
                 labels[str(row["index"])] = row["deceptive"] == "True"
+    if labels:
+        return labels
+
+    from datasets import load_dataset
+    try:
+        sibling = load_dataset(f"{dataset}-labels", split="test")
+    except Exception as error:  # noqa: BLE001 - reported, not swallowed
+        raise SystemExit(
+            f"no manifest labels for {dataset}, and its -labels repo failed "
+            f"to load: {type(error).__name__}: {error}"
+        ) from error
+    labels = {str(index): bool(flag)
+              for index, flag in zip(sibling["index"], sibling["deceptive"])}
     if not labels:
-        raise SystemExit(f"no manifest labels for {dataset}")
+        raise SystemExit(f"no labels found for {dataset}")
+    print(f"labels: manifest miss, using {dataset}-labels ({len(labels)} rows)")
     return labels
 
 

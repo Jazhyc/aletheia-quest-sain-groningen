@@ -15,12 +15,18 @@ which the competition method rules prohibit (per-organism *parameters* are
 allowed, logic is not). The next version should improve the *probe* and leave
 the v3.2 rule alone.
 
+`sonic_v3_3_mini` — a probe-only diagnostic with the `balanced` training recipe
+and all three families on a shared trunk — was **submitted 2026-07-26** and
+scored AUROC `0.775208` / BA `0.657500`. See `sonic_v3_3_prototyping.md` for
+the full results.
+
 Everything below `dev_data_row_ordering.md` in the table is **history**. Those
 documents describe versions that are superseded. Read them only to learn why a
 past decision was made. Do not follow their instructions.
 
 | document | subject |
 | --- | --- |
+| `sonic_v3_3_prototyping.md` | v3.3 probe experiments: training recipe, layer 40 vs 46, shared trunk for gemma. Includes `sonic_v3_3_mini` official results (probe-only diagnostic, submitted 2026-07-26, AUROC `0.7752` / BA `0.6575`). |
 | `sonic_v3_2.md` | **Current version.** Agreement-modulated probe cap: large when judge and probe agree, tight when they disagree. **Submitted 2026-07-26, AUROC `0.9031` / BA `0.8312`, best official submission.** |
 | `sonic_v3_1.md` | **Superseded.** Fixed 2-step probe cap. Submitted 2026-07-26, AUROC `0.9021` / BA `0.8258`. |
 | `sonic_v3.md` | **Superseded.** Convex probe/judge blend at probe weight 0.65. Submitted, scored AUROC `0.8624`, regressed on Notus. |

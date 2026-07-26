@@ -1,0 +1,24 @@
+{
+  "rule": "sigmoid(probe_z) -- probe alone, judge disabled",
+  "purpose": "diagnostic: measure the shared trunk and the balanced recipe per counted unit",
+  "probe_weights": "submission/whitebox_probe_mini (shared trunk, all 3 families, balanced recipe)",
+  "probe_logit_mean": {
+    "qwen": -0.367495,
+    "gemma": -2.523992,
+    "nemotron": -6.329599
+  },
+  "probe_logit_sd": {
+    "qwen": 6.626051,
+    "gemma": 4.510691,
+    "nemotron": 3.268104
+  },
+  "default_probe_mean": -3.073695,
+  "default_probe_sd": 4.801615,
+  "threshold_probe_only": 0.5,
+  "local_reference": {
+    "g_st_holdout_qwen": 0.9986,
+    "g_st_holdout_gemma": 0.9101,
+    "g_st_holdout_gemma_shipped_single_family": 0.9215,
+    "note": "g-st is leakage-free: those 400-row datasets are absent from dev_splits/manifest.csv"
+  }
+}

@@ -140,8 +140,21 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--cells", nargs="*", default=None,
                         help="held-out cells to run (default: all)")
+    parser.add_argument("--recipes", nargs="*", default=list(RECIPES),
+                        help=f"subset of {RECIPES} to run")
+    parser.add_argument("--layer", type=int, default=None,
+                        help="residual layer to read; defaults to the shipped probe "
+                             "config (46). Both 40 and 46 are cached for every "
+                             "dataset, and the layer has not been revisited since v1.")
     parser.add_argument("--output", type=Path, default=OUT_JSON)
     args = parser.parse_args(argv)
+
+    if args.layer is not None:
+        # BaseModelData reads tokens_L{probe_layer(model)} at construction time,
+        # resolving the name from run_eval's module globals, so overriding it
+        # here redirects every family to the requested layer.
+        import run_eval
+        run_eval.probe_layer = lambda _model, _layer=args.layer: _layer
 
     manifest = load_manifest_rows()
     families = {name: BaseModelData(name, manifest) for name in FAMILIES}
@@ -158,7 +171,7 @@ def main(argv: list[str] | None = None) -> None:
     results = {}
     for cell in wanted:
         results[cell] = {}
-        for recipe in RECIPES:
+        for recipe in args.recipes:
             per_family, pooled_scores, pooled_labels = {}, [], []
             for family in FAMILIES:
                 test_rows = np.flatnonzero(cells[family] == cell)
@@ -194,16 +207,16 @@ def main(argv: list[str] | None = None) -> None:
             print(f"  {cell:<20} {recipe:<9} {'POOLED':<9} "
                   f"n={len(labels):>4}  AUROC={pooled:.4f}", flush=True)
 
-    print(f"\n{'held-out cell':<22}" + "".join(f"{r:>12}" for r in RECIPES))
+    print(f"\n{'held-out cell':<22}" + "".join(f"{r:>12}" for r in args.recipes))
     for cell, by_recipe in results.items():
         row = "".join(f"{by_recipe[r]['pooled']:>12.4f}" if r in by_recipe else f"{'-':>12}"
-                      for r in RECIPES)
+                      for r in args.recipes)
         print(f"{cell:<22}{row}")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(
         {"device": DEVICE, "seed": args.seed, "max_epochs": args.max_epochs,
-         "results": results}, indent=2))
+         "layer": args.layer, "recipes": args.recipes, "results": results}, indent=2))
     print(f"\nwrote {args.output}")
 
 

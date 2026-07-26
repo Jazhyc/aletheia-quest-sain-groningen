@@ -127,6 +127,18 @@ def main(argv=None):
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--dry-run", action="store_true",
                         help="fit, export and verify, but write nothing")
+    parser.add_argument("--export-families", nargs="*", default=list(EXPORT_FAMILIES),
+                        help="families to export. gemma is excluded by default: a "
+                             "3-seed sweep and a leave-one-cell-out rerun both show "
+                             "the trunk losing to its single-family probe. Pass all "
+                             "three only to build a deliberate trunk diagnostic.")
+    parser.add_argument("--balanced", action="store_true",
+                        help="fit with the balanced recipe (grouped early-stopping "
+                             "split + base rows upweighted to ~50% of the loss) "
+                             "instead of the shipped random row split")
+    parser.add_argument("--out-root", type=Path, default=PROBE_ROOT,
+                        help="destination probe root; point elsewhere to avoid "
+                             "overwriting the shipped weights")
     args = parser.parse_args(argv)
 
     print(f"device = {DEVICE}  seed = {args.seed}  max_epochs = {args.max_epochs}")
@@ -142,12 +154,23 @@ def main(argv=None):
 
     print("\nfitting the shared trunk on every dev row ...", flush=True)
     started = time.time()
+    fit_kwargs = {}
+    if args.balanced:
+        from train_v3_3_probe import base_balanced_weights
+        fit_kwargs = {
+            "family_groups": {f: families[f].organisms for f in FAMILIES},
+            "family_weights": {f: base_balanced_weights(families[f].organisms)
+                               for f in FAMILIES},
+        }
+        print("  recipe: balanced (grouped split + base upweighting)", flush=True)
+    else:
+        print("  recipe: shipped (random row split, uniform weights)", flush=True)
     shared = MultiFamilyProbe(seed=args.seed, device=DEVICE,
-                              max_epochs=args.max_epochs).fit(family_data)
+                              max_epochs=args.max_epochs).fit(family_data, **fit_kwargs)
     print(f"  done in {time.time() - started:.0f}s", flush=True)
 
     exported = {}
-    for family in EXPORT_FAMILIES:
+    for family in args.export_families:
         hidden_dim = int(families[family].flat.shape[1])
         single = export_family(shared, family, hidden_dim)
         difference = parity_check(shared, single, family, families[family])
@@ -163,8 +186,9 @@ def main(argv=None):
 
     stamp = time.strftime("%Y%m%dT%H%M%S")
     for family, (single, hidden_dim) in exported.items():
-        target = PROBE_ROOT / PROBE_DIR[family]
-        backup = PROBE_ROOT / f"{PROBE_DIR[family]}.backup.{stamp}"
+        target = args.out_root / PROBE_DIR[family]
+        target.mkdir(parents=True, exist_ok=True)
+        backup = args.out_root / f"{PROBE_DIR[family]}.backup.{stamp}"
         backup.mkdir(parents=True, exist_ok=True)
         for name in ("model.pt", "feature_mean.pt", "feature_std.pt", "config.json"):
             if (target / name).exists():
@@ -175,14 +199,21 @@ def main(argv=None):
         torch.save(mean.detach().cpu(), target / "feature_mean.pt")
         torch.save(std.detach().cpu(), target / "feature_std.pt")
 
-        config = json.loads((target / "config.json").read_text())
+        # A fresh --out-root has no config yet; seed it from the shipped probe
+        # so layer/architecture/batch settings stay identical.
+        template = target / "config.json"
+        if not template.exists():
+            template = PROBE_ROOT / PROBE_DIR[family] / "config.json"
+        config = json.loads(template.read_text())
         config["hidden_dim"] = hidden_dim
         config["trained_by"] = "shared_trunk_multifamily"
         config["shared_trunk_families"] = list(FAMILIES)
         (target / "config.json").write_text(json.dumps(config, indent=2) + "\n")
         print(f"  wrote {target}  (backup in {backup.name})")
 
-    print(f"\ngemma untouched: {PROBE_ROOT / PROBE_DIR['gemma']}")
+    skipped = [f for f in FAMILIES if f not in args.export_families]
+    if skipped:
+        print(f"\nnot exported (keeping existing weights): {', '.join(skipped)}")
 
 
 if __name__ == "__main__":
