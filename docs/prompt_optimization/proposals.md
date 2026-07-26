@@ -4807,8 +4807,8 @@ Outcome:
 
 ## P91: Dense Qwen-27B Direct-Logit Soft-Teacher Gate
 
-Status: primary validation passes the AUROC and continuity gates; explicit
-missing-logit audit rerun queued before training-cache authorization.
+Status: completed; exact audit passes all frozen gates and authorizes a
+varied-only training-score cache.
 
 Question: does dense Qwen3.5-27B expose a stronger continuous teacher ordering
 at the direct D/K/S prompt boundary, without generated reasoning?
@@ -4858,3 +4858,19 @@ Primary result:
   distributions and missing-token IDs recorded. Require the audited run to
   satisfy the same AUROC/scenario gates and report zero missing IDs. Do not
   infer this final gate merely from the primary scores.
+
+Audit result and decision:
+
+- Exact audit job `30299786` completed in 3m47s, with a `129.5s` score pass.
+  It reproduced the pass at `0.94429` macro AUROC, `0.99396` instructed, and
+  `0.87806` varied. The small primary/audit difference is ordinary backend
+  drift and does not change any frozen decision.
+- The audit recorded all 2,466 member distributions: zero parse errors, zero
+  missing requested rating-token logits, and normalized probability sums
+  within floating-point tolerance. Max aggregation again produced 819 unique
+  row scores and three ties.
+- P91 passes every accuracy, continuity, and extraction gate. Generate the
+  direct D/K/S distributions only for the 2,880 authoritative varied-deception
+  training rows, preserving dataset/index/member identity. Then train the
+  selected varied-only GPT-OSS reasoning-summary SFT recipe with one added
+  soft-target loss. Do not include teacher reasoning or replace hard labels.

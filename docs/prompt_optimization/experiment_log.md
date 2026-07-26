@@ -3683,3 +3683,11 @@ requested token IDs, however, so it cannot establish the frozen zero-missing
 clause. The runner now records normalized ordinal distributions and absent
 requested IDs for direct logits. An exact audit rerun must reproduce the pass
 and find zero missing IDs before any training-cache work begins.
+
+Audit job `30299786` completed in 3m47s and passed: `0.94429` macro AUROC,
+`0.99396` instructed, and `0.87806` varied, with a `129.5s` score pass. All
+2,466 seven-way distributions normalize correctly, with zero parse errors and
+zero missing requested token IDs. The 822 max-aggregated scores again have 819
+unique values and three ties. P91 therefore authorizes direct dense-27B D/K/S
+training targets for the 2,880 varied-deception training rows and a matched
+Qwen-9B reasoning-summary SFT student with an auxiliary soft-target loss.
