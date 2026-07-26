@@ -2523,3 +2523,49 @@ forward per microbatch. Transformers reported that Qwen's optional fast linear-
 attention dependencies were absent and used its torch fallback. Before any
 future multi-objective sweep, test those kernels and batch the shorter direct
 prefix pass more efficiently rather than repeating this execution shape.
+
+## Dense Qwen-27B direct soft-target distillation (2026-07-26)
+
+The next frozen ablation replaced hard direct-label CE/ranking with a continuous
+teacher target from the stronger dense Qwen3.5-27B direct D/K/S boundary. The
+teacher itself passed its prerequisite audit at `0.94429` validation macro
+AUROC (`0.99396` instructed, `0.87806` varied), with zero missing rating logits.
+The 2,880-row varied-training cache retained all three member distributions and
+selected the max-score member without using labels. Global label-blind logit
+z-normalization produced 2,877 joined soft targets spanning
+`0.103406--0.982934`.
+
+Student job `30299836` kept the selected varied-only rank-16/alpha-32,
+one-epoch AdamW `5e-5` recipe and ordinary GPT-OSS reasoning-summary loss, then
+added direct-margin soft binary cross-entropy at weight `1.0`. It completed 90
+steps in `32m35s`; its adapter weight SHA-256 is
+`466a476e2c0f05c83d8f4e627fb3e47d4274c16d5574ac5f57ae5468dd8fb2d3`.
+
+The original five-adapter validation job `30299897` failed before model loading
+because the compact historical Lambda controls lacked local `config.yaml`
+files. No scores were produced. Corrected job `30300359` therefore loaded the
+soft student and canonical selected reasoning-only adapter together, while the
+already frozen direct-CE/rank artifacts remained secondary historical
+comparisons.
+
+| objective | macro AUROC | delta | instructed AUROC | varied AUROC | unique margins |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Reasoning-only control | `0.937560` | — | `0.9934375` | `0.863056` | 353 |
+| + Qwen-27B direct soft target | `0.937619` | `+0.000060` | `0.9934375` | `0.863194` | 350 |
+
+Both adapters had zero missing direct margins and identical fixed-`0.5`
+balanced accuracy (`0.7833`), recall (`0.5738`), and FPR (`0.0071`). The soft
+loss changed only 24/822 row scores. Per-dataset AUROC differed substantively
+on only three varied units: `+0.00125`, `+0.005`, and `-0.005`; every
+instructed unit and the other six varied units tied. Candidate and control
+cross-label tie fractions were both about `0.0016`, despite BF16 margin
+quantization producing many same-label duplicate scores. The intentionally
+one-token generation produced 822 generated-output parse failures, but these
+are irrelevant to the separately extracted direct margins.
+
+The matched `+0.000060` gain fails the frozen `+0.005` macro-AUROC promotion
+gate by two orders of magnitude and is also numerically below the earlier
+direct-CE/rank results from their separate Lambda session. Do not run local
+test, promote the adapter, or tune soft-target normalization, temperature,
+weight, or data selection on this validation result. The dense teacher's better
+ordering did not transfer through this auxiliary direct-margin objective.

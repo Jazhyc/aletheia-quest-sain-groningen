@@ -4922,8 +4922,22 @@ Cache and student launch:
   optimizer steps, reporting `1905s` trainer runtime and final train loss
   `18.38`. The saved rank-16 adapter weight SHA-256 is
   `466a476e2c0f05c83d8f4e627fb3e47d4274c16d5574ac5f57ae5468dd8fb2d3`.
-- Frozen full-validation job `30299897` compares its direct `Prediction:`
-  margin in one shared vLLM session with the paired reasoning-only control,
-  direct-CE arm, and rank-loss `0.1`/`0.3` arms. Apply the existing `+0.005`
-  macro-AUROC promotion rule and report scenario/per-dataset AUROC,
-  uniqueness/ties, and missing logits before deciding on local test.
+- The first validation attempt, job `30299897`, failed before model loading
+  because the four Lambda-returned historical controls did not include their
+  local `config.yaml` files. No rows were scored. Rather than fabricate
+  provenance, the corrected shared session used the canonical selected
+  reasoning-summary adapter as the live matched control and retained the
+  frozen historical CE/rank analyses as secondary comparisons.
+- Corrected RTX job `30300359` completed in `2m47s`. The soft student scored
+  `0.937619` macro AUROC versus `0.937560` for the reasoning-only control, a
+  gain of only `+0.000060`. Instructed AUROC tied at `0.9934375`; varied AUROC
+  was `0.863194` versus `0.863056` (`+0.000139`). Only 24/822 direct margins
+  changed. Per-dataset AUROC changed materially on three varied units:
+  `+0.00125`, `+0.005`, and `-0.005`, with all other units tied.
+- The candidate had 350 unique direct-margin scores versus 353 for the
+  control, zero missing margins, and identical fixed-`0.5` BA, recall, and
+  FPR. Its macro result also remains numerically below all three earlier
+  direct-CE/rank arms, although those compact artifacts came from a separate
+  Lambda session. The `+0.000060` matched-session gain fails the frozen
+  `+0.005` promotion gate by two orders of magnitude. Do not evaluate local
+  test, tune the normalization/loss weight, or promote this soft student.
