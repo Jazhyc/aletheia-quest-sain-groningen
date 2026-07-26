@@ -4755,7 +4755,7 @@ Direct-gate result:
 
 ## P90: Dense Qwen-27B Post-Reasoning Soft Targets
 
-Status: validation gate queued.
+Status: completed; rejected by the frozen macro and varied-AUROC gates.
 
 Question: does the stronger dense Qwen3.5-27B teacher expose a useful
 continuous rating distribution after its frozen D/K/S reasoning traces?
@@ -4782,3 +4782,25 @@ Frozen protocol:
   Qwen3.5-9B student's direct `Prediction:` boundary while retaining the
   selected GPT-OSS reasoning-summary SFT loss. Do not replace the authoritative
   binary labels or copy teacher private reasoning into student targets.
+
+Outcome:
+
+- Job `30299653` completed in 12m48s on one RTX Pro 6000. Model startup,
+  loading, compilation, profiling, and graph capture preceded a `480.2s`
+  scoring pass over 2,466 cached reasoning traces.
+- The continuous max-aggregated result scored `0.92179` macro AUROC:
+  `0.99417` instructed and `0.82528` varied. Relative to the generated
+  dense-teacher result (`0.94417`, `0.99792/0.87250`), this loses `0.02238`
+  macro and `0.04722` varied AUROC. It also remains below Phoenix direct
+  (`0.93815`).
+- This is not a continuity or extraction failure. All 822 row scores are
+  unique with zero ties. All 2,466 requested seven-way distributions are
+  present and normalize to one, with zero missing rating-token logits.
+  Terminal sampled ratings were removed from 2,416/2,466 traces; the other 50
+  cached completions had no matching terminal rating.
+- The result fails the preregistered macro floor and varied-loss allowance.
+  Do not generate dense-27B training scores or train a Qwen-9B soft-target
+  student from this post-reasoning distribution. Together with P89, this
+  rejects both tested reasoning-conditioned ordinal soft teachers; retain the
+  generated dense-27B ratings only as black-box teacher evidence, not as a
+  distillation target selected after seeing this validation result.

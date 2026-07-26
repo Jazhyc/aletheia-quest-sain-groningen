@@ -3653,3 +3653,16 @@ distribution at that boundary. A training cache is authorized only if the
 continuous result reaches the generated teacher's `0.94417` macro AUROC,
 preserves instructed and varied AUROC within `0.005`, produces a continuous
 score for every row, and has no missing target logits.
+
+Dense-teacher job `30299653` completed in 12m48s, including a `480.2s`
+one-token score pass. The continuous result was worse than the generated
+teacher: macro AUROC fell `0.94417 -> 0.92179`, instructed fell
+`0.99792 -> 0.99417`, and varied fell `0.87250 -> 0.82528`. All 822 row scores
+were unique, all 2,466 normalized seven-way distributions were present, and
+zero requested rating logits were missing. The terminal generated rating was
+removed from 2,416 traces; 50 incomplete or differently terminated traces had
+no matching final rating to remove. This is a valid negative result rather
+than a binary-looking or missing-logit artifact. Reject the dense Qwen-27B
+post-reasoning distribution and do not generate training scores or train the
+soft-target student. P89 and P90 together close the tested
+reasoning-conditioned ordinal soft-distillation branch.
