@@ -3615,11 +3615,32 @@ distilled.
 That result is not a matched comparison with the strong dense-27B D/K/S
 teacher: `qwen27b_reason_ensemble_dks_member4096_v1` generates as many as 4,096
 reasoning tokens before parsing its rating and scored `0.94417` validation
-macro AUROC. Follow-up job `30299593` is an exact 35B-A3B model swap of that
-generated-reasoning condition. It retains the prompts, token budget,
-member-major order, aggregation, and scoring, while eager execution and
-disabled FlashInfer autotuning avoid repeating the pathological cold-start
-tuner. This run determines whether the sparse model is a useful reasoning
-teacher; it does not revive the rejected direct margins. If it passes, a later
-cache must obtain soft logits before the final rating without conditioning on
-the already generated label.
+macro AUROC. Follow-up job `30299593` made an exact 35B-A3B model swap of that
+generated-reasoning condition. Eager initialization took roughly 36 seconds
+after process startup, and the 2,466-generation score pass took `898.8s`,
+versus `1533.1s` for dense 27B. Sparse inference was therefore about 1.7 times
+faster in scoring-only wall time.
+
+Quality still failed the teacher gate. The matched sparse run scored `0.92387`
+macro AUROC, split `0.98542` instructed and `0.84181` varied, versus dense
+27B's `0.99792/0.87250`. It had 11 member-level parse failures and only five
+unique max-aggregated scores. Reasoning materially improved over the sparse
+direct-logit result but did not make the generated rating teacher competitive.
+
+Final diagnostic job `30299623` reused the frozen sparse reasoning cache and
+scored the 1--7 distribution after each trace. It stripped 2,341 terminal
+sampled ratings from 2,466 traces before rescoring; the other 125 completions
+had no terminal rating, usually because generation was incomplete or
+length-capped. The runner validated cached dataset, row, label, and
+ensemble-member metadata against the current evaluation order.
+
+The one-token post-reasoning pass took `124.7s`, produced 822 unique row scores
+with no ties, and improved macro AUROC from the generated rating's `0.92387` to
+`0.93155`. Scenario AUROC was `0.97750` instructed and `0.87028` varied. This
+nearly matched dense 27B on varied (`0.87250`) but regressed instructed ordering
+relative to both dense 27B (`0.99792`) and Phoenix direct (`0.9935`). It fails
+the preregistered `0.93815` macro floor and the maximum `0.005` scenario-loss
+rule. Reject Qwen3.5-35B-A3B as the soft teacher for this recipe; do not
+post-hoc authorize varied-only training from the favorable slice. The
+experiment does confirm that reasoning can materially improve this teacher and
+that continuous rescoring recovers ordering hidden by discrete ratings.

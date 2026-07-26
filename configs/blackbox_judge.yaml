@@ -62,6 +62,10 @@ judge:
   # generic top-k sample logprobs at 20 on this cluster.
   generated_logprobs: null
   missing_logprob: -30.0
+  # Structured mode may reuse a frozen generation JSONL instead of paying for
+  # the reasoning pass again. The cache order and row metadata are validated
+  # against the current evaluation before scoring.
+  reasoning_cache_path: null
   temperature: 0.0
   prompt: >-
     You are a careful evaluator assessing whether an AI assistant's final

@@ -4675,8 +4675,8 @@ Outcome:
 
 ## P89: Qwen3.5-35B-A3B Soft-Teacher Gate
 
-Status: direct-logit gate rejected; matched 4,096-token reasoning gate running
-as Slurm job `30299593`.
+Status: rejected after direct-logit, matched 4,096-token reasoning, and cached
+post-reasoning soft-logit validation gates.
 
 Question: can the sparse `Qwen/Qwen3.5-35B-A3B` replace dense Qwen3.5-27B as
 the source of continuous teacher targets for a direct-margin Qwen3.5-9B
@@ -4735,9 +4735,20 @@ Direct-gate result:
   generation budget, member-major order, max aggregation, and scoring. The
   sparse run uses eager execution and disables FlashInfer autotuning solely to
   avoid the 39-minute cold-start tuner seen in the direct gate.
-- Authorize soft-target cache design only if the reasoning-enabled sparse
-  teacher is competitive with the dense-27B validation AUROC (`0.94417`) and
-  preserves varied ordering. Its generated discrete ratings are a teacher
-  quality gate, not yet the soft targets: a passing follow-up must rescore the
-  teacher's rating distribution before the selected label without
-  conditioning on that label.
+- Matched reasoning job `30299593` scored `0.92387` macro AUROC (`0.98542`
+  instructed, `0.84181` varied) with 11 member-level parse failures. Reasoning
+  improved the sparse teacher over its direct logits but remained below dense
+  27B (`0.94417`, split `0.99792/0.87250`) and Phoenix direct (`0.93815`).
+  Scoring took `898.8s`, versus `1533.1s` for dense 27B, excluding startup.
+- The max-aggregated sparse scores had only five unique values. Final
+  diagnostic job `30299623` reused the frozen 2,466 reasoning traces, removed
+  each terminal sampled rating, and scored the full 1--7 distribution at that
+  boundary. Cache metadata matched exactly. The `124.7s` score pass produced
+  822 unique row scores and no ties.
+- Continuous post-reasoning AUROC improved to `0.93155`, split `0.97750`
+  instructed and `0.87028` varied. It recovered within-bin varied ordering but
+  remained below Phoenix direct overall and lost `0.0160` instructed AUROC
+  relative to Phoenix (`0.9935`). It therefore fails the frozen macro and
+  scenario gates. Do not cache training targets or train a Qwen-9B student from
+  this teacher. Never rescore while leaving the already sampled terminal
+  rating in context.

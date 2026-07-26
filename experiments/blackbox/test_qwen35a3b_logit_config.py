@@ -5,7 +5,10 @@ from pathlib import Path
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
-from experiments.blackbox.run_judge import vllm_kwargs_from_config
+from experiments.blackbox.run_judge import (
+    strip_terminal_generated_rating,
+    vllm_kwargs_from_config,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -124,3 +127,39 @@ def test_qwen35a3b_reasoning_gate_is_a_matched_27b_model_swap() -> None:
     assert sparse.judge.skip_mm_profiling is True
     assert sparse.judge.enforce_eager is True
     assert sparse.judge.enable_flashinfer_autotune is False
+
+
+def test_postreason_gate_reuses_frozen_reasoning_without_selected_label() -> None:
+    generated = compose_ensemble(
+        "blackbox_reasoning_qwen35a3b_ensemble_dks_member4096_v1"
+    )
+    rescored = compose_ensemble(
+        "blackbox_reasoning_qwen35a3b_ensemble_dks_member4096_postreason_logits_v1"
+    )
+
+    assert rescored.judge.mode == "structured"
+    assert rescored.judge.model == generated.judge.model
+    assert rescored.ensemble == generated.ensemble
+    assert rescored.scoring == generated.scoring
+    assert rescored.judge.reasoning_cache_path.endswith(
+        "qwen35a3b_reason_ensemble_dks_member4096_v1/validation/generations.jsonl"
+    )
+
+
+def test_terminal_generated_rating_is_removed_before_rescore() -> None:
+    reasoning = "Check the claims carefully.\n\n**Final Rating:** **6**"
+    stripped, rating = strip_terminal_generated_rating(
+        reasoning,
+        rating_min=1,
+        rating_max=7,
+    )
+
+    assert stripped == "Check the claims carefully."
+    assert rating == 6
+
+    incomplete = "Still checking the evidence.\n\nRating"
+    assert strip_terminal_generated_rating(
+        incomplete,
+        rating_min=1,
+        rating_max=7,
+    ) == (incomplete, None)

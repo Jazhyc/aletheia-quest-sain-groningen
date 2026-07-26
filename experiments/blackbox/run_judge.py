@@ -520,6 +520,25 @@ def structured_rating_prompt(prompt: str, reasoning: str, rating_instruction: st
     )
 
 
+def strip_terminal_generated_rating(
+    text: str,
+    *,
+    rating_min: int,
+    rating_max: int,
+) -> tuple[str, int | None]:
+    """Remove a sampled terminal rating before a post-reasoning logit rescore."""
+    rating_range = f"[{rating_min}-{rating_max}]"
+    pattern = re.compile(
+        rf"(?is)(?:^|\n)[ \t]*\**[ \t]*"
+        rf"(?:final[ \t]+)?rating[ \t]*:?[ \t]*\**[ \t]*:?[ \t]*"
+        rf"\**[ \t]*({rating_range})[ \t]*\**[ \t]*$"
+    )
+    match = pattern.search(text)
+    if match is None:
+        return text.rstrip(), None
+    return text[:match.start()].rstrip(), int(match.group(1))
+
+
 def vllm_kwargs_from_config(
     *,
     model_name: str,
@@ -820,6 +839,7 @@ class OfflineVllmStructuredJudge:
         use_chat_template: bool,
         enable_thinking: bool | None,
         reasoning_effort: str | None,
+        reasoning_cache_path: str | None,
     ) -> None:
         from transformers import AutoTokenizer
         from vllm import LLM, SamplingParams
@@ -831,6 +851,18 @@ class OfflineVllmStructuredJudge:
         self.final_rating_prompt = final_rating_prompt
         self.generations: list[dict[str, Any]] = []
         self.parse_error_count = 0
+        self.cached_reasoning_records: list[dict[str, Any]] | None = None
+        if reasoning_cache_path is not None:
+            cache_path = Path(reasoning_cache_path).resolve()
+            if not cache_path.exists():
+                raise FileNotFoundError(
+                    f"reasoning cache does not exist: {cache_path}"
+                )
+            self.cached_reasoning_records = [
+                json.loads(line)
+                for line in cache_path.read_text().splitlines()
+                if line.strip()
+            ]
 
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.tokenizer = tokenizer if use_chat_template else None
@@ -868,25 +900,74 @@ class OfflineVllmStructuredJudge:
             allowed_token_ids=self.all_rating_ids,
         )
 
-    def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
-        reasoning_prompts = prompts
-        if self.tokenizer is not None:
-            reasoning_prompts = render_chat_prompts(
-                self.tokenizer,
-                prompts,
-                enable_thinking=self.enable_thinking,
-                reasoning_effort=self.reasoning_effort,
+    def validate_cached_metadata(self, metadata: list[dict[str, Any]]) -> None:
+        if self.cached_reasoning_records is None:
+            return
+        if len(self.cached_reasoning_records) != len(metadata):
+            raise ValueError(
+                "reasoning cache length does not match prompt evaluations: "
+                f"{len(self.cached_reasoning_records)} != {len(metadata)}"
             )
-        reasoning_outputs = generate_with_optional_batches(
-            self.llm,
-            reasoning_prompts,
-            self.reasoning_sampling,
-            batch_size,
+        identity_keys = (
+            "dataset",
+            "index",
+            "label",
+            "ensemble_member",
+            "ensemble_member_index",
         )
-        reasoning_texts = [
-            output.outputs[0].text if output.outputs else ""
-            for output in reasoning_outputs
+        for offset, (cached, current) in enumerate(
+            zip(self.cached_reasoning_records, metadata, strict=True)
+        ):
+            cached_identity = {
+                key: cached.get(key) for key in identity_keys if key in current
+            }
+            current_identity = {
+                key: current.get(key) for key in identity_keys if key in current
+            }
+            if cached_identity != current_identity:
+                raise ValueError(
+                    "reasoning cache metadata mismatch at prompt "
+                    f"{offset}: {cached_identity!r} != {current_identity!r}"
+                )
+
+    def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
+        if self.cached_reasoning_records is None:
+            reasoning_prompts = prompts
+            if self.tokenizer is not None:
+                reasoning_prompts = render_chat_prompts(
+                    self.tokenizer,
+                    prompts,
+                    enable_thinking=self.enable_thinking,
+                    reasoning_effort=self.reasoning_effort,
+                )
+            reasoning_outputs = generate_with_optional_batches(
+                self.llm,
+                reasoning_prompts,
+                self.reasoning_sampling,
+                batch_size,
+            )
+            raw_reasoning_texts = [
+                output.outputs[0].text if output.outputs else ""
+                for output in reasoning_outputs
+            ]
+        else:
+            if len(self.cached_reasoning_records) != len(prompts):
+                raise ValueError(
+                    "reasoning cache length does not match prompts: "
+                    f"{len(self.cached_reasoning_records)} != {len(prompts)}"
+                )
+            raw_reasoning_texts = [
+                str(record["text"]) for record in self.cached_reasoning_records
+            ]
+        stripped_reasoning = [
+            strip_terminal_generated_rating(
+                reasoning,
+                rating_min=self.rating_min,
+                rating_max=self.rating_max,
+            )
+            for reasoning in raw_reasoning_texts
         ]
+        reasoning_texts = [reasoning for reasoning, _ in stripped_reasoning]
         rating_prompts = [
             structured_rating_prompt(prompt, reasoning, self.final_rating_prompt)
             for prompt, reasoning in zip(prompts, reasoning_texts, strict=True)
@@ -908,7 +989,9 @@ class OfflineVllmStructuredJudge:
         scores = np.full(len(prompts), np.nan, dtype=float)
         self.generations = []
         self.parse_error_count = 0
-        for offset, (reasoning, output) in enumerate(zip(reasoning_texts, rating_outputs, strict=True)):
+        for offset, ((reasoning, removed_rating), output) in enumerate(
+            zip(stripped_reasoning, rating_outputs, strict=True)
+        ):
             first_token_logprobs = {}
             if output.outputs and output.outputs[0].logprobs:
                 first_token_logprobs = output.outputs[0].logprobs[0] or {}
@@ -931,6 +1014,7 @@ class OfflineVllmStructuredJudge:
                 "parse_error": False,
                 "score": score,
                 "text": reasoning,
+                "removed_terminal_rating": removed_rating,
             })
         return np.nan_to_num(scores, nan=0.5)
 
@@ -1216,6 +1300,14 @@ def build_judge(cfg: DictConfig):
                 use_chat_template=bool(OmegaConf.select(cfg, "judge.use_chat_template", default=False)),
                 enable_thinking=OmegaConf.select(cfg, "judge.enable_thinking", default=None),
                 reasoning_effort=reasoning_effort,
+                reasoning_cache_path=(
+                    None
+                    if OmegaConf.select(
+                        cfg, "judge.reasoning_cache_path", default=None
+                    )
+                    is None
+                    else str(OmegaConf.select(cfg, "judge.reasoning_cache_path"))
+                ),
             )
         raise ValueError(f"unknown judge.mode={mode!r}")
     if backend == "openai":
@@ -1475,6 +1567,9 @@ def main(cfg: DictConfig) -> None:
     n_rows = sum(len(work.examples) for work in dataset_work)
     print(f"scoring {len(all_prompts)} prompt evaluations for {n_rows} rows "
           f"across {len(dataset_work)} datasets with {cfg.judge.model}")
+    validate_cached_metadata = getattr(judge, "validate_cached_metadata", None)
+    if validate_cached_metadata is not None:
+        validate_cached_metadata(all_metadata)
     score_start = time.perf_counter()
     all_scores = judge.score_prompts(all_prompts, batch_size=batch_size)
     score_seconds = time.perf_counter() - score_start
