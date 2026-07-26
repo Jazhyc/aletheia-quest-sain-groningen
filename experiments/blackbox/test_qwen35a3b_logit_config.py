@@ -5,6 +5,8 @@ from pathlib import Path
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
+from experiments.blackbox.run_judge import vllm_kwargs_from_config
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -50,3 +52,25 @@ def test_qwen35a3b_teacher_gate_fits_one_rtx_pro_6000() -> None:
     assert candidate.judge.tensor_parallel_size == 1
     assert candidate.judge.max_model_len == 4096
     assert candidate.judge.max_num_seqs == 128
+    assert candidate.judge.language_model_only is True
+    assert candidate.judge.skip_mm_profiling is True
+
+
+def test_text_only_controls_are_forwarded_to_vllm() -> None:
+    kwargs = vllm_kwargs_from_config(
+        model_name="Qwen/Qwen3.5-35B-A3B",
+        dtype="bfloat16",
+        tensor_parallel_size=1,
+        gpu_memory_utilization=0.9,
+        trust_remote_code=False,
+        max_model_len=4096,
+        max_num_seqs=128,
+        language_model_only=True,
+        skip_mm_profiling=True,
+        spec_method=None,
+        spec_model=None,
+        spec_tokens=None,
+    )
+
+    assert kwargs["language_model_only"] is True
+    assert kwargs["skip_mm_profiling"] is True

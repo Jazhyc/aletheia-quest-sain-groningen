@@ -16,4 +16,5 @@ judge:
   max_model_len: 4096
   max_num_seqs: 128
   tensor_parallel_size: 1
-
+  language_model_only: true
+  skip_mm_profiling: true

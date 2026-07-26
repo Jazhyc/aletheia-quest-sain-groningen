@@ -4675,7 +4675,7 @@ Outcome:
 
 ## P89: Qwen3.5-35B-A3B Soft-Teacher Gate
 
-Status: frozen validation gate submitted as Slurm job `30299486`.
+Status: frozen validation gate running as Slurm job `30299507`.
 
 Question: can the sparse `Qwen/Qwen3.5-35B-A3B` replace dense Qwen3.5-27B as
 the source of continuous teacher targets for a direct-margin Qwen3.5-9B
@@ -4701,7 +4701,8 @@ Frozen first gate:
   3,000-character context view, deterministic scoring, labels, and dataset
   order fixed.
 - Use BF16 on one RTX Pro 6000 with a 4,096-token engine cap and 128 maximum
-  sequences. Record cold startup separately from the 2,466-prompt score pass.
+  sequences. Load the text language model only and skip multimodal profiling.
+  Record cold startup separately from the 2,466-prompt score pass.
 - Compare macro and per-dataset AUROC, instructed/varied AUROC, score
   uniqueness/ties, missing target logits, and runtime against the frozen
   Qwen-9B logit row and Phoenix direct margins.

@@ -3595,10 +3595,18 @@ checkpoint has 35B total and approximately 3B active parameters, but retains
 roughly 72 GB of BF16 weights; the run therefore uses one 96 GB RTX Pro 6000,
 a 4,096-token engine cap, and 128 maximum sequences.
 
-Slurm job `30299486` is pending. It must report macro/per-dataset AUROC,
-instructed/varied AUROC, continuous-score diagnostics, missing target logits,
-and scoring time before any training cache is authorized. The minimum teacher
-gate is Phoenix direct's `0.938155` validation macro AUROC with no more than
-`0.005` loss in either scenario; `+0.005` macro is preferred before student
-training. If it passes, the next stage will cache only compact soft scores and
-retain the existing GPT-OSS reasoning-summary SFT loss.
+Initial job `30299486` downloaded the 66.97 GiB checkpoint in 114.4s and loaded
+65.53 GiB onto one RTX Pro 6000, confirming the single-card memory hypothesis.
+It was cancelled after vLLM spent more than eight additional minutes profiling
+the unused vision path. The shared runner now exposes vLLM's
+`language_model_only` and `skip_mm_profiling` controls while preserving false
+defaults for historical configs. Replacement job `30299507` uses both
+text-only controls and the now-cached weights.
+
+The replacement must report macro/per-dataset AUROC, instructed/varied AUROC,
+continuous-score diagnostics, missing target logits, and scoring time before
+any training cache is authorized. The minimum teacher gate is Phoenix direct's
+`0.938155` validation macro AUROC with no more than `0.005` loss in either
+scenario; `+0.005` macro is preferred before student training. If it passes,
+the next stage will cache only compact soft scores and retain the existing
+GPT-OSS reasoning-summary SFT loss.
