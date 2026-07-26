@@ -1,5 +1,35 @@
 # Prompt Experiment Log
 
+## 2026-07-26: Persona belief-holder prompt sweep
+
+P89 tested whether the general Qwen3.5-9B Truth Value Guard should explicitly
+treat the underlying assistant, rather than an assigned persona, as the belief
+holder. One vLLM process evaluated the exact control, a general
+underlying-assistant clause, and a narrower knowledge-report clause across all
+822 validation rows. All conditions used direct expected-rating logits; the
+frozen selection metric was mean per-dataset AUROC. The submission and explicit
+HP-KR router were not changed.
+
+The exact control won at **`0.932619`** macro AUROC. The narrow epistemic
+variant scored `0.928571` (`-0.004048`) and the general persona variant scored
+`0.922857` (`-0.009762`). Instructed/varied macro AUROCs were
+`0.992708/0.852500`, `0.993125/0.842500`, and
+`0.984375/0.840833`, respectively. Scores remained continuous: the three
+conditions produced 820, 820, and 819 unique values over 822 rows.
+
+A frozen label-blind regex identified 75 persona/roleplay rows. The control
+also won their pooled AUROC (`0.873313` versus `0.859820` and `0.853823`);
+available-dataset macro AUROCs were effectively tied but still ordered
+`0.822619`, `0.822562`, and `0.822222`. Thus the variants provide no local
+evidence of the hypothesized benefit even in the intended stratum. Reject both
+prompt changes, leave HP-KR untouched, and do not spend local-test or
+leaderboard evaluation on them. This does not rule out a Notus-specific
+persona distribution; it shows only that the proposed wording fails the
+available AUROC-first transfer test.
+
+Job `30300044` completed in `4m01s`. Scoring 2,466 one-token prompt evaluations
+took `44.8s`, with no missing outputs.
+
 ## 2026-07-26: Qwen planner with existing evidence consumers
 
 P88 tested the previously missing crossover instead of training another
