@@ -4635,3 +4635,40 @@ Outcome:
   deception labels, and only 16/252 selected facts are teacher-decisive. The
   decisive-only label-aware ceiling is small, while ordinary semantic
   retrieval remains harmful without a directional evidence consumer.
+
+## P88: Existing Evidence-Consumer Crossover
+
+Status: small matched-consumer validation gain; confirmation and fine-tuning
+blocked.
+
+Question: do the already-trained evidence consumers convert the stronger Qwen
+planner into useful continuous ranking without training another adapter?
+
+Frozen design:
+
+- Reuse the rank-16 matched-Wikidata consumer as the in-domain reader and the
+  rank-16 FEVER-visible consumer as an OOD sentence-evidence control.
+- Compare the 31-row unfiltered and 18-row base-Qwen-filtered planner caches.
+- Give each consumer a full explicit-empty baseline, replace only active rows,
+  and compare real with cross-dataset shuffled facts.
+- Score direct and empty-summary `0|1` margins in one shared base-model load.
+- Promote only if real beats both empty and shuffled on macro AUROC; inspect
+  per-unit direction before authorizing local test or new fine-tuning.
+
+Outcome:
+
+- Matched-Wikidata direct empty/unfiltered-real/unfiltered-shuffled score
+  `0.94006/0.94173/0.94024` macro AUROC. Real gains `+0.00167` over empty and
+  `+0.00149` over shuffled. The filtered real cache is weaker at `0.94137`.
+- The real-minus-empty gain improves five varied units, loses on two, and ties
+  on two. The descriptive nine-unit bootstrap interval is
+  `[-0.00083, +0.00889]`; real-minus-shuffled is
+  `[-0.00472, +0.01056]`. Binary BA is unchanged.
+- Matched empty-summary real reaches `0.94030`, versus `0.93940` empty and
+  `0.93863` shuffled, but remains below the direct path.
+- FEVER-visible direct real regresses `0.93857 -> 0.93750`, and empty-summary
+  real regresses `0.93119 -> 0.93071`. Reject the OOD consumer.
+- Keep matched direct plus unfiltered plans as a mechanistic validation signal,
+  not a submission candidate. Do not run local test or fine-tune yet. The
+  matched consumer is already rank 16; a future rank-4 run would increase the
+  rank-1 retriever's capacity, not this consumer's.

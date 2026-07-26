@@ -599,3 +599,52 @@ reader score. Even the label-aware oracle restricted to genuinely decisive
 facts buys only `+0.00274` macro AUROC. Thus the present bottleneck is not
 recoverable by an oracle retriever alone; Phoenix needs a directional,
 evidence-aware consumer before semantic retrieval can create reliable uplift.
+
+### Existing evidence-consumer crossover
+
+Job `30299088` tested the missing combination before any new fine-tuning. It
+loaded the existing rank-16 matched-Wikidata and evidence-visible FEVER
+consumers in one Qwen session, then crossed each with the 31-row unfiltered and
+18-row prompt-filtered planner caches. Every comparison used the consumer's own
+full explicit-empty baseline, changed only cache-active rows, and scored both
+direct and empty-summary `0|1` margins. The 3,680 prefixes took `159.5s` with
+zero missing logits.
+
+The matched Wikidata consumer is the only positive result:
+
+| matched consumer condition | macro AUROC | varied AUROC | delta vs empty | delta vs shuffled |
+| --- | ---: | ---: | ---: | ---: |
+| direct explicit empty | 0.94006 | 0.86903 | — | — |
+| direct unfiltered real | **0.94173** | **0.87292** | **+0.00167** | **+0.00149** |
+| direct unfiltered shuffled | 0.94024 | 0.86944 | +0.00018 | — |
+| direct filtered real | 0.94137 | 0.87208 | +0.00131 | +0.00054 |
+| direct filtered shuffled | 0.94083 | 0.87083 | +0.00077 | — |
+| empty-summary empty | 0.93940 | 0.86833 | — | — |
+| empty-summary unfiltered real | 0.94030 | 0.87042 | +0.00089 | +0.00167 |
+| empty-summary unfiltered shuffled | 0.93863 | 0.86653 | -0.00077 | — |
+
+For the selected diagnostic, direct unfiltered real improves five of nine
+varied units, loses on two, and ties on two versus empty. Against shuffled it
+improves four, loses on three, and ties on two. A descriptive 200,000-sample
+dataset-unit bootstrap gives a 95% interval of `[-0.00083, +0.00889]` for
+real-minus-empty varied AUROC and `[-0.00472, +0.01056]` for
+real-minus-shuffled. Both cross zero. Binary BA is unchanged.
+
+Evidence still lowers the mean active deception score, by `-0.0363` on honest
+rows and a larger `-0.0472` on deceptive rows. The small AUROC gain therefore
+comes from within-unit reordering, not a clean global directional correction.
+The 18-row precision filter is slightly worse than retaining all 31 grounded
+plans.
+
+The FEVER-visible consumer does not transfer to Wikidata cards. Its direct
+empty/real/shuffled macro AUROCs are `0.93857/0.93750/0.93774`; its
+empty-summary values are `0.93119/0.93071/0.93190`. Reject that OOD crossover.
+
+Decision: retain matched-Wikidata direct plus unfiltered Qwen plans as a small
+validation diagnostic, but do not run local test or fine-tune from this result.
+The sign is favorable against both controls but the unit-bootstrap uncertainty
+and active-score direction show that it is not yet a robust new method. The
+matched consumer is already rank 16. A later rank-4 experiment would be a
+higher-capacity continuation of the rejected rank-1 retriever, not a
+higher-rank version of this consumer; require new independent question groups
+or another frozen confirmation before spending that training run.

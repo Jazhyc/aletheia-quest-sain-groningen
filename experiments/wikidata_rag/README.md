@@ -673,6 +673,28 @@ The last condition selects only 16 decisive facts among 252 evidence uses and
 is not a retrieval result. Treat `+0.00274`, not `+0.03643`, as the optimistic
 consumer-compatible headroom from the audited decisive candidate set.
 
+### Existing-consumer crossover
+
+`evaluate_qwen_planner_consumers.py` loads multiple compatible LoRA consumers
+in one vLLM session and scores full explicit-empty baselines plus sparse
+real/shuffled caches at direct and empty-summary label positions.
+
+```bash
+sbatch experiments/wikidata_rag/run_qwen_planner_consumers.sh
+```
+
+Job `30299088` found a small positive crossover only for the existing rank-16
+matched-Wikidata consumer. Direct unfiltered real evidence scored `0.94173`
+macro AUROC versus `0.94006` empty and `0.94024` shuffled. The filtered cache
+scored `0.94137`. FEVER-visible direct real regressed to `0.93750` from
+`0.93857` empty, and its empty-summary path also regressed.
+
+The matched direct gain is not stable across nine varied units: the descriptive
+bootstrap intervals for real-minus-empty and real-minus-shuffled are
+`[-0.00083, +0.00889]` and `[-0.00472, +0.01056]`. Keep this as validation
+evidence that consumer reuse helps slightly; do not run local test or start a
+rank ablation from it.
+
 
 ```bash
 PYTHONPATH=. .venv/bin/python experiments/wikidata_rag/build_claim_gated_cache.py \

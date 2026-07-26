@@ -1,5 +1,41 @@
 # Prompt Experiment Log
 
+## 2026-07-26: Qwen planner with existing evidence consumers
+
+P88 tested the previously missing crossover instead of training another
+adapter. A single A100 load served the existing rank-16 matched-Wikidata and
+FEVER-visible LoRAs. Each consumer received its own full explicit-empty
+baseline and sparse real/shuffled substitutions from both the 31-row
+unfiltered and 18-row base-Qwen-filtered planner caches. Direct and
+empty-summary margins were scored without reasoning generation.
+
+The matched-Wikidata direct condition is modestly positive. Empty, unfiltered
+real, and unfiltered shuffled macro AUROCs were `0.94006`, **`0.94173`**, and
+`0.94024`; varied AUROCs were `0.86903`, **`0.87292`**, and `0.86944`.
+Therefore real gains `+0.00167` over empty and `+0.00149` over shuffled. The
+filtered real condition reaches `0.94137`, so removing the lower-confidence
+planner facts does not help this trained consumer.
+
+The gain changes only seven varied units: five improve and two regress versus
+empty, with two ties. Against shuffled, four improve, three regress, and two
+tie. Descriptive dataset-unit bootstrap intervals cross zero:
+`[-0.00083, +0.00889]` real-minus-empty and
+`[-0.00472, +0.01056]` real-minus-shuffled. Binary BA is unchanged. Real
+evidence lowers mean active scores by `0.0363` on honest and `0.0472` on
+deceptive rows, so the AUROC gain is a local reordering effect rather than a
+clean directional shift.
+
+Empty-summary matched real also beats both controls, but its absolute macro
+AUROC is lower: `0.94030` real versus `0.93940` empty and `0.93863` shuffled.
+The FEVER-visible adapter fails OOD transfer. Direct real scores `0.93750`
+versus `0.93857` empty and `0.93774` shuffled; empty-summary real also loses.
+
+Job `30299088` completed in `5m15s`; the four 920-prefix passes took `159.5s`
+with zero missing logits. Retain matched-direct/unfiltered as a promising but
+uncertain validation diagnostic. Do not run local test or fine-tune rank 4
+from this result. The reused consumer is already rank 16; rank 4 is relevant
+only as a future increase over the rank-1 retriever.
+
 ## 2026-07-26: Direct Phoenix candidate-oracle headroom
 
 The P87 follow-up scored all 4,202 bounded validation candidates against the
