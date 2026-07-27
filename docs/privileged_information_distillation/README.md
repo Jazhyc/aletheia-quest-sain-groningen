@@ -110,6 +110,18 @@ sbatch experiments/privileged_information_distillation/run_datarater_score.sh \
 sbatch experiments/privileged_information_distillation/run_teacher_rationale_audit.sh
 ```
 
+For a development-only OpenRouter comparison of GPT-5.6 Luna reasoning
+efforts under the same privileged Truth Value Guard contract:
+
+```bash
+python experiments/privileged_information_distillation/run_openrouter_luna_reasoning_pilot.py \
+  --efforts medium high --per-stratum 2
+```
+
+The script checkpoints each paid response under `results/blackbox/` and never
+ships in the submission notebook. The completed 36-row-per-effort pilot is
+reported in `findings.md`.
+
 See [findings.md](findings.md) for the current quality audit and experimental
 decisions.
 

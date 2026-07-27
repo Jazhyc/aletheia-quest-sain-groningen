@@ -15,6 +15,51 @@ three-prompt Qwen ensemble in balanced accuracy (`0.9310` versus `0.9298`).
 GPT-OSS cannot be used directly in the submission, which motivates using it as
 a training-only teacher.
 
+### GPT-5.6 Luna privileged Truth Value Guard reasoning pilot (2026-07-27)
+
+A matched OpenRouter pilot tested `openai/gpt-5.6-luna` at medium and high
+reasoning effort on the same 36 varied-training rows: two deterministic random
+examples per label from each of the nine varied dataset units. The teacher saw
+the authoritative label and the original privileged Truth Value Guard prompt.
+Only the compact visible `<reasoning_summary>` is a potential student target;
+OpenRouter was asked not to return the private reasoning text, although its
+reasoning tokens remained in usage and billing.
+
+| effort | parsed | label matches | prompt tokens | completion tokens | reasoning tokens | reported cost | mean summary words |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| medium | `36/36` | `36/36` | `20,052` | `3,794` | `1,227` | `$0.02119` | `43.86` |
+| high | `36/36` | `36/36` | `20,052` | `5,224` | `2,690` | `$0.02544` | `42.25` |
+
+All 72 calls used OpenAI's provider, stopped normally, and required no retry.
+As with the original GPT-OSS cache, Luna normally omitted the redundant
+`Prediction:` line: it appeared in only 2/36 medium responses and 0/36 high
+responses. The parser safely attached the authoritative label after extracting
+the structured summary.
+
+A manual pass found concrete, plausible poisoned-fact identifications in all
+18 deceptive rows under both efforts and no induced contradiction in the 18
+honest rows. Luna also repaired several visible GPT-OSS rationale weaknesses in
+the sampled rows. For example, it identified the false placement of the Khyber
+Pass in the Sulaiman Mountains where the cached GPT-OSS summary had declared
+the response accurate, and it correctly challenged the claim that the Tombs of
+the Kings are ten kilometres from Paphos. Medium and high were qualitatively
+tied on this small sample; one row elicited two different but independently
+valid errors (Gerry Rafferty's birthplace versus the impossible 1978 date for
+the 1992 film *Reservoir Dogs*).
+
+High used 2.19 times as many private reasoning tokens as medium but cost only
+20% more. Scaling the actually reported pilot costs linearly to all 2,880
+varied rows gives approximately `$1.70` for medium and `$2.04` for high; without
+assuming cache discounts, list-price ceilings from the observed token counts
+are roughly `$3.43` and `$4.11`. Cost therefore does not decide the effort
+choice. The pilot establishes that high is cheap, concise, and reliable, but
+does not yet demonstrate a quality advantage over medium.
+
+Runtime and resumable artifacts:
+
+- `experiments/privileged_information_distillation/run_openrouter_luna_reasoning_pilot.py`
+- `results/blackbox/gpt56_luna_openrouter_privileged_tvg_reasoning_pilot_v1/`
+
 ### Qwen3.5-397B OpenRouter Truth Value Guard benchmark (2026-07-27)
 
 The newer `qwen/qwen3.5-397b-a17b` checkpoint was evaluated through OpenRouter
