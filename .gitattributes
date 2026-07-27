@@ -1,3 +1,4 @@
 submission/phoenix_wright_v2_adapter/adapter_model.safetensors filter=lfs diff=lfs merge=lfs -text
 submission/phoenix_wright_v3_adapters/*/adapter_model.safetensors filter=lfs diff=lfs merge=lfs -text
+submission/phoenix_wright_adapters/*/adapter_model.safetensors filter=lfs diff=lfs merge=lfs -text
 submission/wheels/*.whl filter=lfs diff=lfs merge=lfs -text

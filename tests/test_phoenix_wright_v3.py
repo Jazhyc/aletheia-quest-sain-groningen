@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from submission.phoenix_wright_v3 import (
+from legacy_submissions.phoenix_wright_v3 import (
     MEMBER_NAMES,
     TRUNCATION_MARKER,
     build_member_prompt,

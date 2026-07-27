@@ -2820,13 +2820,26 @@ Phoenix 4.4 by `0.00512`. It also transfers the teacher unevenly:
 | `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.97000` | `0.95750` | `-0.01250` |
 | `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.93875` | `0.90125` | `-0.03750` |
 
-The frozen promotion rule rejects this adapter: do not run local test, replace
-Phoenix 4.4, or tune this 27B run after seeing validation. The result does show
-that pure boundary distillation is much more effective than the earlier
-reasoning-SFT-plus-soft-auxiliary formulation (`0.94625` versus `0.93762`), so
-the clean next experiment is to repeat the exact pipeline with the
-validation/test-confirmed Qwen3.5-397B teacher, not to add reasoning or another
-loss term.
+The original frozen local promotion rule rejected this adapter because it
+trailed Phoenix 4.4 validation AUROC. After Phoenix 4.4 subsequently regressed
+on the private leaderboard, the team explicitly overrode that local-only
+decision and promoted the Qwen-27B soft student as Phoenix 5.0 to test a more
+directly transferable supervision path. This is not evidence that the local
+comparison reversed.
+
+Independent local-test job `30311515` completed before packaging and reinforced
+the caveat: direct margins scored `0.94149` macro AUROC (`0.98427` instructed,
+`0.88444` varied), below Phoenix 4.4's `0.95982`. The vector retained much
+better resolution than 4.4 at 565 unique scores over 821 rows, with zero missing
+label logits and a `12.97s` direct-margin pass. At threshold `0.5`, balanced
+accuracy was `0.86786`, recall `0.81429`, and FPR `0.07857`. Phoenix 5.0 is
+therefore a private-leaderboard transfer experiment, not a local test winner.
+
+Pure boundary distillation remains much more effective than the earlier
+reasoning-SFT-plus-soft-auxiliary formulation (`0.94625` versus `0.93762`). A
+future clean experiment could repeat the exact pipeline with the
+validation/test-confirmed Qwen3.5-397B teacher rather than adding reasoning or
+another loss term.
 
 The separate Qwen3.5-27B thinking diagnostic, job `30310441`, also confirms
 that teacher reasoning is unnecessary. Post-reasoning label margins reached

@@ -41,13 +41,15 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
-- `submission/phoenix_wright_v4_4.ipynb` is the current AUROC-first submission
-  candidate and must be tagged `black`. Ordinary rows use the selected epoch-1
-  GRPO continuation of the rank-16 privileged-distillation adapter and score
-  literal `0|1` logits after
-  an empty `<reasoning>` scaffold. The path uses no source reasoning and no
-  generated chain at inference. Frozen validation/test macro AUROC was
-  `0.9514/0.9598`; test instructed/varied AUROC was `0.9907/0.9186`.
+- `submission/phoenix_wright_v5_0.ipynb` is the current AUROC-first submission
+  candidate and must be tagged `black`. Ordinary rows use the fresh rank-16
+  Qwen3.5-9B adapter soft-distilled from Qwen3.5-27B Truth Value Guard binary
+  margins and score literal `0|1` logits directly after `Prediction:`. The path
+  uses no source reasoning and no generated chain at inference. Frozen
+  validation/test macro AUROC was `0.9463/0.9415`; test instructed/varied AUROC
+  was `0.9843/0.8844`, with `565/821` unique test scores. This is a deliberate
+  transfer bet after Phoenix 4.4 regressed on the private leaderboard, not a
+  local validation/test promotion over 4.4.
   The prior HP-KR, action-report, and optional resolved-intent routes remain
   mutually exclusive.
 - P80 selected direct Phoenix `Prediction:` label margins for the next

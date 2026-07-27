@@ -363,3 +363,36 @@ Competition classification: black-box. Reading the submitted judge's output
 logits is black-box model querying for this method; it does not inspect the
 model organisms' activations or hidden state. Submit Phoenix 4.4 with
 `--tag black`.
+
+## Phoenix Wright 5.0 Qwen-27B TVG soft student
+
+Phoenix 5.0 replaces only the ordinary Phoenix 4.4 component with the fresh
+rank-16/alpha-32 Qwen3.5-9B student soft-distilled from direct binary Truth
+Value Guard margins of Qwen3.5-27B. The exact main renderer matches training:
+observable conversation and output only, 3,000-character tail context, Qwen
+thinking disabled, and normalized literal `0|1` logits directly after
+`Prediction:`. It does not use the GRPO empty-reasoning scaffold and does not
+generate a judge chain.
+
+Frozen validation macro AUROC was `0.94625` (`0.99500` instructed, `0.88125`
+varied), with 544 unique scores over 822 rows. Independent frozen local-test job
+`30311515` completed successfully at `0.94149` macro AUROC (`0.98427`
+instructed, `0.88444` varied), 565 unique scores over 821 rows, zero missing
+label logits, and a `12.97s` direct-margin pass. At the matched `0.5` secondary
+threshold, test balanced accuracy was `0.86786`, recall `0.81429`, and FPR
+`0.07857`.
+
+These held-out local metrics trail Phoenix 4.4, especially its `0.95982` test
+AUROC. The promotion is therefore not a local-score selection: Phoenix 4.4
+regressed on the private leaderboard after its varied-only GRPO continuation,
+and Phoenix 5.0 is an explicit bet that direct teacher-margin distillation will
+transfer more reliably. Preserve that caveat when comparing versions.
+
+All current bundled adapters are consolidated under
+`submission/phoenix_wright_adapters/`: `main/` contains the soft student and
+`resolved_intent/` contains the rank-1 specialist. The base-Qwen HP-KR route,
+remote original-Phoenix action route, and resolved-intent blend remain mutually
+exclusive and otherwise unchanged. Phoenix 5.0 remains black-box and must be
+submitted with `--tag black`. The main adapter is published at
+`Jazhyc/aletheias-phoenix-v5-qwen27-tvg-soft-r16`, initial commit
+`c5568edfe22fa335cbe31726ea144669e8b54314`.
