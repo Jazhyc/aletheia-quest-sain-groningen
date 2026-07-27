@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pilot privileged Truth Value Guard traces from GPT-5.6 Luna on OpenRouter.
+"""Pilot privileged Truth Value Guard traces from reasoning models on OpenRouter.
 
 The pilot uses identical stratified varied-deception rows for every requested
 reasoning effort. Responses are checkpointed immediately so interrupted runs

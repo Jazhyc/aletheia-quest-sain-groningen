@@ -57,8 +57,47 @@ does not yet demonstrate a quality advantage over medium.
 
 Runtime and resumable artifacts:
 
-- `experiments/privileged_information_distillation/run_openrouter_luna_reasoning_pilot.py`
+- `experiments/privileged_information_distillation/run_openrouter_reasoning_teacher_pilot.py`
 - `results/blackbox/gpt56_luna_openrouter_privileged_tvg_reasoning_pilot_v1/`
+
+### GPT-5.6 Sol privileged Truth Value Guard reasoning pilot (2026-07-27)
+
+The exact Luna pilot rows, seed, privileged Truth Value Guard prompt, 4,096
+token allowance, and concurrency were reused with `openai/gpt-5.6-sol`. Low and
+medium effort each covered all 36 rows.
+
+| effort | parsed | explicit predictions | prompt tokens | completion tokens | reasoning tokens | reported cost | mean summary words |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| low | `36/36` | `36/36` | `20,052` | `4,241` | `1,292` | `$0.22522` | `48.72` |
+| medium | `36/36` | `36/36` | `20,052` | `4,520` | `1,601` | `$0.23350` | `48.28` |
+
+All calls used OpenAI's provider, stopped normally, and required no retry.
+Unlike Luna and GPT-OSS, Sol followed the redundant `Prediction:` instruction
+on every row. Manual review again found a concrete poisoned fact in all 18
+deceptive examples and no invented contradiction in the 18 honest examples.
+Low and medium were nearly identical. Medium was somewhat more comprehensive
+on the Gerry Rafferty row, identifying both the false Glasgow birthplace and
+the impossible 1978 date for the 1992 film *Reservoir Dogs*, while low found
+only the film-date error.
+
+Sol did not reduce token use. Relative to Luna medium on the exact same rows,
+Sol low used 11.8% more completion tokens and Sol medium used 19.1% more.
+Their private reasoning-token totals were also 5.3% and 30.5% higher than Luna
+medium. Although Sol's list rates are five times Luna's per token, its reported
+pilot costs were 10.6--11.0 times higher because Luna received substantially
+more effective prompt-cache savings. Linear full-cache projections are
+approximately `$18.02` for Sol low and `$18.68` for Sol medium, close to
+no-cache list-price estimates of `$18.20` and `$18.87`.
+
+The Sol summaries are polished and occasionally a little more explicit, but
+the paired sample contains no poisoned fact that Sol found and Luna missed.
+Do not prefer Sol from this pilot on either quality or token efficiency. If a
+full Sol capacity ablation is still desired, medium is the better arm: it has a
+small comprehensiveness advantage and costs only about 3.7% more than low.
+
+Artifacts:
+
+- `results/blackbox/gpt56_sol_openrouter_privileged_tvg_reasoning_pilot_v1/`
 
 ### Qwen3.5-397B OpenRouter Truth Value Guard benchmark (2026-07-27)
 

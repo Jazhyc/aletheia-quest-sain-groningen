@@ -1,6 +1,6 @@
 from argparse import Namespace
 
-from experiments.privileged_information_distillation.run_openrouter_luna_reasoning_pilot import (
+from experiments.privileged_information_distillation.run_openrouter_reasoning_teacher_pilot import (
     numeric_usage,
     reasoning_tokens,
     request_payload,
