@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Aggregate audited direct-judge distributions into soft student targets."""
+"""Convert audited direct-judge distributions into soft student targets."""
 
 from __future__ import annotations
 
@@ -71,11 +71,76 @@ def aggregate_soft_targets(
     return sorted(selected, key=lambda record: (record["dataset"], str(record["index"])))
 
 
+def build_binary_soft_targets(
+    records: list[dict[str, Any]],
+    *,
+    honest_name: str = "honest",
+    deceptive_name: str = "deceptive",
+) -> list[dict[str, Any]]:
+    """Preserve a single binary teacher's normalized deceptive probability."""
+    selected: list[dict[str, Any]] = []
+    seen: set[tuple[str, Any]] = set()
+    for record in records:
+        key = (str(record["dataset"]), record["index"])
+        if key in seen:
+            raise ValueError(f"duplicate binary teacher row for {key}")
+        seen.add(key)
+        if record.get("parse_error"):
+            raise ValueError(f"binary teacher cache contains a parse error for {key}")
+        if record.get("missing_rating_token_ids"):
+            raise ValueError(f"binary teacher cache contains missing logits for {key}")
+        probabilities = {
+            str(name): float(value)
+            for name, value in record["target_probs"].items()
+        }
+        if set(probabilities) != {honest_name, deceptive_name}:
+            raise ValueError(
+                f"binary teacher targets for {key} must be "
+                f"{sorted((honest_name, deceptive_name))}, got "
+                f"{sorted(probabilities)}"
+            )
+        if any(
+            not math.isfinite(value) or value < 0.0
+            for value in probabilities.values()
+        ):
+            raise ValueError(f"invalid binary teacher probability for {key}")
+        total = sum(probabilities.values())
+        if abs(total - 1.0) > 1e-9:
+            raise ValueError(
+                f"binary teacher probabilities do not normalize for {key}: {total}"
+            )
+        soft_target = probabilities[deceptive_name]
+        reported_score = float(record["score"])
+        if not math.isclose(reported_score, soft_target, abs_tol=1e-12):
+            raise ValueError(
+                f"binary teacher score disagrees with deceptive probability for {key}"
+            )
+        clipped = min(max(soft_target, 1e-12), 1.0 - 1e-12)
+        selected.append({
+            "dataset": key[0],
+            "index": key[1],
+            "label": int(record["label"]),
+            "teacher_score": reported_score,
+            "teacher_logit": math.log(clipped / (1.0 - clipped)),
+            "target_probs": probabilities,
+            "soft_target": soft_target,
+            "normalization": {"kind": "binary_identity"},
+        })
+    if not selected:
+        raise ValueError("binary teacher cache is empty")
+    return sorted(selected, key=lambda record: (record["dataset"], str(record["index"])))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("input", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--expected-rows", type=int, default=2880)
+    parser.add_argument(
+        "--kind",
+        choices=("dks_zscore", "binary_identity"),
+        default="dks_zscore",
+    )
     args = parser.parse_args()
 
     records = [
@@ -83,7 +148,11 @@ def main() -> None:
         for line in args.input.read_text().splitlines()
         if line.strip()
     ]
-    aggregated = aggregate_soft_targets(records)
+    aggregated = (
+        build_binary_soft_targets(records)
+        if args.kind == "binary_identity"
+        else aggregate_soft_targets(records)
+    )
     if len(aggregated) != args.expected_rows:
         raise ValueError(
             f"expected {args.expected_rows} aggregated rows, got {len(aggregated)}"
@@ -93,11 +162,16 @@ def main() -> None:
         "".join(json.dumps(record, sort_keys=True) + "\n" for record in aggregated)
     )
     normalization = aggregated[0]["normalization"]
-    print(
+    message = (
         f"wrote {len(aggregated)} rows to {args.output}; "
-        f"teacher_logit_mean={normalization['mean']:.12g} "
-        f"teacher_logit_scale={normalization['scale']:.12g}"
+        f"normalization={normalization['kind']}"
     )
+    if normalization["kind"] == "global_label_blind_logit_zscore":
+        message += (
+            f" teacher_logit_mean={normalization['mean']:.12g}"
+            f" teacher_logit_scale={normalization['scale']:.12g}"
+        )
+    print(message)
 
 
 if __name__ == "__main__":
