@@ -2630,6 +2630,42 @@ no-reasoning path or evaluate local test from this development holdout. If the
 track continues, the clean next ablation is sparse top-k soft distillation over
 every teacher trace token, with the direct rating anchor retained separately.
 
+### Frozen full-validation confirmation
+
+Job `30303488` evaluated all 822 validation rows under Details, Known, and
+Scrutiny in one vLLM session. Native Qwen thinking mode remained disabled; the
+adapter generated its learned ordinary-channel reasoning. Before this
+confirmation, the cached teacher holdout selected `P(Rating=7)` as an
+exploratory binary-like collapse, so the evaluator preserved all seven
+probabilities and reported it alongside expected rating.
+
+| readout | macro AUROC | instructed | varied |
+| --- | ---: | ---: | ---: |
+| Generated integer, D/K/S max | `0.91292` | `0.96229` | `0.84708` |
+| Direct expected rating, D/K/S max | `0.92762` | `0.98438` | `0.85194` |
+| Direct `P(Rating=7)`, D/K/S max | `0.92679` | `0.98458` | `0.84972` |
+| Post-reasoning expected rating, D/K/S max | `0.93821` | **`0.99229`** | `0.86611` |
+| Post-reasoning `P(Rating=7)`, D/K/S max | **`0.93952`** | `0.99125` | **`0.87056`** |
+| Phoenix direct reference | `0.93816` | `0.99354` | `0.86431` |
+
+The best single direct member was Details at `0.93000` macro AUROC
+(`0.98563` instructed, `0.85583` varied); max aggregation reduced it by
+`0.00238`. The best single post-reasoning expected-rating member was Known at
+`0.92607`, so the ensemble is important only for the expensive reasoning path.
+
+The best trace-student result exceeds Phoenix direct by only `0.00137`, below
+the frozen `+0.005` promotion gate, while requiring three generations and six
+one-token passes. Scoring took `380.2s` excluding startup, versus `9.7s` for the
+historical Phoenix direct validation pass on its H100 session. Max aggregation
+had zero parse failures; Details and Known/Scrutiny generation contained five
+total length caps, with the other members recovering every row.
+
+Decision: do not promote, run local test, or deploy reasoning generation. For
+an efficient trace-student readout, one Details direct expected-rating pass is
+strictly preferable to D/K/S max but remains `0.00816` below Phoenix. The next
+useful prompt experiment should align the student and teacher with the compact
+Truth Value Guard prompt rather than retune D/K/S aggregation on validation.
+
 This is a reasoning-imitation ablation, not a continuation of P91's binary
 normalization sweep. Do not choose members or remove label-conflicting traces
 after inspecting held-out results.
