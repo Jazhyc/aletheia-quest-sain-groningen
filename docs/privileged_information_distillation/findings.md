@@ -2598,6 +2598,38 @@ recovered 191 of them. The cache therefore retains 2,818/2,877 usable rows
 (`97.95%`) and excludes the remaining 59 whole rows; no partial or truncated
 completion is accepted.
 
+Completed result:
+
+- Cache job `30301401`, 96-target smoke `30301402`, full student `30301403`,
+  and held-out evaluation `30301404` all completed. The cache contains 2,536
+  training rows / 7,608 member traces and a frozen 282-row holdout. Target
+  lengths were median 781 tokens, p95 2,146, and maximum 7,922.
+- Full training took `3h47m15s` for one epoch and 238 optimizer steps. Final
+  reported train loss was `10.89`. The saved adapter weight SHA-256 is
+  `71f22dcb7ea5d5420cf2196240bf00a629474bbdeea76f12b41997b86ed8b9af`.
+- On the exact holdout, max-aggregated Qwen-27B generated ratings scored
+  `0.91043` macro AUROC and its direct expected-rating distributions scored
+  `0.89831`. The distilled student scored `0.86816` with generated ratings,
+  `0.87718` at the direct no-reasoning boundary, and `0.89597` when extracting
+  the continuous rating distribution after its generated reasoning.
+- Thus post-reasoning scoring recovered nearly all of the teacher's direct
+  ranking (`-0.00234` AUROC), but the intended no-reasoning readout remained
+  `-0.02113` behind. Generated integer ratings collapsed to four unique values;
+  both continuous student paths had 282/282 unique scores and zero within-unit
+  cross-label ties.
+- Max aggregation had zero rating parse failures. Individual known and scrutiny
+  prompts each had one length-capped parse failure, recovered by another
+  member. The native `<think>` strict-format counter is not interpretable here
+  because vLLM strips special thinking tokens from returned text; the visible
+  reasoning and terminal ratings were retained.
+
+This supports the user's hypothesis in a qualified way: the student can use a
+generated chain to approach the teacher's ranking, but that ability does not
+fully transfer to the direct boundary. Do not promote this adapter on the
+no-reasoning path or evaluate local test from this development holdout. If the
+track continues, the clean next ablation is sparse top-k soft distillation over
+every teacher trace token, with the direct rating anchor retained separately.
+
 This is a reasoning-imitation ablation, not a continuation of P91's binary
 normalization sweep. Do not choose members or remove label-conflicting traces
 after inspecting held-out results.
