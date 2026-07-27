@@ -1,0 +1,12 @@
+# @package _global_
+# New-checkpoint teacher gate: exact model swap from Qwen3.5-27B to Qwen3.6-27B.
+
+defaults:
+  - blackbox_reasoning_nothink_truth_value_binary_logit_qwen35_27b_v1
+  - _self_
+
+method: qwen36_27b_nothink_truth_value_binary_logit_v1
+
+judge:
+  model: Qwen/Qwen3.6-27B
+  served_model: qwen36-27b-judge
