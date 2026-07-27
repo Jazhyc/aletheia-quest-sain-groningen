@@ -41,15 +41,19 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
-- `submission/phoenix_wright_v5_0.ipynb` is the current AUROC-first submission
+- `submission/phoenix_wright_v5_1.ipynb` is the current AUROC-first submission
   candidate and must be tagged `black`. Ordinary rows use the fresh rank-16
-  Qwen3.5-9B adapter soft-distilled from Qwen3.5-27B Truth Value Guard binary
-  margins and score literal `0|1` logits directly after `Prediction:`. The path
-  uses no source reasoning and no generated chain at inference. Frozen
-  validation/test macro AUROC was `0.9463/0.9415`; test instructed/varied AUROC
-  was `0.9843/0.8844`, with `565/821` unique test scores. This is a deliberate
-  transfer bet after Phoenix 4.4 regressed on the private leaderboard, not a
-  local validation/test promotion over 4.4.
+  Qwen3.5-9B adapter trained on all 2,875 parsed varied-data reasoning traces
+  from a ground-truth-blind GPT-OSS-120B teacher. It scores literal `0|1` logits
+  directly after `Prediction:` and does not generate the learned chain at
+  inference. Validation macro AUROC was `0.93762` (`0.99344` instructed,
+  `0.86319` varied), essentially tied with the privileged-summary adapter's
+  `0.93815`. The teacher itself was wrong on 415 usable training rows and had
+  `0.85564` train macro BA; its mistakes were retained. This is a
+  private-leaderboard transfer experiment intended to isolate reasoning SFT
+  from privileged-information supervision. Frozen test direct AUROC was
+  `0.93452` (`0.98073` instructed, `0.87292` varied), again essentially tied
+  with the privileged reference's `0.93423`.
   The prior HP-KR, action-report, and optional resolved-intent routes remain
   mutually exclusive.
 - P80 selected direct Phoenix `Prediction:` label margins for the next

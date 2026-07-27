@@ -7,21 +7,23 @@ tags:
 - lora
 ---
 
-# Phoenix Wright 5.0 — Qwen-27B TVG soft student
+# Phoenix Wright 5.1 main adapter
 
-Fresh rank-16, alpha-32 Qwen3.5-9B LoRA trained for one epoch on the 2,880
-varied-deception rows using only binary soft-target BCE. Targets are the direct
-`Prediction:` probabilities of a Qwen3.5-27B Truth Value Guard teacher. Training
-used AdamW at `5e-5` with effective batch size 32 and did not use hard labels,
-GPT-OSS targets, or teacher/student reasoning traces.
+Rank-16, alpha-32 Qwen3.5-9B LoRA trained for one epoch on 2,875 parsed
+varied-deception reasoning traces produced by GPT-OSS-120B. The teacher was
+ground-truth blind: it saw only the observable conversation and final output,
+generated a concise material-claim rationale, and supplied its own binary
+decision. Its mistakes were retained rather than corrected or filtered by
+ground-truth labels. Training used AdamW at `5e-5` with effective batch size 32.
 
-Phoenix 5.0 renders observable conversation and output only, disables Qwen
+The submission renders observable conversation and output only, disables Qwen
 thinking, and normalizes the next-token logits for literal `0|1` directly after
-`Prediction:`. The adapter is intended for the matching competition notebook
-and is not a general-purpose truth classifier.
+`Prediction:` without generating the learned rationale. The adapter is intended
+for the matching competition notebook and is not a general-purpose truth
+classifier.
 
 The `adapter_model.safetensors` SHA-256 is
-`c096e5839fe96fb7409fe759a79bc0989ef1efe5aee010b83c3157d38586a75f`.
+`bfe4a35ceb11055e7b7e77d29cc7027ccb5daa355703d9acd4d14eb03db01931`.
 The deployed Hugging Face repository is
-`Jazhyc/aletheias-phoenix-v5-qwen27-tvg-soft-r16`; the initial upload commit is
-`c5568edfe22fa335cbe31726ea144669e8b54314`.
+`Jazhyc/aletheias-phoenix-blind-reasoning-r16`; the initial upload commit is
+`eaeb37ce03d791db340114eb9132494d7081d31f`.

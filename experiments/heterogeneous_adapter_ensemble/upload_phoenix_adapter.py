@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish the deployed Phoenix 5.0 main adapter to Hugging Face."""
+"""Publish the deployed Phoenix main adapter to Hugging Face."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from huggingface_hub import HfApi
 
 ROOT = Path(__file__).resolve().parents[2]
 ADAPTER_DIR = ROOT / "submission/phoenix_wright_adapters/main"
-REPOSITORY = "Jazhyc/aletheias-phoenix-v5-qwen27-tvg-soft-r16"
+REPOSITORY = "Jazhyc/aletheias-phoenix-blind-reasoning-r16"
 
 
 def main() -> None:
@@ -36,7 +36,7 @@ def main() -> None:
         repo_id=REPOSITORY,
         repo_type="model",
         folder_path=ADAPTER_DIR,
-        commit_message="Upload Phoenix Wright 5.0 Qwen27 TVG soft adapter",
+        commit_message="Upload blind GPT-OSS reasoning adapter",
     )
     print(f"{REPOSITORY} {commit.oid}")
 

@@ -34,7 +34,7 @@ from submission.phoenix_wright import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v5_0.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v5_1.ipynb"
 
 
 class FakeTokenizer:
@@ -69,7 +69,7 @@ def test_main_prompt_stops_at_binary_decision_position() -> None:
     assert prompt == "<chat>" + DIRECT_PREDICTION_PREFIX
 
 
-def test_main_prompt_matches_soft_distillation_renderer() -> None:
+def test_main_prompt_matches_blind_reasoning_renderer() -> None:
     import yaml
 
     from experiments.privileged_information_distillation.core import (
@@ -82,10 +82,7 @@ def test_main_prompt_matches_soft_distillation_renderer() -> None:
     ]
 
     config = yaml.safe_load(
-        (
-            ROOT
-            / "configs/pid_qwen27_tvg_binary_soft_distillation_v1.yaml"
-        ).read_text()
+        (ROOT / "configs/privileged_information_distillation.yaml").read_text()
     )["student"]
 
     assert MAIN_PROMPT == config["prompt"]
@@ -342,11 +339,11 @@ def test_mean_log_odds_and_intent_mask_preserve_other_scores() -> None:
         blend_intent_route_scores(base, [], routes)
 
 
-def test_v5_notebook_uses_soft_student_and_exclusive_routes_without_generation() -> None:
+def test_v5_notebook_uses_blind_student_and_exclusive_routes_without_generation() -> None:
     source = notebook_source()
     ast.parse(source)
 
-    assert "method=phoenix_wright_v5.0 qwen27_tvg_soft" in source
+    assert "method=phoenix_wright_v5.1 blind_gptoss_reasoning" in source
     assert "build_exclusive_route_flags(messages)" in source
     assert "build_main_direct_prompt(messages[position], active_tokenizer)" in source
     assert '"action": build_action_empty_prompt' in source
@@ -373,4 +370,4 @@ def test_v5_notebook_uses_soft_student_and_exclusive_routes_without_generation()
     assert 'PHOENIX_MEDIUM_PROMPT_THRESHOLD", "600"' in source
     assert 'PHOENIX_LONG_BATCH_SIZE", "16"' in source
     assert 'PHOENIX_LONG_PROMPT_THRESHOLD", "900"' in source
-    assert 'PHOENIX_THRESHOLD", "0.5"' in source
+    assert 'PHOENIX_THRESHOLD", "0.19"' in source

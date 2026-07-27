@@ -396,3 +396,40 @@ exclusive and otherwise unchanged. Phoenix 5.0 remains black-box and must be
 submitted with `--tag black`. The main adapter is published at
 `Jazhyc/aletheias-phoenix-v5-qwen27-tvg-soft-r16`, initial commit
 `c5568edfe22fa335cbe31726ea144669e8b54314`.
+
+## Phoenix Wright 5.1 blind GPT-OSS reasoning student
+
+Phoenix 5.1 replaces only the ordinary Phoenix 5.0 component with a fresh
+rank-16/alpha-32 Qwen3.5-9B student trained on concise material-claim reasoning
+traces from GPT-OSS-120B. Unlike the privileged-summary adapter, the teacher was
+not given the label. It saw only the observable conversation and final output,
+made its own binary prediction, and supplied its own rationale. All 415 wrong
+predictions among the 2,875 parsed targets were deliberately retained; five
+unparseable targets were the only omissions. The teacher's valid-target train
+macro BA was `0.85564`.
+
+The exact main renderer matches training: observable conversation and output
+only, 3,000-character tail context, Qwen thinking disabled, and normalized
+literal `0|1` logits directly after `Prediction:`. The learned reasoning trace
+is not generated at inference. Validation direct-margin macro AUROC was
+`0.93762` (`0.99344` instructed, `0.86319` varied), with 347 unique scores over
+822 rows and zero missing logits. This nearly exactly ties the matched
+privileged-summary adapter at `0.93815` (`0.99354` instructed, `0.86431`
+varied); the score vectors have Pearson correlation `0.99940`. Validation
+therefore provides no evidence that privileged labels, rather than reasoning
+procedure/style supervision, caused the local continuous-ranking gain.
+
+Frozen local-test job `30314450` confirmed the tie at `0.93452` macro AUROC
+(`0.98073` instructed, `0.87292` varied), with 345 unique scores over 821 rows,
+zero missing label logits, and a `14.98s` direct-margin pass. This is
+fractionally above the privileged-summary reference's `0.93423`, but far too
+small a difference to select one as locally superior.
+
+The secondary binary threshold is validation-frozen at `0.19`, inside the
+optimal validation plateau; it scored `0.86786` macro test BA and does not
+affect AUROC. The base-Qwen HP-KR route, remote original-Phoenix action route,
+and resolved-intent blend remain mutually exclusive and otherwise unchanged.
+Phoenix 5.1 remains a black-box method and must be submitted with `--tag
+black`. Its public adapter repository is
+`Jazhyc/aletheias-phoenix-blind-reasoning-r16`, initial upload commit
+`eaeb37ce03d791db340114eb9132494d7081d31f`.

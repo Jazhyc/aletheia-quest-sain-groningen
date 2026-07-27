@@ -2894,3 +2894,51 @@ D/K/S ensemble (`0.9573`). Promote the epoch-1 adapter as the next submission
 candidate. Retain the continuous logit score despite its 742 tied rows, keep
 the hard `deceptive` threshold separate, and do not re-enable source reasoning
 or reasoning generation at inference.
+
+## Full-data blind GPT-OSS reasoning SFT (2026-07-27)
+
+Jobs `30313949`--`30313951` completed the ground-truth-blind control requested
+to distinguish privileged-information supervision from reasoning-target SFT.
+The teacher received all 2,880 varied-deception training rows, but never saw a
+label or answer-key placeholder. GPT-OSS-120B generated a concise
+material-claim rationale and its own `Prediction:0|1`. The student used the
+same default one-epoch rank-16/alpha-32 Qwen3.5-9B AdamW `5e-5` recipe with
+effective batch size 32.
+
+Five teacher outputs were unparseable, leaving 2,875 targets. Of those, 415
+teacher predictions disagreed with ground truth. They were retained without
+correction or label-based filtering. The teacher's valid-target macro train BA
+was only `0.85564`, with substantial unit variation (`0.67476--0.95625`).
+Training completed 90 steps in `979.9s` with reported loss `6.862`. The adapter
+weight SHA-256 is
+`bfe4a35ceb11055e7b7e77d29cc7027ccb5daa355703d9acd4d14eb03db01931`.
+
+Validation generation and direct-label scoring gave:
+
+| readout | macro AUROC/BA | instructed | varied | unique scores | missing/parse |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Generated binary | `0.90595` | `0.97708` | `0.81111` | `2/822` | `2` parse |
+| Direct `0|1` margin | `0.93762` | `0.99344` | `0.86319` | `347/822` | `0` missing |
+| Privileged-summary direct reference | `0.93815` | `0.99354` | `0.86431` | `348/822` | `0` missing |
+
+The blind and privileged direct score vectors have Pearson correlation
+`0.99940`; mean absolute score difference is `0.00611`. Their AUROC difference
+is only `-0.00054` overall and is not a meaningful validation separation. The
+blind student also improves generated binary BA over the privileged student's
+original `0.90000`, despite learning from the teacher's noisy decisions.
+
+This is strong local evidence that the earlier advantage over prediction-only
+SFT mostly comes from learning a compact factual-judgment reasoning procedure
+or output manifold, not from privileged labels embedded in post-hoc rationales.
+It does not prove privileged information is useless OOD: all training varied
+rows are also Qwen-family rows, and private transfer may still differ. Phoenix
+5.1 therefore promotes this adapter as an explicit private-leaderboard control,
+not as a validation winner over the privileged adapter.
+
+Frozen local-test job `30314450` confirmed the same conclusion. Direct margins
+scored `0.93452` macro AUROC (`0.98073` instructed, `0.87292` varied), with 345
+unique values over 821 rows, zero missing label logits, and `14.98s` scoring
+time. The privileged-summary reference was `0.93423`, so the blind student is
+fractionally higher but remains an empirical tie. Generated binary BA was
+`0.91071`; its eight parse errors do not affect the direct-margin result. The
+validation-frozen `0.19` threshold gave `0.86786` macro test BA.

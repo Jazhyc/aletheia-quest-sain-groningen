@@ -3785,3 +3785,40 @@ varied units. Label-blind aggregation gives teacher-logit mean
 soft targets spanning `0.103406--0.982934`. All 2,877 usable GPT-OSS summary
 rows join exactly. Frozen student job `30299836` is running with the
 predeclared weight-1 soft BCE plus unchanged reasoning-summary SFT.
+
+## 2026-07-27: Full blind GPT-OSS reasoning SFT and Phoenix 5.1
+
+Jobs `30313949`--`30313951` generated blind GPT-OSS-120B material-claim traces
+for all 2,880 varied training rows, trained a one-epoch rank-16 Qwen3.5-9B
+student, and evaluated it on validation. The teacher never received the label.
+Five outputs were unparseable; all 415 wrong decisions among the 2,875 parsed
+targets were retained. Teacher train macro BA was `0.85564`.
+
+The student reached `0.93762` direct-margin validation macro AUROC
+(`0.99344` instructed, `0.86319` varied), with 347 unique scores and no missing
+label logits. This essentially ties the privileged-summary adapter's `0.93815`;
+their score correlation is `0.99940`. Generated binary BA was `0.90595`, above
+the privileged student's original `0.90000`. This supports reasoning-target SFT
+as the main local effect and provides no validation evidence for an additional
+privileged-label benefit.
+
+Phoenix 5.1 replaces only the ordinary route with this adapter, preserves the
+HP-KR/action/intent routes, and reads direct literal `0|1` logits without
+generating a rationale. The secondary threshold is frozen at `0.19`, inside the
+optimal validation plateau. Submit it as black-box to test OOD transfer; the
+all-varied training set is also Qwen-only, so local evidence cannot establish
+cross-family transfer.
+
+Frozen local-test job `30314450` scored `0.93452` macro direct AUROC
+(`0.98073` instructed, `0.87292` varied), 345 unique scores over 821 rows, zero
+missing logits, and `14.98s` scoring time. This fractionally exceeds but
+effectively ties the privileged-summary reference at `0.93423`. The public
+adapter was initialized at
+`Jazhyc/aletheias-phoenix-blind-reasoning-r16`, commit
+`eaeb37ce03d791db340114eb9132494d7081d31f`.
+
+The final public model-card update is commit
+`37adee41ed85b218b6e04803ba23f84205d05a88`. A one-row dry rehearsal against
+the public adapter completed successfully on the single configured varied
+dataset in `53s`; the notebook produced a valid submission with no runtime
+failure.
