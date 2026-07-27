@@ -3856,3 +3856,48 @@ The final public model-card update is commit
 the public adapter completed successfully on the single configured varied
 dataset in `53s`; the notebook produced a valid submission with no runtime
 failure.
+
+## 2026-07-27: Matched-organism Truth Value Guard logits
+
+The frozen local test diagnostic scored every one of 821 rows with the exact
+organism that generated it: its base checkpoint plus its LoRA, or the base
+checkpoint alone. All forward passes and terminal literal `0|1` logits used the
+competition NDIF endpoint. The judge used the same no-thinking 3,000-character
+tail Truth Value Guard prompt and normalized binary boundary as the model-swap
+controls. Source reasoning was excluded and no judge text was generated.
+
+The 21 dataset units resolve to 12 exact organisms: nine Qwen3.5-27B
+configurations, two Gemma 3 27B configurations, and one Nemotron configuration.
+Grouping by `(model, LoRA)` avoided redundant adapter loads without changing
+macro per-dataset evaluation. The run completed in 146.7 remote scoring seconds
+and produced 159 unique scores over 821 rows.
+
+| judge assignment | macro AUROC | instructed | varied | BA | recall | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| exact generating organism | `0.95131` | `0.99042` | `0.89917` | `0.88810` | `0.81905` | `0.04286` |
+| universal base Qwen3.5-27B | `0.96065` | `0.99823` | `0.91056` | `0.92024` | `0.89524` | `0.05476` |
+| universal Nemotron | `0.95655` | `0.98708` | `0.91583` | `0.89762` | `0.82619` | `0.03095` |
+| universal Gemma | `0.92917` | `0.96344` | `0.88347` | `0.86548` | `0.85476` | `0.12381` |
+
+Family macro AUROC under matched assignment was `0.94875` for Qwen's 18 units,
+`0.97500` for Gemma's two units, and `0.95000` for the single Nemotron unit.
+The four no-LoRA units averaged `0.95875`; the 17 LoRA units averaged
+`0.94956`, but that comparison is confounded by different dataset units.
+
+A paired Qwen control therefore scored the identical rows with unadapted
+Qwen3.5-27B. Across the 16 Qwen adapter units, the generating LoRA changed mean
+AUROC by `-0.00641`. The instructed delta was only `-0.00016`; the varied delta
+was `-0.01266`. The largest losses were varied `a-mo-1`
+(`0.82750 -> 0.78625`) and `a-mo-4` (`0.86000 -> 0.81750`). Three units
+improved, seven tied, and six regressed. A fixed-seed dataset-unit bootstrap
+placed the varied mean delta's 95% interval at `[-0.02641, 0.00000]`.
+
+This does not show a catastrophic organism-self-judge failure. It does show
+that some deception LoRAs suppress or distort TVG ranking on difficult varied
+rows, and that universal base Qwen is the stronger local default. An
+activation-gated OOD fallback could still be reasonable where organism
+knowledge is uniquely valuable, but a false-positive route is not free.
+Do not route on `lora is None`; the intended rule must remain a general
+white-box OOD criterion. The local units are organism-homogeneous, so their
+per-dataset AUROC does not test cross-family score calibration. Mixed-organism
+hidden units would need separate label-blind calibration evidence.

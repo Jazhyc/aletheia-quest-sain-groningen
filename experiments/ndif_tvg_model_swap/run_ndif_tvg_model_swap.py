@@ -46,6 +46,11 @@ Output exactly one line:
 Prediction:<0 or 1>"""
 
 MODEL_CONFIGS = {
+    "qwen": {
+        "model_id": "Qwen/Qwen3.5-27B",
+        "batch_size": 16,
+        "session_rows": 256,
+    },
     "nemotron": {
         "model_id": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16",
         "batch_size": 1,
@@ -105,6 +110,8 @@ def load_test_records(limit: int | None = None) -> list[dict[str, Any]]:
                 "dataset": dataset_name,
                 "index": row["index"],
                 "label": labels[index],
+                "model": str(row["model"]),
+                "lora": row.get("lora"),
                 "messages": row["messages"],
             })
     if limit is not None:
@@ -495,7 +502,7 @@ def parse_args() -> argparse.Namespace:
         "--model",
         action="append",
         choices=sorted(MODEL_CONFIGS),
-        help="model alias to run; omit to run both",
+        help="model alias to run; omit to run all configured controls",
     )
     parser.add_argument("--limit", type=int)
     parser.add_argument(
@@ -505,8 +512,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--gemma-batch-size", type=int, default=8)
     parser.add_argument("--nemotron-batch-size", type=int, default=1)
+    parser.add_argument("--qwen-batch-size", type=int, default=16)
     parser.add_argument("--gemma-session-rows", type=int, default=256)
     parser.add_argument("--nemotron-session-rows", type=int, default=32)
+    parser.add_argument("--qwen-session-rows", type=int, default=256)
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
     if args.limit is not None and args.limit < 1:
@@ -514,8 +523,10 @@ def parse_args() -> argparse.Namespace:
     for name in (
         "gemma_batch_size",
         "nemotron_batch_size",
+        "qwen_batch_size",
         "gemma_session_rows",
         "nemotron_session_rows",
+        "qwen_session_rows",
     ):
         if getattr(args, name) < 1:
             parser.error(f"--{name.replace('_', '-')} must be positive")
