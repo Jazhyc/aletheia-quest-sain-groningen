@@ -32,7 +32,7 @@ cap   = BASE_CAP + agree × (MAX_CAP − BASE_CAP)
 score = sigmoid(judge_z + cap × probe_z)
 
 # new — on the escalated rows the big judge REPLACES the judge
-big_z      = big_margin[esc] / JUDGE_MARGIN_SD <---- this is a bit iffy, maybe calculate for model specifically or remove standardization
+big_z      = big_margin[esc] / JUDGE_MARGIN_SD <---- this is a bit iffy, maybe calculate for model specifically or remove standardization or maybe it doesnt actually matter
 score[esc] = sigmoid(big_z + BASE_CAP × probe_z[esc])
 
 JUDGE_MARGIN_SD = 1.19976   # one judge step = 0.10419 z
