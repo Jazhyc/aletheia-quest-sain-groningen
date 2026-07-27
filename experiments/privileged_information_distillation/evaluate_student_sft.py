@@ -517,7 +517,13 @@ def load_records(
     from datasets import load_dataset
 
     rows: list[dict[str, Any]] = []
-    for dataset_cfg in load_split_config(splits_dir / f"dry.{split}.yaml", ROOT):
+    # Checked-in split manifests use project-relative labels such as
+    # dev_splits/labels/validation/*.csv. Resolve them from the parent of the
+    # selected splits directory, not from this script's checkout/worktree.
+    for dataset_cfg in load_split_config(
+        splits_dir / f"dry.{split}.yaml",
+        splits_dir.parent,
+    ):
         labels = load_labels(dataset_cfg)
         label_by_index = dict(zip(labels["index"], labels["label"], strict=True))
         dataset = load_dataset(dataset_cfg.name, split="test")
