@@ -4298,3 +4298,693 @@ Outcome:
   but OOMed at 64; the deployed length-aware schedule is `48/32/16` at
   `600/900` tokens. See `docs/auroc_first_strategy.md` for the paired runtime
   and numerical-drift measurements.
+
+## P81: Continuous Knowledge-Report Specialist
+
+Status: complete; empty-summary base-Qwen margin confirmed and deployed in
+Phoenix 4.1.
+
+Question: can the exact P78 HP-KR router expose the strong base-Qwen
+`knowledge_report_type` specialist as a continuous AUROC score rather than a
+two-valued generated decision?
+
+Frozen design:
+
+- Preserve P78's exact explicit knowledge self-report rule and its exclusion of
+  harmful forced-choice tasks. Do not add category, source, organism, label, or
+  fitted n-gram features.
+- Keep Phoenix's direct rank-16 margin as the baseline.
+- Run base `Qwen/Qwen3.5-9B` without PEFT under the already selected
+  `knowledge_report_type` prompt.
+- Compare direct `Prediction:`, empty `<reasoning_summary>` plus `Prediction:`,
+  and post-reasoning label margins. Retain generated binary output as the
+  known-strong diagnostic.
+- Select on the frozen 100-row development HP-KR half only if AUROC gains at
+  least `0.05` over Phoenix, then run the selected arm on the untouched
+  100-row confirmation half.
+
+Outcome:
+
+- Development Phoenix, generated binary, direct, empty, and post-reasoning
+  AUROCs were `0.4348`, `0.8100`, `0.8894`, **`0.9002`**, and `0.8472`.
+  Empty-summary scoring was selected before confirmation.
+- Confirmation AUROCs were `0.4012`, `0.8600`, `0.9440`, **`0.9462`**, and
+  `0.8976`. The selected arm's BA was `0.8600`, and no requested label logits
+  were missing.
+- The selected arm emitted 92 unique development and 84 unique confirmation
+  scores. Its H100 margin passes took `1.31s` and `1.38s` after model load.
+- A one-row NDIF smoke verified the exact base-model/no-PEFT path,
+  `logits_to_keep=1`, and empty-summary prefix; it emitted `0.952574`.
+- Phoenix 4.1 originally deployed the route; it remains unchanged and exclusive
+  in `submission/phoenix_wright_v4_2.ipynb`. Known competition coverage remains
+  zero, so this is a low-regression OOD transfer bet, not a measured local
+  validation improvement. Do not broaden the router or replace the frozen
+  empty scaffold from confirmation.
+
+## P82: Direct Semantic Reasoning-Intent Ensemble
+
+Status: validation gate passed; frozen local-test confirmation confirmed.
+
+Question: can Phoenix 4.1 recover complementary private-intent signal without
+restoring autoregressive judge reasoning?
+
+Frozen design:
+
+- Keep Phoenix 4.1's exact rank-16 direct `Prediction:` margin as the regular
+  deception score.
+- On rows with final-assistant reasoning only, query unadapted
+  `Qwen/Qwen3.5-9B` under two frozen no-thinking semantic prompts:
+  `literal_deceptive_intent` as a diagnostic and `resolved_intent` as primary.
+  The primary requires that the assistant ultimately adopts a deceptive plan
+  and executes it in the visible output.
+- End each prompt at `Prediction:` and constrain the next token to exact
+  single-token `0`/`1` labels. Use normalized label probabilities; generate no
+  reasoning.
+- Retain Phoenix exactly on rows without reasoning. Do not use reasoning
+  availability, dataset, source, or organism as a fitted feature.
+- Blend only the continuous `score` column. Retain Phoenix's separate hard
+  `deceptive` prediction instead of thresholding the blend.
+- Report fixed probability mean, log-odds mean, maximum, and within-unit rank
+  average. The fixed resolved-intent log-odds mean is primary. Treat a nested
+  leave-one-dataset-unit-out logistic stack as a diagnostic only.
+- Select on varied validation macro AUROC. Advance only if resolved intent
+  alone reaches `0.80` AUROC and its fixed log-odds mean gains at least `0.005`
+  over Phoenix. Report uniqueness, cross-label ties, saturation, binary
+  diagnostics, and runtime. Run local test once only after passing.
+
+Validation outcome:
+
+- RTX Pro 6000 job `30297634` loaded Qwen once and scored 1,644 prompt
+  evaluations in `31.91s` after startup, with zero parse failures.
+- Phoenix direct, resolved intent, and their fixed log-odds mean scored
+  `0.86431`, `0.84889`, and **`0.88514`** macro AUROC on the nine
+  trace-bearing units. The `+0.02083` gain passes the frozen gate. Nested
+  logistic reached `0.87875`.
+- The primary blend produced 351 unique scores on 360 rows, macro cross-label
+  ties `0.00028`, and no saturation. Keeping the 12 no-trace units unchanged
+  projects full validation macro AUROC `0.93815 -> 0.94708`.
+- The literal diagnostic blend reached `0.88833`, but it is not selected post
+  hoc over the preregistered resolved-intent primary.
+- Frozen local-test job `30297674` completed in `2m27s` including cold startup;
+  1,642 two-prompt evaluations took `30.68s`. The resolved-intent member alone
+  scored `0.82986` test AUROC, while its unchanged log-odds mean improved
+  Phoenix `0.87083 -> 0.88764` (`+0.01681`) on the nine trace-bearing units.
+  The validation-fit logistic reached only `0.87847`.
+- The primary produced 350 unique test scores over 360 rows, cross-label tie
+  fraction `0.00028`, and no saturation. With the 12 no-trace units unchanged,
+  full test macro AUROC projects `0.93423 -> 0.94143` (`+0.00720`).
+- Implement only the resolved member on trace-bearing rows and benchmark it
+  against Phoenix 4.1 on a complete NDIF unit before submission. This local
+  confirmation is Qwen-only and does not erase the earlier reasoning n-gram
+  ensemble's official transfer failure.
+
+## P83: Rank-1 Resolved-Intent Label Margins
+
+Status: validation selected empty-summary margins; frozen test confirmed.
+
+Question: does the existing rank-1 resolved-intent adapter improve the
+AUROC-first P82 ensemble when its label margins are read without generating a
+reasoning summary?
+
+Frozen comparison:
+
+- Reuse the exact `qwen9b_heterogeneous_resolved_intent_rank1_v1` rank-1/alpha-2
+  adapter trained on P66's 288-row trace-bearing manifest.
+- Compare direct `Prediction:` and an empty `<reasoning_summary>` scaffold on
+  validation. Both constrain the next token to `0|1`; neither generates
+  reasoning.
+- Combine each continuous intent score with Phoenix 4.1 direct margins using
+  the same fixed probability and log-odds means used by P82. Select on
+  trace-unit macro AUROC and keep no-trace rows and the hard `deceptive` column
+  unchanged.
+
+Validation outcome:
+
+- Job `30297707` returned zero missing margins. Direct and empty-summary intent
+  AUROC were `0.89125` and `0.88597`, both materially above base Qwen's
+  `0.84889`.
+- Empty-summary plus Phoenix log-odds mean was best at **`0.90111`**, improving
+  Phoenix `+0.03681` and P82's base-Qwen blend `+0.01597`. Direct log-odds mean
+  reached `0.89750`.
+- The selected blend emitted 358 unique scores over 360 rows with zero
+  cross-label ties. Keeping 12 no-trace units unchanged projects full
+  validation macro AUROC `0.93815 -> 0.95393`.
+- Empty-summary scoring took `24.03s` for all 822 validation rows; a submission
+  queries only the 360 trace-bearing rows.
+- Frozen test job `30297739` scored intent at `0.88819` and the selected blend
+  at **`0.90417`** on the nine trace-bearing units, versus `0.87083` Phoenix
+  (`+0.03333`). Seven units improved and two regressed. The full 21-unit
+  projection is `0.93423 -> 0.94851`; the blend had 358 unique scores and zero
+  cross-label ties.
+- Matched validation no-LoRA job `30297742` scored `0.88139` standalone and
+  `0.90028` blended, nearly tying the adapter's `0.88597` and `0.90111`.
+  Therefore the rank-1-specific improvement over its exact prompt control is
+  small, despite the frozen adapter path's strong test transfer.
+
+## P84: Phoenix 4.2 Exclusive Harm Route and Intent Margin
+
+Status: implemented; trace-bearing remote smoke passed.
+
+Question: can the selected rank-1 intent margin add a complementary ranking
+signal without paying its cost or transfer risk on ordinary Phoenix rows?
+
+Frozen deployment:
+
+- Preserve Phoenix 4.1's exact HP-KR semantic router and its exclusion of the
+  rejected forced-choice harm contract.
+- Preserve the base-Qwen `knowledge_report_type` empty-summary harm specialist
+  as the only judge on those routed rows; never invoke intent there.
+- On non-harm rows with a final-assistant reasoning trace, run P83's rank-1
+  resolved-intent adapter with its selected empty-summary margin.
+- Combine Phoenix and intent on those eligible non-harm rows with the fixed
+  mean log-odds rule.
+- Leave non-harm no-trace continuous scores exactly on Phoenix 4.1 and derive
+  the hard `deceptive` column from the unblended Phoenix/specialist score.
+- Load each judge lazily, so the harm specialist runs only on harm rows and
+  intent runs only on eligible non-harm rows.
+
+Implementation:
+
+- The sole notebook is `submission/phoenix_wright_v4_2.ipynb`.
+- The exact rank-1 adapter is bundled under
+  `submission/phoenix_wright_v4_adapters/resolved_intent/`.
+- Unit tests compare the intent renderer with the training pipeline and verify
+  route masking, mean-log-odds composition, and hard-score separation.
+- A one-row trace-bearing NDIF notebook test passed in `221.82s`, exercising
+  both remote adapter sessions and the final composition.
+
+P83's trace-bearing varied-unit validation result motivates the non-harm
+member and projects full macro AUROC `0.93815 -> 0.95393`. The exact HP-KR
+route matches zero known competition rows, so its exclusive specialist
+treatment is still an OOD transfer choice. Do not broaden the router or mix
+intent into harm-specialist rows from this implementation.
+
+## P85: Base-Qwen Bounded Wikidata Planner
+
+Status: retrieval gate passed; downstream Phoenix AUROC gate failed.
+
+Question: can hosted base Qwen replace the weak compact retriever by planning
+over literal facts already available in the frozen submission-sized Wikidata
+database?
+
+Frozen design:
+
+- Present at most 12 bounded database candidates with the question and response.
+- Ask base `Qwen/Qwen3.5-9B`, without Phoenix PEFT, to select at most three
+  facts that independently settle an exact response claim.
+- Require a literal candidate ID, an exact grounded response quote, and
+  `supports|contradicts`; reject invented facts, IDs, or extra fields.
+- Measure selection against the existing GPT-OSS decisiveness audit, with exact
+  question groups from training excluded in the novel validation slice.
+- If retrieval transfers, append the selected literal facts through the
+  existing incomplete/untrusted reference block and read the frozen Phoenix
+  rank-16 direct `Prediction:` margin.
+- Reuse cached Phoenix scores on inactive rows. Compare real with
+  cross-dataset shuffled evidence and fixed mean-log-odds blending. Select on
+  macro AUROC; do not use local test unless validation improves.
+
+Outcome:
+
+- Planner job `30298663` generated 2,700 rows in `134.0s`. On validation it
+  achieved 0.735 selected-fact precision, 0.833 selected-row precision, and
+  0.500 decisive-row recall. It added 19 decisive rows outside rule coverage.
+- On 49 question groups absent from training, it selected five facts; all five
+  were decisive and recovered 5/7 reachable decisive rows.
+- Phoenix job `30298676` scored 31 active rows in `5.37s` with zero missing
+  label logits. Cached baseline AUROC was `0.93815`.
+- Real replacement regressed to `0.93673`, versus `0.93732` for matched
+  shuffled replacement. Mean-log-odds blending reached `0.93768`, also below
+  baseline. Recomputed-empty active rows scored `0.93792`.
+- Real evidence shifted honest/deceptive active scores by `-0.0320/-0.0689`.
+  Twenty-two honest and eight deceptive rows received only supporting facts;
+  only one deceptive row received counterevidence. Supporting objective facts
+  therefore suppressed Phoenix even on belief-based deceptive rows.
+- Reject evidence-conditioned Phoenix and keep local test untouched. Retain
+  the planner code as evidence that semantic retrieval can generalize.
+  A future training-developed directional member may add contradiction as a
+  positive signal without allowing support to lower the independent
+  intent/belief score, but the present contradiction coverage is too sparse.
+
+## P86: Continuous Action-Report Specialist
+
+Status: empty-summary margins selected; frozen confirmation passed.
+
+Question: can the existing observable action-report route recover Insider
+Trading ranking signal under the AUROC-first metric without training another
+adapter or generating reasoning at deployment?
+
+Frozen design:
+
+- Use the existing router that requires evidence of an executed action, an
+  explicit report/disclosure contract, and a final recipient-facing report.
+- Keep the exact Phoenix rank-16 adapter, action prompt, 4,500-character
+  head/tail renderer, and 2,048-token deployment-equivalent left truncation.
+- Compare ordinary Phoenix direct margins with action-prompt direct,
+  empty-summary, and post-reasoning margins. Retain generated binary decisions
+  only as a diagnostic.
+- Split the frozen 200-row action artifact 100/100 within label. Select on
+  development only for at least `+0.05` aggregate AUROC and no evaluable source
+  family losing more than `0.05` AUROC. Run only the selected arm on
+  confirmation.
+- This is a continuous-readout confirmation, not a pristine prompt
+  confirmation: the frozen action prompt already had binary evaluations on
+  these public rows.
+
+Outcome:
+
+- Development Phoenix, generated binary, action direct, empty-summary, and
+  post-reasoning AUROCs were `0.5030`, `0.6200`, `0.7610`, **`0.7974`**, and
+  `0.7056`. Empty-summary gained `+0.2944` and improved every evaluable source
+  family, so it passed the frozen selection.
+- Confirmation reproduced the ranking gain: selected empty-summary reached
+  **`0.8148`** AUROC versus `0.4158` Phoenix and `0.7800` generated binary.
+  Gemma, Llama, and Mistral gained `+0.3143`, `+0.4130`, and `+0.5110` AUROC;
+  Kimi was one-class in both halves.
+- Selected scores were continuous: 73/100 and 83/100 unique on development
+  and confirmation, with zero missing label logits. The confirmation margin
+  pass took `13.9s` after model startup.
+- One development prompt exceeded the input cap (3,358 tokens) and used the
+  frozen final-2,048-token truncation; confirmation had no truncated rows.
+  Router coverage remained 100/100 in both halves.
+- Retain the empty-summary action specialist for a Phoenix deployment port.
+  Routed action rows should use this prompt exclusively, remain on the same
+  Phoenix adapter/session, and be excluded from the reasoning-intent blend.
+  Require route/parity tests and an NDIF smoke before claiming deployment.
+- Phoenix Wright 4.3 implements this exact design. A full local split audit
+  matched zero of 8,216 known competition rows, so the known 4.2 score vector
+  remains unchanged. A synthetic three-row NDIF notebook smoke activated one
+  action route, excluded intent despite an available reasoning trace, and
+  preserved duplicate ordinary scores exactly (`0.0` absolute delta).
+
+## P87: Rank-1 Qwen Database Retriever
+
+Status: semantic prompt retained as a diagnostic; adapter and downstream route
+rejected.
+
+Question: can the earlier retriever's best teacher objective be transferred to
+a rank-1 Qwen adapter that cheaply scores bounded database candidates?
+
+Frozen design:
+
+- Use the existing GPT-OSS candidate audit and define a positive as a fact that
+  by itself settles the response's direct answer. Both support and
+  contradiction are positive; relevant-but-insufficient and irrelevant facts
+  are negative.
+- Pair every fit positive with a same-row hard negative, prioritizing frozen
+  planner mistakes. Add negative-only anchors for planner false positives on
+  rows without a decisive fact.
+- Do not expose deception labels. Split exact question groups by frozen SHA-1
+  bucket into fit, calibration, and internal diagnostic partitions.
+- Train rank 1, alpha 2 across the language attention and MLP projections with
+  direct binary loss plus within-pair ranking loss. Select an absolute score
+  threshold only on the calibration bucket at minimum 0.8 precision.
+- Compare base Qwen, one epoch, and a controlled three-epoch exposure on
+  candidate AUROC/AP, novel questions, top-1 retrieval, and calibrated
+  precision/recall.
+- If the scoring stage cleans the planner cache, rerun the exact Phoenix
+  direct-margin real/shuffled/empty comparison. Do not touch local test unless
+  validation macro AUROC improves.
+
+Outcome:
+
+- The teacher contains 534 records: 230 positive/negative pairs and 74
+  negative-only planner anchors across 101 fit question groups.
+- One-epoch jobs `30298726`/`30298742` were effectively identical to base:
+  validation candidate AUROC `0.92717 -> 0.92722`, novel-question AUROC
+  `0.86758 -> 0.86773`, and unchanged emission precision/recall
+  `0.840/0.420`. Mean validation score delta was only `0.000169`.
+- Three-epoch jobs `30298817`/`30298821` moved the model in the wrong
+  direction: validation AUROC `0.92625`, novel-question AUROC `0.86256`, and
+  emission precision/recall `0.826/0.380`.
+- Base-Qwen prompt filtering retained 18/34 planner facts, 17 decisive. This
+  raises fact precision `0.735 -> 0.944` while lowering decisive-row recall
+  `0.500 -> 0.340`. Attribute this to the prompt, not the adapter.
+- Exact downstream job `30298951` scored cached baseline, real replacement,
+  shuffled replacement, and Phoenix/real mean-log-odds at `0.93815`,
+  `0.93762`, `0.93696`, and `0.93792` macro AUROC. Real evidence now beats
+  shuffled, but neither deployment composition passes the baseline gate.
+- Reject both rank-1 checkpoints and do not run local test. Retain the scoring
+  prompt for retrieval analysis. More epochs or repeated teacher-cache
+  iterations are not supported by the held-out trend.
+- Direct candidate-oracle job `30299003` further separates retrieval from
+  reader utility. Recomputed-empty, forced semantic retrieval, label-aware
+  decisive utility, and label-aware any-candidate utility scored `0.93839`,
+  `0.93649`, `0.94113`, and `0.97482` macro AUROC. The corresponding uplifts
+  are `-0.00190`, `+0.00274`, and `+0.03643`.
+- Do not cite the last number as retrieval headroom: its oracle uses true
+  deception labels, and only 16/252 selected facts are teacher-decisive. The
+  decisive-only label-aware ceiling is small, while ordinary semantic
+  retrieval remains harmful without a directional evidence consumer.
+
+## P88: Existing Evidence-Consumer Crossover
+
+Status: small matched-consumer validation gain; confirmation and fine-tuning
+blocked.
+
+Question: do the already-trained evidence consumers convert the stronger Qwen
+planner into useful continuous ranking without training another adapter?
+
+Frozen design:
+
+- Reuse the rank-16 matched-Wikidata consumer as the in-domain reader and the
+  rank-16 FEVER-visible consumer as an OOD sentence-evidence control.
+- Compare the 31-row unfiltered and 18-row base-Qwen-filtered planner caches.
+- Give each consumer a full explicit-empty baseline, replace only active rows,
+  and compare real with cross-dataset shuffled facts.
+- Score direct and empty-summary `0|1` margins in one shared base-model load.
+- Promote only if real beats both empty and shuffled on macro AUROC; inspect
+  per-unit direction before authorizing local test or new fine-tuning.
+
+Outcome:
+
+- Matched-Wikidata direct empty/unfiltered-real/unfiltered-shuffled score
+  `0.94006/0.94173/0.94024` macro AUROC. Real gains `+0.00167` over empty and
+  `+0.00149` over shuffled. The filtered real cache is weaker at `0.94137`.
+- The real-minus-empty gain improves five varied units, loses on two, and ties
+  on two. The descriptive nine-unit bootstrap interval is
+  `[-0.00083, +0.00889]`; real-minus-shuffled is
+  `[-0.00472, +0.01056]`. Binary BA is unchanged.
+- Matched empty-summary real reaches `0.94030`, versus `0.93940` empty and
+  `0.93863` shuffled, but remains below the direct path.
+- FEVER-visible direct real regresses `0.93857 -> 0.93750`, and empty-summary
+  real regresses `0.93119 -> 0.93071`. Reject the OOD consumer.
+- Keep matched direct plus unfiltered plans as a mechanistic validation signal,
+  not a submission candidate. Do not run local test or fine-tune yet. The
+  matched consumer is already rank 16; a future rank-4 run would increase the
+  rank-1 retriever's capacity, not this consumer's.
+
+## P89: Qwen3.5-35B-A3B Soft-Teacher Gate
+
+Status: rejected after direct-logit, matched 4,096-token reasoning, and cached
+post-reasoning soft-logit validation gates.
+
+Question: can the sparse `Qwen/Qwen3.5-35B-A3B` replace dense Qwen3.5-27B as
+the source of continuous teacher targets for a direct-margin Qwen3.5-9B
+student?
+
+Rationale:
+
+- The checkpoint has 35B total parameters but activates about 3B per token.
+  Its BF16 weights still require roughly 72 GB of device memory, but one 96 GB
+  RTX Pro 6000 should hold the model while sparse expert execution may reduce
+  scoring time substantially relative to dense 27B.
+- The official Qwen benchmark table generally places dense 27B slightly ahead
+  on knowledge and reasoning. Active parameter count therefore motivates a
+  runtime hypothesis, not an accuracy assumption.
+- A same-family Qwen-27B privileged-summary student already tied the GPT-OSS
+  summary baseline. The new signal must be continuous teacher ordering rather
+  than another prose-summary swap.
+
+Frozen first gate:
+
+- Replace only the model in the existing direct-logit D/K/S validation
+  ensemble. Keep all three prompts, 1--7 verbalizers, max aggregation,
+  3,000-character context view, deterministic scoring, labels, and dataset
+  order fixed.
+- Use BF16 on one RTX Pro 6000 with a 4,096-token engine cap and 128 maximum
+  sequences. Load the text language model only and skip multimodal profiling.
+  Record cold startup separately from the 2,466-prompt score pass.
+- Compare macro and per-dataset AUROC, instructed/varied AUROC, score
+  uniqueness/ties, missing target logits, and runtime against the frozen
+  Qwen-9B logit row and Phoenix direct margins.
+- Authorize a train-score cache only if the MoE reaches at least Phoenix's
+  `0.938155` validation macro AUROC, loses no more than `0.005` instructed or
+  varied AUROC relative to Phoenix, has zero missing target logits, and
+  produces continuous scores. Prefer a `+0.005` macro gain before paying for
+  student training.
+- If it passes, cache only the compact ordinal distribution or normalized
+  margin for training rows. Retain GPT-OSS reasoning-summary SFT and add a
+  temperature-softened teacher loss at the student's direct `Prediction:`
+  boundary. Do not copy the MoE's private thinking or replace the summary loss.
+- Select the student on direct Qwen-9B macro AUROC. A binary-label CE/pairwise
+  control already failed to improve AUROC, so any promotion must come from the
+  teacher's soft ordering rather than another hard-label objective.
+
+Direct-gate result:
+
+- Job `30299507` completed on one RTX Pro 6000. The score pass took `31.0s`
+  for 822 rows and 2,466 prompt evaluations (`26.5` rows/s), with zero parse
+  errors, 820 unique scores, and two repeated-score ties.
+- Macro AUROC was only `0.90833`: `0.98188` instructed and `0.81028` varied.
+  This is below Phoenix direct (`0.93815`) and the matched Qwen-9B direct-logit
+  D/K/S control (`0.92714`). Do not cache or distill these direct MoE margins.
+- This does not compare like-for-like with the strong dense-27B D/K/S teacher,
+  which generates up to 4,096 reasoning tokens before its rating. Job
+  `30299593` therefore freezes an exact model swap of
+  `qwen27b_reason_ensemble_dks_member4096_v1`, retaining its prompts,
+  generation budget, member-major order, max aggregation, and scoring. The
+  sparse run uses eager execution and disables FlashInfer autotuning solely to
+  avoid the 39-minute cold-start tuner seen in the direct gate.
+- Matched reasoning job `30299593` scored `0.92387` macro AUROC (`0.98542`
+  instructed, `0.84181` varied) with 11 member-level parse failures. Reasoning
+  improved the sparse teacher over its direct logits but remained below dense
+  27B (`0.94417`, split `0.99792/0.87250`) and Phoenix direct (`0.93815`).
+  Scoring took `898.8s`, versus `1533.1s` for dense 27B, excluding startup.
+- The max-aggregated sparse scores had only five unique values. Final
+  diagnostic job `30299623` reused the frozen 2,466 reasoning traces, removed
+  each terminal sampled rating, and scored the full 1--7 distribution at that
+  boundary. Cache metadata matched exactly. The `124.7s` score pass produced
+  822 unique row scores and no ties.
+- Continuous post-reasoning AUROC improved to `0.93155`, split `0.97750`
+  instructed and `0.87028` varied. It recovered within-bin varied ordering but
+  remained below Phoenix direct overall and lost `0.0160` instructed AUROC
+  relative to Phoenix (`0.9935`). It therefore fails the frozen macro and
+  scenario gates. Do not cache training targets or train a Qwen-9B student from
+  this teacher. Never rescore while leaving the already sampled terminal
+  rating in context.
+
+## P90: Dense Qwen-27B Post-Reasoning Soft Targets
+
+Status: completed; rejected by the frozen macro and varied-AUROC gates.
+
+Question: does the stronger dense Qwen3.5-27B teacher expose a useful
+continuous rating distribution after its frozen D/K/S reasoning traces?
+
+Frozen protocol:
+
+- Reuse the exact 2,466 validation traces from
+  `qwen27b_reason_ensemble_dks_member4096_v1`. Validate dataset, row, label,
+  ensemble-member name, and member index against the current evaluation order.
+- Remove a terminal sampled `Rating: 1--7` before rescoring so the distribution
+  is not conditioned on the teacher's already selected label. Keep incomplete
+  or length-capped reasoning byte-for-byte.
+- Score the full 1--7 distribution at that boundary with the same dense
+  Qwen3.5-27B model, prompts, chat template, member-major order, and max
+  aggregation. Generate exactly one constrained token per trace.
+- Report macro, instructed, varied, and per-dataset AUROC; score uniqueness and
+  ties; removed-rating coverage; missing target logits; and scoring-only time.
+- Authorize a training-score cache only if continuous macro AUROC is at least
+  the generated dense-teacher result (`0.94417`), instructed and varied AUROC
+  each lose no more than `0.005` relative to `0.99792/0.87250`, all 822 row
+  scores are continuous, and no target logits are missing.
+- If the gate passes, cache compact per-row ordinal distributions on the
+  varied-only training set and add a temperature-softened loss at the
+  Qwen3.5-9B student's direct `Prediction:` boundary while retaining the
+  selected GPT-OSS reasoning-summary SFT loss. Do not replace the authoritative
+  binary labels or copy teacher private reasoning into student targets.
+
+Outcome:
+
+- Job `30299653` completed in 12m48s on one RTX Pro 6000. Model startup,
+  loading, compilation, profiling, and graph capture preceded a `480.2s`
+  scoring pass over 2,466 cached reasoning traces.
+- The continuous max-aggregated result scored `0.92179` macro AUROC:
+  `0.99417` instructed and `0.82528` varied. Relative to the generated
+  dense-teacher result (`0.94417`, `0.99792/0.87250`), this loses `0.02238`
+  macro and `0.04722` varied AUROC. It also remains below Phoenix direct
+  (`0.93815`).
+- This is not a continuity or extraction failure. All 822 row scores are
+  unique with zero ties. All 2,466 requested seven-way distributions are
+  present and normalize to one, with zero missing rating-token logits.
+  Terminal sampled ratings were removed from 2,416/2,466 traces; the other 50
+  cached completions had no matching terminal rating.
+- The result fails the preregistered macro floor and varied-loss allowance.
+  Do not generate dense-27B training scores or train a Qwen-9B soft-target
+  student from this post-reasoning distribution. Together with P89, this
+  rejects both tested reasoning-conditioned ordinal soft teachers; retain the
+  generated dense-27B ratings only as black-box teacher evidence, not as a
+  distillation target selected after seeing this validation result.
+
+## P91: Dense Qwen-27B Direct-Logit Soft-Teacher Gate
+
+Status: completed; exact audit passes all frozen gates and authorizes a
+varied-only training-score cache.
+
+Question: does dense Qwen3.5-27B expose a stronger continuous teacher ordering
+at the direct D/K/S prompt boundary, without generated reasoning?
+
+Rationale and isolation:
+
+- P90 rejects only the distribution after the teacher's generated reasoning.
+  Phoenix direct scoring beat its own empty-summary and post-reasoning
+  boundaries, so post-reasoning failure does not establish that the dense
+  teacher's direct boundary is weak.
+- Replace only Qwen3.5-9B with dense Qwen3.5-27B in
+  `qwen_reason_ensemble_dks3072_logit_v1`. Keep the three prompts, 3,000
+  character context view, 1--7 verbalizers, max aggregation, dataset order,
+  and deterministic one-token scoring fixed.
+- Use BF16 on one RTX Pro 6000, a 4,096-token model cap, text-only loading, and
+  skipped multimodal profiling. These are engine-shape controls, not prompt or
+  score changes.
+
+Frozen gate:
+
+- Report macro, instructed, varied, and per-dataset AUROC; score uniqueness and
+  ties; missing target logits; and scoring-only runtime.
+- Authorize a varied-only training-score cache only if macro AUROC reaches
+  Phoenix direct (`0.938155`), instructed and varied AUROC each lose no more
+  than `0.005` relative to `0.993542/0.864306`, all 822 row scores are
+  continuous, and no requested rating logits are missing.
+- A passing training cache must preserve the ordinary GPT-OSS
+  reasoning-summary SFT target and authoritative binary label. Add only a
+  temperature-softened auxiliary loss at the student's direct `Prediction:`
+  boundary. Do not generate or distill dense-teacher reasoning, and do not
+  select a varied-only teacher from a failed overall gate.
+
+Primary result:
+
+- Job `30299761` completed in 5m55s on one RTX Pro 6000. The one-token scoring
+  pass took `132.7s` for 2,466 prompt evaluations (`18.6` prompts/s).
+- Macro AUROC was `0.94500`, split `0.99417` instructed and `0.87944` varied.
+  This beats Phoenix direct by `0.00685` macro and `0.01514` varied AUROC,
+  while instructed improves by `0.00062`. All three accuracy gates pass.
+- The max-aggregated scores have 819 unique values over 822 rows with three
+  repeated-score ties. Their narrow absolute range near 0.5 reflects the
+  normalized ordinal expectation; AUROC uses their ordering.
+- The historical logits runner did not persist the explicitly requested token
+  set, so job `30299761` cannot prove the frozen zero-missing-logit clause from
+  its artifact alone. Before authorizing train-cache generation, rerun the
+  exact validation condition with per-prompt normalized seven-way
+  distributions and missing-token IDs recorded. Require the audited run to
+  satisfy the same AUROC/scenario gates and report zero missing IDs. Do not
+  infer this final gate merely from the primary scores.
+
+Audit result and decision:
+
+- Exact audit job `30299786` completed in 3m47s, with a `129.5s` score pass.
+  It reproduced the pass at `0.94429` macro AUROC, `0.99396` instructed, and
+  `0.87806` varied. The small primary/audit difference is ordinary backend
+  drift and does not change any frozen decision.
+- The audit recorded all 2,466 member distributions: zero parse errors, zero
+  missing requested rating-token logits, and normalized probability sums
+  within floating-point tolerance. Max aggregation again produced 819 unique
+  row scores and three ties.
+- P91 passes every accuracy, continuity, and extraction gate. Generate the
+  direct D/K/S distributions only for the 2,880 authoritative varied-deception
+  training rows, preserving dataset/index/member identity. Then train the
+  selected varied-only GPT-OSS reasoning-summary SFT recipe with one added
+  soft-target loss. Do not include teacher reasoning or replace hard labels.
+
+Training-cache contract:
+
+- Filter the existing `dry.train.yaml` declarations by the exact substring
+  `varied-deception`, yielding nine dataset units and 2,880 rows. Score all
+  three direct D/K/S members in member-major order with the audited P91 config.
+- Require 8,640 unique dataset/index/member records, zero parse errors, zero
+  missing requested logits, normalized seven-way distributions, and complete
+  three-member coverage for every row. Preserve authoritative labels only for
+  identity/audit; do not use them to transform the teacher scores.
+- Aggregate each row by the same maximum expected-rating score used at
+  validation and retain the selected member's normalized ordinal distribution.
+  Compute any centering/temperature statistics from training scores without
+  labels and record them in the derived cache manifest.
+
+Frozen student objective:
+
+- Convert the selected expected-rating score to log-odds, subtract the global
+  training-cache mean, and divide by the global population standard deviation.
+  Apply sigmoid to obtain the binary soft target. This label-blind temperature
+  normalization preserves teacher ordering while avoiding the raw scores'
+  numerically tiny range around 0.5.
+- Add binary cross-entropy against that target at the Qwen-9B direct
+  `Prediction:` margin with weight `1.0`. Keep the selected varied-only
+  one-epoch AdamW `5e-5`, rank-16/alpha-32, effective-batch-32 recipe and its
+  ordinary completion-only GPT-OSS summary loss unchanged.
+- Evaluate direct continuous margins on full validation and compare with the
+  matched reasoning-only control and earlier hard-label CE/rank ablations.
+  Do not tune normalization or loss weight from this validation result.
+
+Cache and student launch:
+
+- Cache job `30299814` completed in 10m43s. Its `554.4s` score pass produced
+  exactly 8,640 audited member records and 2,880 complete rows across all nine
+  varied training units. The derived cache passed every structural gate.
+- Label-blind aggregation selected the max-score member and measured global
+  teacher-logit mean `2.8358148179e-05` and population standard deviation
+  `7.77782138099e-05`. The resulting targets span
+  `0.103406--0.982934`; all 2,877 usable GPT-OSS summary rows join exactly.
+- Frozen student job `30299836` trains
+  `qwen9b_pid_qwen27_direct_soft_varied_v1`. Do not change its loss weight,
+  normalization, optimizer, learning rate, epoch count, or data selection
+  while it is running.
+- Student job `30299836` completed successfully in `32m35s` on one RTX Pro
+  6000. The trainer consumed all 2,877 joined rows for one epoch and 90
+  optimizer steps, reporting `1905s` trainer runtime and final train loss
+  `18.38`. The saved rank-16 adapter weight SHA-256 is
+  `466a476e2c0f05c83d8f4e627fb3e47d4274c16d5574ac5f57ae5468dd8fb2d3`.
+- The first validation attempt, job `30299897`, failed before model loading
+  because the four Lambda-returned historical controls did not include their
+  local `config.yaml` files. No rows were scored. Rather than fabricate
+  provenance, the corrected shared session used the canonical selected
+  reasoning-summary adapter as the live matched control and retained the
+  frozen historical CE/rank analyses as secondary comparisons.
+- Corrected RTX job `30300359` completed in `2m47s`. The soft student scored
+  `0.937619` macro AUROC versus `0.937560` for the reasoning-only control, a
+  gain of only `+0.000060`. Instructed AUROC tied at `0.9934375`; varied AUROC
+  was `0.863194` versus `0.863056` (`+0.000139`). Only 24/822 direct margins
+  changed. Per-dataset AUROC changed materially on three varied units:
+  `+0.00125`, `+0.005`, and `-0.005`, with all other units tied.
+- The candidate had 350 unique direct-margin scores versus 353 for the
+  control, zero missing margins, and identical fixed-`0.5` BA, recall, and
+  FPR. Its macro result also remains numerically below all three earlier
+  direct-CE/rank arms, although those compact artifacts came from a separate
+  Lambda session. The `+0.000060` matched-session gain fails the frozen
+  `+0.005` promotion gate by two orders of magnitude. Do not evaluate local
+  test, tune the normalization/loss weight, or promote this soft student.
+
+## P92: Full Qwen-27B D/K/S Trace and Ordinal Soft Distillation
+
+Question: does the stronger Qwen3.5-27B teacher transfer only when the student
+learns its full reasoning trajectories, rather than receiving an auxiliary
+binary boundary target beside unrelated GPT-OSS summaries?
+
+Frozen data contract:
+
+- Use the exact details, known-fact, and scrutiny prompts from the Qwen-27B
+  DKS4096 judge. Generate each member independently on all 2,877 usable
+  varied-deception training rows with the existing 3,000-character view.
+- The target is the complete raw Qwen-27B completion, including the native
+  `<think>...</think>` block, visible answer, and final `Rating:` line.
+  Ground-truth labels must not be written into, substituted into, or used to
+  filter these completions.
+- Pair every generated member trace with the same member's audited direct
+  seven-way rating distribution. Do not max members before training.
+- Require complete three-member coverage per dataset/index. Make a stable
+  90/10 row-level holdout within dataset/label strata so all three traces for a
+  row remain together.
+
+Frozen student:
+
+- Train a new rank-16/alpha-32 LoRA on `Qwen/Qwen3.5-9B`; do not initialize
+  from Phoenix or the earlier privileged-summary adapter.
+- Use one epoch of AdamW at `5e-5`, effective batch size 32, and maximum
+  sequence length 12,288. This accommodates selective 8,192-token retries for
+  initially truncated teacher traces without truncating their completion.
+- Apply ordinary completion-only next-token loss to the entire member trace.
+  Add weight-1 KL from the student's seven logits after the same prompt plus
+  `Rating:` to the teacher's normalized 1--7 probabilities.
+- Keep all three member examples, including teacher/label conflicts. Labels
+  are retained only for the row-stratified split and evaluation.
+
+Evaluation:
+
+- First audit a 96-target smoke run for finite losses, memory safety, and
+  complete adapter output before launching the full adapter.
+- On the frozen row holdout, run all three prompts and max aggregate them.
+  Report generated-rating and direct expected-rating macro/per-dataset AUROC,
+  instructed/varied slices where present, parse and length failures, unique
+  scores, and cross-label ties.
+- The direct expected-rating path is the deployment-relevant no-reasoning
+  readout; generated ratings diagnose whether the student actually learned to
+  execute the distilled chains. Do not select between those paths or the three
+  members post hoc.

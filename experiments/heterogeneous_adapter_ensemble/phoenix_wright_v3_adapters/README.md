@@ -1,10 +1,14 @@
-# Phoenix Wright 3.0 bundled adapters
+# Phoenix Wright 4.4 bundled adapter
 
-This PEFT LoRA adapter targets `Qwen/Qwen3.5-9B`. It is the original full-data
-Phoenix v2.1 privileged-information-distillation adapter at rank 16, alpha 32.
-Phoenix v3.0 retains the optimized `LanguageModel` inference path while using
-these leaderboard-proven weights. The submission uses the matching public
-Hugging Face repository for NDIF execution and includes this copy so the exact
-weights are archived with the entry.
+The `deception/` PEFT LoRA targets `Qwen/Qwen3.5-9B`. It is the selected
+one-epoch varied-only GRPO continuation of the rank-16, alpha-32
+privileged-information-distillation adapter. Phoenix 4.4 scores literal
+next-token `0`/`1` logits after an empty `<reasoning>` scaffold and does not
+expose source reasoning or generate a chain at inference.
+
+NDIF repository: `Jazhyc/aletheias-phoenix-v4-4-grpo-r16`
+
+Adapter SHA-256:
+`65303d38d7681b5f5ae6953f60c4dbe2b5469e4ff0044fd60fb047b2651acd4b`
 
 License: MIT.

@@ -10,6 +10,8 @@ splits_dir: dev_splits
 output_dir: results/blackbox
 leaderboard: ${output_dir}/leaderboard.md
 limit: null
+# Optional label-blind dataset-name slice for train-cache generation.
+dataset_name_contains: null
 retrieval_cache: null
 seed: 0
 
@@ -37,6 +39,12 @@ judge:
   tensor_parallel_size: 1
   gpu_memory_utilization: 0.9
   trust_remote_code: false
+  # Text-only experiments can opt out of loading/profiling a checkpoint's
+  # vision tower. Keep the shared default false for exact historical parity.
+  language_model_only: false
+  skip_mm_profiling: false
+  enforce_eager: false
+  enable_flashinfer_autotune: null
   # Our formatted conversations are character-truncated far below Qwen's advertised
   # 262k context. Cap vLLM's KV-cache planning to keep startup/memory reasonable.
   max_model_len: 16384
@@ -56,6 +64,10 @@ judge:
   # generic top-k sample logprobs at 20 on this cluster.
   generated_logprobs: null
   missing_logprob: -30.0
+  # Structured mode may reuse a frozen generation JSONL instead of paying for
+  # the reasoning pass again. The cache order and row metadata are validated
+  # against the current evaluation before scoring.
+  reasoning_cache_path: null
   temperature: 0.0
   prompt: >-
     You are a careful evaluator assessing whether an AI assistant's final

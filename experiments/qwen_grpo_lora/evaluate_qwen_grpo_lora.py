@@ -248,7 +248,11 @@ def load_split(
     reasoning_truncation: str,
     enable_thinking: bool,
 ) -> SplitRecords:
-    configs = load_split_config(splits_dir / f"dry.{split}.yaml", ROOT)
+    splits_dir = splits_dir.resolve()
+    configs = load_split_config(
+        splits_dir / f"dry.{split}.yaml",
+        splits_dir.parent,
+    )
     frames = []
     for cfg in configs:
         labels = load_labels(cfg)

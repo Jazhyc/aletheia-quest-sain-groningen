@@ -60,18 +60,45 @@ post-reasoning scoring is revisited, remove the final generated `0|1` and score
 the labels at that position; never condition a rescore on the already-selected
 label token.
 
-Phoenix Wright 4.0 now implements that direct path in
-`experiments/heterogeneous_adapter_ensemble/phoenix_wright_v4_0.ipynb`. It is
-parked outside `submission/`, whose single notebook slot belongs to the sonic
-white-box line; move it and `phoenix_wright_v4.py` back into `submission/` to
-submit it. It retains the exact v3
-rank-16 adapter and renderer, requests `logits_to_keep=1`, and uses `0.15` only
-for the secondary binary column. NDIF full-unit tests selected length-aware
-batches `48/32/16` at `600/900` prompt tokens: the paired high-p95 unit ran
-`38.3s` versus `64.7s` at batch 32, with AUROC `0.75961` versus `0.76046`.
-Batch 64 OOMed against the remote roughly 29.4 GiB process allowance. Do not
-raise the short tier to 64, remove `logits_to_keep=1`, or claim exact score
-invariance across batch shapes.
+Phoenix Wright 4.1 implements that direct path in the sole submission notebook
+`submission/phoenix_wright_v4_1.ipynb`. It retains the exact v3 rank-16 adapter
+and renderer for ordinary rows, requests `logits_to_keep=1`, and uses `0.15`
+only for the secondary binary column. NDIF full-unit tests selected
+length-aware batches `48/32/16` at `600/900` prompt tokens: the paired
+high-p95 unit ran `38.3s` versus `64.7s` at batch 32, with AUROC `0.75961`
+versus `0.76046`. Batch 64 OOMed against the remote roughly 29.4 GiB process
+allowance. Do not raise the short tier to 64, remove `logits_to_keep=1`, or
+claim exact score invariance across batch shapes.
+
+Phoenix 4.1 also deploys the frozen explicit knowledge-report router. Routed
+rows use base `Qwen/Qwen3.5-9B` without the Phoenix LoRA, the established
+`knowledge_report_type` prompt, and logits after an empty
+`<reasoning_summary>` scaffold. On the 100-row HP-KR development half this
+scored AUROC `0.9002` versus `0.4348` for Phoenix direct and `0.8100` for the
+generated binary specialist. Frozen confirmation scored `0.9462` versus
+`0.4012` for Phoenix and `0.8600` for generated binary, with zero missing
+label logits. Direct base-Qwen margins were close (`0.8894` development,
+`0.9440` confirmation) but lost the frozen selection. The exact route still
+matches zero of all 8,216 known competition rows, so this is an OOD transfer
+feature rather than a local-validation gain. A one-row NDIF smoke confirmed
+the no-PEFT path and returned a continuous `0.952574` score. Do not broaden the
+router, add the failed forced-choice route, or replace the selected empty
+scaffold from confirmation.
+
+Phoenix Wright 4.4 replaces the ordinary Phoenix rank-16 adapter with the
+validation-selected one-epoch varied-only GRPO continuation
+(`qwen9b_pid_varied_grpo_ep1_v1`). It uses the exact leaderboard-aligned
+output-only renderer: no source `assistant_reasoning`, no generated judge
+chain, an empty `<reasoning>` scaffold, and normalized literal next-token
+`0|1` logits. Frozen validation/test macro AUROC was `0.95137/0.95982`;
+test instructed/varied AUROC was `0.99073/0.91861`. The validation-frozen
+secondary binary threshold is `0.37754068`. Scores had only 79 unique values
+over 821 test rows, so retain and report the ties even though ranking was
+strong. The adapter is hosted at
+`Jazhyc/aletheias-phoenix-v4-4-grpo-r16` and the exact weights remain bundled
+under `submission/phoenix_wright_v3_adapters/deception/`. Preserve the
+base-Qwen HP-KR route, original-Phoenix action route, and optional rank-1 intent
+route; do not expose source reasoning or generate reasoning at inference.
 
 For development and training experiments, do not use NDIF; reserve NDIF for leaderboard evaluation/submission execution. Use local GPU Slurm jobs with vLLM for black-box judge experiments. Keep experiment code organized under `experiments/<method>/`, keep Slurm shell templates as `.sh` files, and write runtime logs under `logs/`; black-box Slurm jobs should redirect their main output to `logs/slurm/<method>/<split>-<job_id>.out` and automatically delete the temporary bootstrap file at `logs/slurm/%x-%j.bootstrap.out` after successful redirection. Store black-box experiment artifacts under `results/blackbox/`; per-run result directories are ignored, but `results/blackbox/leaderboard.md` is tracked and should show test-set results only. Default Slurm resources for these jobs are one `gpushort` GPU node with `--gpus-per-node=rtx_pro_6000:1`, `--cpus-per-task=1`, and 32 GB memory unless the user says otherwise. The cluster's 40 GB A100s are also sufficient for inference-only `Qwen/Qwen3.5-9B` BF16 evaluations with one rank-16 LoRA and a 4,096-token model context; when the RTX Pro 6000 queue is saturated, request `--gpus-per-node=a100:1` for this workload. A cold A100 vLLM 0.24 load/compile/CUDA-graph capture can be much slower than RTX: job `30159704` needed 29m40s for one startup plus nine 822-row conditions, so request at least 45 minutes for that shape unless the compile cache is known warm or fewer conditions are run. Do not generalize that memory result to training, larger models, or materially longer contexts without a separate memory check. For interactive black-box method development, prefer reserving a GPU node with `srun`, running one persistent vLLM server process, and pointing experiment clients at it over HTTP so model loading/compilation is paid once per session. Prefer direct `sbatch` templates first for unattended runs; add `submitit` only if Python-managed Slurm arrays become necessary. Slurm controller commands such as `sbatch`, `squeue`, `scancel`, and `sacct` should be run outside the sandbox automatically because sandboxed attempts cannot contact the controller.
 For prompt/logits judge sweeps, batch multiple prompt conditions inside a single
@@ -524,19 +551,6 @@ the fallback stats fix. The bundled dry runner can still fail for reasons
 unrelated to the submission notebook, such as missing system-site packages in the
 temporary dry-run venv or other local environment differences.
 
-Model-class update from 2026-07-17 (supersedes the `VisionLanguageModel`
-guidance below for submissions): NDIF now deploys every competition organism —
-including `google/gemma-3-27b-it`, whose HF config still carries a vision tower —
-as a text-only `LanguageModel`. Instantiating `VisionLanguageModel` on the client
-makes the remote hotswap fail (the organizers' "Hotswapping tier" failure), which
-is what killed `sonic_v1.ipynb` on the Gemma dataset (Dataset Metis). `util.build_model`
-now always returns `LanguageModel`. A full 400-row remote run of the Gemma dev set
-(`dev-instructed-deception-gemma-3-27b-it-None`) with `LanguageModel` succeeded
-(AUROC 0.9997). The older `VisionLanguageModel` finding below was about multi-batch
-`generate()` session *stability* on the Qwen judge and predates this deployment
-change; prefer `LanguageModel` now and only revisit if a remote `generate` shape
-actually hangs.
-
 Phoenix Wright remote NNsight session finding from 2026-07-07: avoid one
 `model.session(remote=True)` per generated batch. Rapid successive NDIF sessions
 can stall after the first batch even when isolated remote tests pass. For
@@ -591,6 +605,20 @@ Keep the submission package pruned: `submit.py` excludes `.env`, `.uv-cache`,
 `results/`, `logs/`, and `dev_splits/` so credentials and local experiment
 artifacts are not uploaded. Before submitting, verify there is exactly one
 notebook in `submission/` and that the packaged zip is small.
+
+AUROC-aware privileged-distillation loss finding from 2026-07-26: a matched
+varied-only rank-16 H100 sweep retained reasoning-summary SFT and compared a
+paired control (`0.938155` validation macro direct-margin AUROC), direct binary
+CE (`0.938274`), and direct CE plus within-dataset pairwise logistic loss at
+weights `0.1` and `0.3` (both `0.938214`). The largest delta was only
+`+0.000119`, far below the frozen `+0.005` promotion threshold; direct CE did
+not improve varied AUROC, and both ranking weights were indistinguishable.
+Do not test, deploy, or tune more pairwise weights. Retain the original
+reasoning-summary SFT loss and use direct logits only at inference. The Lambda
+fallback-kernel execution took about 32 minutes for the control and 64--66
+minutes per auxiliary arm, so optimize kernels/direct-prefix batching before
+any future multi-objective training sweep.
+
 After a real submission is accepted, poll its stream or status for about two
 minutes to catch an immediate rejection or crash, then stop polling and hand
 the run back to the user. Do not babysit a queued or long-running leaderboard

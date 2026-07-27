@@ -1,0 +1,21 @@
+# @package _global_
+# Exact Qwen3.5-35B-A3B model swap for the frozen direct-logit D/K/S teacher gate.
+
+defaults:
+  - blackbox_reasoning_ensemble_dks3072_logit_v1
+  - _self_
+
+method: qwen35a3b_reason_ensemble_dks3072_logit_v1
+
+judge:
+  model: Qwen/Qwen3.5-35B-A3B
+  served_model: qwen35a3b-judge
+  # All validation prompts fit comfortably below this cap. Keeping the planned
+  # KV cache small leaves room for the roughly 72 GB BF16 MoE checkpoint on one
+  # 96 GB RTX Pro 6000.
+  max_model_len: 4096
+  max_num_seqs: 128
+  tensor_parallel_size: 1
+  language_model_only: true
+  skip_mm_profiling: true
+  enforce_eager: false

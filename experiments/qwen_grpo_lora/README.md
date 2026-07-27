@@ -127,6 +127,12 @@ FPR `0.0595`. The logits are not completely saturated: on test, the median score
 for negatives was `0.0025`, the median for positives was `0.9903`, but positive
 5th percentile was still `0.0675` and negative 95th percentile was `0.7311`.
 
+Important correction: this early evaluation retained the saved
+`judge.include_reasoning=true` setting and therefore supplied the dataset's
+source `assistant_reasoning` field. Leaderboard inputs do not contain that
+field, so do not use its `0.9646` test AUROC as a submission estimate. Pass
+`--exclude-reasoning` for leaderboard-aligned evaluations.
+
 Using populated generated reasoning before the label was worse as a calibrated
 score despite looking strong on validation. With cached generated completions
 stripped at `Prediction:` and then rescored with next-token logits, validation at
@@ -176,6 +182,29 @@ that vLLM does not reproduce the collapsed two-output behavior from the
 Transformers/PEFT path: the vLLM run produced long, mostly unique reasoning
 completions. Treat this adapter as backend-sensitive unless a dedicated
 prompt-level HF-vs-vLLM equivalence check proves otherwise.
+
+### Phoenix/PID continuation with output-only logits
+
+The one- and two-epoch varied-only GRPO continuations from
+`qwen9b_privileged_gptoss120b_summary_variedonly_adamwlr5e5_v1` were
+re-evaluated without the source `assistant_reasoning` field. The evaluator used
+one direct next-token pass at the empty reasoning scaffold and normalized
+literal `0`/`1` logits. Validation job `30304158` selected epoch 1 by macro
+AUROC:
+
+| adapter | macro AUROC | instructed | varied | unique scores |
+| --- | ---: | ---: | ---: | ---: |
+| epoch 1 | **`0.95137`** | **`0.99656`** | `0.89111` | `79/822` |
+| epoch 2 | `0.94935` | `0.98667` | **`0.89958`** | `69/822` |
+
+The epoch-1 validation threshold was `0.37754068`. Frozen local-test job
+`30304374` scored epoch 1 at `0.95982` macro AUROC (`0.99073` instructed,
+`0.91861` varied), with `79/821` unique scores and `38.85s` scoring time.
+Balanced accuracy was `0.88690` at threshold `0.5` and `0.89881` at the frozen
+validation threshold. This is a leaderboard-compatible inference path: GRPO
+used privileged reasoning during training, but inference uses only the
+observable output and does not generate a chain. Treat epoch 1 as the promotion
+candidate and do not test epoch 2.
 
 ## Optimization Notes
 

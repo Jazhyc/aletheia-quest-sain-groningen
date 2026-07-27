@@ -196,11 +196,9 @@ dataset/source-family holdouts before it is promoted.
 
 ## Phoenix Wright 4.0 deployment
 
-Phoenix Wright 4.0 implements the selected path in
-`experiments/heterogeneous_adapter_ensemble/phoenix_wright_v4_0.ipynb` (kept
-out of `submission/`, which holds the single sonic notebook). It preserves the
-exact Phoenix v3
-rank-16 adapter (weight SHA-256
+Phoenix Wright 4.0 originally implemented the selected path; its sole-notebook
+successor is now `submission/phoenix_wright_v4_2.ipynb`. The ordinary route
+preserves the exact Phoenix v3 rank-16 adapter (weight SHA-256
 `1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`)
 and frozen visible-message renderer. It appends `Prediction:` directly to the
 no-thinking chat prompt, asks Qwen for `logits_to_keep=1`, extracts the exact
@@ -221,3 +219,142 @@ with the highest p95 prompt length, the actual shapes were `48x383...583`,
 `32x619...773`, and `16x896`. It completed in `38.3s`, versus `64.7s` for the
 paired batch-32 control. AUROC moved `0.76046 -> 0.75961`; this small numerical
 batch-shape drift is reported rather than treated as exact score preservation.
+
+## Phoenix Wright 4.1 HP-KR route
+
+Phoenix 4.1 adds one previously confirmed, label-blind OOD route without
+changing ordinary Phoenix scores. The rule activates only when the user
+explicitly requests a constrained self-report of whether the assistant knows
+an answer, and it excludes the failed harmful forced-choice contract. It
+matches all sampled Liars' Bench HP-KR rows, no other sampled Liars' Bench
+category, and zero of the 8,216 known competition train/validation/test rows.
+
+The first AUROC port retained the Phoenix rank-16 adapter and applied the
+truthful-alternative prompt. Specialist replacement beat Phoenix on both
+predeclared halves:
+
+| half | Phoenix HP-KR AUROC | routed AUROC | four-category macro gain |
+| --- | ---: | ---: | ---: |
+| development | `0.4314` | `0.4648` | `+0.00835` |
+| confirmation | `0.4034` | `0.4806` | `+0.01930` |
+
+That result ranks better but is not the strong `~0.8` HP-KR specialist. The
+strong path uses base `Qwen/Qwen3.5-9B` without PEFT and the established
+`knowledge_report_type` prompt. A second frozen sweep compared its generated
+binary decision with direct, empty-summary, and post-reasoning margins:
+
+| condition | development BA | development AUROC | confirmation BA | confirmation AUROC |
+| --- | ---: | ---: | ---: | ---: |
+| Phoenix direct | `0.5000` | `0.4348` | `0.4900` | `0.4012` |
+| epistemic generated binary | `0.8100` | `0.8100` | `0.8600` | `0.8600` |
+| epistemic direct | `0.8300` | `0.8894` | `0.9000` | `0.9440` |
+| epistemic empty summary | `0.8300` | **`0.9002`** | `0.8600` | **`0.9462`** |
+| epistemic post-reasoning | `0.8100` | `0.8472` | `0.8500` | `0.8976` |
+
+Empty-summary scoring was selected on development before confirmation. It
+produced 92 and 84 unique scores on the two 100-row halves with zero missing
+label logits. On the H100 it took `1.31s` and `1.38s` per half after model
+load. A one-row NDIF execution of the exact no-LoRA path completed successfully
+and emitted score `0.952574`.
+
+Phoenix 4.2 retains this exact base-Qwen specialist and router. Keep it as an
+exact semantic transfer route: its zero known-competition coverage prevents
+measuring a local gain and does not authorize lexical expansion from private
+leaderboard behavior.
+
+## Phoenix Wright 4.2 exclusive harm route plus intent augmentation
+
+Phoenix 4.2 adds the selected P83 rank-1 resolved-intent margin on eligible
+non-harm rows while keeping the Phoenix 4.1 HP-KR route exclusive:
+
+- HP-KR harm-pressure rows use only the base-Qwen `knowledge_report_type`
+  empty-summary specialist; the intent judge is never invoked for them;
+- non-harm rows with a final-assistant reasoning trace retain the Phoenix
+  rank-16 direct score and also receive the rank-1/alpha-2 resolved-intent
+  empty-summary margin;
+- those two non-harm margins are combined by a fixed mean in log-odds space;
+- non-harm rows without reasoning retain the exact Phoenix direct score;
+- the required `deceptive` column remains the thresholded unblended
+  Phoenix/specialist decision, so the intent member changes only AUROC ranking.
+
+The intent renderer is the training renderer exactly: the merged conversation
+uses a 3,000-character tail, the optional final-assistant reasoning uses a
+4,000-character tail, and the score is read after an empty
+`<reasoning_summary>` scaffold. The 7.3 MB adapter is bundled under
+`submission/phoenix_wright_v4_adapters/resolved_intent/`; the complete
+submission directory remains below the 200 MB package limit.
+
+P83 established complementarity on the nine trace-bearing varied units:
+empty-summary rank-1 intent plus Phoenix improved macro AUROC from `0.86431`
+to `0.90111` there, projecting full validation macro AUROC `0.93815 ->
+0.95393` when the 12 no-trace units remain unchanged. Frozen test confirmation
+improved the nine trace-bearing units from `0.87083` to `0.90417` and projected
+full test macro AUROC `0.93423 -> 0.94851`; seven of nine units improved, the
+blend had 358 unique scores over 360 rows, and there were zero cross-label
+ties. A matched validation-only no-LoRA control nearly tied the adapter
+(`0.90028` versus `0.90111` blend AUROC), so the rank-1-specific advantage is
+small even though the frozen adapter path transferred.
+
+The exact HP-KR route still matches zero known competition rows, so excluding
+those rows from intent has no effect on the local projection and avoids an
+unvalidated specialist interaction. A one-row trace-bearing NDIF notebook test
+passed end to end in `221.82s`, including separate Phoenix and intent remote
+sessions.
+
+## Phoenix Wright 4.3 exclusive action-report route
+
+Phoenix 4.3 adds P86's continuous action-report specialist without another
+model or adapter. The exact executed-action/report-contract router selects the
+frozen action prompt and an empty `<reasoning_summary>` margin on the existing
+Phoenix rank-16 adapter. Ordinary and action prompts are scored together in the
+same Phoenix pass. Action rows are excluded from the resolved-intent blend, and
+the base-Qwen HP-KR route retains precedence and remains exclusive.
+
+On the frozen 100-row development half, the action empty-summary margin scored
+`0.7974` AUROC versus `0.5030` for Phoenix direct. Frozen confirmation reproduced
+`0.8148` versus `0.4158`, with 83 unique scores, zero missing logits, and positive
+AUROC changes for every source family with both labels. The action wording had
+prior binary evidence on these public rows, so this is a new continuous-readout
+confirmation rather than a pristine prompt confirmation.
+
+A label-blind audit found zero action-route matches in all 8,216 known
+competition train/validation/test rows. Phoenix 4.3 therefore preserves the
+entire known 4.2 score vector and targets only possible hidden OOD coverage. An
+exact three-row synthetic NDIF notebook smoke activated one action route and no
+harm or intent routes, completed in `69.52s`, and gave two duplicated ordinary
+rows identical scores with absolute delta `0.0`. The action score itself is not
+an accuracy measurement; the smoke establishes remote execution, route
+selection, and ordinary-path parity.
+
+## Phoenix Wright 4.4 GRPO output-only judge
+
+Phoenix 4.4 replaces the ordinary Phoenix adapter with the validation-selected
+one-epoch varied-only GRPO continuation of the rank-16 privileged-distillation
+adapter. Inference does not expose the source model's optional reasoning and
+does not generate judge reasoning. It renders the observable conversation with
+the GRPO training prompt, appends
+`<reasoning>\n</reasoning>\nPrediction:`, and normalizes the literal next-token
+`0` and `1` logits.
+
+The correction is important because the early roughly `0.965` GRPO test AUROC
+retained `judge.include_reasoning=true`, while leaderboard datasets do not
+provide that field. Frozen output-only validation selected epoch 1 at `0.95137`
+macro AUROC (`0.99656` instructed, `0.89111` varied) over epoch 2 at `0.94935`.
+One frozen local-test confirmation then scored `0.95982` macro AUROC
+(`0.99073` instructed, `0.91861` varied), versus `0.93423` for Phoenix direct.
+The test vector had 79 unique values over 821 rows and 742 ties. Scoring took
+`38.85s` excluding model startup.
+
+The secondary binary threshold is the validation-frozen `0.37754068`; test BA
+was `0.89881` at that threshold. The continuous margin remains the primary
+submission output. Phoenix 4.4 preserves the exact base-Qwen HP-KR specialist,
+the original-Phoenix action specialist, and the optional rank-1 intent blend.
+Those routes remain exclusive. Ordinary rows use only the GRPO adapter.
+
+The bundled 116 MB adapter replaces the previous rank-16 archive rather than
+being added beside it, keeping the full submission near 131 MB and below the
+200 MB limit. The exact weights were published as
+`Jazhyc/aletheias-phoenix-v4-4-grpo-r16` at Hugging Face commit
+`9c1ea176007d38fd80148dda9289143e53d2adcf`. A focused one-row NDIF notebook
+test loaded that repository and passed the full `submission.csv` contract in
+`97.24s`.

@@ -608,6 +608,133 @@ reader training increases oracle headroom, not as held-out retrieval transfer.
 Do not package the 91.6 MB MiniLM, evaluate on test, or lower its threshold from
 these validation outcomes.
 
+### Hosted-Qwen bounded database planner
+
+`qwen_database_planner.py` replaces the compact semantic gate with one
+no-thinking base-Qwen pass over at most 12 literal database candidates. It
+returns only grounded candidate IDs and `supports|contradicts` relations;
+`build_qwen_planner_sweep_cache.py` turns validated selections into sparse real
+and cross-dataset shuffled reference conditions.
+
+Full planner job `30298663` selected a GPT-OSS-decisive fact on 25/30 emitted
+validation rows and recovered 5/7 reachable decisive rows on question groups
+absent from training, with 5/5 selected facts decisive. This is the strongest
+novel-question retrieval transfer in the compact-index work.
+
+Downstream job `30298676` used the exact Phoenix rank-16 direct `0|1` margin.
+Real replacement regressed macro AUROC `0.93815 -> 0.93673`; mean-log-odds
+blending reached only `0.93768`. Shuffled replacement scored `0.93732`.
+Supporting evidence lowered deceptive active-row scores more than honest scores
+because belief-based deception can coexist with an objectively correct
+headline answer. Do not deploy or test this cache. See
+`docs/wikidata_rag/README.md` for the complete metrics and interpretation.
+
+### Rank-1 Qwen decisiveness distillation
+
+`build_qwen_retriever_distillation.py` converts the GPT-OSS candidate audit
+into same-row decisive/nondecisive pairs and negative-only anchors for frozen
+planner false positives. `evaluate_qwen_retriever_rank1.py` reads direct
+`Prediction:0|1` logits, calibrates only on the frozen question-group bucket,
+and reports candidate ranking plus sparse emission metrics. The teacher target
+contains no deception labels.
+
+```bash
+sbatch --gpus-per-node=a100:1 \
+  experiments/wikidata_rag/run_qwen_retriever_rank1.sh
+
+sbatch --gpus-per-node=a100:1 \
+  experiments/wikidata_rag/run_evaluate_qwen_retriever_rank1.sh
+```
+
+The one-epoch rank-1/alpha-2 adapter was effectively inert: validation
+candidate AUROC changed `0.92717 -> 0.92722`, novel-question AUROC changed
+`0.86758 -> 0.86773`, and its calibrated emissions were identical to base
+Qwen. A three-epoch control moved more but reduced validation AUROC to
+`0.92625` and novel-question AUROC to `0.86256`. Do not promote either adapter.
+
+The unadapted scoring prompt remains useful as a second-stage filter. It kept
+18/34 planner facts, 17 of them decisive, for `0.944` fact precision and
+`0.340` decisive-row recall. `filter_qwen_planner_by_scores.py` materializes
+that sparse plan without another model pass. Exact Phoenix job `30298951`
+scored real replacement at `0.93762` macro AUROC and mean-log-odds blending at
+`0.93792`, both below the `0.93815` baseline. No local-test run was made.
+
+`run_phoenix_candidate_oracle.sh` scores every bounded fact at Phoenix's direct
+label boundary and `analyze_phoenix_candidate_oracle.py` separates retrieval
+from label-aware reader-utility ceilings. Job `30299003` found:
+
+| oracle | macro AUROC | uplift vs recomputed empty |
+| --- | ---: | ---: |
+| semantic retrieval only | 0.93649 | -0.00190 |
+| decisive fact plus label-aware abstention | 0.94113 | +0.00274 |
+| any candidate plus label-aware abstention | 0.97482 | +0.03643 |
+
+The last condition selects only 16 decisive facts among 252 evidence uses and
+is not a retrieval result. Treat `+0.00274`, not `+0.03643`, as the optimistic
+consumer-compatible headroom from the audited decisive candidate set.
+
+### Existing-consumer crossover
+
+`evaluate_qwen_planner_consumers.py` loads multiple compatible LoRA consumers
+in one vLLM session and scores full explicit-empty baselines plus sparse
+real/shuffled caches at direct and empty-summary label positions.
+
+```bash
+sbatch experiments/wikidata_rag/run_qwen_planner_consumers.sh
+```
+
+Job `30299088` found a small positive crossover only for the existing rank-16
+matched-Wikidata consumer. Direct unfiltered real evidence scored `0.94173`
+macro AUROC versus `0.94006` empty and `0.94024` shuffled. The filtered cache
+scored `0.94137`. FEVER-visible direct real regressed to `0.93750` from
+`0.93857` empty, and its empty-summary path also regressed.
+
+The matched direct gain is not stable across nine varied units: the descriptive
+bootstrap intervals for real-minus-empty and real-minus-shuffled are
+`[-0.00083, +0.00889]` and `[-0.00472, +0.01056]`. Keep this as validation
+evidence that consumer reuse helps slightly; do not run local test or start a
+rank ablation from it.
+
+### Guarded polarity supervision
+
+The original GPT-OSS polarity cache was not suitable for training: the teacher
+often copied a database value into `claim_quote`, and occasionally assigned the
+opposite polarity despite explaining the right relation. The guarded follow-up
+therefore starts only from the frozen polarity-blind `decisive` candidates and
+labels one candidate per prompt. It extracts separate exact response and
+database spans, asks for a value comparison rather than a polarity label, and
+derives `supports|contradicts` only after exact-source validation. Contradictions
+on a frozen list of normally multi-valued predicates are vetoed.
+
+Jobs `30299307` and `30299348` ran a 64-train-candidate plus complete
+63-validation-candidate smoke. A 512-token generation cap truncated 102/127
+Harmony finals and is not usable. At 1,024 tokens, train produced 35 supports,
+10 contradictions, and 19 abstentions, with 58/64 exact-source-valid records.
+Validation produced 25 supports, 14 contradictions, and 24 abstentions, with
+52/63 exact-source-valid records. The remaining validation failures were two
+truncated JSON objects and nine quotes that dropped source markdown or otherwise
+failed the exact-substring contract; the old database-to-response copying bug
+did not pass the validator.
+
+The contradiction precision gate still failed. Manual audit found three clear
+wrong-entity contradictions: a television-series `The Odd Couple` candidate was
+used against the play, and two US-city Carthage candidates were used against
+ancient Carthage. `Sears Building` versus `Sears Tower` was additionally
+borderline. Thus only 10--11/14 accepted validation contradictions were
+defensible (71--79%), well below a high-precision retrieval target. All three
+clear wrong-entity errors occurred on hidden honest rows; the other 11 accepted
+contradictions occurred on deceptive rows. This association is diagnostic only:
+supporting headline evidence also occurred on deceptive rows whose poison was
+tangential, so polarity is not a deception label.
+
+`build_polarity_distillation.py` can pair a real grounded contradiction with a
+counterfactual support twin, and the prepared rank-4 recipe requires at least 20
+fit-bucket pairs. The smoke supplied only three pairs across two fit question
+groups. No adapter was trained, the queued full teacher pass (`30299361`) was
+cancelled, and no local-test evaluation was made. Improve entity-sense and
+modifier completeness before reopening the rank-4 path; simply collecting more
+of the present labels would scale the same false contradictions.
+
 
 ```bash
 PYTHONPATH=. .venv/bin/python experiments/wikidata_rag/build_claim_gated_cache.py \

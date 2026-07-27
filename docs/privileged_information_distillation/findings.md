@@ -2476,3 +2476,283 @@ learned rater. This negative result rejects the current one-step,
 initialization-state, last-block approximation for this already curated,
 Qwen-only varied cache; it does not establish that the paper's much more
 expensive full DataRater algorithm would fail in another regime.
+
+## AUROC-aware direct and pairwise student losses (2026-07-26)
+
+A matched four-arm Lambda H100 ablation tested whether the strong direct-logit
+ranking signal could be improved during SFT without removing the useful GPT-OSS
+reasoning-summary supervision. Every arm retained the selected varied-only
+rank-16/alpha-32 recipe: all 2,877 usable rows, one epoch, AdamW `5e-5`, and
+effective batch size 32. Stable within-dataset positive/negative pairing covered
+2,874 rows; the three unmatched negatives retained their ordinary supervised
+loss but contributed no pairwise term.
+
+The auxiliary direct loss scores literal `0`/`1` logits after the rendered
+prompt plus `Prediction:`. Ranking uses
+`softplus(-(margin_positive - margin_negative))` within each dataset. The four
+objectives were reasoning-summary SFT alone, reasoning plus direct CE, and
+reasoning plus direct CE with pairwise weights `0.1` or `0.3`. Shared validation
+loaded all four adapters once and evaluated only the direct continuous margin:
+
+| objective | macro AUROC | delta | instructed AUROC | varied AUROC |
+| --- | ---: | ---: | ---: | ---: |
+| Paired reasoning control | `0.938155` | — | `0.993542` | `0.864306` |
+| + direct CE | **`0.938274`** | `+0.000119` | **`0.993750`** | `0.864306` |
+| + direct CE + rank `0.1` | `0.938214` | `+0.000060` | `0.993542` | **`0.864444`** |
+| + direct CE + rank `0.3` | `0.938214` | `+0.000060` | `0.993542` | **`0.864444`** |
+
+All four had direct-margin missing count zero and identical fixed-`0.5`
+balanced accuracy `0.7833`. The evaluator intentionally generated only one
+token, so its 822 generated-output parse errors are irrelevant to the direct
+margin. Compact `result.json` and `margin_analysis.json` artifacts are stored
+under each method's `validation_direct_margin/` directory in
+`results/blackbox/`; full per-row artifacts remain on the persistent Lambda
+campaign instance.
+
+This is a clear negative result under the frozen `+0.005` promotion rule. The
+largest apparent gain is one ten-thousandth and comes only from instructed
+rows; the ranking weights are numerically indistinguishable and do not improve
+overall AUROC over direct CE. Do not run test, promote these adapters, or tune
+more pairwise weights on validation. Retain reasoning-summary SFT and direct
+logit inference, but leave the training loss unchanged.
+
+The implementation is also expensive in the current Lambda environment. The
+paired control took roughly 32 minutes for 90 optimizer steps, while each
+auxiliary arm took about 64--66 minutes because it performs a second Qwen
+forward per microbatch. Transformers reported that Qwen's optional fast linear-
+attention dependencies were absent and used its torch fallback. Before any
+future multi-objective sweep, test those kernels and batch the shorter direct
+prefix pass more efficiently rather than repeating this execution shape.
+
+## Dense Qwen-27B direct soft-target distillation (2026-07-26)
+
+The next frozen ablation replaced hard direct-label CE/ranking with a continuous
+teacher target from the stronger dense Qwen3.5-27B direct D/K/S boundary. The
+teacher itself passed its prerequisite audit at `0.94429` validation macro
+AUROC (`0.99396` instructed, `0.87806` varied), with zero missing rating logits.
+The 2,880-row varied-training cache retained all three member distributions and
+selected the max-score member without using labels. Global label-blind logit
+z-normalization produced 2,877 joined soft targets spanning
+`0.103406--0.982934`.
+
+Student job `30299836` kept the selected varied-only rank-16/alpha-32,
+one-epoch AdamW `5e-5` recipe and ordinary GPT-OSS reasoning-summary loss, then
+added direct-margin soft binary cross-entropy at weight `1.0`. It completed 90
+steps in `32m35s`; its adapter weight SHA-256 is
+`466a476e2c0f05c83d8f4e627fb3e47d4274c16d5574ac5f57ae5468dd8fb2d3`.
+
+The original five-adapter validation job `30299897` failed before model loading
+because the compact historical Lambda controls lacked local `config.yaml`
+files. No scores were produced. Corrected job `30300359` therefore loaded the
+soft student and canonical selected reasoning-only adapter together, while the
+already frozen direct-CE/rank artifacts remained secondary historical
+comparisons.
+
+| objective | macro AUROC | delta | instructed AUROC | varied AUROC | unique margins |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Reasoning-only control | `0.937560` | — | `0.9934375` | `0.863056` | 353 |
+| + Qwen-27B direct soft target | `0.937619` | `+0.000060` | `0.9934375` | `0.863194` | 350 |
+
+Both adapters had zero missing direct margins and identical fixed-`0.5`
+balanced accuracy (`0.7833`), recall (`0.5738`), and FPR (`0.0071`). The soft
+loss changed only 24/822 row scores. Per-dataset AUROC differed substantively
+on only three varied units: `+0.00125`, `+0.005`, and `-0.005`; every
+instructed unit and the other six varied units tied. Candidate and control
+cross-label tie fractions were both about `0.0016`, despite BF16 margin
+quantization producing many same-label duplicate scores. The intentionally
+one-token generation produced 822 generated-output parse failures, but these
+are irrelevant to the separately extracted direct margins.
+
+The matched `+0.000060` gain fails the frozen `+0.005` macro-AUROC promotion
+gate by two orders of magnitude and is also numerically below the earlier
+direct-CE/rank results from their separate Lambda session. Do not run local
+test, promote the adapter, or tune soft-target normalization, temperature,
+weight, or data selection on this validation result. The dense teacher's better
+ordering did not transfer through this auxiliary direct-margin objective.
+
+## Frozen full-trace Qwen-27B D/K/S follow-up (2026-07-26)
+
+The direct-only P91 loss barely changed the student's ranking and did not teach
+the teacher's inference procedure. The next matched experiment therefore uses a
+new rank-16 adapter and distills each Qwen3.5-27B D/K/S member end to end.
+
+- Generate all three 4,096-token-budget member traces for the 2,877 usable
+  varied-deception rows, using the exact D/K/S prompts and 3,000-character
+  context view.
+- Retain a row only when all three completions parse, close `</think>`, fit the
+  4,096-token target cap, and have a complete audited direct distribution.
+- Preserve each full completion verbatim. Do not inject the ground-truth label,
+  filter teacher/label conflicts, or replace the generated rating.
+- Split whole dataset/index rows 90/10 within dataset/label strata. Every
+  selected row contributes exactly three member-specific training examples.
+- Train Qwen3.5-9B for one epoch with AdamW `5e-5`, rank 16/alpha 32, effective
+  batch size 32, completion SFT, and weight-1 seven-way KL at direct `Rating:`.
+- Evaluate the held-out rows with all three prompts. Report max-aggregated
+  generated-rating AUROC and max-aggregated direct expected-rating AUROC,
+  alongside member results, parse/length failures, score uniqueness, ties, and
+  per-dataset AUROC.
+
+Initial 4,096-token generation completed all 8,640 requests but left 250 usable
+rows without three parsed, closed member traces. A selective 8,192-token retry
+recovered 191 of them. The cache therefore retains 2,818/2,877 usable rows
+(`97.95%`) and excludes the remaining 59 whole rows; no partial or truncated
+completion is accepted.
+
+Completed result:
+
+- Cache job `30301401`, 96-target smoke `30301402`, full student `30301403`,
+  and held-out evaluation `30301404` all completed. The cache contains 2,536
+  training rows / 7,608 member traces and a frozen 282-row holdout. Target
+  lengths were median 781 tokens, p95 2,146, and maximum 7,922.
+- Full training took `3h47m15s` for one epoch and 238 optimizer steps. Final
+  reported train loss was `10.89`. The saved adapter weight SHA-256 is
+  `71f22dcb7ea5d5420cf2196240bf00a629474bbdeea76f12b41997b86ed8b9af`.
+- On the exact holdout, max-aggregated Qwen-27B generated ratings scored
+  `0.91043` macro AUROC and its direct expected-rating distributions scored
+  `0.89831`. The distilled student scored `0.86816` with generated ratings,
+  `0.87718` at the direct no-reasoning boundary, and `0.89597` when extracting
+  the continuous rating distribution after its generated reasoning.
+- Thus post-reasoning scoring recovered nearly all of the teacher's direct
+  ranking (`-0.00234` AUROC), but the intended no-reasoning readout remained
+  `-0.02113` behind. Generated integer ratings collapsed to four unique values;
+  both continuous student paths had 282/282 unique scores and zero within-unit
+  cross-label ties.
+- Max aggregation had zero rating parse failures. Individual known and scrutiny
+  prompts each had one length-capped parse failure, recovered by another
+  member. The native `<think>` strict-format counter is not interpretable here
+  because vLLM strips special thinking tokens from returned text; the visible
+  reasoning and terminal ratings were retained.
+
+This supports the user's hypothesis in a qualified way: the student can use a
+generated chain to approach the teacher's ranking, but that ability does not
+fully transfer to the direct boundary. Do not promote this adapter on the
+no-reasoning path or evaluate local test from this development holdout. If the
+track continues, the clean next ablation is sparse top-k soft distillation over
+every teacher trace token, with the direct rating anchor retained separately.
+
+### Frozen full-validation confirmation
+
+Job `30303488` evaluated all 822 validation rows under Details, Known, and
+Scrutiny in one vLLM session. Native Qwen thinking mode remained disabled; the
+adapter generated its learned ordinary-channel reasoning. Before this
+confirmation, the cached teacher holdout selected `P(Rating=7)` as an
+exploratory binary-like collapse, so the evaluator preserved all seven
+probabilities and reported it alongside expected rating.
+
+| readout | macro AUROC | instructed | varied |
+| --- | ---: | ---: | ---: |
+| Generated integer, D/K/S max | `0.91292` | `0.96229` | `0.84708` |
+| Direct expected rating, D/K/S max | `0.92762` | `0.98438` | `0.85194` |
+| Direct `P(Rating=7)`, D/K/S max | `0.92679` | `0.98458` | `0.84972` |
+| Post-reasoning expected rating, D/K/S max | `0.93821` | **`0.99229`** | `0.86611` |
+| Post-reasoning `P(Rating=7)`, D/K/S max | **`0.93952`** | `0.99125` | **`0.87056`** |
+| Phoenix direct reference | `0.93816` | `0.99354` | `0.86431` |
+
+The best single direct member was Details at `0.93000` macro AUROC
+(`0.98563` instructed, `0.85583` varied); max aggregation reduced it by
+`0.00238`. The best single post-reasoning expected-rating member was Known at
+`0.92607`, so the ensemble is important only for the expensive reasoning path.
+
+The best trace-student result exceeds Phoenix direct by only `0.00137`, below
+the frozen `+0.005` promotion gate, while requiring three generations and six
+one-token passes. Scoring took `380.2s` excluding startup, versus `9.7s` for the
+historical Phoenix direct validation pass on its H100 session. Max aggregation
+had zero parse failures; Details and Known/Scrutiny generation contained five
+total length caps, with the other members recovering every row.
+
+Decision: do not promote, run local test, or deploy reasoning generation. For
+an efficient trace-student readout, one Details direct expected-rating pass is
+strictly preferable to D/K/S max but remains `0.00816` below Phoenix. The next
+useful prompt experiment should align the student and teacher with the compact
+Truth Value Guard prompt rather than retune D/K/S aggregation on validation.
+
+This is a reasoning-imitation ablation, not a continuation of P91's binary
+normalization sweep. Do not choose members or remove label-conflicting traces
+after inspecting held-out results.
+
+## Binary Truth Value Guard teacher gate (2026-07-27)
+
+Job `30303807` tested the exact compact Truth Value Guard prompt as a
+reasoning-free teacher boundary. Both dense teachers used the same 3,000-
+character tail renderer, Qwen no-thinking chat template, and terminal
+`Prediction:` scaffold. The score was the normalized probability of the
+literal next-token choices `0` and `1`; no reasoning was generated. This is
+one forward/logit pass per row.
+
+| teacher | macro AUROC | instructed | varied | BA | recall | FPR | score time | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.5-27B | **`0.95744`** | **`0.99917`** | **`0.90181`** | **`0.91190`** | **`0.88571`** | **`0.06190`** | `38.2s` | `779/822` |
+| Qwen3.6-27B | `0.95333` | `0.99542` | `0.89722` | `0.89405` | `0.85714` | `0.06905` | `39.6s` | `766/822` |
+
+Both arms had zero missing label logits, zero parse errors, no exact score
+saturation at zero or one, and used about 50.2 GiB of GPU memory. Their scores
+were strongly but not identically ranked (Spearman `0.9542`); Qwen3.6 lost
+`0.00411` macro AUROC and also regressed in each scenario aggregate. Retain
+Qwen3.5-27B as the teacher and do not generate a Qwen3.6 trace cache from this
+checkpoint merely because it is newer.
+
+The Qwen3.5 binary Truth Value Guard result is `+0.01315` above the earlier
+Qwen3.5-27B direct seven-way D/K/S teacher (`0.94429`). Job `30303841` removed
+the prompt confound by keeping the exact same Truth Value Guard body and
+renderer while replacing the binary boundary with expected `Rating:1..7`
+logits:
+
+| Qwen3.5-27B TVG readout | macro AUROC | instructed | varied | BA | recall | FPR | score time | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| binary `Prediction:0|1` | **`0.95744`** | **`0.99917`** | **`0.90181`** | **`0.91190`** | `0.88571` | **`0.06190`** | **`38.2s`** | `779/822` |
+| expected `Rating:1..7` | `0.90286` | `0.98208` | `0.79722` | `0.91071` | **`0.89524`** | `0.07381` | `39.5s` | **`821/822`** |
+
+Both had zero missing requested logits. The `+0.05458` binary AUROC gain is
+therefore an output-parameterization result, not merely a better prompt. The
+ordinal arm has more unique scores and nearly identical BA, but badly orders
+the difficult varied rows. Use a literal binary teacher target for the next
+student loss; do not infer ranking quality from score uniqueness alone.
+
+## Leaderboard-aligned GRPO continuation logits (2026-07-27)
+
+An inference-input audit found that the saved GRPO configurations retained
+`judge.include_reasoning=true`. This supplied the dataset's source
+`assistant_reasoning` field to both the early base-Qwen GRPO adapter and the
+later privileged-distillation continuations. Because leaderboard datasets do
+not expose that field, the earlier roughly `0.965` test AUROC is not a valid
+leaderboard estimate.
+
+The logits evaluator now supports `--exclude-reasoning`. The corrected path
+renders only the observable prompt and assistant answer, appends
+`<reasoning>\n</reasoning>\nPrediction:`, and scores the normalized next-token
+margin over literal `0` and `1`. It performs one Qwen3.5-9B forward pass per
+row; it does not generate reasoning at inference.
+
+Frozen validation job `30304158` compared the one- and two-epoch varied-only
+GRPO continuations from the selected rank-16 privileged-distillation adapter:
+
+| adapter | macro AUROC | instructed | varied | BA at 0.5 | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Phoenix/PID SFT direct reference | `0.93815` | `0.99354` | `0.86431` | — | — |
+| GRPO epoch 1 | **`0.95137`** | **`0.99656`** | `0.89111` | **`0.89643`** | `79/822` |
+| GRPO epoch 2 | `0.94935` | `0.98667` | **`0.89958`** | `0.86905` | `69/822` |
+
+Macro AUROC selected epoch 1 before local-test evaluation. Its frozen
+validation threshold was `0.37754068`, where validation BA was `0.91071`.
+Epoch 2 was rejected despite its higher varied AUROC because it lost overall
+and instructed ranking.
+
+Frozen local-test job `30304374` then evaluated epoch 1 exactly once:
+
+| adapter | macro AUROC | instructed | varied | BA at 0.5 | BA at frozen threshold | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Phoenix/PID SFT direct reference | `0.93423` | `0.98177` | `0.87083` | — | — | — |
+| GRPO epoch 1 | **`0.95982`** | **`0.99073`** | **`0.91861`** | `0.88690` | `0.89881` | `79/821` |
+
+The test run had recall `0.82857` and FPR `0.05476` at threshold `0.5`; the
+validation-frozen threshold gave recall `0.85714` and FPR `0.05952`. Scoring
+took `38.85s` for 821 rows. The generic result artifact also reports a
+test-oracle threshold, but that value was inspected only as a diagnostic and
+must not be used for selection or deployment.
+
+This is the strongest tracked leaderboard-aligned local-test judge by macro
+AUROC, narrowly exceeding the much more expensive Qwen3.5-27B three-generation
+D/K/S ensemble (`0.9573`). Promote the epoch-1 adapter as the next submission
+candidate. Retain the continuous logit score despite its 742 tied rows, keep
+the hard `deceptive` threshold separate, and do not re-enable source reasoning
+or reasoning generation at inference.

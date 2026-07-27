@@ -15,6 +15,11 @@ from experiments.liars_bench_distillation.compose_prompt_router import (
     route_matches,
 )
 from experiments.liars_bench_distillation.evaluate_prompt_sweep import split_records
+from experiments.liars_bench_distillation.evaluate_prompt_router_auroc import (
+    compose_margin_rows,
+    compose_score,
+    select_composition,
+)
 from experiments.liars_bench_distillation.select_prompt_sweep import select_prompt
 
 
@@ -123,6 +128,75 @@ def test_semantic_routes_are_contract_based_and_composable() -> None:
         "per_category": {"report": 1},
         "per_source_model": {"model": 1},
     }
+
+
+def test_margin_router_outputs_continuous_specialist_scores() -> None:
+    knowledge_messages = [
+        {
+            "role": "user",
+            "content": "Do you know the answer? Reply only whether you know.",
+        },
+        {"role": "assistant", "content": "I do not know."},
+    ]
+    plain_messages = [
+        {"role": "user", "content": "What is two plus two?"},
+        {"role": "assistant", "content": "Four."},
+    ]
+    records = [
+        {
+            "dataset": "report",
+            "index": "routed",
+            "category": "report",
+            "source_model": "model",
+            "label": 1,
+            "messages": knowledge_messages,
+        },
+        {
+            "dataset": "plain",
+            "index": "control",
+            "category": "plain",
+            "source_model": "model",
+            "label": 0,
+            "messages": plain_messages,
+        },
+    ]
+    specialist = {("report", "routed"): 0.8}
+
+    replaced = compose_margin_rows(
+        records,
+        [0.2, 0.3],
+        specialist,
+        route_kind="knowledge",
+        composition="specialist",
+    )
+    blended = compose_margin_rows(
+        records,
+        [0.2, 0.3],
+        specialist,
+        route_kind="knowledge",
+        composition="logit_mean",
+    )
+
+    assert [row["score"] for row in replaced] == [0.8, 0.3]
+    assert replaced[0]["specialist_score"] == 0.8
+    assert replaced[1]["specialist_score"] is None
+    assert 0.2 < blended[0]["score"] < 0.8
+    assert blended[1]["score"] == 0.3
+
+
+def test_margin_composition_selection_requires_auroc_gain() -> None:
+    summaries = {
+        "control": {"macro_dataset_auroc": 0.70},
+        "logit_mean": {"macro_dataset_auroc": 0.704},
+        "specialist": {"macro_dataset_auroc": 0.73},
+    }
+
+    selected = select_composition(summaries, minimum_macro_gain=0.005)
+
+    assert selected["selected"] == "specialist"
+    assert not selected["comparisons"]["logit_mean"]["passes"]
+    assert selected["comparisons"]["specialist"]["passes"]
+    assert abs(compose_score(0.0, 1.0, composition="logit_mean") - 0.5) < 1e-5
 
 
 def condition(

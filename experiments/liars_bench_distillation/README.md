@@ -197,6 +197,63 @@ skipped. Retain base Qwen plus `knowledge_report_type` as the strongest narrow
 HP-KR specialist. Do not increase rank or training dose from this failed
 development result.
 
+### AUROC-first HP-KR deployment
+
+The strong base-Qwen specialist is now scored continuously rather than reduced
+to its generated binary decision. The frozen 100/100 HP-KR halves compare the
+Phoenix direct margin with base-Qwen `knowledge_report_type` direct,
+empty-summary, and post-reasoning margins. Development requires at least
+`+0.05` AUROC over Phoenix and selects one arm before confirmation.
+
+```bash
+bash experiments/liars_bench_distillation/run_hpkr_epistemic_auroc_lambda.sh development
+bash experiments/liars_bench_distillation/run_hpkr_epistemic_auroc_lambda.sh confirmation
+```
+
+Development selected the empty-summary margin at `0.9002` AUROC, versus
+`0.4348` Phoenix, `0.8100` generated binary, `0.8894` direct, and `0.8472`
+post-reasoning. Frozen confirmation scored `0.9462`, versus `0.4012` Phoenix,
+`0.8600` generated binary, `0.9440` direct, and `0.8976` post-reasoning. Both
+halves had zero missing label logits.
+
+Phoenix 4.1 therefore routes exact knowledge self-report contracts to base
+Qwen without the Phoenix LoRA and scores the exact `0`/`1` logits after an
+empty `<reasoning_summary>` scaffold. All other rows retain the Phoenix direct
+margin. This is still an OOD-only transfer feature: the frozen route matches
+zero known competition rows. Do not broaden the route from leaderboard
+behavior or add the failed forced-choice trigger.
+
+### AUROC-first action-report evaluation
+
+The frozen action prompt was subsequently ported to continuous label margins
+using the unchanged Phoenix rank-16 adapter. The existing 200-row Insider
+Trading artifact was split 100/100 within label. This supplies a new
+continuous-readout selection and confirmation, not a pristine prompt holdout:
+the action wording already had binary evidence on these public rows.
+
+A100 development job `30298917` scored ordinary Phoenix direct, generated
+binary, action direct, action empty-summary, and action post-reasoning at
+AUROC `0.5030`, `0.6200`, `0.7610`, **`0.7974`**, and `0.7056`.
+Empty-summary passed the frozen `+0.05` aggregate gain and source-family
+preservation gates. Confirmation job `30298919` reproduced `0.8148` AUROC
+versus `0.4158` Phoenix and `0.7800` generated binary, with 83 unique scores
+and zero missing logits. Every source family with both labels improved.
+
+The selected path requires no reasoning generation and no new adapter: routed
+rows substitute the action prompt plus empty `<reasoning_summary>` scaffold
+inside the existing Phoenix-backed margin pass. The evaluator exactly
+left-truncates prompts to the final 2,048 tokens; one development row required
+this and confirmation required none. Before adding it to the sole notebook,
+keep the action route exclusive from the intent member and run exact route,
+ordinary-score parity, and NDIF execution checks.
+
+Phoenix Wright 4.3 completes that deployment. The action and ordinary prompts
+share one Phoenix rank-16 pass, while HP-KR keeps exclusive precedence and
+action rows cannot enter the intent blend. The action router matches zero of
+all 8,216 known competition rows. A synthetic three-row NDIF notebook run
+activated exactly one action route, completed in `69.52s`, and returned
+identical scores for duplicate ordinary rows.
+
 This experiment tests whether a very small external-data mixture broadens the
 Phoenix student beyond factual instructed/Qwen-varied deception without
 overwriting its competition calibration. It uses four Liars' Bench categories

@@ -62,6 +62,10 @@ RATING_STRICT_RE = re.compile(
     r"(?is)^\s*<reasoning_summary>\s*(.+?)\s*</reasoning_summary>\s*"
     r"Rating\s*:\s*<?([1-7])>?\s*$"
 )
+NATIVE_RATING_STRICT_RE = re.compile(
+    r"(?is)^\s*<think>.+?</think>\s*.*"
+    r"Rating\s*:\s*<?([1-7])>?\s*$"
+)
 SUMMARY_RATING_STRICT_RE = re.compile(
     r"(?is)^\s*<reasoning_summary>\s*(.+?)\s*</reasoning_summary>\s*"
     r"Rating\s*:\s*<?([1-7])>?\s*"
@@ -73,6 +77,7 @@ EMPTY_REASONING_PREFIX = (
     "Prediction:"
 )
 DIRECT_PREDICTION_PREFIX = "Prediction:"
+DIRECT_RATING_PREFIX = "Rating:"
 CONTINUOUS_MARGIN_CONDITIONS = ("direct", "empty", "reasoning")
 
 
@@ -120,6 +125,14 @@ def prefix_before_prediction(text: str) -> str:
     return text.rstrip() + "\nPrediction:"
 
 
+def prefix_before_rating(text: str) -> str:
+    """Return a completion prefix ending immediately before its final rating token."""
+    matches = list(RATING_RE.finditer(text))
+    if matches:
+        return text[:matches[-1].start(1)]
+    return text.rstrip() + "\nRating:"
+
+
 def continuous_margin_prompts(
     prompt: str,
     generation: str,
@@ -135,6 +148,18 @@ def continuous_margin_prompts(
     }
 
 
+def continuous_rating_prompts(
+    prompt: str,
+    generation: str,
+) -> dict[str, str]:
+    """Build direct, empty-thinking, and post-reasoning rating prefixes."""
+    return {
+        "direct": prompt + DIRECT_RATING_PREFIX,
+        "empty": prompt + "<think>\n</think>\nRating:",
+        "reasoning": prompt + prefix_before_rating(generation),
+    }
+
+
 def binary_token_ids(tokenizer: Any) -> list[int]:
     """Return the distinct single-token ids used for literal binary predictions."""
     ids = []
@@ -145,6 +170,21 @@ def binary_token_ids(tokenizer: Any) -> list[int]:
         ids.append(int(encoded[0]))
     if len(set(ids)) != 2:
         raise ValueError(f"binary targets must have distinct token ids, got {ids}")
+    return ids
+
+
+def rating_token_ids(tokenizer: Any) -> list[int]:
+    """Return distinct single-token ids used for literal ratings 1--7."""
+    ids = []
+    for text in map(str, range(1, 8)):
+        encoded = tokenizer.encode(text, add_special_tokens=False)
+        if len(encoded) != 1:
+            raise ValueError(
+                f"rating target {text!r} tokenized as {encoded}, expected one token"
+            )
+        ids.append(int(encoded[0]))
+    if len(set(ids)) != 7:
+        raise ValueError(f"rating targets must have distinct token ids, got {ids}")
     return ids
 
 
@@ -174,6 +214,40 @@ def binary_score_from_logprobs(
     return 1.0 / (1.0 + math.exp(-difference))
 
 
+def rating_score_from_logprobs(
+    first_token_logprobs: dict[Any, Any],
+    token_ids: list[int],
+) -> float | None:
+    """Return normalized expected rating, mapped from 1--7 onto [0, 1]."""
+    probabilities = rating_probabilities_from_logprobs(
+        first_token_logprobs, token_ids
+    )
+    if probabilities is None:
+        return None
+    return sum(
+        ((rating - 1) / 6) * probability
+        for rating, probability in enumerate(probabilities, start=1)
+    )
+
+
+def rating_probabilities_from_logprobs(
+    first_token_logprobs: dict[Any, Any],
+    token_ids: list[int],
+) -> list[float] | None:
+    """Normalize constrained 1--7 log probabilities in rating order."""
+    expanded = {
+        int(token_id): logprob_value(value)
+        for token_id, value in first_token_logprobs.items()
+    }
+    if any(token_id not in expanded for token_id in token_ids):
+        return None
+    logits = [expanded[token_id] for token_id in token_ids]
+    maximum = max(logits)
+    weights = [math.exp(value - maximum) for value in logits]
+    normalization = sum(weights)
+    return [weight / normalization for weight in weights]
+
+
 def score_binary_prefixes(
     llm: Any,
     prompts: list[str],
@@ -197,6 +271,39 @@ def score_binary_prefixes(
             score = 0.5
         scores.append(score)
     return scores, missing, elapsed
+
+
+def score_rating_prefixes(
+    llm: Any,
+    prompts: list[str],
+    sampling: Any,
+    request: Any,
+    token_ids: list[int],
+) -> tuple[list[float], list[list[float]], int, float]:
+    """Score constrained seven-way expected ratings for rendered prefixes."""
+    started = time.time()
+    outputs = llm.generate(prompts, sampling, lora_request=request)
+    elapsed = time.time() - started
+    scores = []
+    probability_rows = []
+    missing = 0
+    for output in outputs:
+        first_token_logprobs = {}
+        if output.outputs and output.outputs[0].logprobs:
+            first_token_logprobs = output.outputs[0].logprobs[0] or {}
+        probabilities = rating_probabilities_from_logprobs(
+            first_token_logprobs, token_ids
+        )
+        if probabilities is None:
+            missing += 1
+            probabilities = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+        score = sum(
+            ((rating - 1) / 6) * probability
+            for rating, probability in enumerate(probabilities, start=1)
+        )
+        scores.append(score)
+        probability_rows.append(probabilities)
+    return scores, probability_rows, missing, elapsed
 
 
 def scenario_metrics(frame: pd.DataFrame) -> dict[str, dict[str, float | None]]:
@@ -380,6 +487,8 @@ def strict_pattern_for_config(config: dict[str, Any]) -> re.Pattern[str]:
         return ATOMIC_AUDIT_STRICT_RE
     if student.get("target_format") == "summary_rating":
         return SUMMARY_RATING_STRICT_RE
+    if student.get("target_format") == "native_rating":
+        return NATIVE_RATING_STRICT_RE
     if student.get("target_format") == "rating":
         return RATING_STRICT_RE
     return STRICT_RE
@@ -388,7 +497,7 @@ def strict_pattern_for_config(config: dict[str, Any]) -> re.Pattern[str]:
 def output_mode_for_config(config: dict[str, Any]) -> str:
     """Select binary or ordinal parsing from the inference prompt contract."""
     target_format = config["student"].get("target_format")
-    if target_format == "rating":
+    if target_format in {"rating", "native_rating"}:
         return "rating"
     if target_format == "summary_rating":
         return "rating_prediction"
@@ -408,7 +517,13 @@ def load_records(
     from datasets import load_dataset
 
     rows: list[dict[str, Any]] = []
-    for dataset_cfg in load_split_config(splits_dir / f"dry.{split}.yaml", ROOT):
+    # Checked-in split manifests use project-relative labels such as
+    # dev_splits/labels/validation/*.csv. Resolve them from the parent of the
+    # selected splits directory, not from this script's checkout/worktree.
+    for dataset_cfg in load_split_config(
+        splits_dir / f"dry.{split}.yaml",
+        splits_dir.parent,
+    ):
         labels = load_labels(dataset_cfg)
         label_by_index = dict(zip(labels["index"], labels["label"], strict=True))
         dataset = load_dataset(dataset_cfg.name, split="test")
@@ -465,6 +580,20 @@ def load_records(
     return pd.DataFrame(rows)
 
 
+def lora_request_or_none(
+    adapter_dir: Path,
+    lora_id: int,
+    *,
+    use_lora: bool,
+) -> Any | None:
+    """Construct a vLLM LoRA request unless this is a matched base control."""
+    if not use_lora:
+        return None
+    from vllm.lora.request import LoRARequest
+
+    return LoRARequest(adapter_dir.parent.name, lora_id, adapter_dir.as_posix())
+
+
 def evaluate_adapter(
     llm: Any,
     sampling: Any,
@@ -476,14 +605,14 @@ def evaluate_adapter(
     *,
     margin_sampling: Any | None = None,
     binary_ids: list[int] | None = None,
+    rating_ids: list[int] | None = None,
     margin_conditions: tuple[str, ...] = CONTINUOUS_MARGIN_CONDITIONS,
     direct_prefix: str = DIRECT_PREDICTION_PREFIX,
     empty_reasoning_prefix: str = EMPTY_REASONING_PREFIX,
     require_closed_thinking: bool = False,
+    use_lora: bool = True,
 ) -> tuple[pd.DataFrame, dict[str, float | int]]:
-    from vllm.lora.request import LoRARequest
-
-    request = LoRARequest(adapter_dir.parent.name, lora_id, adapter_dir.as_posix())
+    request = lora_request_or_none(adapter_dir, lora_id, use_lora=use_lora)
     started = time.time()
     outputs = llm.generate(records["prompt"].tolist(), sampling, lora_request=request)
     elapsed = time.time() - started
@@ -552,26 +681,66 @@ def evaluate_adapter(
     timing: dict[str, float | int] = {"generation_seconds": elapsed}
 
     if margin_sampling is not None:
-        if binary_ids is None:
-            raise ValueError("binary_ids are required when margin_sampling is enabled")
-        source_prompts = records["prompt"].tolist()
-        margin_prompts = [
-            continuous_margin_prompts(
-                prompt,
-                generation,
-                direct_prefix=direct_prefix,
-                empty_reasoning_prefix=empty_reasoning_prefix,
+        if (binary_ids is None) == (rating_ids is None):
+            raise ValueError(
+                "exactly one of binary_ids or rating_ids is required for margins"
             )
-            for prompt, generation in zip(source_prompts, generations, strict=True)
-        ]
+        source_prompts = records["prompt"].tolist()
+        if rating_ids is not None:
+            margin_prompts = [
+                continuous_rating_prompts(prompt, generation)
+                for prompt, generation in zip(
+                    source_prompts, generations, strict=True
+                )
+            ]
+            score_prefixes = score_rating_prefixes
+            target_ids = rating_ids
+        else:
+            margin_prompts = [
+                continuous_margin_prompts(
+                    prompt,
+                    generation,
+                    direct_prefix=direct_prefix,
+                    empty_reasoning_prefix=empty_reasoning_prefix,
+                )
+                for prompt, generation in zip(
+                    source_prompts, generations, strict=True
+                )
+            ]
+            score_prefixes = score_binary_prefixes
+            target_ids = binary_ids
         unknown = set(margin_conditions).difference(CONTINUOUS_MARGIN_CONDITIONS)
         if unknown:
             raise ValueError(f"unknown continuous margin conditions: {sorted(unknown)}")
         for condition in margin_conditions:
             condition_prompts = [prompts[condition] for prompts in margin_prompts]
-            scores, missing, condition_elapsed = score_binary_prefixes(
-                llm, condition_prompts, margin_sampling, request, binary_ids
-            )
+            if rating_ids is not None:
+                (
+                    scores,
+                    probability_rows,
+                    missing,
+                    condition_elapsed,
+                ) = score_rating_prefixes(
+                    llm,
+                    condition_prompts,
+                    margin_sampling,
+                    request,
+                    target_ids,
+                )
+                for rating in range(1, 8):
+                    evaluated[
+                        f"{condition}_rating_{rating}_prob"
+                    ] = [
+                        probabilities[rating - 1]
+                        for probabilities in probability_rows
+                    ]
+                evaluated[f"{condition}_p7_margin_score"] = [
+                    probabilities[6] for probabilities in probability_rows
+                ]
+            else:
+                scores, missing, condition_elapsed = score_prefixes(
+                    llm, condition_prompts, margin_sampling, request, target_ids
+                )
             evaluated[f"{condition}_margin_score"] = scores
             timing[f"{condition}_margin_seconds"] = condition_elapsed
             timing[f"{condition}_margin_missing"] = missing
@@ -603,6 +772,10 @@ def max_aggregate_evaluations(
     format_columns = []
     generation_columns = []
     prompt_hash_columns = []
+    margin_suffixes = sorted(
+        column for column in first.columns if column.endswith("_margin_score")
+    )
+    margin_columns_by_suffix = {suffix: [] for suffix in margin_suffixes}
     for name, frame in evaluations.items():
         if frame.duplicated(keys).any():
             raise ValueError(f"duplicate row keys in condition {name!r}")
@@ -624,7 +797,17 @@ def max_aggregate_evaluations(
         format_columns.append(format_column)
         generation_columns.append(generation_column)
         prompt_hash_columns.append(prompt_hash_column)
+        for suffix in margin_suffixes:
+            if suffix not in aligned:
+                raise ValueError(
+                    f"condition {name!r} is missing margin column {suffix!r}"
+                )
+            column = f"{name}_{suffix}"
+            result[column] = aligned[suffix].astype(float)
+            margin_columns_by_suffix[suffix].append(column)
     result["score"] = result[score_columns].max(axis=1)
+    for suffix, columns in margin_columns_by_suffix.items():
+        result[suffix] = result[columns].max(axis=1)
     result["prediction"] = (result["score"] >= 0.5).astype(float)
     result["parse_error"] = result[parse_columns].all(axis=1)
     result["format_valid"] = result[format_columns].any(axis=1)
@@ -691,6 +874,14 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--continuous-rating-margins",
+        action="store_true",
+        help=(
+            "score constrained 1--7 logits as normalized expected ratings with "
+            "direct, empty-thinking, and generated-reasoning prefixes"
+        ),
+    )
+    parser.add_argument(
         "--continuous-margin-condition",
         action="append",
         choices=CONTINUOUS_MARGIN_CONDITIONS,
@@ -699,6 +890,11 @@ def main() -> None:
             "repeat to score only selected margin conditions; defaults to all "
             "three when --continuous-margins is enabled"
         ),
+    )
+    parser.add_argument(
+        "--base-model-control",
+        action="store_true",
+        help="use the saved adapter prompt/tokenizer without applying its LoRA weights",
     )
     parser.add_argument(
         "--prompt-without-reasoning-config",
@@ -713,9 +909,15 @@ def main() -> None:
     args = parser.parse_args()
     if args.retrieval_cache is not None and args.retrieval_condition:
         parser.error("use either --retrieval-cache or --retrieval-condition, not both")
-    if args.continuous_margin_condition and not args.continuous_margins:
+    if args.continuous_margins and args.continuous_rating_margins:
         parser.error(
-            "--continuous-margin-condition requires --continuous-margins"
+            "--continuous-margins and --continuous-rating-margins are exclusive"
+        )
+    if args.continuous_margin_condition and not (
+        args.continuous_margins or args.continuous_rating_margins
+    ):
+        parser.error(
+            "--continuous-margin-condition requires a continuous-margin mode"
         )
     margin_conditions = tuple(
         dict.fromkeys(
@@ -881,15 +1083,24 @@ def main() -> None:
         for name, *_, condition_max_tokens in condition_specs
     }
     binary_ids = None
+    rating_ids = None
     margin_sampling = None
-    if args.continuous_margins:
-        binary_ids = binary_token_ids(tokenizer)
+    if args.continuous_margins or args.continuous_rating_margins:
+        target_ids = (
+            binary_token_ids(tokenizer)
+            if args.continuous_margins
+            else rating_token_ids(tokenizer)
+        )
+        if args.continuous_margins:
+            binary_ids = target_ids
+        else:
+            rating_ids = target_ids
         margin_sampling = SamplingParams(
             max_tokens=1,
             temperature=0.0,
-            logprobs=len(binary_ids),
-            logprob_token_ids=binary_ids,
-            allowed_token_ids=binary_ids,
+            logprobs=len(target_ids),
+            logprob_token_ids=target_ids,
+            allowed_token_ids=target_ids,
         )
     for lora_id, (adapter_dir, config) in enumerate(zip(adapter_dirs, configs, strict=True), 1):
         evaluated_by_condition = {}
@@ -915,8 +1126,10 @@ def main() -> None:
                 output_mode=output_mode_by_condition[condition_name],
                 margin_sampling=margin_sampling,
                 binary_ids=binary_ids,
+                rating_ids=rating_ids,
                 margin_conditions=margin_conditions,
                 require_closed_thinking=bool(enable_thinking),
+                use_lora=not args.base_model_control,
             )
             evaluated_by_condition[condition_name] = evaluated
             timing_by_condition[condition_name] = timing
@@ -939,15 +1152,27 @@ def main() -> None:
                     ),
                 }
                 primary_score_name = "generated_rating"
+            elif output_mode_by_condition[condition_name] == "rating":
+                score_metrics = {
+                    "generated_rating": metrics_for_score(evaluated, "score")
+                }
+                primary_score_name = "generated_rating"
             else:
                 score_metrics = {
                     "generated_binary": metrics_for_score(evaluated, "score")
                 }
                 primary_score_name = "generated_binary"
-            if args.continuous_margins:
+            if args.continuous_margins or args.continuous_rating_margins:
                 score_metrics.update({
                     f"{condition}_margin": metrics_for_score(
                         evaluated, f"{condition}_margin_score"
+                    )
+                    for condition in margin_conditions
+                })
+            if args.continuous_rating_margins:
+                score_metrics.update({
+                    f"{condition}_p7_margin": metrics_for_score(
+                        evaluated, f"{condition}_p7_margin_score"
                     )
                     for condition in margin_conditions
                 })
@@ -1000,6 +1225,7 @@ def main() -> None:
                 "max_new_tokens": condition_max_tokens or args.max_new_tokens,
                 "retrieval_cache": retrieval_path.as_posix() if retrieval_path else None,
                 "reasoning_visibility": args.reasoning_visibility,
+                "base_model_control": args.base_model_control,
                 "prompt_without_reasoning_config": (
                     args.prompt_without_reasoning_config.resolve().as_posix()
                     if args.prompt_without_reasoning_config is not None
@@ -1020,7 +1246,7 @@ def main() -> None:
                 f"time={total_elapsed:.1f}s",
                 flush=True,
             )
-            if args.continuous_margins:
+            if args.continuous_margins or args.continuous_rating_margins:
                 print(f"continuous_margin_metrics={score_metrics}", flush=True)
         if args.aggregate_max:
             aggregated = max_aggregate_evaluations(evaluated_by_condition)
@@ -1041,12 +1267,30 @@ def main() -> None:
                 for key, value in timing.items()
                 if key.endswith("_seconds")
             ))
+            aggregate_margin_suffixes = sorted(
+                column
+                for column in aggregated.columns
+                if column.endswith("_margin_score")
+                and not any(
+                    column.startswith(f"{name}_")
+                    for name in evaluated_by_condition
+                )
+            )
             result = {
                 "method": config["method"],
                 "split": args.split,
                 "input_condition": "max_aggregate",
                 "member_conditions": list(evaluated_by_condition),
                 "metrics": metrics_for_score(aggregated, "score"),
+                "score_metrics": {
+                    "generated_rating": metrics_for_score(aggregated, "score"),
+                    **{
+                        suffix.removesuffix("_score"): metrics_for_score(
+                            aggregated, suffix
+                        )
+                        for suffix in aggregate_margin_suffixes
+                    },
+                },
                 "per_dataset": per_dataset,
                 "parse_errors": int(aggregated["parse_error"].sum()),
                 "format_valid": int(aggregated["format_valid"].sum()),

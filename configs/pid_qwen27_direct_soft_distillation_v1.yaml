@@ -1,0 +1,29 @@
+defaults:
+  - privileged_information_distillation
+  - _self_
+
+method: qwen9b_pid_qwen27_direct_soft_varied_v1
+output_dir: results/blackbox/${method}
+
+teacher:
+  artifact: results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/teacher/train.jsonl
+
+student:
+  dataset_name_contains: varied-deception
+  soft_teacher_artifact: results/blackbox/qwen27b_reason_ensemble_dks3072_logit_soft_teacher_v1/train/soft_targets.jsonl
+  output_dir: ${output_dir}/adapter
+  training:
+    optimizer: adamw
+    optim: adamw_torch
+    num_train_epochs: 1.0
+    max_steps: -1
+    learning_rate: 5.0e-5
+    warmup_ratio: 0.03
+    weight_decay: 0.0
+    per_device_train_batch_size: 2
+    gradient_accumulation_steps: 16
+    logging_steps: 5
+    direct_loss_weight: 0.0
+    pairwise_loss_weight: 0.0
+    soft_loss_weight: 1.0
+    paired_batching: false

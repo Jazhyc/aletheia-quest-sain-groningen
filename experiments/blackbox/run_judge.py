@@ -84,6 +84,21 @@ def load_split_config(path: Path, base: Path) -> list[DatasetConfig]:
     return datasets
 
 
+def filter_dataset_configs(
+    datasets: list[DatasetConfig],
+    name_contains: str | None,
+) -> list[DatasetConfig]:
+    """Select a declared dataset-name slice and fail on an empty match."""
+    if name_contains is None:
+        return datasets
+    selected = [dataset for dataset in datasets if name_contains in dataset.name]
+    if not selected:
+        raise ValueError(
+            f"dataset_name_contains={name_contains!r} matched no datasets"
+        )
+    return selected
+
+
 def load_label_subset(cfg: DatasetConfig) -> pd.DataFrame:
     uri = Path(cfg.labels_uri)
     if cfg.labels_uri.endswith(".csv") and uri.exists():
@@ -484,6 +499,23 @@ def rating_probs_from_logprobs(
     }
 
 
+def normalize_rating_probs(probs: dict[int, float]) -> dict[int, float]:
+    """Normalize an ordinal rating distribution for compact cache storage."""
+    total = sum(probs.values())
+    if total <= 0:
+        return {rating: 0.0 for rating in probs}
+    return {rating: probability / total for rating, probability in probs.items()}
+
+
+def missing_requested_token_ids(
+    first_token_logprobs: dict[Any, Any],
+    requested_token_ids: list[int],
+) -> list[int]:
+    """Return explicitly requested token ids absent from a vLLM logprob row."""
+    available = {int(token_id) for token_id in first_token_logprobs}
+    return sorted(set(requested_token_ids) - available)
+
+
 def target_probs_from_logprobs(
     first_token_logprobs: dict[Any, Any],
     *,
@@ -520,6 +552,25 @@ def structured_rating_prompt(prompt: str, reasoning: str, rating_instruction: st
     )
 
 
+def strip_terminal_generated_rating(
+    text: str,
+    *,
+    rating_min: int,
+    rating_max: int,
+) -> tuple[str, int | None]:
+    """Remove a sampled terminal rating before a post-reasoning logit rescore."""
+    rating_range = f"[{rating_min}-{rating_max}]"
+    pattern = re.compile(
+        rf"(?is)(?:^|\n)[ \t]*\**[ \t]*"
+        rf"(?:final[ \t]+)?rating[ \t]*:?[ \t]*\**[ \t]*:?[ \t]*"
+        rf"\**[ \t]*({rating_range})[ \t]*\**[ \t]*$"
+    )
+    match = pattern.search(text)
+    if match is None:
+        return text.rstrip(), None
+    return text[:match.start()].rstrip(), int(match.group(1))
+
+
 def vllm_kwargs_from_config(
     *,
     model_name: str,
@@ -529,6 +580,10 @@ def vllm_kwargs_from_config(
     trust_remote_code: bool,
     max_model_len: int | None,
     max_num_seqs: int | None,
+    language_model_only: bool,
+    skip_mm_profiling: bool,
+    enforce_eager: bool,
+    enable_flashinfer_autotune: bool | None,
     spec_method: str | None,
     spec_model: str | None,
     spec_tokens: int | None,
@@ -539,10 +594,14 @@ def vllm_kwargs_from_config(
         "tensor_parallel_size": tensor_parallel_size,
         "gpu_memory_utilization": gpu_memory_utilization,
         "trust_remote_code": trust_remote_code,
+        "language_model_only": language_model_only,
+        "skip_mm_profiling": skip_mm_profiling,
+        "enforce_eager": enforce_eager,
     }
     optional = {
         "max_model_len": max_model_len,
         "max_num_seqs": max_num_seqs,
+        "enable_flashinfer_autotune": enable_flashinfer_autotune,
         "spec_method": spec_method,
         "spec_model": spec_model,
         "spec_tokens": spec_tokens,
@@ -585,12 +644,20 @@ class OfflineVllmRatingJudge:
         trust_remote_code: bool,
         max_model_len: int | None,
         max_num_seqs: int | None,
+        language_model_only: bool,
+        skip_mm_profiling: bool,
+        enforce_eager: bool,
+        enable_flashinfer_autotune: bool | None,
         spec_method: str | None,
         spec_model: str | None,
         spec_tokens: int | None,
         generated_logprobs: int | None,
         missing_logprob: float,
         temperature: float,
+        use_chat_template: bool,
+        enable_thinking: bool | None,
+        reasoning_effort: str | None,
+        assistant_prefix: str | None,
     ) -> None:
         from transformers import AutoTokenizer
         from vllm import LLM, SamplingParams
@@ -600,8 +667,14 @@ class OfflineVllmRatingJudge:
         self.missing_logprob = missing_logprob
         self.ratings = list(range(rating_min, rating_max + 1))
         self.targets: list[dict[str, Any]] | None = None
+        self.generations: list[dict[str, Any]] = []
+        self.parse_error_count = 0
 
         tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.tokenizer = tokenizer if use_chat_template else None
+        self.enable_thinking = enable_thinking
+        self.reasoning_effort = reasoning_effort
+        self.assistant_prefix = assistant_prefix
         if logit_targets:
             self.all_rating_ids, self.targets = logit_target_ids(tokenizer, logit_targets)
             self.ids_by_rating = {}
@@ -617,6 +690,10 @@ class OfflineVllmRatingJudge:
             trust_remote_code=trust_remote_code,
             max_model_len=max_model_len,
             max_num_seqs=max_num_seqs,
+            language_model_only=language_model_only,
+            skip_mm_profiling=skip_mm_profiling,
+            enforce_eager=enforce_eager,
+            enable_flashinfer_autotune=enable_flashinfer_autotune,
             spec_method=spec_method,
             spec_model=spec_model,
             spec_tokens=spec_tokens,
@@ -632,19 +709,61 @@ class OfflineVllmRatingJudge:
 
     def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
         scores = np.full(len(prompts), np.nan, dtype=float)
-        outputs = generate_with_optional_batches(self.llm, prompts, self.sampling, batch_size)
+        generation_prompts = prompts
+        if self.tokenizer is not None:
+            generation_prompts = render_chat_prompts(
+                self.tokenizer,
+                prompts,
+                enable_thinking=self.enable_thinking,
+                reasoning_effort=self.reasoning_effort,
+            )
+            if self.assistant_prefix:
+                generation_prompts = [
+                    f"{prompt}{self.assistant_prefix}" for prompt in generation_prompts
+                ]
+        outputs = generate_with_optional_batches(
+            self.llm,
+            generation_prompts,
+            self.sampling,
+            batch_size,
+        )
+        self.generations = []
+        self.parse_error_count = 0
 
         for offset, output in enumerate(outputs):
             if not output.outputs or not output.outputs[0].logprobs:
+                self.parse_error_count += 1
+                self.generations.append({
+                    "offset": offset,
+                    "parse_error": True,
+                    "score": 0.5,
+                    "missing_rating_token_ids": self.all_rating_ids,
+                })
                 continue
             first_token_logprobs = output.outputs[0].logprobs[0] or {}
+            missing_token_ids = missing_requested_token_ids(
+                first_token_logprobs,
+                self.all_rating_ids,
+            )
             if self.targets is not None:
                 target_probs = target_probs_from_logprobs(
                     first_token_logprobs,
                     targets=self.targets,
                     missing_logprob=self.missing_logprob,
                 )
-                scores[offset] = score_from_target_probs(target_probs, self.targets)
+                score = score_from_target_probs(target_probs, self.targets)
+                total = sum(target_probs.values())
+                normalized_targets = {
+                    name: (probability / total if total > 0 else 0.0)
+                    for name, probability in target_probs.items()
+                }
+                record = {
+                    "offset": offset,
+                    "parse_error": False,
+                    "score": score,
+                    "target_probs": normalized_targets,
+                    "missing_rating_token_ids": missing_token_ids,
+                }
             else:
                 probs = rating_probs_from_logprobs(
                     first_token_logprobs,
@@ -652,11 +771,20 @@ class OfflineVllmRatingJudge:
                     ratings=self.ratings,
                     missing_logprob=self.missing_logprob,
                 )
-                scores[offset] = score_from_rating_probs(
+                score = score_from_rating_probs(
                     probs,
                     rating_min=self.rating_min,
                     rating_max=self.rating_max,
                 )
+                record = {
+                    "offset": offset,
+                    "parse_error": False,
+                    "score": score,
+                    "rating_probs": normalize_rating_probs(probs),
+                    "missing_rating_token_ids": missing_token_ids,
+                }
+            scores[offset] = score
+            self.generations.append(record)
         return np.nan_to_num(scores, nan=0.5)
 
 
@@ -673,6 +801,10 @@ class OfflineVllmGenerateJudge:
         trust_remote_code: bool,
         max_model_len: int | None,
         max_num_seqs: int | None,
+        language_model_only: bool,
+        skip_mm_profiling: bool,
+        enforce_eager: bool,
+        enable_flashinfer_autotune: bool | None,
         spec_method: str | None,
         spec_model: str | None,
         spec_tokens: int | None,
@@ -704,6 +836,10 @@ class OfflineVllmGenerateJudge:
             trust_remote_code=trust_remote_code,
             max_model_len=max_model_len,
             max_num_seqs=max_num_seqs,
+            language_model_only=language_model_only,
+            skip_mm_profiling=skip_mm_profiling,
+            enforce_eager=enforce_eager,
+            enable_flashinfer_autotune=enable_flashinfer_autotune,
             spec_method=spec_method,
             spec_model=spec_model,
             spec_tokens=spec_tokens,
@@ -781,6 +917,10 @@ class OfflineVllmStructuredJudge:
         trust_remote_code: bool,
         max_model_len: int | None,
         max_num_seqs: int | None,
+        language_model_only: bool,
+        skip_mm_profiling: bool,
+        enforce_eager: bool,
+        enable_flashinfer_autotune: bool | None,
         spec_method: str | None,
         spec_model: str | None,
         spec_tokens: int | None,
@@ -792,6 +932,7 @@ class OfflineVllmStructuredJudge:
         use_chat_template: bool,
         enable_thinking: bool | None,
         reasoning_effort: str | None,
+        reasoning_cache_path: str | None,
     ) -> None:
         from transformers import AutoTokenizer
         from vllm import LLM, SamplingParams
@@ -803,6 +944,18 @@ class OfflineVllmStructuredJudge:
         self.final_rating_prompt = final_rating_prompt
         self.generations: list[dict[str, Any]] = []
         self.parse_error_count = 0
+        self.cached_reasoning_records: list[dict[str, Any]] | None = None
+        if reasoning_cache_path is not None:
+            cache_path = Path(reasoning_cache_path).resolve()
+            if not cache_path.exists():
+                raise FileNotFoundError(
+                    f"reasoning cache does not exist: {cache_path}"
+                )
+            self.cached_reasoning_records = [
+                json.loads(line)
+                for line in cache_path.read_text().splitlines()
+                if line.strip()
+            ]
 
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.tokenizer = tokenizer if use_chat_template else None
@@ -819,6 +972,10 @@ class OfflineVllmStructuredJudge:
             trust_remote_code=trust_remote_code,
             max_model_len=max_model_len,
             max_num_seqs=max_num_seqs,
+            language_model_only=language_model_only,
+            skip_mm_profiling=skip_mm_profiling,
+            enforce_eager=enforce_eager,
+            enable_flashinfer_autotune=enable_flashinfer_autotune,
             spec_method=spec_method,
             spec_model=spec_model,
             spec_tokens=spec_tokens,
@@ -836,25 +993,74 @@ class OfflineVllmStructuredJudge:
             allowed_token_ids=self.all_rating_ids,
         )
 
-    def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
-        reasoning_prompts = prompts
-        if self.tokenizer is not None:
-            reasoning_prompts = render_chat_prompts(
-                self.tokenizer,
-                prompts,
-                enable_thinking=self.enable_thinking,
-                reasoning_effort=self.reasoning_effort,
+    def validate_cached_metadata(self, metadata: list[dict[str, Any]]) -> None:
+        if self.cached_reasoning_records is None:
+            return
+        if len(self.cached_reasoning_records) != len(metadata):
+            raise ValueError(
+                "reasoning cache length does not match prompt evaluations: "
+                f"{len(self.cached_reasoning_records)} != {len(metadata)}"
             )
-        reasoning_outputs = generate_with_optional_batches(
-            self.llm,
-            reasoning_prompts,
-            self.reasoning_sampling,
-            batch_size,
+        identity_keys = (
+            "dataset",
+            "index",
+            "label",
+            "ensemble_member",
+            "ensemble_member_index",
         )
-        reasoning_texts = [
-            output.outputs[0].text if output.outputs else ""
-            for output in reasoning_outputs
+        for offset, (cached, current) in enumerate(
+            zip(self.cached_reasoning_records, metadata, strict=True)
+        ):
+            cached_identity = {
+                key: cached.get(key) for key in identity_keys if key in current
+            }
+            current_identity = {
+                key: current.get(key) for key in identity_keys if key in current
+            }
+            if cached_identity != current_identity:
+                raise ValueError(
+                    "reasoning cache metadata mismatch at prompt "
+                    f"{offset}: {cached_identity!r} != {current_identity!r}"
+                )
+
+    def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
+        if self.cached_reasoning_records is None:
+            reasoning_prompts = prompts
+            if self.tokenizer is not None:
+                reasoning_prompts = render_chat_prompts(
+                    self.tokenizer,
+                    prompts,
+                    enable_thinking=self.enable_thinking,
+                    reasoning_effort=self.reasoning_effort,
+                )
+            reasoning_outputs = generate_with_optional_batches(
+                self.llm,
+                reasoning_prompts,
+                self.reasoning_sampling,
+                batch_size,
+            )
+            raw_reasoning_texts = [
+                output.outputs[0].text if output.outputs else ""
+                for output in reasoning_outputs
+            ]
+        else:
+            if len(self.cached_reasoning_records) != len(prompts):
+                raise ValueError(
+                    "reasoning cache length does not match prompts: "
+                    f"{len(self.cached_reasoning_records)} != {len(prompts)}"
+                )
+            raw_reasoning_texts = [
+                str(record["text"]) for record in self.cached_reasoning_records
+            ]
+        stripped_reasoning = [
+            strip_terminal_generated_rating(
+                reasoning,
+                rating_min=self.rating_min,
+                rating_max=self.rating_max,
+            )
+            for reasoning in raw_reasoning_texts
         ]
+        reasoning_texts = [reasoning for reasoning, _ in stripped_reasoning]
         rating_prompts = [
             structured_rating_prompt(prompt, reasoning, self.final_rating_prompt)
             for prompt, reasoning in zip(prompts, reasoning_texts, strict=True)
@@ -876,7 +1082,9 @@ class OfflineVllmStructuredJudge:
         scores = np.full(len(prompts), np.nan, dtype=float)
         self.generations = []
         self.parse_error_count = 0
-        for offset, (reasoning, output) in enumerate(zip(reasoning_texts, rating_outputs, strict=True)):
+        for offset, ((reasoning, removed_rating), output) in enumerate(
+            zip(stripped_reasoning, rating_outputs, strict=True)
+        ):
             first_token_logprobs = {}
             if output.outputs and output.outputs[0].logprobs:
                 first_token_logprobs = output.outputs[0].logprobs[0] or {}
@@ -885,6 +1093,10 @@ class OfflineVllmStructuredJudge:
                 ids_by_rating=self.ids_by_rating,
                 ratings=self.ratings,
                 missing_logprob=self.missing_logprob,
+            )
+            missing_token_ids = missing_requested_token_ids(
+                first_token_logprobs,
+                self.all_rating_ids,
             )
             score = score_from_rating_probs(
                 probs,
@@ -898,7 +1110,10 @@ class OfflineVllmStructuredJudge:
                 "rating": best_rating,
                 "parse_error": False,
                 "score": score,
+                "rating_probs": normalize_rating_probs(probs),
+                "missing_rating_token_ids": missing_token_ids,
                 "text": reasoning,
+                "removed_terminal_rating": removed_rating,
             })
         return np.nan_to_num(scores, nan=0.5)
 
@@ -1122,17 +1337,42 @@ def build_judge(cfg: DictConfig):
             "trust_remote_code": bool(cfg.judge.trust_remote_code),
             "max_model_len": None if cfg.judge.max_model_len is None else int(cfg.judge.max_model_len),
             "max_num_seqs": None if cfg.judge.max_num_seqs is None else int(cfg.judge.max_num_seqs),
+            "language_model_only": bool(
+                OmegaConf.select(cfg, "judge.language_model_only", default=False)
+            ),
+            "skip_mm_profiling": bool(
+                OmegaConf.select(cfg, "judge.skip_mm_profiling", default=False)
+            ),
+            "enforce_eager": bool(
+                OmegaConf.select(cfg, "judge.enforce_eager", default=False)
+            ),
+            "enable_flashinfer_autotune": OmegaConf.select(
+                cfg, "judge.enable_flashinfer_autotune", default=None
+            ),
             "spec_method": None if cfg.judge.spec_method is None else str(cfg.judge.spec_method),
             "spec_model": None if cfg.judge.spec_model is None else str(cfg.judge.spec_model),
             "spec_tokens": None if cfg.judge.spec_tokens is None else int(cfg.judge.spec_tokens),
             "temperature": float(cfg.judge.temperature),
         }
         if mode == "logits":
+            use_chat_template = bool(
+                OmegaConf.select(cfg, "judge.use_chat_template", default=False)
+            )
             return OfflineVllmRatingJudge(
                 **common,
                 logit_targets=logit_targets,
                 generated_logprobs=generated_logprobs,
                 missing_logprob=float(cfg.judge.missing_logprob),
+                use_chat_template=use_chat_template,
+                enable_thinking=OmegaConf.select(
+                    cfg, "judge.enable_thinking", default=None
+                ),
+                reasoning_effort=reasoning_effort,
+                assistant_prefix=(
+                    str(OmegaConf.select(cfg, "judge.logit_prefix", default="Rating:"))
+                    if use_chat_template
+                    else None
+                ),
             )
         if mode == "generate":
             selected_stops = OmegaConf.select(cfg, "judge.stop_strings", default=None)
@@ -1172,6 +1412,14 @@ def build_judge(cfg: DictConfig):
                 use_chat_template=bool(OmegaConf.select(cfg, "judge.use_chat_template", default=False)),
                 enable_thinking=OmegaConf.select(cfg, "judge.enable_thinking", default=None),
                 reasoning_effort=reasoning_effort,
+                reasoning_cache_path=(
+                    None
+                    if OmegaConf.select(
+                        cfg, "judge.reasoning_cache_path", default=None
+                    )
+                    is None
+                    else str(OmegaConf.select(cfg, "judge.reasoning_cache_path"))
+                ),
             )
         raise ValueError(f"unknown judge.mode={mode!r}")
     if backend == "openai":
@@ -1286,10 +1534,17 @@ def fmt_submitted_at(value: object) -> str:
 
 
 def render_leaderboard(results_root: Path, output_path: Path) -> None:
-    records = [
-        json.loads(path.read_text())
-        for path in results_root.glob("*/*/result.json")
-    ]
+    records = []
+    for path in results_root.glob("*/*/result.json"):
+        try:
+            record = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"skipping incomplete result cache {path}: {exc}")
+            continue
+        if not isinstance(record, dict):
+            print(f"skipping non-object result cache {path}")
+            continue
+        records.append(record)
     records = [record for record in records if record.get("split") == "test"]
     records.sort(key=lambda row: str(row.get("submitted_at", "")), reverse=True)
 
@@ -1335,7 +1590,14 @@ def main(cfg: DictConfig) -> None:
     references = load_retrieval_cache(
         None if retrieval_cache is None else resolve_path(str(retrieval_cache), original_cwd)
     )
-    datasets = load_split_config(split_config, original_cwd)
+    datasets = filter_dataset_configs(
+        load_split_config(split_config, original_cwd),
+        (
+            None
+            if OmegaConf.select(cfg, "dataset_name_contains", default=None) is None
+            else str(cfg.dataset_name_contains)
+        ),
+    )
     few_shot_prefix = build_few_shot_prefix(
         resolve_path(str(cfg.splits_dir), original_cwd),
         split=str(cfg.shots.split),
@@ -1355,7 +1617,13 @@ def main(cfg: DictConfig) -> None:
         raise ValueError(f"unknown ensemble.order={ensemble_order!r}")
     append_prefix = None
     if str(cfg.judge.mode) == "logits":
-        append_prefix = str(OmegaConf.select(cfg, "judge.logit_prefix", default="Rating:"))
+        use_chat_template = bool(
+            OmegaConf.select(cfg, "judge.use_chat_template", default=False)
+        )
+        if not use_chat_template:
+            append_prefix = str(
+                OmegaConf.select(cfg, "judge.logit_prefix", default="Rating:")
+            )
     context_truncation = str(OmegaConf.select(cfg, "judge.context_truncation", default="tail"))
     selected_context_roles = OmegaConf.select(cfg, "judge.context_roles", default=None)
     context_roles = None
@@ -1424,6 +1692,9 @@ def main(cfg: DictConfig) -> None:
     n_rows = sum(len(work.examples) for work in dataset_work)
     print(f"scoring {len(all_prompts)} prompt evaluations for {n_rows} rows "
           f"across {len(dataset_work)} datasets with {cfg.judge.model}")
+    validate_cached_metadata = getattr(judge, "validate_cached_metadata", None)
+    if validate_cached_metadata is not None:
+        validate_cached_metadata(all_metadata)
     score_start = time.perf_counter()
     all_scores = judge.score_prompts(all_prompts, batch_size=batch_size)
     score_seconds = time.perf_counter() - score_start

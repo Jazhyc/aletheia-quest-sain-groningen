@@ -23,9 +23,6 @@ from experiments.pid_specialist_ensemble.analyze_ensemble import (  # noqa: E402
     comparison_counts,
     metrics_without_groups,
 )
-from experiments.reasoning_ngram_ensemble.analyze_ensemble import (  # noqa: E402
-    load_phoenix,
-)
 from experiments.reasoning_ngram_intent.train import (  # noqa: E402
     balanced_dataset_label_weights,
 )
@@ -38,8 +35,9 @@ CANDIDATE_CS = (0.01, 0.03, 0.1, 0.3, 1.0)
 THRESHOLD = 0.5
 PRIMARY_CONDITION = "resolved_intent"
 MIN_VALIDATION_GAIN = 0.005
-MAX_FPR_INCREASE = 0.05
-MIN_SPECIALIST_BA = 0.80
+MIN_SPECIALIST_AUROC = 0.80
+DEFAULT_PHOENIX_SCORE_COLUMN = "direct_margin_score"
+EPSILON = 1e-8
 
 
 @dataclasses.dataclass(frozen=True)
@@ -80,13 +78,35 @@ def load_intent_member(root: Path, condition: str) -> pd.DataFrame:
     return output.rename(columns={"score": "intent_score"})
 
 
+def load_phoenix(path: Path, score_column: str) -> pd.DataFrame:
+    """Load the selected continuous Phoenix score and retain varied rows."""
+    frame = pd.read_json(path, lines=True)
+    required = {*KEYS, "label", score_column}
+    missing = required - set(frame.columns)
+    if missing:
+        raise ValueError(f"{path}: missing Phoenix columns {sorted(missing)}")
+    frame = frame.loc[
+        frame["dataset"].str.contains("varied-deception", regex=False),
+        [*KEYS, "label", score_column],
+    ].copy()
+    frame["index"] = frame["index"].astype(str)
+    frame["phoenix_parse_error"] = frame[score_column].isna()
+    if frame["phoenix_parse_error"].any():
+        raise ValueError(
+            f"{path}: {int(frame['phoenix_parse_error'].sum())} missing "
+            f"{score_column} values"
+        )
+    return frame.rename(columns={score_column: "phoenix_score"})
+
+
 def load_joined(
     phoenix_path: Path,
     intent_root: Path,
     condition: str,
+    phoenix_score_column: str = DEFAULT_PHOENIX_SCORE_COLUMN,
 ) -> pd.DataFrame:
     """Join Phoenix, semantic intent, and labels exactly."""
-    phoenix = load_phoenix(phoenix_path)
+    phoenix = load_phoenix(phoenix_path, phoenix_score_column)
     intent = load_intent_member(intent_root, condition)
     frame = phoenix.merge(
         intent,
@@ -136,8 +156,8 @@ def grouped_oof_scores(frame: pd.DataFrame, c: float) -> np.ndarray:
 
 def selection_key(selection: Selection) -> tuple[float, float, float, float]:
     return (
-        selection.metrics["balanced_accuracy"],
         selection.metrics["auroc"],
+        selection.metrics["balanced_accuracy"],
         -selection.metrics["fpr"],
         -selection.c,
     )
@@ -178,11 +198,58 @@ def score_bundle(
     frame: pd.DataFrame,
     logistic_scores: np.ndarray,
 ) -> dict[str, np.ndarray]:
+    phoenix = frame["phoenix_score"].to_numpy(dtype=float)
+    intent = frame["intent_score"].to_numpy(dtype=float)
+    phoenix_log_odds = np.log(
+        np.clip(phoenix, EPSILON, 1.0 - EPSILON)
+        / (1.0 - np.clip(phoenix, EPSILON, 1.0 - EPSILON))
+    )
+    intent_log_odds = np.log(
+        np.clip(intent, EPSILON, 1.0 - EPSILON)
+        / (1.0 - np.clip(intent, EPSILON, 1.0 - EPSILON))
+    )
+    mean_log_odds = 1.0 / (
+        1.0 + np.exp(-0.5 * (phoenix_log_odds + intent_log_odds))
+    )
+    phoenix_ranks = (
+        frame.groupby("dataset", sort=False)["phoenix_score"]
+        .rank(method="average", pct=True)
+        .to_numpy(dtype=float)
+    )
+    intent_ranks = (
+        frame.groupby("dataset", sort=False)["intent_score"]
+        .rank(method="average", pct=True)
+        .to_numpy(dtype=float)
+    )
     return {
-        "phoenix": frame["phoenix_score"].to_numpy(dtype=float),
-        "intent": frame["intent_score"].to_numpy(dtype=float),
+        "phoenix": phoenix,
+        "intent": intent,
+        "mean_probability": 0.5 * (phoenix + intent),
+        "mean_log_odds": mean_log_odds,
+        "maximum": np.maximum(phoenix, intent),
+        "rank_average": 0.5 * (phoenix_ranks + intent_ranks),
         "or": frame[FEATURES].max(axis=1).to_numpy(dtype=float),
         "logistic": logistic_scores,
+    }
+
+
+def score_diagnostics(
+    frame: pd.DataFrame,
+    scores: np.ndarray,
+) -> dict[str, Any]:
+    """Report ranking resolution, cross-label ties, and extreme saturation."""
+    values = np.asarray(scores, dtype=float)
+    cross_label_ties = []
+    for _, group in frame.assign(_score=values).groupby("dataset", sort=True):
+        positive = group.loc[group["label"].eq(1), "_score"].to_numpy()
+        negative = group.loc[group["label"].eq(0), "_score"].to_numpy()
+        cross_label_ties.append(float((positive[:, None] == negative).mean()))
+    return {
+        "unique_scores": int(np.unique(values).size),
+        "duplicate_row_fraction": float(1.0 - np.unique(values).size / len(values)),
+        "macro_cross_label_pair_fraction": float(np.mean(cross_label_ties)),
+        "fraction_below_1e-6": float((values < 1e-6).mean()),
+        "fraction_above_1_minus_1e-6": float((values > 1.0 - 1e-6).mean()),
     }
 
 
@@ -194,6 +261,10 @@ def summarize(
     return {
         "metrics": {
             name: metrics_without_groups(frame, values)
+            for name, values in scores.items()
+        },
+        "score_diagnostics": {
+            name: score_diagnostics(frame, values)
             for name, values in scores.items()
         },
         "comparisons_to_phoenix": {
@@ -215,24 +286,28 @@ def validation_gate(summary: dict[str, Any]) -> dict[str, Any]:
     metrics = summary["metrics"]
     phoenix = metrics["phoenix"]
     specialist = metrics["intent"]
-    logistic = metrics["logistic"]
+    primary_blend = metrics["mean_log_odds"]
     checks = {
-        "specialist_ba": specialist["balanced_accuracy"] >= MIN_SPECIALIST_BA,
-        "logistic_gain": (
-            logistic["balanced_accuracy"] - phoenix["balanced_accuracy"]
+        "specialist_auroc": specialist["auroc"] >= MIN_SPECIALIST_AUROC,
+        "mean_log_odds_gain": (
+            primary_blend["auroc"] - phoenix["auroc"]
             >= MIN_VALIDATION_GAIN
-        ),
-        "logistic_fpr": (
-            logistic["fpr"] - phoenix["fpr"] <= MAX_FPR_INCREASE
         ),
     }
     return {
         "passed": all(checks.values()),
         "checks": checks,
+        "diagnostics": {
+            "mean_log_odds_fpr_increase": (
+                primary_blend["fpr"] - phoenix["fpr"]
+            ),
+            "nested_logistic_auroc_gain": (
+                metrics["logistic"]["auroc"] - phoenix["auroc"]
+            ),
+        },
         "thresholds": {
-            "min_specialist_ba": MIN_SPECIALIST_BA,
-            "min_logistic_gain": MIN_VALIDATION_GAIN,
-            "max_logistic_fpr_increase": MAX_FPR_INCREASE,
+            "min_specialist_auroc": MIN_SPECIALIST_AUROC,
+            "min_mean_log_odds_gain": MIN_VALIDATION_GAIN,
         },
     }
 
@@ -253,6 +328,10 @@ def write_predictions(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--validation-phoenix", type=Path, required=True)
+    parser.add_argument(
+        "--phoenix-score-column",
+        default=DEFAULT_PHOENIX_SCORE_COLUMN,
+    )
     parser.add_argument("--validation-intent-root", type=Path, required=True)
     parser.add_argument("--test-phoenix", type=Path)
     parser.add_argument("--test-intent-root", type=Path)
@@ -266,9 +345,12 @@ def main() -> None:
             "conditions": list(CONDITIONS),
             "primary_condition": PRIMARY_CONDITION,
             "features": FEATURES,
+            "phoenix_score_column": args.phoenix_score_column,
             "threshold": THRESHOLD,
             "meta_training_split": "validation varied-deception only",
             "meta_evaluation": "nested leave-one-dataset-unit-out OOF",
+            "primary_fixed_blend": "mean_log_odds",
+            "selection_metric": "mean per-dataset AUROC",
             "logistic_candidates_c": list(CANDIDATE_CS),
             "sample_weighting": "equal total weight per dataset-unit/label cell",
             "test_used_for_selection": False,
@@ -282,6 +364,7 @@ def main() -> None:
             args.validation_phoenix,
             args.validation_intent_root,
             condition,
+            args.phoenix_score_column,
         )
         nested_scores, outer_selections = nested_grouped_oof_scores(validation)
         final_selection = select_c(validation)
@@ -319,6 +402,7 @@ def main() -> None:
                 args.test_phoenix,
                 args.test_intent_root,
                 condition,
+                args.phoenix_score_column,
             )
             logistic_scores = final_model.predict_proba(
                 test[FEATURES].to_numpy(dtype=float)

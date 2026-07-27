@@ -1,0 +1,21 @@
+# @package _global_
+# Matched sparse-model swap for the strong generated-reasoning Qwen-27B D/K/S
+# teacher. Runtime-only vLLM controls avoid paying the pathological cold-start
+# autotuning cost observed in the direct-logit gate.
+
+defaults:
+  - blackbox_reasoning_qwen27b_ensemble_dks_member4096_v1
+  - _self_
+
+method: qwen35a3b_reason_ensemble_dks_member4096_v1
+
+judge:
+  model: Qwen/Qwen3.5-35B-A3B
+  served_model: qwen35a3b-judge
+  max_model_len: 8192
+  max_num_seqs: 128
+  tensor_parallel_size: 1
+  language_model_only: true
+  skip_mm_profiling: true
+  enforce_eager: true
+  enable_flashinfer_autotune: false

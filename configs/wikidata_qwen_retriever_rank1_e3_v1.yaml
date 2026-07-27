@@ -1,0 +1,15 @@
+# @package _global_
+defaults:
+  - wikidata_qwen_retriever_rank1_v1
+  - _self_
+
+method: wikidata_qwen_retriever_rank1_e3_v1
+output_dir: results/blackbox/${method}
+
+teacher:
+  artifact: results/blackbox/wikidata_qwen_retriever_rank1_v1/teacher/train_pairs.jsonl
+
+student:
+  output_dir: ${output_dir}/adapter
+  training:
+    num_train_epochs: 3.0

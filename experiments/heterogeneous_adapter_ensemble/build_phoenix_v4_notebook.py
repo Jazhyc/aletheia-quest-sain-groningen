@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the direct-label-logit Phoenix Wright 4.0 submission notebook."""
+"""Build the GRPO-backed Phoenix Wright 4.4 notebook."""
 
 from pathlib import Path
 
@@ -7,7 +7,7 @@ import nbformat
 
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUT = Path(__file__).resolve().parent / "phoenix_wright_v4_0.ipynb"
+OUTPUT = ROOT / "submission/phoenix_wright_v4_4.ipynb"
 
 
 def main() -> None:
@@ -22,13 +22,22 @@ def main() -> None:
     }
     notebook["cells"] = [
         nbformat.v4.new_markdown_cell(
-            """# Phoenix Wright v4.0
+            """# Phoenix Wright v4.4
 
-AUROC-first black-box deception judge using the frozen Phoenix v3 rank-16
-Qwen3.5-9B adapter. The notebook skips reasoning generation and reads the
-normalized next-token margin between the exact labels `0` and `1` immediately
-after `Prediction:`. The continuous margin is the submission score; a separately
-frozen threshold supplies the required binary decision."""
+AUROC-first white-box deception judge using the selected one-epoch GRPO
+continuation of the rank-16 Qwen3.5-9B privileged-distillation adapter. The
+notebook skips reasoning generation and reads the normalized next-token margin
+between the exact labels `0` and `1` after an empty `<reasoning>` scaffold. The
+continuous margin is the submission score; a separately frozen validation
+threshold supplies the required binary decision.
+
+Three routes remain mutually exclusive. Explicit harm-pressure knowledge
+self-reports use the base-Qwen `knowledge_report_type` empty-summary specialist.
+Executed-action reports preserve the frozen action-report prompt and original
+Phoenix adapter. Remaining rows with a final assistant reasoning trace combine
+the GRPO margin and rank-1 resolved-intent margin in log-odds space. All other
+rows use the GRPO output-only path. The required binary column always uses the
+unblended route score."""
         ),
         nbformat.v4.new_code_cell(
             """import contextlib
@@ -39,11 +48,15 @@ import numpy as np
 import torch
 
 sys.path.insert(0, "submission")
-sys.path.insert(0, "experiments/heterogeneous_adapter_ensemble")
 from phoenix_wright_v4 import (
     MEMBER_NAMES,
     binary_token_ids,
-    build_direct_prompt,
+    blend_intent_route_scores,
+    build_action_empty_prompt,
+    build_epistemic_empty_prompt,
+    build_exclusive_route_flags,
+    build_grpo_empty_prompt,
+    build_intent_empty_prompt,
 )
 import util
 
@@ -51,11 +64,20 @@ DATASET_NAME = os.environ["DATASET_NAME"]
 LIMIT = int(os.environ["ALETHEIA_LIMIT"]) if os.environ.get("ALETHEIA_LIMIT") else None
 
 JUDGE_MODEL = "Qwen/Qwen3.5-9B"
-ADAPTER_REPO = os.environ.get(
-    "PHOENIX_DECEPTION_ADAPTER_REPO",
+GRPO_ADAPTER_REPO = os.environ.get(
+    "PHOENIX_GRPO_ADAPTER_REPO",
+    "Jazhyc/aletheias-phoenix-v4-4-grpo-r16",
+)
+BUNDLED_GRPO_ADAPTER = "submission/phoenix_wright_v3_adapters/deception"
+ACTION_ADAPTER_REPO = os.environ.get(
+    "PHOENIX_ACTION_ADAPTER_REPO",
     "Jazhyc/aletheias-phoenix-wright-v2-adapter",
 )
-BUNDLED_ADAPTER = "experiments/heterogeneous_adapter_ensemble/phoenix_wright_v3_adapters/deception"
+INTENT_ADAPTER_REPO = os.environ.get(
+    "PHOENIX_INTENT_ADAPTER_REPO",
+    "Jazhyc/aletheias-phoenix-v3-resolved-intent-r1",
+)
+BUNDLED_INTENT_ADAPTER = "submission/phoenix_wright_v4_adapters/resolved_intent"
 
 MAX_PROMPT_TOKENS = int(os.environ.get("PHOENIX_MAX_PROMPT_TOKENS", "2048"))
 BATCH_SIZE = int(os.environ.get("PHOENIX_BATCH_SIZE", "48"))
@@ -65,11 +87,13 @@ LONG_BATCH_SIZE = int(os.environ.get("PHOENIX_LONG_BATCH_SIZE", "16"))
 LONG_PROMPT_THRESHOLD = int(os.environ.get("PHOENIX_LONG_PROMPT_THRESHOLD", "900"))
 REMOTE_BATCHES_PER_SESSION = int(os.environ.get("PHOENIX_REMOTE_BATCHES_PER_SESSION", "0"))
 NNSIGHT_LOCAL = os.environ.get("PHOENIX_NNSIGHT_LOCAL", "0").lower() in {"1", "true", "yes"}
-SUBMISSION_THRESHOLD = float(os.environ.get("PHOENIX_THRESHOLD", "0.15"))
+SUBMISSION_THRESHOLD = float(os.environ.get("PHOENIX_THRESHOLD", "0.37754067778587347"))
 
 print(f"dataset={DATASET_NAME} limit={LIMIT}")
-print(f"method=phoenix_wright_v4.0 direct_binary_margin members={MEMBER_NAMES}")
-print(f"adapter_repo={ADAPTER_REPO}")
+print(f"method=phoenix_wright_v4.4 grpo_output_only members={MEMBER_NAMES}")
+print(f"grpo_adapter_repo={GRPO_ADAPTER_REPO}")
+print(f"action_adapter_repo={ACTION_ADAPTER_REPO}")
+print(f"intent_adapter_repo={INTENT_ADAPTER_REPO}")
 print(
     f"batch={BATCH_SIZE}/{MEDIUM_BATCH_SIZE}/{LONG_BATCH_SIZE} "
     f"sessions={REMOTE_BATCHES_PER_SESSION} max_prompt_tokens={MAX_PROMPT_TOKENS} "
@@ -82,20 +106,69 @@ print(
 except ImportError:
     from nnsight.modeling.language import LanguageModel
 
-adapter_source = BUNDLED_ADAPTER if NNSIGHT_LOCAL else ADAPTER_REPO
-model_kwargs = {"device_map": "auto", "dispatch": True, "dtype": "bfloat16"} if NNSIGHT_LOCAL else {}
-model = LanguageModel(JUDGE_MODEL, peft=adapter_source, **model_kwargs)
-tokenizer = model.tokenizer
-tokenizer.padding_side = "left"
-tokenizer.truncation_side = "left"
-if tokenizer.pad_token_id is None:
-    tokenizer.pad_token = tokenizer.eos_token
-
-BINARY_TOKEN_IDS = list(binary_token_ids(tokenizer))
+examples = util.load_examples(DATASET_NAME)
+n = len(examples) if LIMIT is None else min(LIMIT, len(examples))
+messages = list(examples["messages"][:n])
+indices = list(examples["index"][:n])
+harm_routes, action_routes, intent_routes = build_exclusive_route_flags(messages)
 print(
-    f"adapter={adapter_source} binary_token_ids={BINARY_TOKEN_IDS} "
-    f"pad_token_id={tokenizer.pad_token_id}"
-)"""
+    f"loaded={len(examples)} scoring={n} "
+    f"harm_specialist_routes={int(harm_routes.sum())} "
+    f"action_specialist_routes={int(action_routes.sum())} "
+    f"ordinary_intent_routes={int(intent_routes.sum())}"
+)
+
+
+def load_judge(*, kind):
+    model_kwargs = (
+        {"device_map": "auto", "dispatch": True, "dtype": "bfloat16"}
+        if NNSIGHT_LOCAL
+        else {}
+    )
+    if kind == "harm":
+        active_model = LanguageModel(JUDGE_MODEL, **model_kwargs)
+        source = "base"
+    elif kind == "grpo":
+        adapter_source = (
+            BUNDLED_GRPO_ADAPTER if NNSIGHT_LOCAL else GRPO_ADAPTER_REPO
+        )
+        active_model = LanguageModel(
+            JUDGE_MODEL,
+            peft=adapter_source,
+            **model_kwargs,
+        )
+        source = adapter_source
+    elif kind == "action":
+        active_model = LanguageModel(
+            JUDGE_MODEL,
+            peft=ACTION_ADAPTER_REPO,
+            **model_kwargs,
+        )
+        source = ACTION_ADAPTER_REPO
+    elif kind == "intent":
+        adapter_source = (
+            BUNDLED_INTENT_ADAPTER if NNSIGHT_LOCAL else INTENT_ADAPTER_REPO
+        )
+        active_model = LanguageModel(
+            JUDGE_MODEL,
+            peft=adapter_source,
+            **model_kwargs,
+        )
+        source = adapter_source
+    else:
+        raise ValueError(f"unknown judge kind: {kind}")
+    active_tokenizer = active_model.tokenizer
+    active_tokenizer.padding_side = "left"
+    active_tokenizer.truncation_side = "left"
+    if active_tokenizer.pad_token_id is None:
+        active_tokenizer.pad_token = active_tokenizer.eos_token
+    label_ids = list(binary_token_ids(active_tokenizer))
+    print(
+        f"judge={kind} "
+        f"source={source} binary_token_ids={label_ids} "
+        f"pad_token_id={active_tokenizer.pad_token_id}"
+    )
+    return active_model, active_tokenizer, label_ids"""
         ),
         nbformat.v4.new_code_cell(
             """def make_position_batches(prompt_lengths):
@@ -118,17 +191,17 @@ print(
     return batches
 
 
-def score_prompts(prompts):
+def score_prompts(active_model, active_tokenizer, label_ids, prompts):
     if not prompts:
         return np.array([], dtype=float)
     prompt_lengths = [
-        len(tokenizer.encode(prompt, add_special_tokens=False))
+        len(active_tokenizer.encode(prompt, add_special_tokens=False))
         for prompt in prompts
     ]
     position_batches = make_position_batches(prompt_lengths)
     encoded_batches = []
     for positions in position_batches:
-        encoded = tokenizer(
+        encoded = active_tokenizer(
             [prompts[position] for position in positions],
             return_tensors="pt",
             padding=True,
@@ -146,7 +219,11 @@ def score_prompts(prompts):
     for group_start in range(0, len(encoded_batches), batches_per_session):
         group_stop = min(group_start + batches_per_session, len(encoded_batches))
         score_pieces = []
-        session = contextlib.nullcontext() if NNSIGHT_LOCAL else model.session(remote=True)
+        session = (
+            contextlib.nullcontext()
+            if NNSIGHT_LOCAL
+            else active_model.session(remote=True)
+        )
         shapes = [
             (len(positions), prompt_tokens)
             for _, positions, prompt_tokens in encoded_batches[group_start:group_stop]
@@ -158,12 +235,12 @@ def score_prompts(prompts):
         )
         with session:
             for encoded, _, _ in encoded_batches[group_start:group_stop]:
-                with model.trace({
+                with active_model.trace({
                     "input_ids": encoded["input_ids"],
                     "attention_mask": encoded["attention_mask"],
                     "logits_to_keep": 1,
                 }):
-                    label_logits = model.output.logits[:, -1, BINARY_TOKEN_IDS].float()
+                    label_logits = active_model.output.logits[:, -1, label_ids].float()
                     piece = torch.softmax(label_logits, dim=-1)[:, 1].detach().cpu()
                     score_pieces.append(piece)
             group_scores = torch.cat(score_pieces, dim=0).save()
@@ -179,31 +256,105 @@ def score_prompts(prompts):
     return np.clip(scores, 0.0, 1.0)
 
 
-def score_messages(messages):
-    prompts = [build_direct_prompt(value, tokenizer) for value in messages]
-    scores = score_prompts(prompts)
+def score_message_subset(messages, positions, *, kind, action_flags=None):
+    active_model, active_tokenizer, label_ids = load_judge(kind=kind)
+    if kind == "grpo":
+        prompts = [
+            build_grpo_empty_prompt(messages[position], active_tokenizer)
+            for position in positions
+        ]
+    else:
+        builder = {
+            "harm": build_epistemic_empty_prompt,
+            "action": build_action_empty_prompt,
+            "intent": build_intent_empty_prompt,
+        }[kind]
+        prompts = [
+            builder(messages[position], active_tokenizer)
+            for position in positions
+        ]
+    subset_scores = score_prompts(
+        active_model,
+        active_tokenizer,
+        label_ids,
+        prompts,
+    )
     print(
-        f"direct-margin: active={len(messages)} "
-        f"unique_scores={len(np.unique(scores))}",
+        f"{kind}: active={len(positions)} "
+        f"unique_scores={len(np.unique(subset_scores))}",
         flush=True,
     )
-    return scores"""
+    return subset_scores
+
+
+def score_messages(messages, harm_flags, action_flags, intent_flags):
+    if np.any(harm_flags & action_flags):
+        raise ValueError("harm and action routes must be disjoint")
+    if np.any(harm_flags & intent_flags):
+        raise ValueError("harm and intent routes must be disjoint")
+    if np.any(action_flags & intent_flags):
+        raise ValueError("action and intent routes must be disjoint")
+
+    base_scores = np.empty(len(messages), dtype=float)
+    grpo_positions = np.flatnonzero(~harm_flags & ~action_flags).tolist()
+    if grpo_positions:
+        base_scores[grpo_positions] = score_message_subset(
+            messages,
+            grpo_positions,
+            kind="grpo",
+        )
+    harm_positions = np.flatnonzero(harm_flags).tolist()
+    if harm_positions:
+        base_scores[harm_positions] = score_message_subset(
+            messages,
+            harm_positions,
+            kind="harm",
+        )
+    action_positions = np.flatnonzero(action_flags).tolist()
+    if action_positions:
+        base_scores[action_positions] = score_message_subset(
+            messages,
+            action_positions,
+            kind="action",
+        )
+    intent_positions = np.flatnonzero(intent_flags).tolist()
+    intent_scores = (
+        score_message_subset(messages, intent_positions, kind="intent")
+        if intent_positions
+        else np.array([], dtype=float)
+    )
+    scores = blend_intent_route_scores(base_scores, intent_scores, intent_flags)
+    return scores, base_scores"""
         ),
         nbformat.v4.new_code_cell(
-            """examples = util.load_examples(DATASET_NAME)
-n = len(examples) if LIMIT is None else min(LIMIT, len(examples))
-messages = list(examples["messages"][:n])
-indices = list(examples["index"][:n])
-print(f"loaded={len(examples)} scoring={n}")
-
-scores = score_messages(messages)
+            """scores, binary_scores = score_messages(
+    messages,
+    harm_routes,
+    action_routes,
+    intent_routes,
+)
+deceptive = binary_scores >= SUBMISSION_THRESHOLD
 print(
     f"score min={scores.min():.6f} mean={scores.mean():.6f} "
-    f"max={scores.max():.6f} positives={int((scores >= SUBMISSION_THRESHOLD).sum())}"
+    f"max={scores.max():.6f} binary_positives={int(deceptive.sum())}"
 )
-util.write_submission(indices, scores, threshold=SUBMISSION_THRESHOLD)"""
+util.write_submission(
+    indices,
+    scores,
+    threshold=SUBMISSION_THRESHOLD,
+    deceptive=deceptive,
+)"""
         ),
     ]
+    cell_ids = (
+        "phoenix-v4-4-overview",
+        "phoenix-v4-4-configuration",
+        "phoenix-v4-4-routes-and-models",
+        "phoenix-v4-4-scoring",
+        "phoenix-v4-4-output",
+    )
+    for cell, cell_id in zip(notebook["cells"], cell_ids, strict=True):
+        cell["id"] = cell_id
     nbformat.write(notebook, OUTPUT)
     print(OUTPUT)
 

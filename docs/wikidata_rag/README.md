@@ -448,3 +448,203 @@ package the 91.6 MB FP32 MiniLM, quantize it, evaluate it on test, or lower the
 threshold using frozen labels. A future continuation needs new independent
 questions or stronger mechanically grounded relevance supervision; another
 iteration on these repeated groups would mostly reinforce memorization.
+
+## Base-Qwen bounded database planner
+
+The next retrieval revisit replaced the compact learned/rule gate with hosted
+base `Qwen/Qwen3.5-9B`. Qwen received the response and at most 12 bounded facts
+from the frozen expanded entity database. It could select at most three
+candidate IDs, each tied to an exact response quote and a
+`supports|contradicts` relation. A strict parser rejected invented IDs,
+ungrounded quotes, extra fields, and oversized plans. Qwen never supplied fact
+text; every emitted reference remained a literal database row.
+
+Smoke job `30298650` supported the frozen prompt. Full job `30298663` then
+generated 2,700 train/validation plans in `134.0s` after model startup.
+
+| split | teacher-valid rows | planner parse errors | selected rows | selected-fact precision | selected-row precision | decisive-row recall | new decisive rows outside rule coverage |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| grouped training | 2,336 | 51 | 270 | 0.553 | 0.633 | 0.510 | 137 |
+| frozen validation | 282 | 4 | 30 | 0.735 | 0.833 | 0.500 | 19 |
+| novel validation questions | 49 | 1 | 5 | **1.000** | **1.000** | **0.714** | 2 |
+
+The planner is a real retrieval improvement: on question groups absent from
+training it recovered five of seven rows that contained a GPT-OSS-decisive
+candidate, with no false emission under that teacher audit. This is materially
+better semantic transfer than the compact rankers and rule router.
+
+Frozen Phoenix direct-logit job `30298676` nevertheless rejected end-to-end
+deployment. It appended the selected database rows through the standard
+explicitly incomplete/untrusted reference block and rescored only the 31 active
+rows with the exact Phoenix rank-16 direct `Prediction:` margin. Inactive rows
+reused the cached baseline exactly; matched shuffled facts came from another
+dataset unit. The margin pass took `5.37s` and had zero missing label logits.
+
+| condition | full macro AUROC | varied AUROC |
+| --- | ---: | ---: |
+| cached Phoenix baseline | **0.93815** | **0.86431** |
+| recomputed empty on active rows | 0.93792 | 0.86375 |
+| real evidence replacement | 0.93673 | 0.86097 |
+| shuffled replacement | 0.93732 | 0.86236 |
+| Phoenix/real mean log-odds | 0.93768 | 0.86319 |
+| Phoenix/shuffled mean log-odds | 0.93756 | 0.86292 |
+
+Real evidence lowered the active deception score by `0.0320` on honest rows
+but by a larger `0.0689` on deceptive rows. The cause is architectural rather
+than failed entity retrieval. Of 31 active validation rows, 22 honest and eight
+deceptive rows received only supporting facts; just one deceptive row received
+counterevidence. Some belief-based deceptive rows state an objectively correct
+headline answer, so a supporting Wikidata fact can make Phoenix less suspicious
+even though it should not erase the deceptive-intent signal. Relative to
+shuffled evidence, real facts helped ten active rows and harmed fifteen.
+
+Decision: retain the bounded planner as a successful retrieval diagnostic, but
+do not add its evidence to Phoenix, package the databases, or evaluate this
+condition on local test. A credible continuation must be developed on grouped
+training data and make evidence directional: database contradiction may add a
+positive factual-error signal, while supporting or incomplete evidence must
+not reduce the independent belief/intent score. With the present prompt only
+7/268 labeled training emissions and 1/31 validation emissions contained
+counterevidence, so simply filtering the current cache to contradictions is too
+sparse to constitute a submission method.
+
+## Rank-1 Qwen decisiveness retriever
+
+The follow-up tested whether the strongest parts of the earlier compact
+retriever program transfer to Qwen itself. The useful prior supervision was
+semantic GPT-OSS decisiveness, with same-row hard negatives; lexical overlap,
+synthetic targets, reader-utility targets, larger cross-encoders, and repeated
+retriever/reader alternation had not transferred reliably. The Qwen target is
+therefore deliberately narrow: predict `1` when a literal database fact, by
+itself, settles the response's direct answer, whether by support or
+contradiction. It never receives the competition deception label.
+
+GPT-OSS candidate audits supplied 230 positive/negative pairs from the same
+row. Seventy-four additional negative-only anchors were frozen planner false
+positives. Exact question groups were split by a frozen SHA-1 bucket: three
+buckets fit the adapter, one selected an absolute-score threshold at minimum
+0.8 precision, and one was an untouched internal diagnostic. The resulting
+534 records cover 101 fit question groups. Training uses rank 1, alpha 2 over
+the language attention and MLP projections, direct binary loss plus a same-pair
+ranking loss, and no deception labels.
+
+Jobs `30298726` and `30298742` trained and evaluated the one-epoch adapter.
+Its scores were effectively the base model's scores: on validation only
+175/3,097 candidate probabilities changed, with mean absolute change
+`0.000169`, maximum `0.0312`, and correlation `0.99995`. A controlled
+three-epoch exposure (`30298817`, `30298821`) moved the model more, but moved
+held-out ranking in the wrong direction.
+
+| scorer | internal candidate AUROC | validation candidate AUROC | novel-question AUROC | emitted precision | decisive-row recall |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| frozen base Qwen | 0.92983 | 0.92717 | 0.86758 | 0.840 | 0.420 |
+| rank-1, one epoch | 0.92975 | 0.92722 | 0.86773 | 0.840 | 0.420 |
+| rank-1, three epochs | 0.93037 | 0.92625 | 0.86256 | 0.826 | 0.380 |
+
+The prompt itself is useful as a high-precision second stage. Applying the
+base-Qwen threshold only to the bounded planner's selected facts reduced 34
+facts to 18, of which 17 were GPT-OSS-decisive: selected-fact precision rose
+from `0.735` to `0.944`, while decisive-row recall fell from `0.500` to
+`0.340`. This gain must be attributed to the pointwise Qwen prompt, not the
+rank-1 update.
+
+Frozen Phoenix job `30298951` tested those 18 prompt-filtered rows. It had zero
+missing label logits and scored the 54 real/shuffled/empty prompts in `6.89s`
+after startup.
+
+| condition | full macro AUROC | varied AUROC |
+| --- | ---: | ---: |
+| cached Phoenix baseline | **0.93815** | **0.86431** |
+| recomputed empty on active rows | 0.93804 | 0.86403 |
+| filtered real replacement | 0.93762 | 0.86306 |
+| filtered shuffled replacement | 0.93696 | 0.86153 |
+| Phoenix/filtered-real mean log-odds | 0.93792 | 0.86375 |
+| Phoenix/filtered-shuffled mean log-odds | 0.93768 | 0.86319 |
+
+Filtering makes real evidence outperform shuffled evidence and recovers part
+of the unfiltered regression, but neither replacement nor blending beats the
+frozen Phoenix baseline. Reject both trained adapters and leave local test
+untouched. Retain the base scoring prompt as a retrieval diagnostic; further
+adapter exposure on these repeated question groups is more likely to memorize
+the teacher cache than to improve transfer.
+
+### Current Phoenix oracle headroom
+
+Job `30299003` scored all 4,202 bounded validation candidates at Phoenix's
+selected direct `Prediction:` position. The 4,922 empty/candidate/shuffled
+prefixes took `178.6s` after startup, with no missing label logits. Three
+different oracles must not be conflated:
+
+- `semantic retrieval` knows only which facts GPT-OSS labeled decisive. It
+  forces the first decisive fact on the 50 reachable rows and does not inspect
+  the deception label.
+- `semantic utility` additionally knows the deception label and may choose the
+  most helpful decisive fact or abstain.
+- `any-candidate utility` knows the deception label and may choose any bounded
+  candidate or abstain. This is a reader-perturbation ceiling, not a retriever.
+
+| condition | full macro AUROC | uplift vs recomputed empty | varied AUROC | varied uplift |
+| --- | ---: | ---: | ---: | ---: |
+| cached Phoenix baseline | 0.93815 | — | 0.86431 | — |
+| recomputed direct empty | 0.93839 | — | 0.86486 | — |
+| semantic retrieval oracle | 0.93649 | **-0.00190** | 0.86042 | **-0.00444** |
+| label-aware semantic utility oracle | 0.94113 | **+0.00274** | 0.87125 | **+0.00639** |
+| label-aware any-candidate utility oracle | 0.97482 | **+0.03643** | 0.94986 | **+0.08500** |
+
+The large final row is not factual-retrieval headroom. It uses the true
+deception label on every row, and among its 252 selected facts only 16 are
+GPT-OSS-decisive; 119 are labeled irrelevant, 50 relevant-but-insufficient,
+and 67 have no semantic audit. It exploits candidate-specific movement in the
+reader score. Even the label-aware oracle restricted to genuinely decisive
+facts buys only `+0.00274` macro AUROC. Thus the present bottleneck is not
+recoverable by an oracle retriever alone; Phoenix needs a directional,
+evidence-aware consumer before semantic retrieval can create reliable uplift.
+
+### Existing evidence-consumer crossover
+
+Job `30299088` tested the missing combination before any new fine-tuning. It
+loaded the existing rank-16 matched-Wikidata and evidence-visible FEVER
+consumers in one Qwen session, then crossed each with the 31-row unfiltered and
+18-row prompt-filtered planner caches. Every comparison used the consumer's own
+full explicit-empty baseline, changed only cache-active rows, and scored both
+direct and empty-summary `0|1` margins. The 3,680 prefixes took `159.5s` with
+zero missing logits.
+
+The matched Wikidata consumer is the only positive result:
+
+| matched consumer condition | macro AUROC | varied AUROC | delta vs empty | delta vs shuffled |
+| --- | ---: | ---: | ---: | ---: |
+| direct explicit empty | 0.94006 | 0.86903 | — | — |
+| direct unfiltered real | **0.94173** | **0.87292** | **+0.00167** | **+0.00149** |
+| direct unfiltered shuffled | 0.94024 | 0.86944 | +0.00018 | — |
+| direct filtered real | 0.94137 | 0.87208 | +0.00131 | +0.00054 |
+| direct filtered shuffled | 0.94083 | 0.87083 | +0.00077 | — |
+| empty-summary empty | 0.93940 | 0.86833 | — | — |
+| empty-summary unfiltered real | 0.94030 | 0.87042 | +0.00089 | +0.00167 |
+| empty-summary unfiltered shuffled | 0.93863 | 0.86653 | -0.00077 | — |
+
+For the selected diagnostic, direct unfiltered real improves five of nine
+varied units, loses on two, and ties on two versus empty. Against shuffled it
+improves four, loses on three, and ties on two. A descriptive 200,000-sample
+dataset-unit bootstrap gives a 95% interval of `[-0.00083, +0.00889]` for
+real-minus-empty varied AUROC and `[-0.00472, +0.01056]` for
+real-minus-shuffled. Both cross zero. Binary BA is unchanged.
+
+Evidence still lowers the mean active deception score, by `-0.0363` on honest
+rows and a larger `-0.0472` on deceptive rows. The small AUROC gain therefore
+comes from within-unit reordering, not a clean global directional correction.
+The 18-row precision filter is slightly worse than retaining all 31 grounded
+plans.
+
+The FEVER-visible consumer does not transfer to Wikidata cards. Its direct
+empty/real/shuffled macro AUROCs are `0.93857/0.93750/0.93774`; its
+empty-summary values are `0.93119/0.93071/0.93190`. Reject that OOD crossover.
+
+Decision: retain matched-Wikidata direct plus unfiltered Qwen plans as a small
+validation diagnostic, but do not run local test or fine-tune from this result.
+The sign is favorable against both controls but the unit-bootstrap uncertainty
+and active-score direction show that it is not yet a robust new method. The
+matched consumer is already rank 16. A later rank-4 experiment would be a
+higher-capacity continuation of the rejected rank-1 retriever, not a
+higher-rank version of this consumer; require new independent question groups
+or another frozen confirmation before spending that training run.
