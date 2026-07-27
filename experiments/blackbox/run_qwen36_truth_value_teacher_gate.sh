@@ -9,14 +9,14 @@
 
 set -euo pipefail
 
-CODE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+CODE_ROOT="${AQ_CODE_ROOT:-${SLURM_SUBMIT_DIR:-$(pwd)}}"
 COMMON_GIT_DIR="$(git -C "${CODE_ROOT}" rev-parse --git-common-dir)"
 SHARED_ROOT="$(cd -- "$(dirname -- "${COMMON_GIT_DIR}")" && pwd)"
 
 METHOD="qwen27_truth_value_binary_teacher_gate"
 METHOD_LOG_DIR="${SHARED_ROOT}/logs/slurm/${METHOD}"
 METHOD_LOG_FILE="${METHOD_LOG_DIR}/validation-${SLURM_JOB_ID}.out"
-BOOTSTRAP_LOG_FILE="${SHARED_ROOT}/logs/slurm/${SLURM_JOB_NAME}-${SLURM_JOB_ID}.bootstrap.out"
+BOOTSTRAP_LOG_FILE="${CODE_ROOT}/logs/slurm/${SLURM_JOB_NAME}-${SLURM_JOB_ID}.bootstrap.out"
 mkdir -p "${METHOD_LOG_DIR}"
 exec >"${METHOD_LOG_FILE}" 2>&1
 rm -f "${BOOTSTRAP_LOG_FILE}"
