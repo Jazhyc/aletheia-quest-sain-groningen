@@ -38,6 +38,8 @@ if [[ -f "${SHARED_ROOT}/.env" ]]; then
   set +a
 fi
 
+cd "${SHARED_ROOT}"
+
 run_candidate() {
   local config_name="$1"
   echo
