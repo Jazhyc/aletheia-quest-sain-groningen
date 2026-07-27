@@ -2669,3 +2669,31 @@ Truth Value Guard prompt rather than retune D/K/S aggregation on validation.
 This is a reasoning-imitation ablation, not a continuation of P91's binary
 normalization sweep. Do not choose members or remove label-conflicting traces
 after inspecting held-out results.
+
+## Binary Truth Value Guard teacher gate (2026-07-27)
+
+Job `30303807` tested the exact compact Truth Value Guard prompt as a
+reasoning-free teacher boundary. Both dense teachers used the same 3,000-
+character tail renderer, Qwen no-thinking chat template, and terminal
+`Prediction:` scaffold. The score was the normalized probability of the
+literal next-token choices `0` and `1`; no reasoning was generated. This is
+one forward/logit pass per row.
+
+| teacher | macro AUROC | instructed | varied | BA | recall | FPR | score time | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.5-27B | **`0.95744`** | **`0.99917`** | **`0.90181`** | **`0.91190`** | **`0.88571`** | **`0.06190`** | `38.2s` | `779/822` |
+| Qwen3.6-27B | `0.95333` | `0.99542` | `0.89722` | `0.89405` | `0.85714` | `0.06905` | `39.6s` | `766/822` |
+
+Both arms had zero missing label logits, zero parse errors, no exact score
+saturation at zero or one, and used about 50.2 GiB of GPU memory. Their scores
+were strongly but not identically ranked (Spearman `0.9542`); Qwen3.6 lost
+`0.00411` macro AUROC and also regressed in each scenario aggregate. Retain
+Qwen3.5-27B as the teacher and do not generate a Qwen3.6 trace cache from this
+checkpoint merely because it is newer.
+
+The Qwen3.5 binary Truth Value Guard result is `+0.01315` above the earlier
+Qwen3.5-27B direct seven-way D/K/S teacher (`0.94429`). That comparison changes
+both prompt alignment and output space, so it does not by itself prove that
+binary labels caused the gain. A frozen same-prompt seven-way expected-rating
+control was queued as job `30303841`; use it to separate prompt effects from
+the binary boundary before specifying the next student loss.
