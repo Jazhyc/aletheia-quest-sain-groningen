@@ -33,6 +33,7 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     parse_prediction,
     prefix_before_prediction,
     prefix_before_rating,
+    rating_probabilities_from_logprobs,
     rating_score_from_logprobs,
     rating_token_ids,
     rating_to_score,
@@ -479,6 +480,10 @@ def test_rating_token_ids_and_expected_score() -> None:
 
     assert token_ids == list(range(101, 108))
     assert rating_score_from_logprobs(logprobs, token_ids) == 1.0
+    probabilities = rating_probabilities_from_logprobs(logprobs, token_ids)
+    assert probabilities is not None
+    assert sum(probabilities) == 1.0
+    assert probabilities[-1] == 1.0
 
 
 def test_continuous_rating_prompts_use_final_rating_boundary() -> None:

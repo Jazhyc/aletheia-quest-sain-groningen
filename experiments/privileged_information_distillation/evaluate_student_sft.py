@@ -219,6 +219,22 @@ def rating_score_from_logprobs(
     token_ids: list[int],
 ) -> float | None:
     """Return normalized expected rating, mapped from 1--7 onto [0, 1]."""
+    probabilities = rating_probabilities_from_logprobs(
+        first_token_logprobs, token_ids
+    )
+    if probabilities is None:
+        return None
+    return sum(
+        ((rating - 1) / 6) * probability
+        for rating, probability in enumerate(probabilities, start=1)
+    )
+
+
+def rating_probabilities_from_logprobs(
+    first_token_logprobs: dict[Any, Any],
+    token_ids: list[int],
+) -> list[float] | None:
+    """Normalize constrained 1--7 log probabilities in rating order."""
     expanded = {
         int(token_id): logprob_value(value)
         for token_id, value in first_token_logprobs.items()
@@ -229,10 +245,7 @@ def rating_score_from_logprobs(
     maximum = max(logits)
     weights = [math.exp(value - maximum) for value in logits]
     normalization = sum(weights)
-    return sum(
-        ((rating - 1) / 6) * weight
-        for rating, weight in enumerate(weights, start=1)
-    ) / normalization
+    return [weight / normalization for weight in weights]
 
 
 def score_binary_prefixes(
@@ -266,23 +279,31 @@ def score_rating_prefixes(
     sampling: Any,
     request: Any,
     token_ids: list[int],
-) -> tuple[list[float], int, float]:
+) -> tuple[list[float], list[list[float]], int, float]:
     """Score constrained seven-way expected ratings for rendered prefixes."""
     started = time.time()
     outputs = llm.generate(prompts, sampling, lora_request=request)
     elapsed = time.time() - started
     scores = []
+    probability_rows = []
     missing = 0
     for output in outputs:
         first_token_logprobs = {}
         if output.outputs and output.outputs[0].logprobs:
             first_token_logprobs = output.outputs[0].logprobs[0] or {}
-        score = rating_score_from_logprobs(first_token_logprobs, token_ids)
-        if score is None:
+        probabilities = rating_probabilities_from_logprobs(
+            first_token_logprobs, token_ids
+        )
+        if probabilities is None:
             missing += 1
-            score = 0.5
+            probabilities = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+        score = sum(
+            ((rating - 1) / 6) * probability
+            for rating, probability in enumerate(probabilities, start=1)
+        )
         scores.append(score)
-    return scores, missing, elapsed
+        probability_rows.append(probabilities)
+    return scores, probability_rows, missing, elapsed
 
 
 def scenario_metrics(frame: pd.DataFrame) -> dict[str, dict[str, float | None]]:
@@ -687,9 +708,33 @@ def evaluate_adapter(
             raise ValueError(f"unknown continuous margin conditions: {sorted(unknown)}")
         for condition in margin_conditions:
             condition_prompts = [prompts[condition] for prompts in margin_prompts]
-            scores, missing, condition_elapsed = score_prefixes(
-                llm, condition_prompts, margin_sampling, request, target_ids
-            )
+            if rating_ids is not None:
+                (
+                    scores,
+                    probability_rows,
+                    missing,
+                    condition_elapsed,
+                ) = score_rating_prefixes(
+                    llm,
+                    condition_prompts,
+                    margin_sampling,
+                    request,
+                    target_ids,
+                )
+                for rating in range(1, 8):
+                    evaluated[
+                        f"{condition}_rating_{rating}_prob"
+                    ] = [
+                        probabilities[rating - 1]
+                        for probabilities in probability_rows
+                    ]
+                evaluated[f"{condition}_p7_margin_score"] = [
+                    probabilities[6] for probabilities in probability_rows
+                ]
+            else:
+                scores, missing, condition_elapsed = score_prefixes(
+                    llm, condition_prompts, margin_sampling, request, target_ids
+                )
             evaluated[f"{condition}_margin_score"] = scores
             timing[f"{condition}_margin_seconds"] = condition_elapsed
             timing[f"{condition}_margin_missing"] = missing
@@ -1115,6 +1160,13 @@ def main() -> None:
                 score_metrics.update({
                     f"{condition}_margin": metrics_for_score(
                         evaluated, f"{condition}_margin_score"
+                    )
+                    for condition in margin_conditions
+                })
+            if args.continuous_rating_margins:
+                score_metrics.update({
+                    f"{condition}_p7_margin": metrics_for_score(
+                        evaluated, f"{condition}_p7_margin_score"
                     )
                     for condition in margin_conditions
                 })
