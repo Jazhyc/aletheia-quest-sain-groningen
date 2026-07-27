@@ -11,6 +11,7 @@ from experiments.privileged_information_distillation.build_soft_teacher_cache im
 from experiments.privileged_information_distillation.train_student_sft import (
     attach_soft_teacher_targets,
     soft_binary_distillation_loss,
+    soft_rating_distillation_loss,
 )
 
 
@@ -68,3 +69,26 @@ def test_attach_and_soft_binary_loss(tmp_path) -> None:
     )
 
     assert loss.item() > 0
+
+
+def test_soft_rating_loss_matches_normalized_teacher_distribution() -> None:
+    targets = torch.tensor([
+        [0.02, 0.03, 0.05, 0.10, 0.15, 0.25, 0.40],
+        [0.40, 0.25, 0.15, 0.10, 0.05, 0.03, 0.02],
+    ])
+    matching_logits = targets.log()
+    mismatched_logits = matching_logits.flip(dims=(-1,))
+
+    matching_loss = soft_rating_distillation_loss(matching_logits, targets)
+    mismatched_loss = soft_rating_distillation_loss(mismatched_logits, targets)
+
+    assert matching_loss.item() == pytest.approx(0.0, abs=1e-6)
+    assert mismatched_loss > matching_loss
+
+
+def test_soft_rating_loss_rejects_unnormalized_targets() -> None:
+    with pytest.raises(ValueError, match="normalize"):
+        soft_rating_distillation_loss(
+            torch.zeros((1, 7)),
+            torch.ones((1, 7)),
+        )

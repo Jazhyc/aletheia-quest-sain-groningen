@@ -236,6 +236,10 @@ def test_direct_logit_judge_records_soft_distribution_and_missing_ids() -> None:
     judge.missing_logprob = -30.0
     judge.ratings = [1, 2]
     judge.targets = None
+    judge.tokenizer = None
+    judge.enable_thinking = None
+    judge.reasoning_effort = None
+    judge.assistant_prefix = None
     judge.all_rating_ids = [11, 12, 13]
     judge.ids_by_rating = {1: [11], 2: [12, 13]}
 

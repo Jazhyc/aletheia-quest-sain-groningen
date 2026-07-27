@@ -654,6 +654,10 @@ class OfflineVllmRatingJudge:
         generated_logprobs: int | None,
         missing_logprob: float,
         temperature: float,
+        use_chat_template: bool,
+        enable_thinking: bool | None,
+        reasoning_effort: str | None,
+        assistant_prefix: str | None,
     ) -> None:
         from transformers import AutoTokenizer
         from vllm import LLM, SamplingParams
@@ -667,6 +671,10 @@ class OfflineVllmRatingJudge:
         self.parse_error_count = 0
 
         tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.tokenizer = tokenizer if use_chat_template else None
+        self.enable_thinking = enable_thinking
+        self.reasoning_effort = reasoning_effort
+        self.assistant_prefix = assistant_prefix
         if logit_targets:
             self.all_rating_ids, self.targets = logit_target_ids(tokenizer, logit_targets)
             self.ids_by_rating = {}
@@ -701,7 +709,24 @@ class OfflineVllmRatingJudge:
 
     def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
         scores = np.full(len(prompts), np.nan, dtype=float)
-        outputs = generate_with_optional_batches(self.llm, prompts, self.sampling, batch_size)
+        generation_prompts = prompts
+        if self.tokenizer is not None:
+            generation_prompts = render_chat_prompts(
+                self.tokenizer,
+                prompts,
+                enable_thinking=self.enable_thinking,
+                reasoning_effort=self.reasoning_effort,
+            )
+            if self.assistant_prefix:
+                generation_prompts = [
+                    f"{prompt}{self.assistant_prefix}" for prompt in generation_prompts
+                ]
+        outputs = generate_with_optional_batches(
+            self.llm,
+            generation_prompts,
+            self.sampling,
+            batch_size,
+        )
         self.generations = []
         self.parse_error_count = 0
 
@@ -1330,11 +1355,24 @@ def build_judge(cfg: DictConfig):
             "temperature": float(cfg.judge.temperature),
         }
         if mode == "logits":
+            use_chat_template = bool(
+                OmegaConf.select(cfg, "judge.use_chat_template", default=False)
+            )
             return OfflineVllmRatingJudge(
                 **common,
                 logit_targets=logit_targets,
                 generated_logprobs=generated_logprobs,
                 missing_logprob=float(cfg.judge.missing_logprob),
+                use_chat_template=use_chat_template,
+                enable_thinking=OmegaConf.select(
+                    cfg, "judge.enable_thinking", default=None
+                ),
+                reasoning_effort=reasoning_effort,
+                assistant_prefix=(
+                    str(OmegaConf.select(cfg, "judge.logit_prefix", default="Rating:"))
+                    if use_chat_template
+                    else None
+                ),
             )
         if mode == "generate":
             selected_stops = OmegaConf.select(cfg, "judge.stop_strings", default=None)
@@ -1579,7 +1617,13 @@ def main(cfg: DictConfig) -> None:
         raise ValueError(f"unknown ensemble.order={ensemble_order!r}")
     append_prefix = None
     if str(cfg.judge.mode) == "logits":
-        append_prefix = str(OmegaConf.select(cfg, "judge.logit_prefix", default="Rating:"))
+        use_chat_template = bool(
+            OmegaConf.select(cfg, "judge.use_chat_template", default=False)
+        )
+        if not use_chat_template:
+            append_prefix = str(
+                OmegaConf.select(cfg, "judge.logit_prefix", default="Rating:")
+            )
     context_truncation = str(OmegaConf.select(cfg, "judge.context_truncation", default="tail"))
     selected_context_roles = OmegaConf.select(cfg, "judge.context_roles", default=None)
     context_roles = None

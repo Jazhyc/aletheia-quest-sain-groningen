@@ -4922,8 +4922,69 @@ Cache and student launch:
   optimizer steps, reporting `1905s` trainer runtime and final train loss
   `18.38`. The saved rank-16 adapter weight SHA-256 is
   `466a476e2c0f05c83d8f4e627fb3e47d4274c16d5574ac5f57ae5468dd8fb2d3`.
-- Frozen full-validation job `30299897` compares its direct `Prediction:`
-  margin in one shared vLLM session with the paired reasoning-only control,
-  direct-CE arm, and rank-loss `0.1`/`0.3` arms. Apply the existing `+0.005`
-  macro-AUROC promotion rule and report scenario/per-dataset AUROC,
-  uniqueness/ties, and missing logits before deciding on local test.
+- The first validation attempt, job `30299897`, failed before model loading
+  because the four Lambda-returned historical controls did not include their
+  local `config.yaml` files. No rows were scored. Rather than fabricate
+  provenance, the corrected shared session used the canonical selected
+  reasoning-summary adapter as the live matched control and retained the
+  frozen historical CE/rank analyses as secondary comparisons.
+- Corrected RTX job `30300359` completed in `2m47s`. The soft student scored
+  `0.937619` macro AUROC versus `0.937560` for the reasoning-only control, a
+  gain of only `+0.000060`. Instructed AUROC tied at `0.9934375`; varied AUROC
+  was `0.863194` versus `0.863056` (`+0.000139`). Only 24/822 direct margins
+  changed. Per-dataset AUROC changed materially on three varied units:
+  `+0.00125`, `+0.005`, and `-0.005`, with all other units tied.
+- The candidate had 350 unique direct-margin scores versus 353 for the
+  control, zero missing margins, and identical fixed-`0.5` BA, recall, and
+  FPR. Its macro result also remains numerically below all three earlier
+  direct-CE/rank arms, although those compact artifacts came from a separate
+  Lambda session. The `+0.000060` matched-session gain fails the frozen
+  `+0.005` promotion gate by two orders of magnitude. Do not evaluate local
+  test, tune the normalization/loss weight, or promote this soft student.
+
+## P92: Full Qwen-27B D/K/S Trace and Ordinal Soft Distillation
+
+Question: does the stronger Qwen3.5-27B teacher transfer only when the student
+learns its full reasoning trajectories, rather than receiving an auxiliary
+binary boundary target beside unrelated GPT-OSS summaries?
+
+Frozen data contract:
+
+- Use the exact details, known-fact, and scrutiny prompts from the Qwen-27B
+  DKS4096 judge. Generate each member independently on all 2,877 usable
+  varied-deception training rows with the existing 3,000-character view.
+- The target is the complete raw Qwen-27B completion, including the native
+  `<think>...</think>` block, visible answer, and final `Rating:` line.
+  Ground-truth labels must not be written into, substituted into, or used to
+  filter these completions.
+- Pair every generated member trace with the same member's audited direct
+  seven-way rating distribution. Do not max members before training.
+- Require complete three-member coverage per dataset/index. Make a stable
+  90/10 row-level holdout within dataset/label strata so all three traces for a
+  row remain together.
+
+Frozen student:
+
+- Train a new rank-16/alpha-32 LoRA on `Qwen/Qwen3.5-9B`; do not initialize
+  from Phoenix or the earlier privileged-summary adapter.
+- Use one epoch of AdamW at `5e-5`, effective batch size 32, and maximum
+  sequence length 12,288. This accommodates selective 8,192-token retries for
+  initially truncated teacher traces without truncating their completion.
+- Apply ordinary completion-only next-token loss to the entire member trace.
+  Add weight-1 KL from the student's seven logits after the same prompt plus
+  `Rating:` to the teacher's normalized 1--7 probabilities.
+- Keep all three member examples, including teacher/label conflicts. Labels
+  are retained only for the row-stratified split and evaluation.
+
+Evaluation:
+
+- First audit a 96-target smoke run for finite losses, memory safety, and
+  complete adapter output before launching the full adapter.
+- On the frozen row holdout, run all three prompts and max aggregate them.
+  Report generated-rating and direct expected-rating macro/per-dataset AUROC,
+  instructed/varied slices where present, parse and length failures, unique
+  scores, and cross-label ties.
+- The direct expected-rating path is the deployment-relevant no-reasoning
+  readout; generated ratings diagnose whether the student actually learned to
+  execute the distilled chains. Do not select between those paths or the three
+  members post hoc.

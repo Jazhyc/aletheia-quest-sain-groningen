@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
 from experiments.privileged_information_distillation.evaluate_student_sft import (
     ATOMIC_AUDIT_STRICT_RE,
     COUNTERFACTUAL_STRICT_RE,
+    NATIVE_RATING_STRICT_RE,
     PREDICTION_ONLY_STRICT_RE,
     RATING_STRICT_RE,
     SUMMARY_RATING_STRICT_RE,
@@ -19,6 +20,7 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     binary_token_ids,
     comparable_student_settings,
     continuous_margin_prompts,
+    continuous_rating_prompts,
     final_after_thinking,
     load_retrieval_cache,
     lora_request_or_none,
@@ -30,6 +32,10 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     parse_thinking_condition,
     parse_prediction,
     prefix_before_prediction,
+    prefix_before_rating,
+    rating_probabilities_from_logprobs,
+    rating_score_from_logprobs,
+    rating_token_ids,
     rating_to_score,
     rating_prediction_to_score,
     vllm_max_lora_rank,
@@ -174,6 +180,32 @@ def test_max_aggregate_evaluations_aligns_rows_and_preserves_members() -> None:
         "summary": "Prediction:0",
         "binary": "Prediction:1",
     }
+
+
+def test_max_aggregate_evaluations_aggregates_continuous_margins() -> None:
+    common = {
+        "dataset": "d",
+        "index": 1,
+        "label": 1,
+        "score": 0.0,
+        "parse_error": False,
+        "format_valid": True,
+        "generation": "Rating: 1",
+        "prompt_sha256": "a",
+    }
+    first = pd.DataFrame([{**common, "direct_margin_score": 0.2}])
+    second = pd.DataFrame([{
+        **common,
+        "score": 1.0,
+        "prompt_sha256": "b",
+        "direct_margin_score": 0.8,
+    }])
+
+    result = max_aggregate_evaluations({"details": first, "known": second})
+
+    assert result["direct_margin_score"].tolist() == [0.8]
+    assert result["details_direct_margin_score"].tolist() == [0.2]
+    assert result["known_direct_margin_score"].tolist() == [0.8]
 
 
 def test_load_retrieval_cache_formats_passages(tmp_path) -> None:
@@ -431,6 +463,37 @@ def test_binary_score_normalizes_zero_one_logprob_margin() -> None:
 
 def test_binary_score_rejects_missing_target_logprob() -> None:
     assert binary_score_from_logprobs({10: _Logprob(-1.0)}, [10, 11]) is None
+
+
+class _RatingTokenizer:
+    def encode(self, text: str, add_special_tokens: bool) -> list[int]:
+        assert add_special_tokens is False
+        return [100 + int(text)]
+
+
+def test_rating_token_ids_and_expected_score() -> None:
+    token_ids = rating_token_ids(_RatingTokenizer())
+    logprobs = {
+        token_id: _Logprob(0.0 if rating == 7 else -100.0)
+        for rating, token_id in enumerate(token_ids, start=1)
+    }
+
+    assert token_ids == list(range(101, 108))
+    assert rating_score_from_logprobs(logprobs, token_ids) == 1.0
+    probabilities = rating_probabilities_from_logprobs(logprobs, token_ids)
+    assert probabilities is not None
+    assert sum(probabilities) == 1.0
+    assert probabilities[-1] == 1.0
+
+
+def test_continuous_rating_prompts_use_final_rating_boundary() -> None:
+    generation = "<think>\ncheck\n</think>\nRating: 6"
+    prompts = continuous_rating_prompts("PROMPT", generation)
+
+    assert prefix_before_rating(generation).endswith("Rating: ")
+    assert prompts["direct"] == "PROMPTRating:"
+    assert prompts["reasoning"].endswith("Rating: ")
+    assert NATIVE_RATING_STRICT_RE.fullmatch(generation)
 
 
 def test_rank_fraction_predictions_operates_per_dataset() -> None:

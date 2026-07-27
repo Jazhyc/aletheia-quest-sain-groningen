@@ -112,3 +112,21 @@ sbatch experiments/privileged_information_distillation/run_teacher_rationale_aud
 
 See [findings.md](findings.md) for the current quality audit and experimental
 decisions.
+
+## Qwen-27B full D/K/S trace soft distillation
+
+The post-P91 follow-up trains a fresh rank-16 Qwen3.5-9B adapter to imitate the
+entire Qwen3.5-27B D/K/S judge trajectory. Each selected varied-deception row
+contributes three separate examples—details, known-fact, and scrutiny—with the
+member's exact prompt and its verbatim completion from the opening `<think>`
+through the terminal `Rating:` line. No authoritative label is inserted into
+the completion.
+
+Completion SFT is paired with a seven-way KL loss at the same member's direct
+`Rating:` boundary. Its target is that member's audited direct 1--7
+distribution, not the earlier max-aggregated binary transform. A stable
+row-level 90/10 split keeps all three member traces for a row on the same side.
+The primary held-out comparisons are generated-rating AUROC and direct
+expected-rating AUROC, both max-aggregated across D/K/S. This tests whether
+reasoning imitation transfers useful teacher behavior while retaining a
+reasoning-free direct inference path.
