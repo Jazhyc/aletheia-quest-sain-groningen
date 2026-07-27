@@ -3857,6 +3857,28 @@ the public adapter completed successfully on the single configured varied
 dataset in `53s`; the notebook produced a valid submission with no runtime
 failure.
 
+## 2026-07-28: Luna medium privileged student and Phoenix 5.2
+
+The selected GPT-5.6 Luna medium cache covered all 2,880 varied training rows
+with zero parse errors, retries, or truncations. It cost `$1.70929`. Student job
+`30316452` used the matched one-epoch rank-16/alpha-32 AdamW `5e-5` recipe and
+saved adapter weights with SHA-256
+`da83f294a248a97ddf07ff7a458280f0990dea329e61fc5e2aec8faec8c61d17`.
+
+Validation job `30316477` scored `0.93762` direct-margin macro AUROC
+(`0.99344` instructed, `0.86319` varied), with 350 unique scores and zero
+missing logits. The GPT-OSS privileged reference remains fractionally higher
+at `0.93815`; direct score correlation is `0.99937`. No Luna local-test run was
+performed. Phoenix 5.2 nevertheless replaces only the ordinary route to test
+the predeclared possibility that the stronger teacher changes private OOD
+transfer despite the local tie. All specialist routes and direct-logit
+inference remain frozen.
+
+The public adapter repository is
+`Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16`, initial upload commit
+`fa52f5e7f6a36d7d06e6718c65bd00fd4d11658f`. Submit the sole notebook
+`submission/phoenix_wright_v5_2.ipynb` as black-box.
+
 ## 2026-07-27: Matched-organism Truth Value Guard logits
 
 The frozen local test diagnostic scored every one of 821 rows with the exact

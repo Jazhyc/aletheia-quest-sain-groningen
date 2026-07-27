@@ -41,21 +41,21 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
-- `submission/phoenix_wright_v5_1.ipynb` is the current AUROC-first submission
+- `submission/phoenix_wright_v5_2.ipynb` is the current AUROC-first submission
   candidate and must be tagged `black`. Ordinary rows use the fresh rank-16
-  Qwen3.5-9B adapter trained on all 2,875 parsed varied-data reasoning traces
-  from a ground-truth-blind GPT-OSS-120B teacher. It scores literal `0|1` logits
-  directly after `Prediction:` and does not generate the learned chain at
-  inference. Validation macro AUROC was `0.93762` (`0.99344` instructed,
-  `0.86319` varied), essentially tied with the privileged-summary adapter's
-  `0.93815`. The teacher itself was wrong on 415 usable training rows and had
-  `0.85564` train macro BA; its mistakes were retained. This is a
-  private-leaderboard transfer experiment intended to isolate reasoning SFT
-  from privileged-information supervision. Frozen test direct AUROC was
-  `0.93452` (`0.98073` instructed, `0.87292` varied), again essentially tied
-  with the privileged reference's `0.93423`.
-  The prior HP-KR, action-report, and optional resolved-intent routes remain
-  mutually exclusive.
+  Qwen3.5-9B adapter trained on all 2,880 varied-data privileged Truth Value
+  Guard traces from GPT-5.6 Luna at medium reasoning effort. It scores literal
+  `0|1` logits directly after `Prediction:` and does not generate the learned
+  chain at inference. Validation macro AUROC was `0.93762` (`0.99344`
+  instructed, `0.86319` varied), effectively tied with the GPT-OSS privileged
+  adapter's `0.93815`; their direct score correlation is `0.99937`. This is a
+  private-leaderboard transfer experiment intended to test whether stronger
+  teacher reasoning changes OOD behavior despite the local tie. No Luna local
+  test was run because validation did not select it. The prior HP-KR,
+  action-report, and optional resolved-intent routes remain mutually exclusive.
+- Phoenix 5.1 was the preceding private-leaderboard control. Its ordinary
+  adapter learned from ground-truth-blind GPT-OSS-120B traces and scored
+  `0.93762/0.93452` macro AUROC on validation/local test.
 - P80 selected direct Phoenix `Prediction:` label margins for the next
   AUROC-first submission implementation. On validation/test they scored
   `0.9382/0.9342` macro AUROC with `9.7s/9.3s` margin passes and zero missing

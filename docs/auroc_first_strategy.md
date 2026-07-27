@@ -433,3 +433,33 @@ Phoenix 5.1 remains a black-box method and must be submitted with `--tag
 black`. Its public adapter repository is
 `Jazhyc/aletheias-phoenix-blind-reasoning-r16`, initial upload commit
 `eaeb37ce03d791db340114eb9132494d7081d31f`.
+
+## Phoenix Wright 5.2 Luna medium privileged-reasoning student
+
+Phoenix 5.2 replaces only the ordinary Phoenix 5.1 component with the matched
+rank-16/alpha-32 Qwen3.5-9B student trained on all 2,880 varied rows using
+privileged Truth Value Guard traces from GPT-5.6 Luna at medium reasoning
+effort. Luna received the authoritative label while constructing the concise
+reasoning target; the deployed student receives only the observable
+conversation and final output. Training otherwise keeps the frozen one-epoch
+AdamW `5e-5`, effective-batch-32 recipe.
+
+Validation direct-margin macro AUROC was `0.93762` (`0.99344` instructed,
+`0.86319` varied), with 350 unique scores and zero missing logits. This is
+`0.00054` below the GPT-OSS privileged reference at `0.93815`; their direct
+score vectors correlate at `0.99937` with mean absolute difference `0.00630`.
+The validation result is a tie, not a local promotion. Phoenix 5.2 is an
+explicit private-leaderboard OOD-transfer probe motivated by possible teacher
+knowledge differences. No Luna local-test evaluation was used.
+
+Inference preserves the exact direct `Prediction:` boundary, no-thinking mode,
+3,000-character tail renderer, length-aware batching, and validation-frozen
+secondary threshold `0.19`. The base-Qwen HP-KR route, original-Phoenix action
+route, and optional resolved-intent blend remain unchanged and mutually
+exclusive. The method remains black-box and must be submitted with `--tag
+black`.
+
+The exact main adapter is published at
+`Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16`, initial upload commit
+`fa52f5e7f6a36d7d06e6718c65bd00fd4d11658f`. Its weight SHA-256 is
+`da83f294a248a97ddf07ff7a458280f0990dea329e61fc5e2aec8faec8c61d17`.

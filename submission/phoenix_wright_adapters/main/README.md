@@ -7,14 +7,13 @@ tags:
 - lora
 ---
 
-# Phoenix Wright 5.1 main adapter
+# Phoenix Wright main adapter
 
-Rank-16, alpha-32 Qwen3.5-9B LoRA trained for one epoch on 2,875 parsed
-varied-deception reasoning traces produced by GPT-OSS-120B. The teacher was
-ground-truth blind: it saw only the observable conversation and final output,
-generated a concise material-claim rationale, and supplied its own binary
-decision. Its mistakes were retained rather than corrected or filtered by
-ground-truth labels. Training used AdamW at `5e-5` with effective batch size 32.
+Rank-16, alpha-32 Qwen3.5-9B LoRA trained for one epoch on all 2,880
+varied-deception rows using concise privileged Truth Value Guard reasoning
+traces produced by GPT-5.6 Luna at medium reasoning effort. The teacher received
+the authoritative label while constructing each trace. Training used AdamW at
+`5e-5` with effective batch size 32.
 
 The submission renders observable conversation and output only, disables Qwen
 thinking, and normalizes the next-token logits for literal `0|1` directly after
@@ -23,7 +22,7 @@ for the matching competition notebook and is not a general-purpose truth
 classifier.
 
 The `adapter_model.safetensors` SHA-256 is
-`bfe4a35ceb11055e7b7e77d29cc7027ccb5daa355703d9acd4d14eb03db01931`.
+`da83f294a248a97ddf07ff7a458280f0990dea329e61fc5e2aec8faec8c61d17`.
 The deployed Hugging Face repository is
-`Jazhyc/aletheias-phoenix-blind-reasoning-r16`; the initial upload commit is
-`eaeb37ce03d791db340114eb9132494d7081d31f`.
+`Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16`; the initial upload commit
+is `fa52f5e7f6a36d7d06e6718c65bd00fd4d11658f`.

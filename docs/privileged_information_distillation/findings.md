@@ -106,6 +106,11 @@ test-select the Luna adapter. The near-identical ranking is further evidence
 that, under this fixed one-epoch recipe and local Qwen-only varied split,
 teacher capability is not the dominant bottleneck.
 
+Phoenix 5.2 nevertheless deploys the Luna adapter as an explicit private
+leaderboard OOD-transfer probe, replacing only the ordinary route while
+preserving every specialist and the direct-logit inference path. This is not a
+local promotion claim and no Luna local-test result was used.
+
 ### GPT-5.6 Sol privileged Truth Value Guard reasoning pilot (2026-07-27)
 
 The exact Luna pilot rows, seed, privileged Truth Value Guard prompt, 4,096

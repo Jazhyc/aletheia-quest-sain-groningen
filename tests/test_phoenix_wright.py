@@ -34,7 +34,7 @@ from submission.phoenix_wright import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v5_1.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v5_2.ipynb"
 
 
 class FakeTokenizer:
@@ -339,11 +339,18 @@ def test_mean_log_odds_and_intent_mask_preserve_other_scores() -> None:
         blend_intent_route_scores(base, [], routes)
 
 
-def test_v5_notebook_uses_blind_student_and_exclusive_routes_without_generation() -> None:
+def test_v5_notebook_uses_luna_student_and_exclusive_routes_without_generation() -> None:
     source = notebook_source()
     ast.parse(source)
 
-    assert "method=phoenix_wright_v5.1 blind_gptoss_reasoning" in source
+    assert (
+        "method=phoenix_wright_v5.2 luna_medium_privileged_reasoning"
+        in source
+    )
+    assert (
+        "Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16"
+        in source
+    )
     assert "build_exclusive_route_flags(messages)" in source
     assert "build_main_direct_prompt(messages[position], active_tokenizer)" in source
     assert '"action": build_action_empty_prompt' in source

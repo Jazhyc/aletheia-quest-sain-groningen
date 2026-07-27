@@ -12,7 +12,7 @@ from huggingface_hub import HfApi
 
 ROOT = Path(__file__).resolve().parents[2]
 ADAPTER_DIR = ROOT / "submission/phoenix_wright_adapters/main"
-REPOSITORY = "Jazhyc/aletheias-phoenix-blind-reasoning-r16"
+REPOSITORY = "Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16"
 
 
 def main() -> None:
@@ -36,7 +36,7 @@ def main() -> None:
         repo_id=REPOSITORY,
         repo_type="model",
         folder_path=ADAPTER_DIR,
-        commit_message="Upload blind GPT-OSS reasoning adapter",
+        commit_message="Upload Luna medium reasoning adapter",
     )
     print(f"{REPOSITORY} {commit.oid}")
 

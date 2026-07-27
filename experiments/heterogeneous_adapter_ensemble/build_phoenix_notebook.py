@@ -7,7 +7,7 @@ import nbformat
 
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUT = ROOT / "submission/phoenix_wright_v5_1.ipynb"
+OUTPUT = ROOT / "submission/phoenix_wright_v5_2.ipynb"
 
 
 def main() -> None:
@@ -22,24 +22,25 @@ def main() -> None:
     }
     notebook["cells"] = [
         nbformat.v4.new_markdown_cell(
-            """# Phoenix Wright v5.1
+            """# Phoenix Wright v5.2
 
 AUROC-first black-box deception judge using a fresh rank-16 Qwen3.5-9B adapter
-trained on concise reasoning traces from a ground-truth-blind GPT-OSS-120B
-teacher. The teacher saw only the same observable conversation and output as
-the student and supplied its own possibly incorrect decision. The notebook
-exposes no source reasoning, generates no judge reasoning, and reads the
-normalized next-token margin between the exact labels `0` and `1` directly
-after `Prediction:`. The continuous margin is the submission score; the
-validation-selected threshold supplies the required binary decision.
+trained on concise privileged Truth Value Guard reasoning traces from GPT-5.6
+Luna at medium reasoning effort. The teacher saw the authoritative label while
+constructing each training trace; the deployed student receives only the
+observable conversation and output. The notebook exposes no source reasoning,
+generates no judge reasoning, and reads the normalized next-token margin between
+the exact labels `0` and `1` directly after `Prediction:`. The continuous margin
+is the submission score; the validation-selected threshold supplies the required
+binary decision.
 
 Three routes remain mutually exclusive. Explicit harm-pressure knowledge
 self-reports use the base-Qwen `knowledge_report_type` empty-summary specialist.
 Executed-action reports preserve the frozen action-report prompt and original
 Phoenix adapter. Remaining rows with a final assistant reasoning trace combine
-the blind-reasoning main margin and rank-1 resolved-intent margin in log-odds
-space. All other rows use the direct factual-judgment path. The required binary
-column always uses the unblended route score."""
+the Luna-trained main margin and rank-1 resolved-intent margin in log-odds space.
+All other rows use the direct factual-judgment path. The required binary column
+always uses the unblended route score."""
         ),
         nbformat.v4.new_code_cell(
             """import contextlib
@@ -68,7 +69,7 @@ LIMIT = int(os.environ["ALETHEIA_LIMIT"]) if os.environ.get("ALETHEIA_LIMIT") el
 JUDGE_MODEL = "Qwen/Qwen3.5-9B"
 MAIN_ADAPTER_REPO = os.environ.get(
     "PHOENIX_MAIN_ADAPTER_REPO",
-    "Jazhyc/aletheias-phoenix-blind-reasoning-r16",
+    "Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16",
 )
 BUNDLED_MAIN_ADAPTER = "submission/phoenix_wright_adapters/main"
 ACTION_ADAPTER_REPO = os.environ.get(
@@ -92,7 +93,7 @@ NNSIGHT_LOCAL = os.environ.get("PHOENIX_NNSIGHT_LOCAL", "0").lower() in {"1", "t
 SUBMISSION_THRESHOLD = float(os.environ.get("PHOENIX_THRESHOLD", "0.19"))
 
 print(f"dataset={DATASET_NAME} limit={LIMIT}")
-print(f"method=phoenix_wright_v5.1 blind_gptoss_reasoning members={MEMBER_NAMES}")
+print(f"method=phoenix_wright_v5.2 luna_medium_privileged_reasoning members={MEMBER_NAMES}")
 print(f"main_adapter_repo={MAIN_ADAPTER_REPO}")
 print(f"action_adapter_repo={ACTION_ADAPTER_REPO}")
 print(f"intent_adapter_repo={INTENT_ADAPTER_REPO}")
@@ -349,11 +350,11 @@ util.write_submission(
         ),
     ]
     cell_ids = (
-        "phoenix-v5-0-overview",
-        "phoenix-v5-0-configuration",
-        "phoenix-v5-0-routes-and-models",
-        "phoenix-v5-0-scoring",
-        "phoenix-v5-0-output",
+        "phoenix-v5-2-overview",
+        "phoenix-v5-2-configuration",
+        "phoenix-v5-2-routes-and-models",
+        "phoenix-v5-2-scoring",
+        "phoenix-v5-2-output",
     )
     for cell, cell_id in zip(notebook["cells"], cell_ids, strict=True):
         cell["id"] = cell_id
