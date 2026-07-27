@@ -24,7 +24,7 @@ def main() -> None:
         nbformat.v4.new_markdown_cell(
             """# Phoenix Wright v4.4
 
-AUROC-first white-box deception judge using the selected one-epoch GRPO
+AUROC-first black-box deception judge using the selected one-epoch GRPO
 continuation of the rank-16 Qwen3.5-9B privileged-distillation adapter. The
 notebook skips reasoning generation and reads the normalized next-token margin
 between the exact labels `0` and `1` after an empty `<reasoning>` scaffold. The

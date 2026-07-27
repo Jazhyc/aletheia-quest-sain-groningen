@@ -358,3 +358,8 @@ being added beside it, keeping the full submission near 131 MB and below the
 `9c1ea176007d38fd80148dda9289143e53d2adcf`. A focused one-row NDIF notebook
 test loaded that repository and passed the full `submission.csv` contract in
 `97.24s`.
+
+Competition classification: black-box. Reading the submitted judge's output
+logits is black-box model querying for this method; it does not inspect the
+model organisms' activations or hidden state. Submit Phoenix 4.4 with
+`--tag black`.

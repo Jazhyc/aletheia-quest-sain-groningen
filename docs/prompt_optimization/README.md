@@ -42,8 +42,9 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 Submission mapping:
 
 - `submission/phoenix_wright_v4_4.ipynb` is the current AUROC-first submission
-  candidate. Ordinary rows use the selected epoch-1 GRPO continuation of the
-  rank-16 privileged-distillation adapter and score literal `0|1` logits after
+  candidate and must be tagged `black`. Ordinary rows use the selected epoch-1
+  GRPO continuation of the rank-16 privileged-distillation adapter and score
+  literal `0|1` logits after
   an empty `<reasoning>` scaffold. The path uses no source reasoning and no
   generated chain at inference. Frozen validation/test macro AUROC was
   `0.9514/0.9598`; test instructed/varied AUROC was `0.9907/0.9186`.
