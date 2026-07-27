@@ -71,6 +71,42 @@ while sharing the same Alibaba endpoint, but retrying did not change provider
 or leave incomplete rows. Select 397B, not 122B, if proceeding with remote
 same-family soft supervision.
 
+### NDIF Nemotron/Gemma Truth Value Guard swaps (2026-07-27)
+
+The exact no-thinking binary Truth Value Guard boundary was also ported to
+NDIF for two cross-family model swaps. It retained the 3,000-character tail
+renderer, excluded source reasoning, appended `Prediction:`, requested only
+the final logits, and normalized the literal `0|1` choices. Tokenization was
+local, but no model weights were loaded on the cluster.
+
+Nemotron completed the frozen 821-row local test:
+
+| teacher | macro AUROC | instructed | varied | BA | recall | FPR | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| NVIDIA Nemotron Super 120B-A12B | `0.95655` | `0.98708` | `0.91583` | `0.89762` | `0.82619` | `0.03095` | `70/821` |
+
+Its 26 resumable remote sessions took `185.6s` of scoring time. Nemotron is
+competitive but does not beat the frozen Qwen3.5-397B test teacher (`0.9654`
+macro, `0.9272` varied), and it narrowly trails Phoenix 4.4's local-test
+ranking (`0.95982`). It is only `+0.0010` above Qwen3.5-122B overall, although
+its varied AUROC is `+0.0137`. The score resolution is unusually coarse:
+only 70 unique probabilities over 821 rows. On the 21-row base-Nemotron
+instructed unit, AUROC was `0.9500` but recall at the fixed 0.5 threshold was
+zero, illustrating why ranking and secondary threshold diagnostics must stay
+separate.
+
+Gemma passed the local renderer/tokenizer compatibility smoke: literal `0`
+and `1` are distinct single tokens and the two test prompts fit comfortably.
+However, two separate NDIF requests were rejected before inference because
+`google/gemma-3-27b-it` was not pinned and hotswapping was unavailable for the
+API key. This is an availability blocker, not a Gemma score. Do not substitute
+a local-cluster load or another provider into this matched NDIF benchmark;
+resume the Gemma-only run when NDIF schedules the checkpoint.
+
+Runtime code and resumable artifacts are under
+`experiments/ndif_tvg_model_swap/` and
+`results/blackbox/ndif_tvg_model_swap_test_v1/`, respectively.
+
 ## Trace audit
 
 The teacher cache is nearly balanced: 3,360 usable label-0 targets and 3,210
