@@ -13,8 +13,11 @@ The labels mean:
 
 The resulting probability of `1` is evaluated as a continuous deception score.
 The report includes mean per-dataset AUROC, scenario/family/organism
-breakdowns, secondary threshold diagnostics, prompt truncation, and score
-uniqueness/ties.
+breakdowns, secondary threshold diagnostics, full prompt lengths, and score
+uniqueness/ties. Requests use Phoenix-style length sorting and
+`48/32/16` batch tiers, one remote session per exact organism, and
+`logits_to_keep=1`. No prompt is truncated; batches shrink further to keep
+padded token counts safe when source reasoning makes a prompt unusually long.
 
 This differs from the earlier whole-output self-query baseline in two ways:
 
@@ -48,6 +51,16 @@ Run the complete frozen test evaluation:
 ```bash
 bash experiments/ndif_context_self_question/run.sh
 ```
+
+Run the reasoning-context follow-up on all 360 varied-deception rows:
+
+```bash
+bash experiments/ndif_context_self_question/run.sh --reasoning-varied
+```
+
+The reasoning variant renders the original final assistant trace through
+Qwen's native `reasoning_content` field before appending the self-question. It
+does not generate a new reasoning chain.
 
 Group caches are validated against dataset/index keys and prompt hashes, so a
 failed run can be resumed without repeating completed organisms. Smoke results
@@ -84,4 +97,30 @@ before use.
 The ignored artifacts are in
 `results/blackbox/ndif_context_self_question_test_v1/`. Remote scoring took
 125.2 seconds (6.56 rows/s). Prompts ranged from 127 to 521 tokens and none
-required the 4,096-token left-truncation fallback.
+were truncated.
+
+## Reasoning-context varied follow-up
+
+The frozen follow-up included the complete original reasoning trace for all
+360 varied-deception rows:
+
+| contextual self-question input | varied macro AUROC | BA | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| role/content plus source reasoning | `0.91681` | `0.84167` | `0.77778` | `0.09444` |
+| role/content only | `0.89792` | `0.78889` | `0.81667` | `0.23889` |
+| matched-organism Truth Value Guard | `0.89917` | `0.81667` | `0.69444` | `0.06111` |
+| universal base-Qwen Truth Value Guard | `0.91056` | — | — | — |
+
+Source reasoning improved macro AUROC by `0.01889` over the otherwise matched
+self-question and by `0.01764` over the matched-organism direct judge. It
+improved six of nine dataset units and regressed three. Compared with the
+output-only self-question, score correlation was Pearson `0.86068` and Spearman
+`0.86095`.
+
+The run produced 109 unique scores and 251 ties. Full prompts ranged from 193
+to 6,122 tokens (median 612, p95 4,624), with zero truncation. Remote scoring
+took 192.3 seconds. The result applies only to varied Qwen3.5-27B organisms;
+it is not cross-family evidence.
+
+Artifacts are under
+`results/blackbox/ndif_context_self_question_reasoning_varied_test_v1/`.

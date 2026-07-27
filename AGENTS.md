@@ -151,6 +151,16 @@ false-negative recoveries were Qwen. Gemma and Nemotron used documented
 single-token TRUE/FALSE forced-choice fallbacks because hosted generation was
 incompatible/OOM-prone; consult the method docs before comparing runtimes or
 treating this as an identical generation backend.
+A later continuous contextual self-question follow-up used the exact generating
+Qwen base/LoRA on all 360 varied test rows. Including the complete native source
+reasoning trace raised macro AUROC from `0.89792` output-only to `0.91681`,
+improving six of nine units; BA rose from `0.78889` to `0.84167` as FPR fell
+from `0.23889` to `0.09444`. Prompts were 193--6,122 tokens with no truncation.
+The NDIF implementation uses Phoenix-style length sorting, `48/32/16` tiers
+with a padded-token budget, one session per organism, and
+`logits_to_keep=1`. This is Qwen-only test evidence: do not infer cross-family
+transfer, opaque leaderboard reasoning access, or integrate the trace into
+Phoenix solely from this follow-up.
 The learned whole-output correction gate failed: text features improved OOF
 ranking but reduced binary BA under both stratified and leave-one-organism-out
 evaluation. A later claim-level pilot appeared promising, but its frozen

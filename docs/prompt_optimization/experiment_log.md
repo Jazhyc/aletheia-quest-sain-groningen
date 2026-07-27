@@ -3995,3 +3995,47 @@ direct matched-organism judging was marginally stronger, and universal
 unadapted Qwen remained stronger still. Runtime and ignored artifacts are under
 `experiments/ndif_context_self_question/` and
 `results/blackbox/ndif_context_self_question_test_v1/`.
+
+### Reasoning-context varied follow-up
+
+A frozen follow-up exposed each varied-deception organism's complete original
+assistant reasoning trace before asking the same self-question. Qwen's native
+chat template only retains `reasoning_content` while rendering the assistant
+turn as the response to its original user request, so the implementation first
+renders that original exchange and then appends a separately rendered user
+follow-up. A real-tokenizer check confirmed the trace and question each occur
+exactly once.
+
+The NDIF path now matches Phoenix's important direct-scoring optimizations:
+length-sorted `48/32/16` tiers, one remote session per exact organism,
+`logits_to_keep=1`, and normalized literal `0|1` logits. Since reasoning made
+some prompts longer than Phoenix's ordinary capped inputs, a 14,400
+padded-token budget shrank individual batches as needed. Truncation was
+disabled. All nine exact Qwen base/LoRA configurations passed a smoke and all
+360 varied rows completed.
+
+| contextual self-question input | varied macro AUROC | BA | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| role/content plus source reasoning | `0.91681` | `0.84167` | `0.77778` | `0.09444` |
+| role/content only | `0.89792` | `0.78889` | `0.81667` | `0.23889` |
+| matched-organism Truth Value Guard | `0.89917` | `0.81667` | `0.69444` | `0.06111` |
+| universal base-Qwen Truth Value Guard | `0.91056` | — | — | — |
+
+Reasoning improved the otherwise matched self-question by `0.01889` macro
+AUROC and improved six of nine dataset units. The per-unit changes ranged from
+`-0.02500` to `+0.07000`. It also beat the matched-organism TVG by `0.01764`
+and the existing universal base-Qwen varied control by `0.00625`. The
+reasoning and output-only self-question scores correlated at Pearson `0.86068`
+and Spearman `0.86095`, with mean absolute movement `0.16668`.
+
+At threshold 0.5, the trace reduced FPR from `0.23889` to `0.09444` while
+recall fell from `0.81667` to `0.77778`, yielding the higher BA shown above.
+Scores had 109 unique values and 251 ties. Prompts were 193--6,122 tokens
+(median 612, p95 4,624), none truncated; remote scoring took 192.3 seconds.
+
+This is meaningful evidence that an organism's own hidden trace contains
+deception-relevant information beyond its visible output. It is not evidence
+of cross-family transfer because every varied row is Qwen. Do not infer that
+opaque leaderboard methods expose reasoning, and do not integrate this
+test-measured variant into Phoenix without a separately frozen promotion
+decision.
