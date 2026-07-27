@@ -27,7 +27,9 @@ returned both binary labels within the provider's top-five limit.
 
 | teacher | macro AUROC | instructed AUROC | varied AUROC | BA | recall | FPR |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.6-27B local direct logits | 0.9533 | 0.9954 | 0.8972 | 0.8940 | 0.8571 | 0.0690 |
 | Qwen3.5-27B local direct logits | 0.9574 | **0.9992** | 0.9018 | 0.9119 | **0.8857** | 0.0619 |
+| Qwen3.5-122B-A10B OpenRouter terminal logits | 0.9482 | 0.9973 | 0.8828 | 0.9155 | 0.8738 | 0.0429 |
 | Qwen3.5-397B-A17B OpenRouter terminal logits | **0.9631** | 0.9981 | **0.9164** | **0.9179** | 0.8762 | **0.0405** |
 
 The 397B teacher gains 0.0057 macro AUROC overall and 0.0146 on varied
@@ -45,6 +47,29 @@ that required a retry. Artifacts are under
 `results/blackbox/qwen35_397b_openrouter_nothink_tvg_binary_logit_v1/`.
 OpenRouter remains development/training infrastructure only; external API calls
 are not permitted in the submitted detector.
+
+The frozen local-test follow-up confirmed the 397B result and rejected 122B as
+a scale/efficiency compromise:
+
+| teacher | test macro AUROC | instructed AUROC | varied AUROC | BA | recall | FPR | cost |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.5-122B-A10B | 0.9555 | **0.9956** | 0.9021 | 0.8952 | 0.8333 | 0.0429 | `$0.0708` |
+| Qwen3.5-397B-A17B | **0.9654** | 0.9940 | **0.9272** | **0.9071** | **0.8500** | **0.0357** | `$0.1043` |
+
+Both runs covered all 821 rows with zero missing binary logits, zero reasoning
+tokens, and only `Prediction:0|1` completions. The 397B result improved slightly
+from validation to test (`0.9631` to `0.9654`) and its varied AUROC rose from
+`0.9164` to `0.9272`. The 122B checkpoint also improved on test but remained
+behind 397B by 0.0098 macro AUROC and 0.0251 varied AUROC. It was unexpectedly
+worse than the local Qwen3.5-27B control on validation despite its greater
+capacity, so do not assume monotonic teacher quality from parameter count.
+
+The 122B validation/test runs produced 775/768 unique scores and cost
+`$0.0707`/`$0.0708`; the matched 397B runs produced 811/814 unique scores and
+cost `$0.1042`/`$0.1043`. The 122B jobs required many more transient retries
+while sharing the same Alibaba endpoint, but retrying did not change provider
+or leave incomplete rows. Select 397B, not 122B, if proceeding with remote
+same-family soft supervision.
 
 ## Trace audit
 
