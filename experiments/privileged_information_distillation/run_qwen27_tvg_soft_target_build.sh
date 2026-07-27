@@ -24,4 +24,4 @@ python "${WORKTREE_ROOT}/experiments/privileged_information_distillation/build_s
   "${INPUT}" \
   "${OUTPUT}" \
   --kind binary_identity \
-  --expected-rows 6573
+  --expected-rows 2880

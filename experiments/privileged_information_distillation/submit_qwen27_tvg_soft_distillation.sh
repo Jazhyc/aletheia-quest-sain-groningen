@@ -29,7 +29,8 @@ TEACHER="$(submit_id \
   --config-path "${WORKTREE_ROOT}/configs/single_judges" \
   --config-name blackbox_reasoning_nothink_truth_value_binary_logit_qwen35_27b_v1 \
   "method=${TEACHER_METHOD}" \
-  split=train)"
+  split=train \
+  +dataset_name_contains=varied-deception)"
 
 CACHE="$(submit_id \
   --job-name=aq-q27-tvg-cache \
