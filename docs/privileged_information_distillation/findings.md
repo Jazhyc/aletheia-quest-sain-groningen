@@ -2707,3 +2707,52 @@ therefore an output-parameterization result, not merely a better prompt. The
 ordinal arm has more unique scores and nearly identical BA, but badly orders
 the difficult varied rows. Use a literal binary teacher target for the next
 student loss; do not infer ranking quality from score uniqueness alone.
+
+## Leaderboard-aligned GRPO continuation logits (2026-07-27)
+
+An inference-input audit found that the saved GRPO configurations retained
+`judge.include_reasoning=true`. This supplied the dataset's source
+`assistant_reasoning` field to both the early base-Qwen GRPO adapter and the
+later privileged-distillation continuations. Because leaderboard datasets do
+not expose that field, the earlier roughly `0.965` test AUROC is not a valid
+leaderboard estimate.
+
+The logits evaluator now supports `--exclude-reasoning`. The corrected path
+renders only the observable prompt and assistant answer, appends
+`<reasoning>\n</reasoning>\nPrediction:`, and scores the normalized next-token
+margin over literal `0` and `1`. It performs one Qwen3.5-9B forward pass per
+row; it does not generate reasoning at inference.
+
+Frozen validation job `30304158` compared the one- and two-epoch varied-only
+GRPO continuations from the selected rank-16 privileged-distillation adapter:
+
+| adapter | macro AUROC | instructed | varied | BA at 0.5 | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Phoenix/PID SFT direct reference | `0.93815` | `0.99354` | `0.86431` | — | — |
+| GRPO epoch 1 | **`0.95137`** | **`0.99656`** | `0.89111` | **`0.89643`** | `79/822` |
+| GRPO epoch 2 | `0.94935` | `0.98667` | **`0.89958`** | `0.86905` | `69/822` |
+
+Macro AUROC selected epoch 1 before local-test evaluation. Its frozen
+validation threshold was `0.37754068`, where validation BA was `0.91071`.
+Epoch 2 was rejected despite its higher varied AUROC because it lost overall
+and instructed ranking.
+
+Frozen local-test job `30304374` then evaluated epoch 1 exactly once:
+
+| adapter | macro AUROC | instructed | varied | BA at 0.5 | BA at frozen threshold | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Phoenix/PID SFT direct reference | `0.93423` | `0.98177` | `0.87083` | — | — | — |
+| GRPO epoch 1 | **`0.95982`** | **`0.99073`** | **`0.91861`** | `0.88690` | `0.89881` | `79/821` |
+
+The test run had recall `0.82857` and FPR `0.05476` at threshold `0.5`; the
+validation-frozen threshold gave recall `0.85714` and FPR `0.05952`. Scoring
+took `38.85s` for 821 rows. The generic result artifact also reports a
+test-oracle threshold, but that value was inspected only as a diagnostic and
+must not be used for selection or deployment.
+
+This is the strongest tracked leaderboard-aligned local-test judge by macro
+AUROC, narrowly exceeding the much more expensive Qwen3.5-27B three-generation
+D/K/S ensemble (`0.9573`). Promote the epoch-1 adapter as the next submission
+candidate. Retain the continuous logit score despite its 742 tied rows, keep
+the hard `deceptive` threshold separate, and do not re-enable source reasoning
+or reasoning generation at inference.
