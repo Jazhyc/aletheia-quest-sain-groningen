@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+import types
+
 import numpy as np
 import pytest
 
@@ -13,6 +16,7 @@ from experiments.ndif_tvg_model_swap.run_ndif_tvg_model_swap import (
     render_chat_prompt,
     render_raw_prompt,
 )
+from submission.util import build_model
 
 
 class FakeTokenizer:
@@ -64,6 +68,25 @@ def test_binary_labels_must_be_distinct_single_tokens() -> None:
     tokenizer.encode = lambda value, *, add_special_tokens: [1, 2]
     with pytest.raises(ValueError, match="expected one token"):
         binary_token_ids(tokenizer)
+
+
+def test_competition_gemma_uses_language_model_wrapper(monkeypatch) -> None:
+    calls = []
+
+    class FakeLanguageModel:
+        def __init__(self, model_id, **kwargs):
+            calls.append((model_id, kwargs))
+
+    fake_nnsight = types.ModuleType("nnsight")
+    fake_nnsight.LanguageModel = FakeLanguageModel
+    monkeypatch.setitem(sys.modules, "nnsight", fake_nnsight)
+
+    result = build_model("google/gemma-3-27b-it", "example/adapter")
+
+    assert isinstance(result, FakeLanguageModel)
+    assert calls == [
+        ("google/gemma-3-27b-it", {"peft": "example/adapter"}),
+    ]
 
 
 def test_metrics_are_macro_averaged_by_dataset() -> None:

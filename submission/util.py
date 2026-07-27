@@ -80,31 +80,23 @@ def response_span(messages: list, tokenizer) -> tuple[list[int], int, int]:
 
 # ── model ────────────────────────────────────────────────────────────────────
 
-def build_model(model_id: str, lora_id: str | None = None):
-    """Construct the right nnsight wrapper for a repo: ``VisionLanguageModel`` for
-    multimodal/conditional models (e.g. Gemma-3), ``LanguageModel`` otherwise.
-    ``peft=lora_id`` attaches the LoRA adapter when one is given. The config and
-    tokenizer load locally; the weights live on NDIF — the returned object is just
-    a handle you trace against."""
-    from transformers import AutoConfig
+def build_model(model_id: str, lora_id: str | None = None, **model_kwargs):
+    """Construct the competition's text-only nnsight ``LanguageModel`` handle.
 
+    ``peft=lora_id`` attaches a LoRA adapter when one is given. Every competition
+    organism is deployed under the ``LanguageModel`` remote key, including
+    ``google/gemma-3-27b-it`` even though its Hugging Face configuration contains
+    a vision tower. Selecting ``VisionLanguageModel`` for Gemma therefore misses
+    the pinned competition deployment.
+    """
     try:
-        cfg = AutoConfig.from_pretrained(model_id)
-        archs = getattr(cfg, "architectures", None) or []
-        is_vlm = bool(getattr(cfg, "vision_config", None)) or any(
-            ("ConditionalGeneration" in a) or ("VisionLanguage" in a) for a in archs)
-    except Exception:
-        is_vlm = False
-
-    try:
-        from nnsight import LanguageModel, VisionLanguageModel
+        from nnsight import LanguageModel
     except ImportError:                       # nnsight 0.7.x no longer re-exports at top level
         from nnsight.modeling.language import LanguageModel
-        from nnsight.modeling.vlm import VisionLanguageModel
 
-    Wrapper = VisionLanguageModel if is_vlm else LanguageModel
     kwargs = {"peft": lora_id} if lora_id else {}
-    return Wrapper(model_id, **kwargs)
+    kwargs.update(model_kwargs)
+    return LanguageModel(model_id, **kwargs)
 
 
 def load_model(dataset_name: str):

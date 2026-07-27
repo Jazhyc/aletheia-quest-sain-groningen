@@ -42,14 +42,13 @@ Nemotron completed all 821 rows:
 | model | macro AUROC | instructed | varied | BA | recall | FPR | unique |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Nemotron Super 120B-A12B | `0.95655` | `0.98708` | `0.91583` | `0.89762` | `0.82619` | `0.03095` | `70/821` |
+| Gemma 3 27B IT | `0.92917` | `0.96344` | `0.88347` | `0.86548` | `0.85476` | `0.12381` | `136/821` |
 
-The 26 resumable competition-NDIF sessions took 185.6 seconds of scoring time.
-Gemma passed local tokenizer and prompt compatibility (`0` and `1` are distinct
-single tokens), but the competition endpoint rejected two separate two-row
-smoke requests before model execution because `google/gemma-3-27b-it` was not
-pinned and this API key does not support hotswapping. The regular NDIF endpoint,
-`https://api.ndif.us`, listed Gemma as a hot Pilot-only deployment, but a
-separate approved two-row access check rejected the competition key as missing
-or invalid before accepting the trace. Therefore neither endpoint can currently
-run Gemma with the available key. This is an endpoint/access blocker, not a
-benchmark result; no local model weights are required.
+The 26 resumable Nemotron sessions took 185.6 seconds of scoring time. Gemma
+needed four sessions and 49.3 seconds at batch 8. An initial Gemma attempt
+incorrectly used `VisionLanguageModel`, inferred from its Hugging Face vision
+configuration. The competition deploys Gemma under the text-only
+`LanguageModel` key; using the wrong wrapper missed the pinned deployment and
+caused a misleading hotswap error. The corrected wrapper completed all rows.
+Gemma's margins were heavily saturated: 270 rows were exactly 1.0 and only 136
+unique scores remained.

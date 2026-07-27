@@ -85,6 +85,7 @@ Nemotron completed the frozen 821-row local test:
 | teacher | macro AUROC | instructed | varied | BA | recall | FPR | unique scores |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | NVIDIA Nemotron Super 120B-A12B | `0.95655` | `0.98708` | `0.91583` | `0.89762` | `0.82619` | `0.03095` | `70/821` |
+| Google Gemma 3 27B IT | `0.92917` | `0.96344` | `0.88347` | `0.86548` | `0.85476` | `0.12381` | `136/821` |
 
 Its 26 resumable remote sessions took `185.6s` of scoring time. Nemotron is
 competitive but does not beat the frozen Qwen3.5-397B test teacher (`0.9654`
@@ -96,16 +97,21 @@ instructed unit, AUROC was `0.9500` but recall at the fixed 0.5 threshold was
 zero, illustrating why ranking and secondary threshold diagnostics must stay
 separate.
 
-Gemma passed the local renderer/tokenizer compatibility smoke: literal `0`
-and `1` are distinct single tokens and the two test prompts fit comfortably.
-However, two separate competition-endpoint requests were rejected before
-inference because `google/gemma-3-27b-it` was not pinned and hotswapping was
-unavailable for the API key. The regular `https://api.ndif.us` status listed
-Gemma as a hot Pilot-only deployment, but an explicitly approved two-row access
-check rejected the competition key as missing or invalid before accepting the
-trace. Thus neither endpoint can currently evaluate Gemma with the available
-key. This is an endpoint/access blocker, not a Gemma score. Do not substitute a
-local-cluster load or another provider into this matched benchmark.
+The first Gemma attempts selected `VisionLanguageModel` because its Hugging
+Face configuration carries a vision tower. Competition NDIF actually pins
+`google/gemma-3-27b-it` under the text-only `LanguageModel` remote key, as the
+current Sonic branch already documents. The wrapper mismatch—not deployment
+availability—caused the misleading hotswap error. After aligning the shared
+helper with the competition deployment, the two-row smoke and full test both
+completed.
+
+Gemma trails Nemotron by `0.02738` macro AUROC and by `0.03236` on varied
+deception. Its higher FPR and severe probability saturation are notable: 270
+rows scored exactly 1.0 and only 136 unique values remained. Cross-family
+performance was uneven, including AUROC `0.7000` on the 21-row base-Nemotron
+instructed unit. On the two Gemma-source instructed units it scored `0.9500`
+and `1.0000` AUROC. This does not make Gemma a strong universal judge, although
+the matched-family unit remains relevant to an organism-self-judgment design.
 
 Runtime code and resumable artifacts are under
 `experiments/ndif_tvg_model_swap/` and

@@ -15,13 +15,20 @@ metrics at threshold 0.5 were `0.89762` BA, `0.82619` recall, and `0.03095`
 FPR. It produced only 70 unique probabilities across 821 rows. The 26
 resumable NDIF sessions took `185.6s` of scoring time.
 
-`google/gemma-3-27b-it` passed local tokenizer/prompt validation, but two
-separate two-row competition-endpoint attempts were rejected before execution
-because the checkpoint was not pinned and the API key could not hotswap it.
-The regular `https://api.ndif.us` endpoint listed Gemma as hot and Pilot-only,
-but a separate approved access check rejected the competition key as missing or
-invalid before accepting the trace. Record this as an endpoint/access blocker,
-not a model result.
+`google/gemma-3-27b-it` completed with `0.92917` macro AUROC, `0.96344`
+instructed AUROC, and `0.88347` varied AUROC. Secondary metrics were `0.86548`
+BA, `0.85476` recall, and `0.12381` FPR. Four resumable sessions took `49.3s`
+at batch 8. Scores were heavily saturated: 270 exact-one probabilities and only
+136 unique values over 821 rows.
+
+The initial Gemma attempts failed because the shared helper inferred
+`VisionLanguageModel` from the repository's vision configuration. Competition
+NDIF pins Gemma under the text-only `LanguageModel` remote key, so the request
+missed the active deployment and returned a misleading hotswap error. The
+helper now matches the competition deployment, consistent with the current
+Sonic branch. Gemma's `0.7000` AUROC on the small base-Nemotron unit shows that
+it is not a strong universal judge; its two matched Gemma-source instructed
+units scored `0.9500/1.0000`.
 
 Implementation and tests are in `experiments/ndif_tvg_model_swap/`; ignored
 artifacts are under
