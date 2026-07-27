@@ -2764,6 +2764,75 @@ ordinal arm has more unique scores and nearly identical BA, but badly orders
 the difficult varied rows. Use a literal binary teacher target for the next
 student loss; do not infer ranking quality from score uniqueness alone.
 
+## Pure Qwen-27B TVG binary soft distillation (2026-07-27)
+
+Jobs `30310442`--`30310445` completed the frozen varied-only binary soft-target
+pipeline. Unlike the earlier auxiliary-loss experiment, this used a fresh
+rank-16/alpha-32 Qwen3.5-9B adapter and optimized only binary soft-target BCE at
+the exact Truth Value Guard `Prediction:` boundary. There was no GPT-OSS
+reasoning-summary loss or hard-label loss. The cache contains all 2,880 varied
+training rows, 2,488 unique teacher probabilities, and no parser/filter losses.
+Teacher probabilities range from `0.0002305` to `0.9996646`.
+
+Training used one epoch, AdamW `5e-5`, and effective batch size 32. It completed
+90 optimizer steps in `892.1s`; reported train loss was `4.967`. The adapter
+weight SHA-256 is
+`c096e5839fe96fb7409fe759a79bc0989ef1efe5aee010b83c3157d38586a75f`.
+
+The evaluation command intentionally allowed only one generated token, which
+produced `Prediction` and therefore made all 822 generated-output rows
+unparseable. This does not invalidate the separately executed direct-margin
+pass: it appended `Prediction:` to the original prompt, scored literal `0|1`
+with one forward pass, and had zero missing logits. Read
+`score_metrics.direct_margin`, not the placeholder top-level generated metric.
+
+| readout | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.5-27B teacher | `0.95744` | `0.99917` | `0.90181` | `0.91190` | `0.88571` | `0.06190` | `779/822` |
+| Soft-only Qwen3.5-9B student | `0.94625` | `0.99500` | `0.88125` | `0.88810` | `0.83810` | `0.06190` | `544/822` |
+| Phoenix 4.4 GRPO reference | **`0.95137`** | **`0.99656`** | **`0.89111`** | **`0.89643`** | **`0.84524`** | `0.05238` | `79/822` |
+
+The soft student retains a strong ranking and far more score resolution than
+Phoenix 4.4, but it loses `0.01119` macro AUROC to the teacher and trails
+Phoenix 4.4 by `0.00512`. It also transfers the teacher unevenly:
+
+| validation dataset unit | teacher AUROC | student AUROC | delta |
+| --- | ---: | ---: | ---: |
+| `instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None` | `1.00000` | `1.00000` | `+0.00000` |
+| `instructed-deception-Qwen3.5-27B-None` | `1.00000` | `1.00000` | `+0.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.99000` | `0.97750` | `-0.01250` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `1.00000` | `1.00000` | `+0.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `1.00000` | `0.99750` | `-0.00250` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `1.00000` | `0.99750` | `-0.00250` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `1.00000` | `0.97250` | `-0.02750` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `1.00000` | `1.00000` | `+0.00000` |
+| `instructed-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `1.00000` | `0.99750` | `-0.00250` |
+| `instructed-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `1.00000` | `1.00000` | `+0.00000` |
+| `instructed-deception-gemma-3-27b-it-None` | `1.00000` | `1.00000` | `+0.00000` |
+| `instructed-deception-gemma-3-27b-it-s-mo-gemma-3-27b-it` | `1.00000` | `0.99750` | `-0.00250` |
+| `varied-deception-Qwen3.5-27B-None` | `0.95750` | `0.97250` | `+0.01500` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.85750` | `0.90750` | `+0.05000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.81125` | `0.72000` | `-0.09125` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `0.87625` | `0.81875` | `-0.05750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `0.98250` | `0.95250` | `-0.03000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.84000` | `0.90250` | `+0.06250` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.88250` | `0.79875` | `-0.08375` |
+| `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.97000` | `0.95750` | `-0.01250` |
+| `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.93875` | `0.90125` | `-0.03750` |
+
+The frozen promotion rule rejects this adapter: do not run local test, replace
+Phoenix 4.4, or tune this 27B run after seeing validation. The result does show
+that pure boundary distillation is much more effective than the earlier
+reasoning-SFT-plus-soft-auxiliary formulation (`0.94625` versus `0.93762`), so
+the clean next experiment is to repeat the exact pipeline with the
+validation/test-confirmed Qwen3.5-397B teacher, not to add reasoning or another
+loss term.
+
+The separate Qwen3.5-27B thinking diagnostic, job `30310441`, also confirms
+that teacher reasoning is unnecessary. Post-reasoning label margins reached
+`0.95571` macro AUROC (`0.99792` instructed, `0.89944` varied), slightly below
+direct no-thinking `0.95744`, while scoring took `723.3s` instead of `38.2s`.
+
 ## Leaderboard-aligned GRPO continuation logits (2026-07-27)
 
 An inference-input audit found that the saved GRPO configurations retained
