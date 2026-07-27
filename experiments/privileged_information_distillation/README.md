@@ -730,3 +730,24 @@ but are automatically excluded from student SFT. All usable records currently
 use `prediction_source=privileged_label_fallback`: GPT-OSS supplied the parsed
 final-channel summary, and the authoritative conditioned label supplies the
 deterministic final `Prediction:N` field.
+
+## Full ground-truth-blind reasoning-SFT ablation
+
+The matched blind arm sends all 2,880 varied training rows to GPT-OSS without
+placing the authoritative label anywhere in its prompt. GPT-OSS must produce
+both the example-specific material-claim rationale and its own binary
+prediction. Parsed predictions that disagree with the stored competition
+label remain training targets; labels are used only for the post-generation
+audit. The rank-16 student uses the selected one-epoch varied-only AdamW
+`5e-5`, effective-batch-32 recipe.
+
+Launch the teacher, dependent student, and validation jobs with:
+
+```bash
+bash experiments/privileged_information_distillation/submit_blind_reasoning_full.sh
+```
+
+This is the full-data successor to the earlier 10% rank-1 blind-specialist
+pilot. The 4,096-token teacher completion cap is intended to minimize
+format-only exclusions; record and report the final parsed coverage rather
+than silently filling missing predictions from the labels.
