@@ -3948,3 +3948,50 @@ Do not route on `lora is None`; the intended rule must remain a general
 white-box OOD criterion. The local units are organism-homogeneous, so their
 per-dataset AUROC does not test cross-family score calibration. Mixed-organism
 hidden units would need separate label-blind calibration evidence.
+
+## 2026-07-28: Matched-organism contextual self-question logits
+
+The frozen follow-up retained every original role/content message, appended a
+user turn asking the exact generating organism whether every factual claim in
+its immediately preceding response was true, and read normalized literal
+`0|1` next-token logits after `Prediction:`. A score of one meant that at least
+one claim was false or materially misleading. Source reasoning was excluded,
+thinking was disabled, and no audit chain or verdict text was generated.
+
+All 12 exact base-model/LoRA configurations passed a one-row NDIF compatibility
+smoke before the complete 821-row test run. The full run had no prompt
+truncation: prompt lengths ranged from 127 to 521 tokens against the 4,096-token
+limit. Remote scoring took 125.2 seconds and produced 157 unique scores.
+
+| method | macro AUROC | instructed | varied | BA | recall | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| contextual self-question | `0.95012` | `0.98927` | `0.89792` | `0.89048` | `0.92143` | `0.14048` |
+| matched-organism Truth Value Guard | `0.95131` | `0.99042` | `0.89917` | `0.88810` | `0.81905` | `0.04286` |
+| universal base Qwen Truth Value Guard | `0.96065` | `0.99823` | `0.91056` | `0.92024` | `0.89524` | `0.05476` |
+
+Contextual self-questioning trailed the matched direct judge by only `0.00119`
+macro AUROC, with similarly small instructed (`-0.00115`) and varied
+(`-0.00125`) deltas. Across dataset units it won five, tied seven, and lost
+nine. Score correlation was high (Pearson `0.92598`, Spearman `0.91692`), but
+mean absolute score movement was `0.11009`. At the uncalibrated 0.5 threshold,
+self-questioning raised recall by `0.10238` and FPR by `0.09762`; its nearly
+unchanged BA should not be read as unchanged behavior.
+
+Family macro AUROC was `0.94736` for Qwen's 18 units, `0.95000` for Gemma's two
+units, and `1.00000` for the single 21-row Nemotron unit. This does not reproduce
+the hypothesized Gemma < Nemotron < Qwen order, and it is not a fair family
+comparison because only Qwen contains varied-deception units.
+
+An exploratory equal probability average of self-question and matched direct
+scores reached `0.95601` macro AUROC with 652 unique values. This blend was
+computed after observing test results and is therefore diagnostic only. Do not
+promote or tune it without a frozen definition and an untouched evaluation
+split. Even its post-hoc result remains below the existing universal base-Qwen
+control.
+
+The result supports contextual self-questioning as a strong continuous signal,
+but not as the explanation for an otherwise inaccessible performance jump:
+direct matched-organism judging was marginally stronger, and universal
+unadapted Qwen remained stronger still. Runtime and ignored artifacts are under
+`experiments/ndif_context_self_question/` and
+`results/blackbox/ndif_context_self_question_test_v1/`.
