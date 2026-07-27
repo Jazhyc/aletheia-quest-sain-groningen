@@ -3885,8 +3885,24 @@ were parse failures. Luna and GPT-OSS post-reasoning vectors correlate at
 
 The public adapter repository is
 `Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16`, initial upload commit
-`fa52f5e7f6a36d7d06e6718c65bd00fd4d11658f`. Submit the sole notebook
-`submission/phoenix_wright_v5_2.ipynb` as black-box.
+`fa52f5e7f6a36d7d06e6718c65bd00fd4d11658f`. Phoenix 5.2 entered the main
+leaderboard queue as a black-box direct-scoring control.
+
+Phoenix 5.2.1 was then prepared as the matched inference-time reasoning probe.
+It keeps the adapter and all routes fixed, deterministically generates the
+ordinary Luna reasoning summary, removes the final selected label, and scores
+literal `0|1` logits at that boundary. Missing labels fall back to a canonical
+`Prediction:` boundary. Generation uses length-aware `32/24/16` batches and a
+512-token allowance; the final score pass retains `48/32/16` and
+`logits_to_keep=1`. The secondary threshold is validation-frozen at `0.38`.
+
+A one-row execution of the sole
+`submission/phoenix_wright_v5_2_1.ipynb` notebook against the competition NDIF
+host completed successfully and wrote score `0.00109873` for index `3200`. The
+first harness attempt used the regular NDIF host and correctly rejected the
+competition key; setting the same `NDIF_HOST` supplied by the leaderboard fixed
+the harness without a notebook change. The adapter model card was updated at
+commit `efbb2cf750b8e60ab789ea369e797fb7c6cbbdf2`; weights are unchanged.
 
 ## 2026-07-27: Matched-organism Truth Value Guard logits
 

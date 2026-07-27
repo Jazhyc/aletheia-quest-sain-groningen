@@ -121,6 +121,15 @@ binary AUROC was `0.91071` and the empty-summary margin scored `0.92780`.
 Generating the Luna student's learned rationale therefore does not improve
 overall or varied ranking. Keep Phoenix 5.2 on direct scoring.
 
+Phoenix 5.2.1 nevertheless packages post-reasoning scoring as a separate OOD
+transfer probe. It keeps the same adapter and routes, removes the generated
+final digit before rescoring, and uses a canonical `Prediction:` fallback only
+when no label is present. Local aggregate performance is explicitly not its
+selection claim; queued Phoenix 5.2 is the matched direct leaderboard control.
+A one-row competition-NDIF notebook smoke passed with score `0.00109873`.
+Generation uses `32/24/16` length-aware batches, while the final one-token
+margin retains `48/32/16`.
+
 ### GPT-5.6 Sol privileged Truth Value Guard reasoning pilot (2026-07-27)
 
 The exact Luna pilot rows, seed, privileged Truth Value Guard prompt, 4,096

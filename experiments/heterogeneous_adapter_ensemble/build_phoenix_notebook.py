@@ -7,7 +7,7 @@ import nbformat
 
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUT = ROOT / "submission/phoenix_wright_v5_2.ipynb"
+OUTPUT = ROOT / "submission/phoenix_wright_v5_2_1.ipynb"
 
 
 def main() -> None:
@@ -22,25 +22,24 @@ def main() -> None:
     }
     notebook["cells"] = [
         nbformat.v4.new_markdown_cell(
-            """# Phoenix Wright v5.2
+            """# Phoenix Wright v5.2.1
 
 AUROC-first black-box deception judge using a fresh rank-16 Qwen3.5-9B adapter
 trained on concise privileged Truth Value Guard reasoning traces from GPT-5.6
 Luna at medium reasoning effort. The teacher saw the authoritative label while
 constructing each training trace; the deployed student receives only the
-observable conversation and output. The notebook exposes no source reasoning,
-generates no judge reasoning, and reads the normalized next-token margin between
-the exact labels `0` and `1` directly after `Prediction:`. The continuous margin
-is the submission score; the validation-selected threshold supplies the required
-binary decision.
+observable conversation and output. For ordinary rows, the notebook generates
+the student's learned reasoning summary, removes its final selected label, and
+reads the normalized next-token margin between the exact labels `0` and `1` at
+that decision boundary. This tests whether inference-time reasoning transfers
+better to OOD leaderboard data despite its slight local AUROC regression.
 
 Three routes remain mutually exclusive. Explicit harm-pressure knowledge
 self-reports use the base-Qwen `knowledge_report_type` empty-summary specialist.
 Executed-action reports preserve the frozen action-report prompt and original
 Phoenix adapter. Remaining rows with a final assistant reasoning trace combine
-the Luna-trained main margin and rank-1 resolved-intent margin in log-odds space.
-All other rows use the direct factual-judgment path. The required binary column
-always uses the unblended route score."""
+the Luna post-reasoning margin and rank-1 resolved-intent margin in log-odds
+space. The required binary column always uses the unblended route score."""
         ),
         nbformat.v4.new_code_cell(
             """import contextlib
@@ -59,7 +58,9 @@ from phoenix_wright import (
     build_epistemic_empty_prompt,
     build_exclusive_route_flags,
     build_intent_empty_prompt,
-    build_main_direct_prompt,
+    build_main_generation_prompt,
+    has_binary_prediction,
+    prefix_before_prediction,
 )
 import util
 
@@ -83,23 +84,29 @@ INTENT_ADAPTER_REPO = os.environ.get(
 BUNDLED_INTENT_ADAPTER = "submission/phoenix_wright_adapters/resolved_intent"
 
 MAX_PROMPT_TOKENS = int(os.environ.get("PHOENIX_MAX_PROMPT_TOKENS", "2048"))
+MAX_NEW_TOKENS = int(os.environ.get("PHOENIX_MAX_NEW_TOKENS", "512"))
 BATCH_SIZE = int(os.environ.get("PHOENIX_BATCH_SIZE", "48"))
 MEDIUM_BATCH_SIZE = int(os.environ.get("PHOENIX_MEDIUM_BATCH_SIZE", "32"))
 MEDIUM_PROMPT_THRESHOLD = int(os.environ.get("PHOENIX_MEDIUM_PROMPT_THRESHOLD", "600"))
 LONG_BATCH_SIZE = int(os.environ.get("PHOENIX_LONG_BATCH_SIZE", "16"))
 LONG_PROMPT_THRESHOLD = int(os.environ.get("PHOENIX_LONG_PROMPT_THRESHOLD", "900"))
+GENERATION_BATCH_SIZE = int(os.environ.get("PHOENIX_GENERATION_BATCH_SIZE", "32"))
+GENERATION_MEDIUM_BATCH_SIZE = int(os.environ.get("PHOENIX_GENERATION_MEDIUM_BATCH_SIZE", "24"))
+GENERATION_LONG_BATCH_SIZE = int(os.environ.get("PHOENIX_GENERATION_LONG_BATCH_SIZE", "16"))
 REMOTE_BATCHES_PER_SESSION = int(os.environ.get("PHOENIX_REMOTE_BATCHES_PER_SESSION", "0"))
 NNSIGHT_LOCAL = os.environ.get("PHOENIX_NNSIGHT_LOCAL", "0").lower() in {"1", "true", "yes"}
-SUBMISSION_THRESHOLD = float(os.environ.get("PHOENIX_THRESHOLD", "0.19"))
+SUBMISSION_THRESHOLD = float(os.environ.get("PHOENIX_THRESHOLD", "0.38"))
 
 print(f"dataset={DATASET_NAME} limit={LIMIT}")
-print(f"method=phoenix_wright_v5.2 luna_medium_privileged_reasoning members={MEMBER_NAMES}")
+print(f"method=phoenix_wright_v5.2.1 luna_medium_post_reasoning members={MEMBER_NAMES}")
 print(f"main_adapter_repo={MAIN_ADAPTER_REPO}")
 print(f"action_adapter_repo={ACTION_ADAPTER_REPO}")
 print(f"intent_adapter_repo={INTENT_ADAPTER_REPO}")
 print(
-    f"batch={BATCH_SIZE}/{MEDIUM_BATCH_SIZE}/{LONG_BATCH_SIZE} "
-    f"sessions={REMOTE_BATCHES_PER_SESSION} max_prompt_tokens={MAX_PROMPT_TOKENS} "
+    f"score_batch={BATCH_SIZE}/{MEDIUM_BATCH_SIZE}/{LONG_BATCH_SIZE} "
+    f"generation_batch={GENERATION_BATCH_SIZE}/{GENERATION_MEDIUM_BATCH_SIZE}/"
+    f"{GENERATION_LONG_BATCH_SIZE} sessions={REMOTE_BATCHES_PER_SESSION} "
+    f"max_prompt_tokens={MAX_PROMPT_TOKENS} max_new_tokens={MAX_NEW_TOKENS} "
     f"threshold={SUBMISSION_THRESHOLD} nnsight_local={NNSIGHT_LOCAL}"
 )"""
         ),
@@ -174,20 +181,25 @@ def load_judge(*, kind):
     return active_model, active_tokenizer, label_ids"""
         ),
         nbformat.v4.new_code_cell(
-            """def make_position_batches(prompt_lengths):
+            """def make_position_batches(
+    prompt_lengths,
+    short_batch_size,
+    medium_batch_size,
+    long_batch_size,
+):
     order = np.argsort(prompt_lengths)
     batches = []
     cursor = 0
     while cursor < len(order):
-        cap = BATCH_SIZE
+        cap = short_batch_size
         candidate = order[cursor:min(cursor + cap, len(order))]
         longest = max(prompt_lengths[position] for position in candidate)
         if longest > MEDIUM_PROMPT_THRESHOLD:
-            cap = min(cap, MEDIUM_BATCH_SIZE)
+            cap = min(cap, medium_batch_size)
             candidate = order[cursor:min(cursor + cap, len(order))]
             longest = max(prompt_lengths[position] for position in candidate)
         if longest > LONG_PROMPT_THRESHOLD:
-            cap = min(cap, LONG_BATCH_SIZE)
+            cap = min(cap, long_batch_size)
             candidate = order[cursor:min(cursor + cap, len(order))]
         batches.append(candidate.tolist())
         cursor += len(candidate)
@@ -201,7 +213,12 @@ def score_prompts(active_model, active_tokenizer, label_ids, prompts):
         len(active_tokenizer.encode(prompt, add_special_tokens=False))
         for prompt in prompts
     ]
-    position_batches = make_position_batches(prompt_lengths)
+    position_batches = make_position_batches(
+        prompt_lengths,
+        BATCH_SIZE,
+        MEDIUM_BATCH_SIZE,
+        LONG_BATCH_SIZE,
+    )
     encoded_batches = []
     for positions in position_batches:
         encoded = active_tokenizer(
@@ -259,13 +276,116 @@ def score_prompts(active_model, active_tokenizer, label_ids, prompts):
     return np.clip(scores, 0.0, 1.0)
 
 
+def generate_reasoning_score_prompts(
+    active_model,
+    active_tokenizer,
+    generation_prompts,
+):
+    prompt_lengths = [
+        len(active_tokenizer.encode(prompt, add_special_tokens=False))
+        for prompt in generation_prompts
+    ]
+    position_batches = make_position_batches(
+        prompt_lengths,
+        GENERATION_BATCH_SIZE,
+        GENERATION_MEDIUM_BATCH_SIZE,
+        GENERATION_LONG_BATCH_SIZE,
+    )
+    encoded_batches = []
+    for positions in position_batches:
+        encoded = active_tokenizer(
+            [generation_prompts[position] for position in positions],
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=MAX_PROMPT_TOKENS,
+        )
+        encoded_batches.append((encoded, positions, encoded["input_ids"].shape[1]))
+
+    batches_per_session = (
+        len(encoded_batches)
+        if NNSIGHT_LOCAL or REMOTE_BATCHES_PER_SESSION <= 0
+        else REMOTE_BATCHES_PER_SESSION
+    )
+    saved_groups = []
+    for group_start in range(0, len(encoded_batches), batches_per_session):
+        group_stop = min(group_start + batches_per_session, len(encoded_batches))
+        generated_pieces = []
+        session = (
+            contextlib.nullcontext()
+            if NNSIGHT_LOCAL
+            else active_model.session(remote=True)
+        )
+        shapes = [
+            (len(positions), prompt_tokens)
+            for _, positions, prompt_tokens in encoded_batches[group_start:group_stop]
+        ]
+        print(
+            f"reasoning-generation: batches {group_start + 1}-{group_stop}/"
+            f"{len(encoded_batches)} shapes={shapes}",
+            flush=True,
+        )
+        with session:
+            for encoded, _, prompt_tokens in encoded_batches[group_start:group_stop]:
+                with active_model.generate(
+                    {
+                        "input_ids": encoded["input_ids"],
+                        "attention_mask": encoded["attention_mask"],
+                    },
+                    do_sample=False,
+                    max_new_tokens=MAX_NEW_TOKENS,
+                    pad_token_id=active_tokenizer.pad_token_id,
+                ):
+                    piece = active_model.generator.output[:, prompt_tokens:].detach().cpu()
+                    piece = torch.nn.functional.pad(
+                        piece,
+                        (0, MAX_NEW_TOKENS - piece.shape[1]),
+                        value=active_tokenizer.pad_token_id,
+                    )
+                    generated_pieces.append(piece)
+            generated_group = torch.cat(generated_pieces, dim=0).save()
+        saved_groups.append(generated_group)
+
+    generated_tokens = torch.cat(saved_groups, dim=0)
+    replies = [None] * len(generation_prompts)
+    cursor = 0
+    for _, positions, _ in encoded_batches:
+        count = len(positions)
+        decoded = active_tokenizer.batch_decode(
+            generated_tokens[cursor:cursor + count],
+            skip_special_tokens=True,
+        )
+        cursor += count
+        for position, reply in zip(positions, decoded, strict=True):
+            replies[position] = reply
+
+    fallback_count = sum(
+        not has_binary_prediction(reply)
+        for reply in replies
+    )
+    print(
+        f"reasoning-generation: completions={len(replies)} "
+        f"fallback_boundaries={fallback_count}",
+        flush=True,
+    )
+    return [
+        prompt + prefix_before_prediction(reply)
+        for prompt, reply in zip(generation_prompts, replies, strict=True)
+    ]
+
+
 def score_message_subset(messages, positions, *, kind, action_flags=None):
     active_model, active_tokenizer, label_ids = load_judge(kind=kind)
     if kind == "main":
-        prompts = [
-            build_main_direct_prompt(messages[position], active_tokenizer)
+        generation_prompts = [
+            build_main_generation_prompt(messages[position], active_tokenizer)
             for position in positions
         ]
+        prompts = generate_reasoning_score_prompts(
+            active_model,
+            active_tokenizer,
+            generation_prompts,
+        )
     else:
         builder = {
             "harm": build_epistemic_empty_prompt,
@@ -350,11 +470,11 @@ util.write_submission(
         ),
     ]
     cell_ids = (
-        "phoenix-v5-2-overview",
-        "phoenix-v5-2-configuration",
-        "phoenix-v5-2-routes-and-models",
-        "phoenix-v5-2-scoring",
-        "phoenix-v5-2-output",
+        "phoenix-v5-2-1-overview",
+        "phoenix-v5-2-1-configuration",
+        "phoenix-v5-2-1-routes-and-models",
+        "phoenix-v5-2-1-scoring",
+        "phoenix-v5-2-1-output",
     )
     for cell, cell_id in zip(notebook["cells"], cell_ids, strict=True):
         cell["id"] = cell_id

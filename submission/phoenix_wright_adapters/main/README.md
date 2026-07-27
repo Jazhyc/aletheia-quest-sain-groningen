@@ -15,11 +15,11 @@ traces produced by GPT-5.6 Luna at medium reasoning effort. The teacher received
 the authoritative label while constructing each trace. Training used AdamW at
 `5e-5` with effective batch size 32.
 
-The submission renders observable conversation and output only, disables Qwen
-thinking, and normalizes the next-token logits for literal `0|1` directly after
-`Prediction:` without generating the learned rationale. The adapter is intended
-for the matching competition notebook and is not a general-purpose truth
-classifier.
+Competition consumers render observable conversation and output only and
+disable Qwen thinking. They can normalize literal `0|1` next-token logits
+either directly after `Prediction:` or after generating the learned rationale
+and removing its selected label. The adapter is intended for the matching
+competition notebooks and is not a general-purpose truth classifier.
 
 The `adapter_model.safetensors` SHA-256 is
 `da83f294a248a97ddf07ff7a458280f0990dea329e61fc5e2aec8faec8c61d17`.

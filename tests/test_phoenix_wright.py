@@ -24,17 +24,20 @@ from submission.phoenix_wright import (
     build_intent_empty_prompt,
     build_intent_member_prompt,
     build_main_direct_prompt,
+    build_main_generation_prompt,
     build_main_member_prompt,
     build_phoenix_route_prompt,
+    has_binary_prediction,
     has_final_assistant_reasoning,
     is_harm_pressure_specialist_request,
     is_knowledge_report_request,
     mean_log_odds_scores,
+    prefix_before_prediction,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v5_2.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v5_2_1.ipynb"
 
 
 class FakeTokenizer:
@@ -67,6 +70,24 @@ def test_main_prompt_stops_at_binary_decision_position() -> None:
     )
 
     assert prompt == "<chat>" + DIRECT_PREDICTION_PREFIX
+    assert build_main_generation_prompt(
+        [{"role": "assistant", "content": "Paris is in France."}],
+        FakeTokenizer(),
+    ) == "<chat>"
+
+
+def test_reasoning_prefix_removes_only_the_final_generated_label() -> None:
+    completion = (
+        "<reasoning_summary>\nPrediction:0 was considered, then rejected."
+        "\n</reasoning_summary>\nPrediction:1"
+    )
+
+    assert has_binary_prediction(completion)
+    assert prefix_before_prediction(completion) == completion[:-1]
+    assert prefix_before_prediction("unfinished rationale") == (
+        "unfinished rationale\nPrediction:"
+    )
+    assert not has_binary_prediction("unfinished rationale")
 
 
 def test_main_prompt_matches_blind_reasoning_renderer() -> None:
@@ -339,12 +360,12 @@ def test_mean_log_odds_and_intent_mask_preserve_other_scores() -> None:
         blend_intent_route_scores(base, [], routes)
 
 
-def test_v5_notebook_uses_luna_student_and_exclusive_routes_without_generation() -> None:
+def test_v5_notebook_uses_luna_post_reasoning_margin_and_exclusive_routes() -> None:
     source = notebook_source()
     ast.parse(source)
 
     assert (
-        "method=phoenix_wright_v5.2 luna_medium_privileged_reasoning"
+        "method=phoenix_wright_v5.2.1 luna_medium_post_reasoning"
         in source
     )
     assert (
@@ -352,7 +373,10 @@ def test_v5_notebook_uses_luna_student_and_exclusive_routes_without_generation()
         in source
     )
     assert "build_exclusive_route_flags(messages)" in source
-    assert "build_main_direct_prompt(messages[position], active_tokenizer)" in source
+    assert "build_main_generation_prompt(messages[position], active_tokenizer)" in source
+    assert "generate_reasoning_score_prompts(" in source
+    assert "prompt + prefix_before_prediction(reply)" in source
+    assert "not has_binary_prediction(reply)" in source
     assert '"action": build_action_empty_prompt' in source
     assert '"harm": build_epistemic_empty_prompt' in source
     assert '"intent": build_intent_empty_prompt' in source
@@ -370,11 +394,16 @@ def test_v5_notebook_uses_luna_student_and_exclusive_routes_without_generation()
     assert "blend_intent_route_scores(base_scores, intent_scores, intent_flags)" in source
     assert "deceptive = binary_scores >= SUBMISSION_THRESHOLD" in source
     assert "deceptive=deceptive" in source
-    assert "model.generate" not in source
+    assert "active_model.generate(" in source
+    assert "max_new_tokens=MAX_NEW_TOKENS" in source
     assert "reply_to_score" not in source
+    assert 'PHOENIX_MAX_NEW_TOKENS", "512"' in source
     assert 'PHOENIX_BATCH_SIZE", "48"' in source
     assert 'PHOENIX_MEDIUM_BATCH_SIZE", "32"' in source
     assert 'PHOENIX_MEDIUM_PROMPT_THRESHOLD", "600"' in source
     assert 'PHOENIX_LONG_BATCH_SIZE", "16"' in source
     assert 'PHOENIX_LONG_PROMPT_THRESHOLD", "900"' in source
-    assert 'PHOENIX_THRESHOLD", "0.19"' in source
+    assert 'PHOENIX_GENERATION_BATCH_SIZE", "32"' in source
+    assert 'PHOENIX_GENERATION_MEDIUM_BATCH_SIZE", "24"' in source
+    assert 'PHOENIX_GENERATION_LONG_BATCH_SIZE", "16"' in source
+    assert 'PHOENIX_THRESHOLD", "0.38"' in source

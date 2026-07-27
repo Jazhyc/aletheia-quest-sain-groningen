@@ -478,3 +478,28 @@ The exact main adapter is published at
 `Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16`, initial upload commit
 `fa52f5e7f6a36d7d06e6718c65bd00fd4d11658f`. Its weight SHA-256 is
 `da83f294a248a97ddf07ff7a458280f0990dea329e61fc5e2aec8faec8c61d17`.
+
+## Phoenix Wright 5.2.1 Luna post-reasoning OOD probe
+
+Phoenix 5.2.1 keeps the exact 5.2 adapter, renderer, and mutually exclusive
+specialist routes. It changes only ordinary inference: generate the learned
+reasoning summary deterministically with Qwen thinking disabled, find the final
+`Prediction:0|1`, remove only its selected digit, and normalize the literal
+next-token `0|1` logits at that position. A completion without a parseable
+label receives a canonical trailing `Prediction:` boundary. The notebook never
+conditions its rescore on the already-selected label.
+
+This is deliberately not selected by local aggregate AUROC. Post-reasoning
+validation/test AUROC was `0.93250/0.93429`, below direct scoring at
+`0.93762/0.93470`. The hypothesis is instead that an explicit reasoning pass
+may help private OOD samples whose factual or semantic structure differs from
+the local Qwen-only varied data. The queued 5.2 direct run supplies the matched
+leaderboard control.
+
+Generation uses the previously proven length-aware `32/24/16` schedule with a
+512-token allowance. The one-token rescore retains `48/32/16`,
+`logits_to_keep=1`, and the exact normalized label margin. The secondary
+threshold is validation-selected at `0.38`; it does not affect AUROC. A direct
+one-row competition-NDIF notebook smoke completed successfully and emitted a
+continuous score of `0.00109873`. Phoenix 5.2.1 remains black-box and must be
+submitted with `--tag black`.

@@ -104,6 +104,7 @@ _HARM_PRESSURE_RE = re.compile(
     flags=re.IGNORECASE,
 )
 _OPTION_RE = re.compile(r"(?m)^\s*([A-D])\s*[.)]\s+")
+_PREDICTION_RE = re.compile(r"(?im)\bPrediction\s*:\s*<?([01])>?")
 
 
 def is_harm_pressure_choice_request(messages: Any) -> bool:
@@ -331,13 +332,31 @@ def build_main_member_prompt(messages: Any) -> str:
 
 def build_main_direct_prompt(messages: Any, tokenizer: Any) -> str:
     """Render the reasoning-distilled main judge at its direct decision boundary."""
+    return build_main_generation_prompt(messages, tokenizer) + DIRECT_PREDICTION_PREFIX
+
+
+def build_main_generation_prompt(messages: Any, tokenizer: Any) -> str:
+    """Render the main judge prompt at the start of its learned completion."""
     chat = tokenizer.apply_chat_template(
         [{"role": "user", "content": build_main_member_prompt(messages)}],
         tokenize=False,
         add_generation_prompt=True,
         enable_thinking=False,
     )
-    return chat + DIRECT_PREDICTION_PREFIX
+    return chat
+
+
+def has_binary_prediction(text: str) -> bool:
+    """Return whether a completion contains a literal final-label candidate."""
+    return bool(_PREDICTION_RE.search(text))
+
+
+def prefix_before_prediction(text: str) -> str:
+    """End immediately before the final generated label, or add a safe boundary."""
+    matches = list(_PREDICTION_RE.finditer(text))
+    if matches:
+        return text[:matches[-1].start(1)]
+    return text.rstrip() + "\nPrediction:"
 
 
 def build_epistemic_empty_prompt(messages: Any, tokenizer: Any) -> str:

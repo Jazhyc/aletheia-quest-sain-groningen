@@ -41,20 +41,20 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
-- `submission/phoenix_wright_v5_2.ipynb` is the current AUROC-first submission
-  candidate and must be tagged `black`. Ordinary rows use the fresh rank-16
-  Qwen3.5-9B adapter trained on all 2,880 varied-data privileged Truth Value
-  Guard traces from GPT-5.6 Luna at medium reasoning effort. It scores literal
-  `0|1` logits directly after `Prediction:` and does not generate the learned
-  chain at inference. Validation macro AUROC was `0.93762` (`0.99344`
-  instructed, `0.86319` varied), effectively tied with the GPT-OSS privileged
-  adapter's `0.93815`; their direct score correlation is `0.99937`. This is a
-  private-leaderboard transfer experiment intended to test whether stronger
-  teacher reasoning changes OOD behavior despite the local tie. Frozen local
-  test direct AUROC was `0.93470`; generating the learned rationale and scoring
-  its final boundary reached only `0.93429`, versus `0.93661` for the matched
-  GPT-OSS privileged student. Keep direct inference. The prior HP-KR,
-  action-report, and optional resolved-intent routes remain mutually exclusive.
+- `submission/phoenix_wright_v5_2_1.ipynb` is the next AUROC-first submission
+  candidate and must be tagged `black`. Ordinary rows use the same rank-16
+  Luna-medium privileged Truth Value Guard student as queued Phoenix 5.2, but
+  now generate its learned reasoning summary, remove the selected final digit,
+  and normalize literal `0|1` logits at that boundary. Validation/test
+  post-reasoning macro AUROC was `0.93250/0.93429`, versus
+  `0.93762/0.93470` for direct scoring. This is not a local promotion: it tests
+  the explicit hypothesis that inference-time reasoning helps private OOD
+  samples despite the aggregate local regression. The required binary column
+  uses the validation-selected post-reasoning threshold `0.38`.
+- Phoenix 5.2 is the queued direct-scoring control. Its ordinary adapter was
+  trained on all 2,880 varied-data privileged traces from GPT-5.6 Luna at
+  medium reasoning effort. The prior HP-KR, action-report, and optional
+  resolved-intent routes remain mutually exclusive and unchanged in 5.2.1.
 - Phoenix 5.1 was the preceding private-leaderboard control. Its ordinary
   adapter learned from ground-truth-blind GPT-OSS-120B traces and scored
   `0.93762/0.93452` macro AUROC on validation/local test.
