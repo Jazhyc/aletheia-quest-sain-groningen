@@ -19,9 +19,18 @@ rm -f "logs/slurm/${SLURM_JOB_NAME}-${SLURM_JOB_ID}.bootstrap.out"
 WORKTREE_ROOT="${QWEN27_TVG_WORKTREE:?missing QWEN27_TVG_WORKTREE}"
 INPUT="results/blackbox/qwen35_27b_nothink_truth_value_binary_logit_v1/train/generations.jsonl"
 OUTPUT="results/blackbox/qwen35_27b_nothink_truth_value_binary_logit_v1/train/soft_targets.jsonl"
+STUDENT_ROWS="results/blackbox/qwen35_27b_nothink_truth_value_binary_logit_v1/train/student_rows.jsonl"
 
 python "${WORKTREE_ROOT}/experiments/privileged_information_distillation/build_soft_teacher_cache.py" \
   "${INPUT}" \
   "${OUTPUT}" \
   --kind binary_identity \
+  --expected-rows 2880
+
+python "${WORKTREE_ROOT}/experiments/privileged_information_distillation/build_soft_student_rows.py" \
+  --soft-targets "${OUTPUT}" \
+  --output "${STUDENT_ROWS}" \
+  --config-name pid_qwen27_tvg_binary_soft_distillation_v1 \
+  --split train \
+  --dataset-name-contains varied-deception \
   --expected-rows 2880
