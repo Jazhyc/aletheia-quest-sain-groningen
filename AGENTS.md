@@ -85,6 +85,21 @@ the no-PEFT path and returned a continuous `0.952574` score. Do not broaden the
 router, add the failed forced-choice route, or replace the selected empty
 scaffold from confirmation.
 
+Phoenix Wright 4.4 replaces the ordinary Phoenix rank-16 adapter with the
+validation-selected one-epoch varied-only GRPO continuation
+(`qwen9b_pid_varied_grpo_ep1_v1`). It uses the exact leaderboard-aligned
+output-only renderer: no source `assistant_reasoning`, no generated judge
+chain, an empty `<reasoning>` scaffold, and normalized literal next-token
+`0|1` logits. Frozen validation/test macro AUROC was `0.95137/0.95982`;
+test instructed/varied AUROC was `0.99073/0.91861`. The validation-frozen
+secondary binary threshold is `0.37754068`. Scores had only 79 unique values
+over 821 test rows, so retain and report the ties even though ranking was
+strong. The adapter is hosted at
+`Jazhyc/aletheias-phoenix-v4-4-grpo-r16` and the exact weights remain bundled
+under `submission/phoenix_wright_v3_adapters/deception/`. Preserve the
+base-Qwen HP-KR route, original-Phoenix action route, and optional rank-1 intent
+route; do not expose source reasoning or generate reasoning at inference.
+
 For development and training experiments, do not use NDIF; reserve NDIF for leaderboard evaluation/submission execution. Use local GPU Slurm jobs with vLLM for black-box judge experiments. Keep experiment code organized under `experiments/<method>/`, keep Slurm shell templates as `.sh` files, and write runtime logs under `logs/`; black-box Slurm jobs should redirect their main output to `logs/slurm/<method>/<split>-<job_id>.out` and automatically delete the temporary bootstrap file at `logs/slurm/%x-%j.bootstrap.out` after successful redirection. Store black-box experiment artifacts under `results/blackbox/`; per-run result directories are ignored, but `results/blackbox/leaderboard.md` is tracked and should show test-set results only. Default Slurm resources for these jobs are one `gpushort` GPU node with `--gpus-per-node=rtx_pro_6000:1`, `--cpus-per-task=1`, and 32 GB memory unless the user says otherwise. The cluster's 40 GB A100s are also sufficient for inference-only `Qwen/Qwen3.5-9B` BF16 evaluations with one rank-16 LoRA and a 4,096-token model context; when the RTX Pro 6000 queue is saturated, request `--gpus-per-node=a100:1` for this workload. A cold A100 vLLM 0.24 load/compile/CUDA-graph capture can be much slower than RTX: job `30159704` needed 29m40s for one startup plus nine 822-row conditions, so request at least 45 minutes for that shape unless the compile cache is known warm or fewer conditions are run. Do not generalize that memory result to training, larger models, or materially longer contexts without a separate memory check. For interactive black-box method development, prefer reserving a GPU node with `srun`, running one persistent vLLM server process, and pointing experiment clients at it over HTTP so model loading/compilation is paid once per session. Prefer direct `sbatch` templates first for unattended runs; add `submitit` only if Python-managed Slurm arrays become necessary. Slurm controller commands such as `sbatch`, `squeue`, `scancel`, and `sacct` should be run outside the sandbox automatically because sandboxed attempts cannot contact the controller.
 For prompt/logits judge sweeps, batch multiple prompt conditions inside a single
 Slurm job or one persistent vLLM session whenever practical, so Python import,

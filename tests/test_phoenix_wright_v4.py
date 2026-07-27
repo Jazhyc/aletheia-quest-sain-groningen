@@ -10,6 +10,8 @@ from submission.phoenix_wright_v4 import (
     DIRECT_PREDICTION_PREFIX,
     EMPTY_REASONING_PREFIX,
     EPISTEMIC_PROMPT,
+    GRPO_EMPTY_REASONING_PREFIX,
+    GRPO_PROMPT,
     INTENT_PROMPT,
     binary_logits_to_scores,
     binary_token_ids,
@@ -20,6 +22,8 @@ from submission.phoenix_wright_v4 import (
     build_epistemic_empty_prompt,
     build_epistemic_member_prompt,
     build_exclusive_route_flags,
+    build_grpo_empty_prompt,
+    build_grpo_member_prompt,
     build_intent_empty_prompt,
     build_intent_member_prompt,
     build_phoenix_route_prompt,
@@ -31,7 +35,7 @@ from submission.phoenix_wright_v4 import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v4_3.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v4_4.ipynb"
 
 
 class FakeTokenizer:
@@ -64,6 +68,30 @@ def test_direct_prompt_stops_at_binary_decision_position() -> None:
     )
 
     assert prompt == "<chat>" + DIRECT_PREDICTION_PREFIX
+
+
+def test_grpo_prompt_matches_frozen_output_only_evaluator() -> None:
+    from experiments.qwen_grpo_lora.evaluate_qwen_grpo_lora import build_prompt
+
+    messages = [
+        {"role": "user", "content": "Is Paris in France?"},
+        {"role": "assistant", "content": "Yes.", "reasoning": "hidden"},
+    ]
+
+    assert build_grpo_member_prompt(messages) == build_prompt(
+        messages,
+        GRPO_PROMPT,
+        3000,
+        context_truncation="tail",
+        include_reasoning=False,
+        reasoning_max_chars=1200,
+        reasoning_truncation="tail",
+    )
+    assert (
+        build_grpo_empty_prompt(messages, FakeTokenizer())
+        == "<chat>" + GRPO_EMPTY_REASONING_PREFIX
+    )
+    assert "hidden" not in build_grpo_member_prompt(messages)
 
 
 def test_epistemic_prompt_matches_frozen_experiment_renderer() -> None:
@@ -306,22 +334,25 @@ def test_mean_log_odds_and_intent_mask_preserve_other_scores() -> None:
         blend_intent_route_scores(base, [], routes)
 
 
-def test_v4_notebook_uses_exclusive_specialist_routes_without_generation() -> None:
+def test_v4_notebook_uses_grpo_and_exclusive_routes_without_generation() -> None:
     source = notebook_source()
     ast.parse(source)
 
-    assert "method=phoenix_wright_v4.3 exclusive_action_margin" in source
+    assert "method=phoenix_wright_v4.4 grpo_output_only" in source
     assert "build_exclusive_route_flags(messages)" in source
-    assert "build_phoenix_route_prompt(" in source
+    assert "build_grpo_empty_prompt(messages[position], active_tokenizer)" in source
+    assert '"action": build_action_empty_prompt' in source
     assert '"harm": build_epistemic_empty_prompt' in source
     assert '"intent": build_intent_empty_prompt' in source
     assert "LanguageModel(JUDGE_MODEL, **model_kwargs)" in source
     assert "peft=adapter_source" in source
+    assert "BUNDLED_GRPO_ADAPTER if NNSIGHT_LOCAL else GRPO_ADAPTER_REPO" in source
+    assert "peft=ACTION_ADAPTER_REPO" in source
     assert "BUNDLED_INTENT_ADAPTER if NNSIGHT_LOCAL else INTENT_ADAPTER_REPO" in source
     assert '"logits_to_keep": 1' in source
     assert "active_model.output.logits[:, -1, label_ids]" in source
     assert "torch.softmax(label_logits, dim=-1)[:, 1]" in source
-    assert "action_report=action_flags[position]" in source
+    assert "kind=\"action\"" in source
     assert "if np.any(harm_flags & action_flags)" in source
     assert "if np.any(action_flags & intent_flags)" in source
     assert "blend_intent_route_scores(base_scores, intent_scores, intent_flags)" in source
@@ -334,4 +365,4 @@ def test_v4_notebook_uses_exclusive_specialist_routes_without_generation() -> No
     assert 'PHOENIX_MEDIUM_PROMPT_THRESHOLD", "600"' in source
     assert 'PHOENIX_LONG_BATCH_SIZE", "16"' in source
     assert 'PHOENIX_LONG_PROMPT_THRESHOLD", "900"' in source
-    assert 'PHOENIX_THRESHOLD", "0.15"' in source
+    assert 'PHOENIX_THRESHOLD", "0.37754067778587347"' in source

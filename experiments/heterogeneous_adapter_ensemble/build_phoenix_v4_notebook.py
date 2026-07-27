@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the exclusive-specialist Phoenix Wright 4.3 notebook."""
+"""Build the GRPO-backed Phoenix Wright 4.4 notebook."""
 
 from pathlib import Path
 
@@ -7,7 +7,7 @@ import nbformat
 
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUT = ROOT / "submission/phoenix_wright_v4_3.ipynb"
+OUTPUT = ROOT / "submission/phoenix_wright_v4_4.ipynb"
 
 
 def main() -> None:
@@ -22,21 +22,22 @@ def main() -> None:
     }
     notebook["cells"] = [
         nbformat.v4.new_markdown_cell(
-            """# Phoenix Wright v4.3
+            """# Phoenix Wright v4.4
 
-AUROC-first white-box deception judge using the frozen Phoenix v3 rank-16
-Qwen3.5-9B adapter. The notebook skips reasoning generation and reads the
-normalized next-token margin between the exact labels `0` and `1`. The
-continuous margin is the submission score; a separately frozen threshold
-supplies the required binary decision.
+AUROC-first white-box deception judge using the selected one-epoch GRPO
+continuation of the rank-16 Qwen3.5-9B privileged-distillation adapter. The
+notebook skips reasoning generation and reads the normalized next-token margin
+between the exact labels `0` and `1` after an empty `<reasoning>` scaffold. The
+continuous margin is the submission score; a separately frozen validation
+threshold supplies the required binary decision.
 
 Three routes remain mutually exclusive. Explicit harm-pressure knowledge
 self-reports use the base-Qwen `knowledge_report_type` empty-summary specialist.
-Executed-action reports use the frozen action-report prompt and empty-summary
-margin on the ordinary Phoenix adapter. Remaining rows with a final assistant
-reasoning trace combine Phoenix direct and rank-1 resolved-intent margins in
-log-odds space. All other rows retain the exact Phoenix direct path. The
-required binary column always uses the unblended route score."""
+Executed-action reports preserve the frozen action-report prompt and original
+Phoenix adapter. Remaining rows with a final assistant reasoning trace combine
+the GRPO margin and rank-1 resolved-intent margin in log-odds space. All other
+rows use the GRPO output-only path. The required binary column always uses the
+unblended route score."""
         ),
         nbformat.v4.new_code_cell(
             """import contextlib
@@ -51,10 +52,11 @@ from phoenix_wright_v4 import (
     MEMBER_NAMES,
     binary_token_ids,
     blend_intent_route_scores,
+    build_action_empty_prompt,
     build_epistemic_empty_prompt,
     build_exclusive_route_flags,
+    build_grpo_empty_prompt,
     build_intent_empty_prompt,
-    build_phoenix_route_prompt,
 )
 import util
 
@@ -62,11 +64,15 @@ DATASET_NAME = os.environ["DATASET_NAME"]
 LIMIT = int(os.environ["ALETHEIA_LIMIT"]) if os.environ.get("ALETHEIA_LIMIT") else None
 
 JUDGE_MODEL = "Qwen/Qwen3.5-9B"
-ADAPTER_REPO = os.environ.get(
-    "PHOENIX_DECEPTION_ADAPTER_REPO",
+GRPO_ADAPTER_REPO = os.environ.get(
+    "PHOENIX_GRPO_ADAPTER_REPO",
+    "Jazhyc/aletheias-phoenix-v4-4-grpo-r16",
+)
+BUNDLED_GRPO_ADAPTER = "submission/phoenix_wright_v3_adapters/deception"
+ACTION_ADAPTER_REPO = os.environ.get(
+    "PHOENIX_ACTION_ADAPTER_REPO",
     "Jazhyc/aletheias-phoenix-wright-v2-adapter",
 )
-BUNDLED_ADAPTER = "submission/phoenix_wright_v3_adapters/deception"
 INTENT_ADAPTER_REPO = os.environ.get(
     "PHOENIX_INTENT_ADAPTER_REPO",
     "Jazhyc/aletheias-phoenix-v3-resolved-intent-r1",
@@ -81,11 +87,12 @@ LONG_BATCH_SIZE = int(os.environ.get("PHOENIX_LONG_BATCH_SIZE", "16"))
 LONG_PROMPT_THRESHOLD = int(os.environ.get("PHOENIX_LONG_PROMPT_THRESHOLD", "900"))
 REMOTE_BATCHES_PER_SESSION = int(os.environ.get("PHOENIX_REMOTE_BATCHES_PER_SESSION", "0"))
 NNSIGHT_LOCAL = os.environ.get("PHOENIX_NNSIGHT_LOCAL", "0").lower() in {"1", "true", "yes"}
-SUBMISSION_THRESHOLD = float(os.environ.get("PHOENIX_THRESHOLD", "0.15"))
+SUBMISSION_THRESHOLD = float(os.environ.get("PHOENIX_THRESHOLD", "0.37754067778587347"))
 
 print(f"dataset={DATASET_NAME} limit={LIMIT}")
-print(f"method=phoenix_wright_v4.3 exclusive_action_margin members={MEMBER_NAMES}")
-print(f"adapter_repo={ADAPTER_REPO}")
+print(f"method=phoenix_wright_v4.4 grpo_output_only members={MEMBER_NAMES}")
+print(f"grpo_adapter_repo={GRPO_ADAPTER_REPO}")
+print(f"action_adapter_repo={ACTION_ADAPTER_REPO}")
 print(f"intent_adapter_repo={INTENT_ADAPTER_REPO}")
 print(
     f"batch={BATCH_SIZE}/{MEDIUM_BATCH_SIZE}/{LONG_BATCH_SIZE} "
@@ -121,14 +128,23 @@ def load_judge(*, kind):
     if kind == "harm":
         active_model = LanguageModel(JUDGE_MODEL, **model_kwargs)
         source = "base"
-    elif kind == "phoenix":
-        adapter_source = BUNDLED_ADAPTER if NNSIGHT_LOCAL else ADAPTER_REPO
+    elif kind == "grpo":
+        adapter_source = (
+            BUNDLED_GRPO_ADAPTER if NNSIGHT_LOCAL else GRPO_ADAPTER_REPO
+        )
         active_model = LanguageModel(
             JUDGE_MODEL,
             peft=adapter_source,
             **model_kwargs,
         )
         source = adapter_source
+    elif kind == "action":
+        active_model = LanguageModel(
+            JUDGE_MODEL,
+            peft=ACTION_ADAPTER_REPO,
+            **model_kwargs,
+        )
+        source = ACTION_ADAPTER_REPO
     elif kind == "intent":
         adapter_source = (
             BUNDLED_INTENT_ADAPTER if NNSIGHT_LOCAL else INTENT_ADAPTER_REPO
@@ -242,18 +258,15 @@ def score_prompts(active_model, active_tokenizer, label_ids, prompts):
 
 def score_message_subset(messages, positions, *, kind, action_flags=None):
     active_model, active_tokenizer, label_ids = load_judge(kind=kind)
-    if kind == "phoenix":
+    if kind == "grpo":
         prompts = [
-            build_phoenix_route_prompt(
-                messages[position],
-                active_tokenizer,
-                action_report=action_flags[position],
-            )
+            build_grpo_empty_prompt(messages[position], active_tokenizer)
             for position in positions
         ]
     else:
         builder = {
             "harm": build_epistemic_empty_prompt,
+            "action": build_action_empty_prompt,
             "intent": build_intent_empty_prompt,
         }[kind]
         prompts = [
@@ -266,13 +279,8 @@ def score_message_subset(messages, positions, *, kind, action_flags=None):
         label_ids,
         prompts,
     )
-    action_count = (
-        int(action_flags[positions].sum())
-        if kind == "phoenix" and positions
-        else 0
-    )
     print(
-        f"{kind}: active={len(positions)} action_prompts={action_count} "
+        f"{kind}: active={len(positions)} "
         f"unique_scores={len(np.unique(subset_scores))}",
         flush=True,
     )
@@ -288,13 +296,12 @@ def score_messages(messages, harm_flags, action_flags, intent_flags):
         raise ValueError("action and intent routes must be disjoint")
 
     base_scores = np.empty(len(messages), dtype=float)
-    phoenix_positions = np.flatnonzero(~harm_flags).tolist()
-    if phoenix_positions:
-        base_scores[phoenix_positions] = score_message_subset(
+    grpo_positions = np.flatnonzero(~harm_flags & ~action_flags).tolist()
+    if grpo_positions:
+        base_scores[grpo_positions] = score_message_subset(
             messages,
-            phoenix_positions,
-            kind="phoenix",
-            action_flags=action_flags,
+            grpo_positions,
+            kind="grpo",
         )
     harm_positions = np.flatnonzero(harm_flags).tolist()
     if harm_positions:
@@ -302,6 +309,13 @@ def score_messages(messages, harm_flags, action_flags, intent_flags):
             messages,
             harm_positions,
             kind="harm",
+        )
+    action_positions = np.flatnonzero(action_flags).tolist()
+    if action_positions:
+        base_scores[action_positions] = score_message_subset(
+            messages,
+            action_positions,
+            kind="action",
         )
     intent_positions = np.flatnonzero(intent_flags).tolist()
     intent_scores = (
@@ -333,11 +347,11 @@ util.write_submission(
         ),
     ]
     cell_ids = (
-        "phoenix-v4-3-overview",
-        "phoenix-v4-3-configuration",
-        "phoenix-v4-3-routes-and-models",
-        "phoenix-v4-3-scoring",
-        "phoenix-v4-3-output",
+        "phoenix-v4-4-overview",
+        "phoenix-v4-4-configuration",
+        "phoenix-v4-4-routes-and-models",
+        "phoenix-v4-4-scoring",
+        "phoenix-v4-4-output",
     )
     for cell, cell_id in zip(notebook["cells"], cell_ids, strict=True):
         cell["id"] = cell_id

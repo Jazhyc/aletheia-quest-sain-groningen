@@ -41,6 +41,14 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
+- `submission/phoenix_wright_v4_4.ipynb` is the current AUROC-first submission
+  candidate. Ordinary rows use the selected epoch-1 GRPO continuation of the
+  rank-16 privileged-distillation adapter and score literal `0|1` logits after
+  an empty `<reasoning>` scaffold. The path uses no source reasoning and no
+  generated chain at inference. Frozen validation/test macro AUROC was
+  `0.9514/0.9598`; test instructed/varied AUROC was `0.9907/0.9186`.
+  The prior HP-KR, action-report, and optional resolved-intent routes remain
+  mutually exclusive.
 - P80 selected direct Phoenix `Prediction:` label margins for the next
   AUROC-first submission implementation. On validation/test they scored
   `0.9382/0.9342` macro AUROC with `9.7s/9.3s` margin passes and zero missing
