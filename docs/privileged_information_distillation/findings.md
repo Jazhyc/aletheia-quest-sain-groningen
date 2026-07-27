@@ -2692,8 +2692,18 @@ Qwen3.5-27B as the teacher and do not generate a Qwen3.6 trace cache from this
 checkpoint merely because it is newer.
 
 The Qwen3.5 binary Truth Value Guard result is `+0.01315` above the earlier
-Qwen3.5-27B direct seven-way D/K/S teacher (`0.94429`). That comparison changes
-both prompt alignment and output space, so it does not by itself prove that
-binary labels caused the gain. A frozen same-prompt seven-way expected-rating
-control was queued as job `30303841`; use it to separate prompt effects from
-the binary boundary before specifying the next student loss.
+Qwen3.5-27B direct seven-way D/K/S teacher (`0.94429`). Job `30303841` removed
+the prompt confound by keeping the exact same Truth Value Guard body and
+renderer while replacing the binary boundary with expected `Rating:1..7`
+logits:
+
+| Qwen3.5-27B TVG readout | macro AUROC | instructed | varied | BA | recall | FPR | score time | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| binary `Prediction:0|1` | **`0.95744`** | **`0.99917`** | **`0.90181`** | **`0.91190`** | `0.88571` | **`0.06190`** | **`38.2s`** | `779/822` |
+| expected `Rating:1..7` | `0.90286` | `0.98208` | `0.79722` | `0.91071` | **`0.89524`** | `0.07381` | `39.5s` | **`821/822`** |
+
+Both had zero missing requested logits. The `+0.05458` binary AUROC gain is
+therefore an output-parameterization result, not merely a better prompt. The
+ordinal arm has more unique scores and nearly identical BA, but badly orders
+the difficult varied rows. Use a literal binary teacher target for the next
+student loss; do not infer ranking quality from score uniqueness alone.
