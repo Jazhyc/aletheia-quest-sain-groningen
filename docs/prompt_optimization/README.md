@@ -50,8 +50,10 @@ Submission mapping:
   instructed, `0.86319` varied), effectively tied with the GPT-OSS privileged
   adapter's `0.93815`; their direct score correlation is `0.99937`. This is a
   private-leaderboard transfer experiment intended to test whether stronger
-  teacher reasoning changes OOD behavior despite the local tie. No Luna local
-  test was run because validation did not select it. The prior HP-KR,
+  teacher reasoning changes OOD behavior despite the local tie. Frozen local
+  test direct AUROC was `0.93470`; generating the learned rationale and scoring
+  its final boundary reached only `0.93429`, versus `0.93661` for the matched
+  GPT-OSS privileged student. Keep direct inference. The prior HP-KR,
   action-report, and optional resolved-intent routes remain mutually exclusive.
 - Phoenix 5.1 was the preceding private-leaderboard control. Its ordinary
   adapter learned from ground-truth-blind GPT-OSS-120B traces and scored

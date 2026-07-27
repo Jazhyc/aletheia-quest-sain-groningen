@@ -109,7 +109,17 @@ teacher capability is not the dominant bottleneck.
 Phoenix 5.2 nevertheless deploys the Luna adapter as an explicit private
 leaderboard OOD-transfer probe, replacing only the ordinary route while
 preserving every specialist and the direct-logit inference path. This is not a
-local promotion claim and no Luna local-test result was used.
+local promotion claim.
+
+Frozen post-submission local-test job `30316568` then ran full generation and
+all continuous boundaries. Direct scoring reached `0.93470` macro AUROC
+(`0.98073` instructed, `0.87333` varied). Post-reasoning scoring reached
+`0.93429` (`0.99229` instructed, `0.85694` varied), with 176 unique scores and
+eight parse failures. The matched GPT-OSS privileged student scored `0.93661`
+post-reasoning; the two post-reasoning vectors correlate at `0.98058`. Generated
+binary AUROC was `0.91071` and the empty-summary margin scored `0.92780`.
+Generating the Luna student's learned rationale therefore does not improve
+overall or varied ranking. Keep Phoenix 5.2 on direct scoring.
 
 ### GPT-5.6 Sol privileged Truth Value Guard reasoning pilot (2026-07-27)
 

@@ -450,7 +450,22 @@ Validation direct-margin macro AUROC was `0.93762` (`0.99344` instructed,
 score vectors correlate at `0.99937` with mean absolute difference `0.00630`.
 The validation result is a tie, not a local promotion. Phoenix 5.2 is an
 explicit private-leaderboard OOD-transfer probe motivated by possible teacher
-knowledge differences. No Luna local-test evaluation was used.
+knowledge differences.
+
+Frozen local-test job `30316568` subsequently compared full generation with
+the direct and empty-summary boundaries. Direct scoring reached `0.93470`
+macro AUROC (`0.98073` instructed, `0.87333` varied). Generating the learned
+rationale and scoring its final boundary reached `0.93429` (`0.99229`
+instructed, `0.85694` varied), with 176 unique scores and eight generation
+parse failures. Generated binary AUROC was `0.91071`; the empty-summary margin
+scored `0.92780`.
+
+The prior GPT-OSS privileged student's post-reasoning result was `0.93661`
+(`0.99354` instructed, `0.86069` varied). Luna's post-reasoning scores correlate
+at `0.98058` with that vector and are lower by `0.00232` macro AUROC. Full
+generation therefore does not improve Luna overall: its instructed gain is
+more than offset by worse varied ranking. Keep the queued notebook on direct
+scoring without generation.
 
 Inference preserves the exact direct `Prediction:` boundary, no-thinking mode,
 3,000-character tail renderer, length-aware batching, and validation-frozen

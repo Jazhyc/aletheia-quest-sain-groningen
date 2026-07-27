@@ -3869,10 +3869,19 @@ Validation job `30316477` scored `0.93762` direct-margin macro AUROC
 (`0.99344` instructed, `0.86319` varied), with 350 unique scores and zero
 missing logits. The GPT-OSS privileged reference remains fractionally higher
 at `0.93815`; direct score correlation is `0.99937`. No Luna local-test run was
-performed. Phoenix 5.2 nevertheless replaces only the ordinary route to test
-the predeclared possibility that the stronger teacher changes private OOD
-transfer despite the local tie. All specialist routes and direct-logit
-inference remain frozen.
+performed before the submission candidate was frozen. Phoenix 5.2 nevertheless
+replaces only the ordinary route to test the predeclared possibility that the
+stronger teacher changes private OOD transfer despite the local tie. All
+specialist routes and direct-logit inference remain frozen.
+
+After the main submission entered the queue, frozen local-test job `30316568`
+ran full generation plus all continuous boundaries. Direct scoring reached
+`0.93470` macro AUROC (`0.98073` instructed, `0.87333` varied). Post-reasoning
+scoring reached `0.93429` (`0.99229` instructed, `0.85694` varied), versus
+`0.93661` for the GPT-OSS privileged student. Generated binary AUROC was
+`0.91071`, empty-summary AUROC was `0.92780`, and eight generated completions
+were parse failures. Luna and GPT-OSS post-reasoning vectors correlate at
+`0.98058`. Do not change the queued direct-only inference path.
 
 The public adapter repository is
 `Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16`, initial upload commit
