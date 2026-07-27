@@ -59,6 +59,15 @@ def parse_args() -> argparse.Namespace:
         default="space",
         help="Score 0/1 or space-prefixed 0/1 as the next token.",
     )
+    parser.add_argument(
+        "--exclude-reasoning",
+        action="store_true",
+        help=(
+            "Do not expose the source model's assistant reasoning, even when the "
+            "saved training config enabled it. Use this for leaderboard-aligned "
+            "output-only evaluation."
+        ),
+    )
     parser.add_argument("--threshold", type=float, default=0.5)
     return parser.parse_args()
 
@@ -291,6 +300,10 @@ def main() -> None:
     )
 
     print(f"loading {args.split} split", flush=True)
+    include_reasoning = (
+        bool(cfg_get(training_config, "judge.include_reasoning"))
+        and not args.exclude_reasoning
+    )
     records = load_split(
         args.split,
         args.splits_dir.resolve(),
@@ -298,7 +311,7 @@ def main() -> None:
         tokenizer=tokenizer,
         max_prompt_chars=int(cfg_get(training_config, "judge.max_prompt_chars")),
         context_truncation=str(cfg_get(training_config, "judge.context_truncation")),
-        include_reasoning=bool(cfg_get(training_config, "judge.include_reasoning")),
+        include_reasoning=include_reasoning,
         reasoning_max_chars=int(cfg_get(training_config, "judge.reasoning_max_chars")),
         reasoning_truncation=str(cfg_get(training_config, "judge.reasoning_truncation")),
         enable_thinking=bool(cfg_get(training_config, "judge.enable_thinking")),
@@ -375,6 +388,8 @@ def main() -> None:
             "label0_id": label0_id,
             "label1_id": label1_id,
             "baseline_threshold": args.threshold,
+            "exclude_reasoning": args.exclude_reasoning,
+            "include_reasoning": include_reasoning,
             "reasoning_prefixes": args.reasoning_prefixes.as_posix() if args.reasoning_prefixes else None,
             "training_config": training_config,
         },
