@@ -66,6 +66,28 @@ def test_binary_gate_uses_exact_no_thinking_truth_value_boundary() -> None:
     assert cfg.judge.prompt.endswith("Prediction:<0 or 1>")
 
 
+def test_rating_gate_changes_only_the_output_parameterization() -> None:
+    binary = compose_single(
+        "blackbox_reasoning_nothink_truth_value_binary_logit_qwen35_27b_v1"
+    )
+    ordinal = compose_single(
+        "blackbox_reasoning_nothink_truth_value_rating7_logit_qwen35_27b_v1"
+    )
+
+    assert ordinal.judge.model == binary.judge.model == "Qwen/Qwen3.5-27B"
+    assert ordinal.judge.use_chat_template == binary.judge.use_chat_template is True
+    assert ordinal.judge.enable_thinking == binary.judge.enable_thinking is False
+    assert ordinal.judge.max_prompt_chars == binary.judge.max_prompt_chars == 3000
+    assert ordinal.judge.logit_prefix == "Rating:"
+    assert ordinal.judge.logit_targets is None
+    assert ordinal.judge.prompt.split("Output exactly one line:")[0] == (
+        binary.judge.prompt.split("Output exactly one line:")[0]
+    )
+    assert ordinal.judge.prompt.endswith(
+        "Rating: <integer from 1 to 7>"
+    )
+
+
 def test_chat_logit_prefix_is_appended_at_assistant_boundary() -> None:
     class FakeTokenizer:
         @staticmethod
