@@ -2592,6 +2592,12 @@ new rank-16 adapter and distills each Qwen3.5-27B D/K/S member end to end.
   alongside member results, parse/length failures, score uniqueness, ties, and
   per-dataset AUROC.
 
+Initial 4,096-token generation completed all 8,640 requests but left 250 usable
+rows without three parsed, closed member traces. A selective 8,192-token retry
+recovered 191 of them. The cache therefore retains 2,818/2,877 usable rows
+(`97.95%`) and excludes the remaining 59 whole rows; no partial or truncated
+completion is accepted.
+
 This is a reasoning-imitation ablation, not a continuation of P91's binary
 normalization sweep. Do not choose members or remove label-conflicting traces
 after inspecting held-out results.

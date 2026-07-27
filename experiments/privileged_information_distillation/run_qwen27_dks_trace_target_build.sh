@@ -24,4 +24,5 @@ python "${WORKTREE_ROOT}/experiments/privileged_information_distillation/build_q
   --direct-distributions results/blackbox/qwen27b_reason_ensemble_dks3072_logit_soft_teacher_v1/train/generations.jsonl \
   --base-teacher results/blackbox/qwen9b_privileged_gptoss120b_summary_v1/teacher/train.jsonl \
   --output-dir results/blackbox/qwen27b_dks_full_trace_soft_teacher_v1 \
+  --min-complete-rows 2800 \
   --max-target-tokens 8192
