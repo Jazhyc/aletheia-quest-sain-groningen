@@ -6,6 +6,11 @@ text judge with a gate. Each version changes one part.
 **Start here:** `sonic_v4.md` for the baseline, then `sonic_v3_6.md` for
 the peak AUROC.
 
+`sonic_v5` is **planned, not built**. It escalates the gate's disagreement
+rows — currently a dead branch where the probe is silenced — to the tested
+model itself (27B/120B) as a third judge, blended under a bounded cap. See
+`sonic_v5.md`.
+
 `sonic_v3_5` was **submitted 2026-07-27** and scored AUROC `0.9046` / BA
 `0.8275`. See `sonic_v3_5.md`.
 
@@ -59,6 +64,7 @@ Everything below `dev_data_row_ordering.md` in the table is **history**.
 
 | document | subject |
 | --- | --- |
+| `sonic_v5.md` | **Planned 2026-07-27, not built.** Escalation to the tested model as a big judge on the gate's disagreement rows, blended under a new `BIG_CAP`. Includes the go/no-go offline measurement and the 1800s-per-dataset budget guards. |
 | `ideas_tested.md` | **2026-07-27.** Token-pair ensemble (rejected — anti-correlated pairs kill signal) and CoT on uncertain rows (deferred — untestable locally on instruct-only data). |
 | `sonic_v4_2.md` | **Submitted 2026-07-27, AUROC `0.9047` / BA `0.8183` — regression vs v4.** Judge-uncertainty exception on sign test. Even judge-uncertain Notus rows had ranking signal the probe damaged. Moved to `legacy_submissions/`. |
 | `sonic_v4.md` | **Submitted 2026-07-27, AUROC `0.9060` / BA `0.8204`.** v3.8 gate with dual probes (L40 + L46). Best submitted AUROC in the v4 family. Holds `submission/`. |

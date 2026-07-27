@@ -1,0 +1,52 @@
+{
+  "rule": "judge_z + (BASE_CAP + (judge_z*probe_z > 0) * (MAX_CAP-BASE_CAP)) * PROBE_GAIN * probe_z, with judge_z replaced by big_margin/JUDGE_MARGIN_SD on the escalated disagreement rows",
+  "purpose": "v4's gate with the disagreement branch handed to the tested model itself (27B/120B): on escalated rows the big judge replaces the cheap judge outright",
+  "derived_from": "v4 (legacy_submissions/sonic_v4.ipynb); every v4 constant is unchanged",
+  "probe_standardization_from": "results/ensemble_gate_eval/sonic_v3_3_mini_constants.json",
+  "probe_weights": "submission/whitebox_probe (L46) + submission/whitebox_probe_L40 (L40)",
+  "judge_margin_sd": 1.199755138011975,
+  "judge_step_z": 0.10418792638565248,
+  "base_cap_steps": 2.0,
+  "base_cap": 0.20837585277130496,
+  "max_cap_steps": 4.0,
+  "max_cap": 0.41675170554260993,
+  "agreement_scale": null,
+  "probe_gain": 1.0,
+  "squash": "linear",
+  "probe_logit_mean": {
+    "qwen": -0.367495,
+    "gemma": -2.523992,
+    "nemotron": -6.329599
+  },
+  "probe_logit_sd": {
+    "qwen": 6.626051,
+    "gemma": 4.510691,
+    "nemotron": 3.268104
+  },
+  "default_probe_mean": -3.073695,
+  "default_probe_sd": 4.801615,
+  "threshold_probe_only": 0.5,
+  "threshold_score": 0.2,
+  "gate": "sign",
+  "escalation": {
+    "trigger": "judge_margin * probe_z <= 0 (v4's disagreement branch)",
+    "big_judge": "the tested model itself, reusing the handle built for extraction",
+    "standardization": "none -- big_margin goes over the same JUDGE_MARGIN_SD as the cheap judge; both are logit_1 - logit_0 on the same label tokens",
+    "max_prompt_tokens": 1536,
+    "batch_sizing": "inherited from the probe config's extract_token_budget / extract_max_batch",
+    "substitution": "full replacement of judge_z on the escalated rows; no blend weight",
+    "big_z": "big_margin / JUDGE_MARGIN_SD -- the same divisor as the cheap judge. Not a calibration: JUDGE_MARGIN_SD is the 9B's margin spread, not the tested model's. See docs/sonic/sonic_v5.md section 4.",
+    "scope": "all-or-nothing: every disagreement row, or none",
+    "min_disagreement_rows": 8
+  },
+  "selection": {
+    "method": "not fitted -- v5 adds no scoring constant",
+    "why": "the design replaces rather than nudges, so there is no cap to choose. A synthetic sweep (docs/sonic/sonic_v5.md section 10) shows a partial blend outscores full replacement at every big-judge quality level, turning positive only above ~0.85; a blend weight is the v5.1 lever if v5.0 underperforms.",
+    "go_no_go": "the big judge must beat the Phoenix 9B judge on dev rows with lora=None, on disagreement rows specifically; also compare the two margins' mean and spread there -- that is the group-placement risk in section 5"
+  },
+  "selection_notes": {
+    "trigger_choice": "v4.1 gated the cap on sigmoid(abs(probe_z)) and lost -0.0380 on Notus Nemotron: the probe is spuriously confident out of distribution, so no quantity derived from abs(probe_z) is a safe trigger",
+    "subset_standardization": "NOT applied: big_margin substitutes as-is. The escalated rows are selected by detector conflict, so their label mix is skewed; if the big judge's margin runs hotter or colder than the cheap judge's, that group moves as a block in the dataset ranking. This is the design's largest untested assumption.",
+    "budget": "NOTEBOOK_BUDGET is 1800s per (notebook, dataset) and the first SIGKILL aborts the whole submission. The escalation does not gate itself on the clock: measure its real cost on --dry."
+  }
+}

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import importlib.util
 import io
 import itertools
 import json
@@ -424,6 +425,32 @@ def run_dry(root: Path, ndif_api_key: str | None, hf_token: str | None,
             f"per-job venv from this interpreter); you're on "
             f"{sys.version_info.major}.{sys.version_info.minor}. Use a newer Python "
             f"(e.g. `./setup_dev.sh` creates a 3.10+ venv).")
+    # The runner builds the per-job venv from THIS interpreter and injects
+    # <root>/.venv/lib/python{major}.{minor}/site-packages. Launch with an
+    # interpreter whose minor version differs from the project venv's and that
+    # path does not exist, so the child sees no project packages and dies deep
+    # inside the run -- on nbformat, or on pandas in write_submission -- with
+    # nothing naming the cause. Refuse up front instead.
+    venv_dir = (root / ".venv").resolve()
+    venv_python = venv_dir / "bin" / "python"
+    if venv_python.exists() and Path(sys.prefix).resolve() != venv_dir:
+        sys.exit(
+            f"--dry must run under the project venv.\n"
+            f"  you are on : {sys.executable} (python "
+            f"{sys.version_info.major}.{sys.version_info.minor})\n"
+            f"  run instead: {venv_python} submit.py --dry "
+            f"{' '.join(sys.argv[1:])}\n"
+            f"  why: the runner injects {venv_dir}/lib/python"
+            f"{sys.version_info.major}.{sys.version_info.minor}/site-packages "
+            f"into the sandbox, which only exists for the venv's own Python.")
+
+    missing = [name for name in ("pandas", "numpy", "datasets", "torch", "nbformat")
+               if importlib.util.find_spec(name) is None]
+    if missing:
+        sys.exit(f"--dry: this interpreter ({sys.executable}) cannot import "
+                 f"{', '.join(missing)}, so neither can your notebook. "
+                 f"Recreate the environment with `./setup_dev.sh`.")
+
     runner_src = root / "leaderboard" / "src"
     if not runner_src.is_dir():
         sys.exit("--dry needs the bundled runner at leaderboard/ (run from the repo root).")
