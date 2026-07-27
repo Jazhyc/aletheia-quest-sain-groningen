@@ -45,7 +45,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SOURCE = REPO_ROOT / "submission/sonic_v3_2.ipynb"
 DEFAULT_OUTPUT = REPO_ROOT / "submission/sonic_v3_3_mini.ipynb"
 DEFAULT_CONSTANTS = REPO_ROOT / "results/ensemble_gate_eval/sonic_v3_3_mini_constants.json"
-PROBE_SUBDIR = "whitebox_probe_mini"
+# These weights shipped as whitebox_probe_mini/ while the older per-family set still
+# occupied whitebox_probe/; since 2026-07-26 they ARE whitebox_probe/, so the rewrite
+# below is now an identity. Kept so this builder still reproduces the submitted mini.
+PROBE_SUBDIR = "whitebox_probe"
 
 HEADER_CELL = '''# sonic v3.3-mini -- probe-only diagnostic
 
@@ -74,7 +77,7 @@ Scoring is `sigmoid(probe_z)` with a frozen `0.5` threshold. No judge, no gate,
 no batch statistics. AUROC is rank-based and the sigmoid is monotone, so the
 standardization constants affect the balanced-accuracy column only.
 
-Probe weights: `submission/whitebox_probe_mini/`, one shared trunk fitted on all
+Probe weights: `submission/whitebox_probe/`, one shared trunk fitted on all
 8,216 dev rows with the balanced recipe, split into per-family weights (export
 parity verified exact).
 '''

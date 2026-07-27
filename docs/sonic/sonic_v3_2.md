@@ -135,8 +135,14 @@ This is within noise.
 concentrated on Iris/Qwen (`+0.0055`); Iris/gemma did not move at
 all, so the cap never opened there.
 Notus was flat as designed (`-0.0004` vs v3.1).
-Raising MAX_CAP is therefore still the open lever, and it is now the cheapest
-next experiment.
+
+**MAX_CAP was raised, and it did not pay.** `sonic_v3_3` ran 6 steps on
+2026-07-27 and Iris fell to `0.9393` (`-0.0034`), giving back more than the
+`+0.0022` the modulation bought. That run also swapped the probe, so the two
+changes are confounded and the cap is the suspect, not the proven cause. Either
+way this sweep is the wrong instrument for the question: it scored candidates on
+worst-fold Notus safety only, and the probe is in-sample on every fold, so the
+Iris side of a larger cap was never priced. See `sonic_v3_3.md`.
 
 ## Comparison
 

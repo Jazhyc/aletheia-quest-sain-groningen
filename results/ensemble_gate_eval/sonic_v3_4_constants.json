@@ -1,0 +1,36 @@
+{
+  "rule": "judge_z + (BASE_CAP + clip(judge_z*probe_z/AGREEMENT_SCALE,0,1) * (MAX_CAP-BASE_CAP)) * tanh(PROBE_GAIN * probe_z)",
+  "purpose": "isolate the v3.3 probe swap: v3.2's gate constants verbatim, v3.3's shared-trunk probe",
+  "caps_from": "results/ensemble_gate_eval/sonic_v3_2_constants.json (fit_bounded_refine_v3_2.py)",
+  "probe_standardization_from": "results/ensemble_gate_eval/sonic_v3_3_mini_constants.json (NDIF benchmark runs)",
+  "probe_weights": "submission/whitebox_probe (shared trunk, all 3 families, balanced recipe)",
+  "judge_margin_sd": 1.199755138011975,
+  "judge_ulp": 0.125,
+  "judge_step_z": 0.10418792638565248,
+  "base_cap_steps": 2.0,
+  "base_cap": 0.20837585277130496,
+  "max_cap_steps": 4.0,
+  "max_cap": 0.41675170554260993,
+  "agreement_scale": 3.0,
+  "probe_gain": 1.0,
+  "probe_logit_mean": {
+    "qwen": -0.367495,
+    "gemma": -2.523992,
+    "nemotron": -6.329599
+  },
+  "probe_logit_sd": {
+    "qwen": 6.626051,
+    "gemma": 4.510691,
+    "nemotron": 3.268104
+  },
+  "default_probe_mean": -3.073695,
+  "default_probe_sd": 4.801615,
+  "threshold_judge_margin": 0.0,
+  "threshold_probe_only": 0.5,
+  "threshold_score": 0.2,
+  "official_reference": {
+    "sonic_v3_2": {"probe": "per-family", "caps_steps": [2, 4], "headline_auroc": 0.90305, "notus_auroc": 0.8634, "iris_auroc": 0.9427},
+    "sonic_v3_3": {"probe": "shared trunk", "caps_steps": [1, 6], "headline_auroc": 0.90175, "notus_auroc": 0.8642, "iris_auroc": 0.9393},
+    "note": "v3.4 holds the caps at v3.2 and moves only the probe, so its Iris number attributes the v3.3 loss"
+  }
+}

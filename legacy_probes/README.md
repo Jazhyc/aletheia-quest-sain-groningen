@@ -1,7 +1,16 @@
 # Archived probe weights
 
 Snapshots of `submission/whitebox_probe/` taken before a retrain, so any
-shipped submission can be reproduced exactly.
+shipped submission can be reproduced exactly. The `.pt` files here are tracked
+(`.gitignore` excepts this directory) — an archive nobody can check out proves
+nothing.
+
+`submission/whitebox_probe/` always holds the weights the current notebook
+loads; there is exactly one such directory. The v3.3 shared-trunk weights spent
+2026-07-26 under the name `whitebox_probe_mini/` while the v2.3.7 set still
+occupied `whitebox_probe/`, and took the plain name once that set was archived
+below. Anything written before then that says `whitebox_probe_mini/` means what
+is now `whitebox_probe/`.
 
 | directory | shipped in | notes |
 | --- | --- | --- |

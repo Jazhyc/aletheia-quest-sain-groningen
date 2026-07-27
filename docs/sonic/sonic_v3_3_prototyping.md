@@ -1,17 +1,70 @@
-# sonic v3.3 prototyping — probe experiments
+# sonic v3.3 — probe experiments and the v3.3 submission
 
-> Status: experiments only. **Nothing here has shipped.** `submission/` still
-> holds `sonic_v3_2.ipynb` with the `whitebox_probe_v2_3_7` weights (official
-> AUROC `0.903050` / BA `0.831250`).
+> Status: `sonic_v3_3.ipynb` was resubmitted unchanged on 2026-07-27 00:20 UTC
+> and **scored AUROC `0.9017` / BA `0.8275`** in 24m38s. That is `-0.0014` below
+> `sonic_v3_2.ipynb`, which remains the best official submission. The loss is
+> all on Iris; Notus reached `0.8642`, the best of any sonic run. MAX_CAP at 6
+> steps is the likely cause, not the probe — one run changed both, so it is not
+> proven. Results and attribution: `sonic_v3_3.md`.
+>
+> The first attempt on 2026-07-26 19:30 UTC **failed** — the sandbox killed it
+> on the first dataset after burning the full 1800 s per-(notebook, dataset)
+> budget, with the judge's remote session stalled; no dataset was scored.
+> `sonic_v3_3_mini.ipynb` was submitted the same day
+> (probe-only diagnostic, AUROC `0.7752`). `submission/` now holds
+> `sonic_v3_4.ipynb` — v3.2's caps with these same probe weights, built to
+> settle the attribution — and, since 2026-07-26, the shared-trunk weights under
+> their permanent name `whitebox_probe/` (they were `whitebox_probe_mini/` while
+> the two probe sets coexisted). `sonic_v3_3.ipynb` and `sonic_v3_2.ipynb` are
+> archived in `legacy_submissions/`, the v3.2 weights in
+> `legacy_probes/whitebox_probe_v2_3_7/`.
 
-Scope: v3.3 changes the **probe**, not the scoring rule. v3.2's cell 12 stays
-byte-identical; only the probe weights and the `PROBE_LOGIT_MEAN`/`SD`
-constants would move. Same shape as the v2.3.7 weights-only swap.
+Scope: v3.3 changes the probe weights AND the scoring-rule constants in
+cell 12. The formula is identical to v3.2's; only `BASE_CAP`, `MAX_CAP`, and
+the probe weights differ.
 
 A gate design keyed on the LoRA field was built and **rejected** on 2026-07-26
 without submission — switching scoring formulas per regime reads as
 "fundamentally different detection *logic* per organism", which the competition
 rules prohibit. See `docs/sonic/README.md`.
+
+---
+
+## sonic v3.3 — agreement-modulated cap with adjusted constants
+
+**Built 2026-07-26.** `submission/sonic_v3_3.ipynb`. Derived from
+`sonic_v3_2.ipynb`. The gate formula is the same. The judge is the same. The
+threshold is the same. Three things changed:
+
+1. **The probe** is the v3.3-mini weights. All three families share one trunk.
+   The balanced training recipe is used. The standardization constants are
+   refitted from NDIF benchmark runs.
+2. **BASE_CAP lowered: 0.208 → 0.104 (2 steps → 1 step).** The probe does not
+   transfer to Notus. Its Notus AUROC is 0.5586. On gemma it is 0.4808 — below
+   chance. On disagreement rows the probe signal is noise. The floor cap is
+   halved to reduce the damage.
+3. **MAX_CAP raised: 0.417 → 0.625 (4 steps → 6 steps).** The probe transfers
+   on Iris (AUROC 0.9918). The v3.2 offline sweep measured a Notus penalty of
+   −0.0013 at 6 steps. That is inside the judge's run-to-run noise. The ceiling
+   cap is raised to recover Iris headroom.
+
+The scoring formula:
+
+    STEP     = 0.10419   # one bf16 step of the judge logit
+    BASE_CAP = 1 × STEP  # floor: 1 step on disagreement (v3.2: 2)
+    MAX_CAP  = 6 × STEP  # ceiling: 6 steps on agreement (v3.2: 4)
+
+    agreement = clip(judge_z × probe_z / 3.0, 0, 1)
+    cap       = BASE_CAP + agreement × (MAX_CAP − BASE_CAP)
+    score     = sigmoid(judge_z + cap × tanh(probe_z))
+
+Constants: AGREEMENT_SCALE = 3.0, PROBE_GAIN = 1.0, threshold = 0.20. All
+unchanged from v3.2. The judge is Phoenix v4 direct-label-logit. The full
+design is in `sonic_v3_3.md`.
+
+---
+
+## Experiments (background, already completed)
 
 Background, data inventory and the external-data search:
 `docs/probe_training_and_external_data.md`.
@@ -174,7 +227,8 @@ the cumulative effect of the shared trunk, `balanced` recipe, and
   its existing probe-alone branch). Score is `sigmoid(probe_z)`, frozen `0.5`
   threshold, no gate, no batch statistics.
 
-Weights in `submission/whitebox_probe_mini/`, export parity verified exact
+Weights in `submission/whitebox_probe/` (`whitebox_probe_mini/` at the time of
+this run; renamed 2026-07-26), export parity verified exact
 (`0.00e+00`). Constants in
 `results/ensemble_gate_eval/sonic_v3_3_mini_constants.json`.
 

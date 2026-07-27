@@ -1,0 +1,60 @@
+{
+  "rule": "judge_z + (BASE_CAP + (judge_z*probe_z > 0) * (MAX_CAP-BASE_CAP)) * tanh(PROBE_GAIN * probe_z)",
+  "purpose": "replace v3.2's agreement product with a sign test; caps and probe unchanged from v3.4",
+  "caps_from": "results/ensemble_gate_eval/sonic_v3_2_constants.json (fit_bounded_refine_v3_2.py)",
+  "probe_standardization_from": "results/ensemble_gate_eval/sonic_v3_3_mini_constants.json (NDIF benchmark runs)",
+  "probe_weights": "submission/whitebox_probe (shared trunk, all 3 families, balanced recipe)",
+  "judge_margin_sd": 1.199755138011975,
+  "judge_ulp": 0.125,
+  "judge_step_z": 0.10418792638565248,
+  "base_cap_steps": 2.0,
+  "base_cap": 0.20837585277130496,
+  "max_cap_steps": 4.0,
+  "max_cap": 0.41675170554260993,
+  "agreement_scale": null,
+  "probe_gain": 1.0,
+  "probe_logit_mean": {
+    "qwen": -0.367495,
+    "gemma": -2.523992,
+    "nemotron": -6.329599
+  },
+  "probe_logit_sd": {
+    "qwen": 6.626051,
+    "gemma": 4.510691,
+    "nemotron": 3.268104
+  },
+  "default_probe_mean": -3.073695,
+  "default_probe_sd": 4.801615,
+  "threshold_judge_margin": 0.0,
+  "threshold_probe_only": 0.5,
+  "threshold_score": 0.2,
+  "gate": "sign",
+  "selection": {
+    "iris_like_probe_edge": 0.02763875,
+    "iris_like_gain_product": 0.015001249999999999,
+    "iris_like_capture_product": 0.5427615214146805,
+    "iris_like_gain_sign": 0.01827875000000002,
+    "iris_like_capture_sign": 0.661345031884583,
+    "notus_0.48_mean_product": -0.008902374999999999,
+    "notus_0.48_worst_product": -0.038000000000000145,
+    "notus_0.48_mean_sign": -0.009433000000000004,
+    "notus_0.48_worst_sign": -0.03885000000000016,
+    "notus_0.48_sign_minus_product_mean": -0.0005306250000000046,
+    "notus_0.48_sign_minus_product_worst": -0.0038875000000001547,
+    "notus_0.56_mean_product": -0.003854375000000002,
+    "notus_0.56_worst_product": -0.03612499999999996,
+    "notus_0.56_mean_sign": -0.004878999999999998,
+    "notus_0.56_worst_sign": -0.04227499999999995,
+    "notus_0.56_sign_minus_product_mean": -0.0010246249999999956,
+    "notus_0.56_sign_minus_product_worst": -0.006149999999999989
+  },
+  "selection_notes": {
+    "safety_targets": [
+      0.48,
+      0.56
+    ],
+    "why_0.56": "sonic_v3_3_mini measured the probe's real Notus AUROC at 0.5586; the v3.2 fit used 0.76, which no longer matches the evidence",
+    "iris_proxy": "the 10 dev folds where the probe most outclasses the judge; the average fold is not in Iris's condition",
+    "caveat": "the probe is in-sample on every dev fold, so absolute gains are inflated; only the comparison between the two shapes is used"
+  }
+}

@@ -41,6 +41,19 @@ EXCLUDE_DIRS = {".git", ".claude", "leaderboard", "__pycache__",
                 "logs", "dev_splits", "wandb"}
 EXCLUDE_GLOBS = ["*.pyc", "*.pyo", "test_*.py", ".DS_Store", ".env", "submission.csv"]
 
+# Ours: research ballast the shipped notebook never touches. Dropping these takes the
+# upload from ~154 MB to ~22 MB, so the runner unpacks less and the Space holds less
+# while other teams' jobs run alongside ours. A notebook that DOES read one of these
+# would otherwise fail in the sandbox with a redacted error, so build_zip refuses to
+# package that combination -- keep the names here in sync with what the notebook loads.
+OUR_EXCLUDE_DIRS = {
+    "experiments",         # 132 MB, dominated by heterogeneous_adapter_ensemble/
+    "legacy_probes",       # superseded probe weights; submission/whitebox_probe ships
+    "legacy_submissions",  # previously-submitted notebooks
+    "staged",              # next-in-line notebooks, not the one being submitted
+}
+EXCLUDE_DIRS |= OUR_EXCLUDE_DIRS
+
 MAX_ZIP_MB = 200  # guardrail; the Space may enforce its own limit.
 
 # The competition leaderboard Space; used when --space-url / $ALETHEIA_SPACE_URL is unset.
@@ -135,6 +148,18 @@ def _excluded(rel: Path) -> bool:
     return any(fnmatch.fnmatch(rel.name, pat) for pat in EXCLUDE_GLOBS)
 
 
+def _check_notebook_needs_nothing_excluded(notebook: Path) -> None:
+    """Abort if ``notebook`` reads a directory OUR_EXCLUDE_DIRS drops from the package.
+    The dir name is matched with a trailing slash, so a path merely prefixed by an
+    excluded name (``legacy_probes_v2/...``) does not trip its entry."""
+    source = notebook.read_text(encoding="utf-8", errors="replace")
+    referenced = sorted(name for name in OUR_EXCLUDE_DIRS if f"{name}/" in source)
+    if referenced:
+        sys.exit(f"{notebook.name} reads {', '.join(referenced)}, which submit.py "
+                 f"excludes from the package — it would fail in the sandbox. Move what "
+                 f"it needs under submission/, or drop the name from OUR_EXCLUDE_DIRS.")
+
+
 def build_zip(root: Path) -> bytes:
     """Package ``root`` into an in-memory zip, skipping cruft."""
     # One notebook per submission — catch it here so we don't upload a package the
@@ -144,6 +169,8 @@ def build_zip(root: Path) -> bytes:
         names = ", ".join(p.name for p in nbs)
         sys.exit(f"submission/ must contain exactly one notebook — found "
                  f"{len(nbs)} ({names}). Submit one notebook at a time.")
+    if nbs:
+        _check_notebook_needs_nothing_excluded(nbs[0])
 
     buf = io.BytesIO()
     n = 0

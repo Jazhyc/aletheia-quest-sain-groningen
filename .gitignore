@@ -28,9 +28,12 @@ venv/
 .DS_Store
 .env
 
-# Probe weights (regenerated from activations; large binary blobs)
+# Probe weights (regenerated from activations; large binary blobs). The shipped
+# probe and its archived predecessors are the exception: retraining is expensive
+# and a past submission can only be reproduced from the exact weights it ran on.
 *.pt
 !submission/whitebox_probe/**/*.pt
+!legacy_probes/**/*.pt
 
 # sklearn serialized models
 *.joblib
