@@ -22,7 +22,7 @@ sys.path.insert(0, str(HERE))
 
 import build_sonic_v3_5_notebook as builder  # noqa: E402
 
-SOURCE = REPO_ROOT / "staged/sonic_v3_4.ipynb"
+SOURCE = REPO_ROOT / "legacy_submissions/sonic_v3_4.ipynb"
 CONSTANTS = REPO_ROOT / "results/ensemble_gate_eval/sonic_v3_5_constants.json"
 V3_4_CONSTANTS = REPO_ROOT / "results/ensemble_gate_eval/sonic_v3_4_constants.json"
 

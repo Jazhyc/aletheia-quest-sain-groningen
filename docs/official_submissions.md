@@ -17,12 +17,30 @@ opaque public labels returned by the Space.
 ## Current Status
 
 - Team: `SAIN Groningen`
-- **Best official AUROC is now `sonic_v3_2.ipynb` at `0.903050` / BA `0.831250`**
+- **Latest submission: `sonic_v4_2.ipynb` at AUROC `0.9047` / BA `0.8183`**
+  (2026-07-27 18:00). v4's dual probe and sign gate with a judge-uncertainty
+  exception — when `|judge_z| < 0.5`, the cap opens to MAX_CAP regardless of
+  probe agreement. **Regression: −0.0013 AUROC vs v4.** Notus Nemotron fell
+  from 0.8864 to 0.8717 (−0.0147). Even when the judge is uncertain, Notus
+  rows carry ranking signal that the probe damages when uncapped. See
+  "Sonic v4.2 counted detail".
+- **Best submission: `sonic_v4.ipynb` at AUROC `0.906067` / BA `0.820417`**
+  (2026-07-27 13:59). v3.8's gate with dual probes at L40 and L46 fused as
+  `(z_46 + z_40) / 2.0`. Headline AUROC `−0.0001` below v3.8, BA `+0.0004`
+  above it — essentially identical. The gap to rank 1
+  (Tiresias, `0.9451`) is unchanged at `−0.0390`. See "Sonic v4 counted detail".
+- **`sonic_v4_1.ipynb`: AUROC `0.900267` / BA `0.815417`** (2026-07-27 17:01).
+  v4's dual probe with a confidence gate (`sigmoid(|probe_z|) × MAX_CAP`)
+  instead of the sign test. **Regression: −0.0057 AUROC vs v4.** Notus Nemotron
+  collapsed from 0.8864 to 0.8484 (−0.0380) — spurious probe confidence on
+  Notus opened the cap on rows where the probe was wrong and the judge right.
+  The sign test was the safety mechanism. See "Sonic v4.1 counted detail".
+- **`sonic_v3_2.ipynb`: AUROC `0.903050` / BA `0.831250`**
   (2026-07-26 14:52). The agreement-modulated cap edges past v3.1 by `+0.0010`
   AUROC and `+0.0054` BA, and beats the pure judge (phoenix_wright_v4) by
   `+0.0092` AUROC / `+0.0158` BA. Notus stays flat (`-0.0006` vs v4) as designed;
-  Iris gains `+0.0191`. This is the best official submission from this team on
-  both metrics under the amended regime. See "Sonic v3.2 counted detail".
+  Iris gains `+0.0191`. Holds the highest BA (`0.831250`) of any submission in
+  the v3/v4 gate family. See "Sonic v3.2 counted detail".
 - **`sonic_v3_1.ipynb`: AUROC `0.902083` / BA `0.825833`**
   (2026-07-26 12:55). The capped-nudge design works: `+0.0083` AUROC over the
   pure judge (phoenix_wright_v4), with all of the gain on Iris where the probe
@@ -47,7 +65,7 @@ opaque public labels returned by the Space.
   probe, `MAX_CAP` back to 4 steps. See "Sonic v3.3 counted detail". An earlier
   attempt at 2026-07-26 19:30 failed in the sandbox.
 - **`sonic_v3_4.ipynb`: built 2026-07-27, never submitted; overtaken by v3.5 and
-  moved to `staged/`.** v3.2's gate constants (`BASE_CAP` 2 steps, `MAX_CAP` 4 steps)
+  moved to `legacy_submissions/`.** v3.2's gate constants (`BASE_CAP` 2 steps, `MAX_CAP` 4 steps)
   with v3.3's shared-trunk probe. Cells 1-11 are byte-identical to
   `sonic_v3_2.ipynb` and the scoring cell differs only in the probe
   standardization constants, which belong to the weights. One thing moves, so
@@ -94,21 +112,23 @@ opaque public labels returned by the Space.
   median-split fallback fixed v2.3's Iris/gemma collapse exactly as projected
   (`0.5000 -> 0.9700`, ahead of the `~0.93` estimate), and every other counted
   unit is unchanged from v2.3.
-- Best official submission in this record: `sonic_v3_2.ipynb`, AUROC `0.903050`
-  / BA `0.831250` (previous best AUROC was `sonic_v3_1` at `0.902083`; the
-  highest BA ever recorded is still `sonic_v2.3.5` at `0.853750`, from the
-  BA-first regime)
+- Best official AUROC in this record: `sonic_v4.ipynb` at `0.906067` / BA
+  `0.820417` (submitted 2026-07-27 13:59). `sonic_v4_2` regressed to
+  `0.9047` (−0.0013), confirming no gate relaxation of the sign test
+  constraint has been safe. Highest BA among the v3/v4 gate family:
+  `sonic_v3_2.ipynb` at `0.831250` / AUROC `0.903050`. The highest BA
+  ever recorded is `sonic_v2.3.5.ipynb` at `0.853750`, from the BA-first
+  regime.
 - Leaderboard rank: `2` of the public board; leader is EleutherAI
   `Tiresias.ipynb` at AUROC `0.9451` / BA `0.8904` (see benchmark below)
-- **Remaining gap to rank 1 is now split across both counted datasets**:
-  Notus AUROC `0.8634 -> 0.9032` (`-0.0398`) and Iris AUROC
-  `0.9427 -> 0.9869` (`-0.0442`). The v3.1/v3.2 capped-nudge family
-  intentionally trades Iris headroom for Notus safety — under v2.3.5's
-  aggressive probe weighting Iris scored 0.9950 but the same strategy burned
-  `-0.1055` on Notus. Closing the gap now requires a detector that actually
-  transfers to base-model-only data; no gate or blending strategy can
-  manufacture ranking signal neither detector possesses there. See "Sonic v3.2
-  counted detail".
+- **Remaining gap to rank 1 (`-0.0391`).** v4 Notus AUROC `0.8605` vs
+  Tiresias `0.9032` (`-0.0427`), Iris AUROC `0.9516` vs `0.9869`
+  (`-0.0353`). The v3/v4 gate family intentionally trades Iris headroom
+  for Notus safety — under v2.3.5's aggressive probe weighting Iris scored
+  0.9950 but the same strategy burned `-0.1055` on Notus. Closing the gap
+  now requires a detector that actually transfers to base-model-only data;
+  no gate or blending strategy can manufacture ranking signal neither
+  detector possesses there. See "Sonic v4 counted detail".
 - Previous best black-box entry: `phoenix_wright_v2_0.ipynb`, BA `0.833333`
 
 The sonic family is white-box (`--tag white`). Unlike the Phoenix rows, its BA
@@ -126,7 +146,10 @@ recent runs have not been added without a fresh authenticated API query.
 
 | submitted at (UTC) | notebook | method / local mapping | tag | BA | AUROC | recall | FPR | runtime |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| 2026-07-26 14:52 | `sonic_v3_2.ipynb` | agreement-modulated cap: `score = sigmoid(judge_z + cap × tanh(PROBE_GAIN × probe_z))` with `cap = BASE_CAP + clip(judge_z × probe_z / 3, 0, 1) × (MAX_CAP − BASE_CAP)`, 2 judge steps when probe and judge disagree, 4 when they agree; threshold `0.20` (**best official on both metrics**) | white | 0.831250 | 0.903050 | — | — | 1799s |
+| 2026-07-27 18:00 | `sonic_v4_2.ipynb` | v4 dual probe + judge-uncertainty exception on sign test; opens cap when judge is uncertain regardless of probe-sign agreement (**regression: −0.0013 AUROC vs v4, Notus Nemotron −0.0147**) | white | 0.8183 | 0.9047 | — | — | 1664s |
+| 2026-07-27 17:01 | `sonic_v4_1.ipynb` | v4 dual probe + confidence gate `sigmoid(abs(probe_z)) * MAX_CAP`; decouples cap from judge agreement (**regression: −0.0057 AUROC vs v4, Notus Nemotron −0.0380**) | white | 0.815417 | 0.900267 | — | — | 1694s |
+| 2026-07-27 13:59 | `sonic_v4.ipynb` | v3.8 gate (sign test, linear, cap 4 steps) + dual probes at L40 and L46 fused as `(z_46 + z_40) / 2.0`; best headline AUROC in the v4 family | white | 0.820417 | 0.906067 | — | — | 1718s |
+| 2026-07-26 14:52 | `sonic_v3_2.ipynb` | agreement-modulated cap: `score = sigmoid(judge_z + cap × tanh(PROBE_GAIN × probe_z))` with `cap = BASE_CAP + clip(judge_z × probe_z / 3, 0, 1) × (MAX_CAP − BASE_CAP)`, 2 judge steps when probe and judge disagree, 4 when they agree; threshold `0.20` | white | 0.831250 | 0.903050 | — | — | 1799s |
 | 2026-07-27 00:20 | `sonic_v3_3.ipynb` | v3.2 gate with v3.3-mini shared-trunk probe weights, `BASE_CAP` 1 step (was 2), `MAX_CAP` 6 steps (was 4); threshold `0.20` unchanged (**best Notus mean of any sonic run, `0.8642`; Iris regressed `-0.0034`**) | white | 0.827500 | 0.901750 | — | — | 1478s |
 | 2026-07-26 18:57 | `sonic_v3_3_mini.ipynb` | **probe-only diagnostic.** Shared-trunk transformer probe, balanced training recipe (grouped early-stopping split + base-row upweighting), all three families on one trunk including gemma; `sigmoid(probe_z)` at frozen `0.5` threshold, no judge, no gate | white | 0.657500 | 0.775208 | — | — | 1035s |
 | 2026-07-26 13:21 | `phoenix_wright_v4_3.ipynb` | direct-label-logit judge, no probe; every counted and uncounted row identical to v4_2 | black | 0.815417 | 0.893817 | — | — | 1228s |
@@ -205,6 +228,203 @@ Leakage-free dev folds gave no warning. Held-out base-model organisms score
 probe `0.9878` / judge `0.9814`, so "base model, no adapter" is not the
 discriminating feature — Notus differs in its *data distribution*, which no
 inference-time metadata exposes.
+
+### Sonic v4 counted detail — dual probe, v3.8 gate, essentially flat
+
+Submitted 2026-07-27 13:59. Headline AUROC `0.906067` / BA `0.820417`, runtime
+28m38s (1718s). Against `sonic_v3.8`: `-0.0001` AUROC, `+0.0004` BA.
+
+**Design.** v3.8's gate, unchanged. The only change is that `probe_z` is the
+mean of two probes at layers 40 and 46: `probe_z = (z_L46 + z_L40) / 2.0`.
+The L40 probe was trained with the same shared-trunk recipe as the shipped L46.
+Each probe has its own frozen standardization constants. The gate, the cap
+(BASE_CAP 2 steps, MAX_CAP 4 steps), the linear contribution, the judge and
+the prompt are v3.8's, unchanged. Full design: `docs/sonic/sonic_v4.md`.
+
+**Counted Notus/Iris head-to-head against v3.8.**
+
+| dataset | model / lora | v4 AUROC | v3.8 AUROC | Δ AUROC | v4 BA | v3.8 BA |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Notus | `Nemotron-120B` / `None` | 0.8864 | 0.8860 | +0.0004 | 0.7800 | — |
+| Notus | `Qwen3.5-27B` / `None` | 0.8427 | 0.8421 | +0.0006 | 0.7725 | — |
+| Notus | `gemma-3-27b-it` / `None` | 0.8525 | 0.8533 | −0.0008 | 0.7650 | — |
+| Iris | `Nemotron-120B` / `g-st` | 0.9723 | 0.9759 | −0.0036 | 0.8925 | — |
+| Iris | `Qwen3.5-27B` / `g-st` | 0.9677 | 0.9650 | +0.0027 | 0.9050 | — |
+| Iris | `gemma-3-27b-it` / `g-st-2` | 0.9148 | 0.9146 | +0.0002 | 0.8075 | — |
+| **Notus mean** | | 0.8605 | 0.8605 | 0.0000 | 0.7725 | — |
+| **Iris mean** | | 0.9516 | 0.9518 | −0.0002 | 0.8683 | — |
+| **headline** | | **0.9061** | **0.9061** | **−0.0001** | **0.8204** | **0.8200** |
+
+**What the dual probe bought.** Very little. The design targeted Iris Qwen,
+the unit where v3.8 had lost −0.0144 against v3.6's higher cap. The L40 probe
+agreed with L46 on Qwen rows where the judge was wrong, letting the fused
+signal push through at full cap. Iris Qwen gained +0.0027 — a partial
+recovery of the v3.6 loss. But Iris Nemotron lost −0.0036, approximately
+the same size. The L40 probe was shared-trunk; a single-family Nemotron L40
+would likely have been stronger. The two effects nearly cancel.
+
+**Notus is flat.** All three Notus units moved by less than ±0.0010. The cap
+is unchanged from v3.8 at 4 steps, and the dual-probe signal is damped when
+the two probes conflict. The design's Notus safety guarantee held.
+
+**BA is the highest in the post-v3 gate family.** Headline BA `0.8204` edges
+past v3.8's `0.8200` by `+0.0004`. The gain is concentrated on Iris Qwen
+(`0.9050`, the only counted unit above 0.90 BA).
+
+**The dual probe closes nothing.** The headline moved −0.0001. The gap to
+Tiresias (0.9451) is unchanged at −0.0391. The dual probe was a low-cost
+experiment that measured exactly what the structural case predicted: two
+probes reduce single-probe variance on agreement rows, but the effect is
+small because Iris is near-saturated and Notus is bounded by the cap
+regardless of how many probes feed it.
+
+**Uncounted reference rows.**
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Metis | `Nemotron-120B` / `None` | 0.9825 | 0.9900 | 1.0000 | 0.0350 |
+| Dataset Metis | `Qwen3.5-27B` / `None` | 0.9725 | 0.9976 | 0.9650 | 0.0200 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-1` | 0.9427 | 0.9889 | 0.8953 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-3` | 0.9650 | 0.9976 | 0.9350 | 0.0050 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-4` | 0.9650 | 0.9936 | 0.9400 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-5` | 0.9775 | 0.9950 | 0.9650 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-6` | 0.9557 | 0.9946 | 0.9514 | 0.0400 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-7` | 0.9626 | 0.9945 | 0.9402 | 0.0150 |
+| Dataset Metis | `Qwen3.5-27B` / `b-mo-qwen3.5-27b` | 0.9776 | 0.9963 | 0.9701 | 0.0150 |
+| Dataset Metis | `Qwen3.5-27B` / `c-mo-qwen3.5-27b` | 0.9750 | 0.9975 | 0.9850 | 0.0350 |
+| Dataset Metis | `Qwen3.5-27B` / `g-st-qwen3.5-27b` | 0.9150 | 0.9767 | 0.9500 | 0.1200 |
+| Dataset Metis | `gemma-3-27b-it` / `None` | 0.9725 | 0.9932 | 1.0000 | 0.0550 |
+| Dataset Metis | `gemma-3-27b-it` / `g-st-gemma-3-27b-it-2` | 0.9475 | 0.9757 | 0.9950 | 0.1000 |
+| Dataset Metis | `gemma-3-27b-it` / `s-mo-gemma-3-27b-it` | 0.9900 | 0.9973 | 0.9950 | 0.0150 |
+| Dataset Eunomia | `Qwen3.5-27B` / `None` | 0.9146 | 0.9796 | 0.9464 | 0.1172 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-1` | 0.7344 | 0.8503 | 0.6234 | 0.1546 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-3` | 0.6705 | 0.7483 | 0.4769 | 0.1359 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-4` | 0.7777 | 0.8668 | 0.6795 | 0.1241 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-5` | 0.8748 | 0.9540 | 0.8718 | 0.1222 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-6` | 0.8201 | 0.8936 | 0.7188 | 0.0786 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-7` | 0.8239 | 0.9014 | 0.7674 | 0.1197 |
+| Dataset Eunomia | `Qwen3.5-27B` / `b-mo-qwen3.5-27b` | 0.8464 | 0.9298 | 0.9150 | 0.2222 |
+| Dataset Eunomia | `Qwen3.5-27B` / `c-mo-qwen3.5-27b` | 0.9211 | 0.9653 | 0.9344 | 0.0923 |
+
+### Sonic v4.1 counted detail — confidence gate regression
+
+Submitted 2026-07-27 17:01. Headline AUROC `0.900267` / BA `0.815417`, runtime
+28m14s (1694s). Against `sonic_v4`: **−0.0057 AUROC, −0.0050 BA**.
+
+**Design.** v4's dual probe (L40+L46), unchanged. The gate's sign test
+(`agreement = judge_z × probe_z > 0`) is replaced with a confidence gate:
+`cap = sigmoid(|probe_z|) × MAX_CAP`. Parameter-free, no threshold, no
+judge agreement check. The rationale was to decouple the cap from the judge
+so the probe could get through on Iris rows where the probe is right and the
+judge wrong. Full design: `docs/sonic/sonic_v4_1.md`.
+
+**Counted Notus/Iris head-to-head against v4.**
+
+| dataset | model / lora | v4.1 AUROC | v4 AUROC | Δ AUROC | v4.1 BA | v4 BA |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Notus | `Nemotron-120B` / `None` | 0.8484 | 0.8864 | **−0.0380** | 0.7375 | 0.7800 |
+| Notus | `Qwen3.5-27B` / `None` | 0.8450 | 0.8427 | +0.0023 | 0.7875 | 0.7725 |
+| Notus | `gemma-3-27b-it` / `None` | 0.8525 | 0.8525 | 0.0000 | 0.7600 | 0.7650 |
+| Iris | `Nemotron-120B` / `g-st` | 0.9753 | 0.9723 | +0.0030 | 0.8975 | 0.8925 |
+| Iris | `Qwen3.5-27B` / `g-st` | 0.9656 | 0.9677 | −0.0021 | 0.8950 | 0.9050 |
+| Iris | `gemma-3-27b-it` / `g-st-2` | 0.9148 | 0.9148 | 0.0000 | 0.8150 | 0.8075 |
+| **Notus mean** | | 0.8486 | 0.8605 | **−0.0119** | 0.7617 | 0.7725 |
+| **Iris mean** | | 0.9519 | 0.9516 | +0.0003 | 0.8692 | 0.8683 |
+| **headline** | | **0.9003** | **0.9060** | **−0.0057** | **0.8154** | **0.8204** |
+
+**What went wrong.** Notus Nemotron collapsed from 0.8864 to 0.8484
+(−0.0380). v4.1 FPR rose to 0.500 (random guessing) against v4's 0.370. The
+probe has enough spurious signal on Notus that even `sigmoid(|z|)` opens the
+cap beyond the safe 2-step floor — at |z| = 0.5 the cap is already 2.5 steps.
+On rows where the probe happened to be modestly confident but wrong, the extra
+nudge damaged the ranking.
+
+**The sign test was the safety mechanism.** v4's gate only opens the cap when
+judge and probe *agree on direction*. This couples the probe's influence to
+the judge's verdict. On Notus, where the judge is decent (0.8640) and the
+probe is random, the sign test ensures the probe only amplifies rows where
+the judge already points the right way. The confidence gate removed this
+coupling and let the probe through on rows where it was wrong and the judge
+was right — exactly the rows the sign test was designed to block.
+
+**The local sweep was wrong.** The dev-only sweep predicted +0.0025 mean
+AUROC gain. The actual result is −0.0057 loss. Dev is in-sample for the
+probe, so |probe_z| is always well-calibrated there. On Notus the probe is
+out-of-distribution and can be spuriously confident. Any gate that decouples
+the probe from the judge must be tested on real Notus data.
+
+### Sonic v4.2 counted detail — judge-uncertainty exception, modest regression
+
+Submitted 2026-07-27 18:00. Headline AUROC `0.9047` / BA `0.8183`, runtime
+27m44s (1664s). Against `sonic_v4`: **−0.0013 AUROC, −0.0021 BA**.
+
+**Design.** v4's dual probe (L40+L46) and sign gate, unchanged. One exception
+is added: when the judge is uncertain (`|judge_z| < JUDGE_UNCERTAINTY_THRESHOLD`,
+0.5), the cap opens fully to MAX_CAP regardless of whether probe and judge
+agree on sign. The rationale was that uncertain judge rows are exactly where
+the sign test is least informative — the judge barely leans one way, so
+coupling the cap to that uncertain sign is noise. Opening the cap on those
+rows should let the probe through when it's right and the judge is genuinely
+unsure. Full design: `docs/sonic/sonic_v4_2.md`.
+
+**Counted Notus/Iris head-to-head against v4.**
+
+| dataset | model / lora | v4.2 AUROC | v4 AUROC | Δ AUROC | v4.2 BA | v4 BA |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Notus | `Nemotron-120B` / `None` | 0.8717 | 0.8864 | **−0.0147** | 0.7675 | 0.7800 |
+| Notus | `Qwen3.5-27B` / `None` | 0.8427 | 0.8427 | 0.0000 | 0.7750 | 0.7725 |
+| Notus | `gemma-3-27b-it` / `None` | 0.8525 | 0.8525 | 0.0000 | 0.7650 | 0.7650 |
+| Iris | `Nemotron-120B` / `g-st` | 0.9759 | 0.9723 | +0.0036 | 0.8900 | 0.8925 |
+| Iris | `Qwen3.5-27B` / `g-st` | 0.9705 | 0.9677 | +0.0028 | 0.9050 | 0.9050 |
+| Iris | `gemma-3-27b-it` / `g-st-2` | 0.9148 | 0.9148 | 0.0000 | 0.8075 | 0.8075 |
+| **Notus mean** | | 0.8556 | 0.8605 | **−0.0049** | 0.7692 | 0.7725 |
+| **Iris mean** | | 0.9537 | 0.9516 | +0.0021 | 0.8675 | 0.8683 |
+| **headline** | | **0.9047** | **0.9060** | **−0.0013** | **0.8183** | **0.8204** |
+
+**What went wrong.** Notus Nemotron absorbed the entire regression
+(−0.0147). Qwen and gemma Notus were flat. The judge-uncertainty exception
+opened the cap on rows where the sign test would have kept it at BASE_CAP (2
+steps). On Notus, the 14.4% of rows where the judge was uncertain (|z| < 0.5)
+still carried meaningful ranking signal — the judge's marginal lean, even
+when small, pointed correctly more often than not. Opening the cap to 4
+steps on those rows amplified the probe's noise against a direction the judge
+had correctly (if weakly) identified. The sign test was not just a safety
+mechanism against *wrong* probe agreement — it was also a safety mechanism
+against *uncertain* judge rows.
+
+**The local dev sweep was wrong for the same reason as v4.1.** On dev data
+the probe is in-sample, so |probe_z| is elevated and probe-judge agreement is
+inflated. The sweep could not detect that the uncertainty path would open the
+cap on rows where the probe's signal was noise on Notus. Any gate that
+relaxes the sign test constraint must be tested on real Notus data.
+
+**Uncounted reference rows.**
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Metis | `Nemotron-120B` / `None` | 0.9825 | 0.9933 | 1.0000 | 0.0350 |
+| Dataset Metis | `Qwen3.5-27B` / `None` | 0.9725 | 0.9977 | 0.9650 | 0.0200 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-1` | 0.9456 | 0.9897 | 0.9012 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-3` | 0.9650 | 0.9978 | 0.9350 | 0.0050 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-4` | 0.9675 | 0.9940 | 0.9450 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-5` | 0.9800 | 0.9951 | 0.9700 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-6` | 0.9584 | 0.9953 | 0.9568 | 0.0400 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-7` | 0.9653 | 0.9949 | 0.9457 | 0.0150 |
+| Dataset Metis | `Qwen3.5-27B` / `b-mo-qwen3.5-27b` | 0.9813 | 0.9972 | 0.9776 | 0.0150 |
+| Dataset Metis | `Qwen3.5-27B` / `c-mo-qwen3.5-27b` | 0.9775 | 0.9977 | 0.9900 | 0.0350 |
+| Dataset Metis | `Qwen3.5-27B` / `g-st-qwen3.5-27b` | 0.9150 | 0.9807 | 0.9500 | 0.1200 |
+| Dataset Metis | `gemma-3-27b-it` / `None` | 0.9725 | 0.9932 | 1.0000 | 0.0550 |
+| Dataset Metis | `gemma-3-27b-it` / `g-st-gemma-3-27b-it-2` | 0.9425 | 0.9757 | 0.9950 | 0.1100 |
+| Dataset Metis | `gemma-3-27b-it` / `s-mo-gemma-3-27b-it` | 0.9900 | 0.9973 | 0.9950 | 0.0150 |
+| Dataset Eunomia | `Qwen3.5-27B` / `None` | 0.9146 | 0.9817 | 0.9464 | 0.1172 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-1` | 0.7409 | 0.8533 | 0.6364 | 0.1546 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-3` | 0.6705 | 0.7517 | 0.4769 | 0.1359 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-4` | 0.7777 | 0.8681 | 0.6795 | 0.1241 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-5` | 0.8748 | 0.9551 | 0.8718 | 0.1222 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-6` | 0.8253 | 0.8950 | 0.7292 | 0.0786 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-7` | 0.8203 | 0.9027 | 0.7674 | 0.1268 |
+| Dataset Eunomia | `Qwen3.5-27B` / `b-mo-qwen3.5-27b` | 0.8489 | 0.9341 | 0.9200 | 0.2222 |
+| Dataset Eunomia | `Qwen3.5-27B` / `c-mo-qwen3.5-27b` | 0.9252 | 0.9668 | 0.9426 | 0.0923 |
 
 ### Sonic v3.3 counted detail — a small loss, probably from MAX_CAP
 
@@ -314,11 +534,11 @@ Iris does not recover, the probe caused it and 6 steps is still untested.
 it would move two things again. Expect Notus to fall back to about `0.8634`.
 That is the price of a clean read on Iris.
 
-### Sonic v3.2 agreement-modulated cap — best official submission
+### Sonic v3.2 agreement-modulated cap — highest BA in the gate family
 
 Submitted 2026-07-26 14:52. Headline AUROC `0.903050` / BA `0.831250`, runtime
-29m59s (1799s). **Best official submission from this team on both metrics under
-the AUROC-first regime.**
+29m59s (1799s). **Highest balanced accuracy of any submission in the v3/v4
+gate family.**
 
 **Design.** Same skeleton as v3.1, but the cap on the probe's correction is
 per-row instead of fixed:

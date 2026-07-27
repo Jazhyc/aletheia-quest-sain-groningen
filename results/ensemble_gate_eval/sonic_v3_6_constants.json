@@ -1,0 +1,68 @@
+{
+  "rule": "judge_z + (BASE_CAP + (judge_z*probe_z > 0) * (MAX_CAP-BASE_CAP)) * tanh(PROBE_GAIN * probe_z)",
+  "purpose": "v3.5's sign gate with MAX_CAP raised 4 -> 12 judge steps; nothing else moves",
+  "caps_from": "results/ensemble_gate_eval/sonic_v3_6_cap_sweep (experiments/ensemble_gate_eval/test_cap_binding_v3_6.py)",
+  "probe_standardization_from": "results/ensemble_gate_eval/sonic_v3_3_mini_constants.json (NDIF benchmark runs)",
+  "probe_weights": "submission/whitebox_probe (shared trunk, all 3 families, balanced recipe)",
+  "judge_margin_sd": 1.199755138011975,
+  "judge_ulp": 0.125,
+  "judge_step_z": 0.10418792638565248,
+  "base_cap_steps": 2.0,
+  "base_cap": 0.20837585277130496,
+  "max_cap_steps": 12.0,
+  "max_cap": 1.2502551166278297,
+  "agreement_scale": null,
+  "probe_gain": 1.0,
+  "probe_logit_mean": {
+    "qwen": -0.367495,
+    "gemma": -2.523992,
+    "nemotron": -6.329599
+  },
+  "probe_logit_sd": {
+    "qwen": 6.626051,
+    "gemma": 4.510691,
+    "nemotron": 3.268104
+  },
+  "default_probe_mean": -3.073695,
+  "default_probe_sd": 4.801615,
+  "threshold_judge_margin": 0.0,
+  "threshold_probe_only": 0.5,
+  "threshold_score": 0.2,
+  "gate": "sign",
+  "selection": {
+    "method": "sweep MAX_CAP in judge steps against both regimes, sign gate retained in every arm",
+    "iris_regime": "judge blunted to probe_auroc - edge; blunting does not saturate, so the real +0.068 Iris edge is reachable",
+    "notus_regime": "probe blunted to the measured 0.5586 (and 0.48 inverted), judge left healthy",
+    "capture_at_edge_0.068": {
+      "cap2": 0.61,
+      "cap4": 0.69,
+      "cap6": 0.73,
+      "cap8": 0.76,
+      "cap12": 0.80,
+      "cap20": 0.84,
+      "cap40": 0.86
+    },
+    "headline_delta_vs_cap4": {
+      "cap6": 0.0018,
+      "cap8": 0.0030,
+      "cap12": 0.0044,
+      "cap20": 0.0055,
+      "cap40": 0.0059
+    },
+    "notus_delta_vs_cap4_at_0.5586": {
+      "cap8": -0.0002,
+      "cap12": -0.0002,
+      "cap20": -0.0002,
+      "cap40": -0.0003
+    },
+    "chosen": 12.0,
+    "why_12_not_20_or_40": "captures 80% of the probe's edge against cap40's 86%, for a smaller excursion from the only cap regime ever validated on private data; the cap20->cap40 gain is +0.0004 and not worth the extra distance"
+  },
+  "selection_notes": {
+    "why_the_v3_5_sweep_missed_this": "fit_sign_gate_v3_5.py varied the gate SHAPE at fixed caps of 2 and 4 steps and never raised MAX_CAP. Its 'flat, always open' row removes the direction test at cap 4, which is why it costs -0.0137 on Notus. Keeping the sign gate and raising the ceiling is a different change and was untested.",
+    "why_the_first_v3_6_sweep_said_no_effect": "test_saturation_v3_6.py built its Iris regime by sharpening the probe, which saturates at ~+0.025 edge. The cap does not bind there, so that arm was uninformative rather than negative.",
+    "notus_blind_spot": "the local Notus proxy has the judge at 0.938 against real Notus's ~0.864, so the near-zero Notus cost is measured on an easier regime than the one that matters",
+    "iris_capture_anomaly": "the harness says cap4 should capture 69% on real Iris; the leaderboard says sonic_v3_5 captured 30.5% (0.9444 against judge-alone 0.9236 and probe-alone 0.9918). The cap explains part of the gap. The rest is unexplained, so the projected gain may not land in full.",
+    "probe_in_sample_caveat": "the probe is in-sample on every dev fold, so absolute levels are inflated; only the comparison across cap values is used"
+  }
+}

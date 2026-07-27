@@ -1,7 +1,7 @@
 # sonic v3.4
 
 **Built 2026-07-27. Never submitted; overtaken by v3.5 on 2026-07-27 and moved
-to `staged/sonic_v3_4.ipynb`.** It remains the only clean way to attribute the
+to `legacy_submissions/sonic_v3_4.ipynb`.** It remains the only clean way to attribute the
 v3.3 Iris loss to either MAX_CAP or the probe, so it is worth a later run.
 
 v3.2 with the v3.3 probe. That is the whole change.

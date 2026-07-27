@@ -1,0 +1,55 @@
+{
+  "rule": "judge_z + (BASE_CAP + (judge_z*probe_z > 0) * (MAX_CAP-BASE_CAP)) * PROBE_GAIN * probe_z",
+  "purpose": "v3.6's sign gate with tanh squash removed — linear probe contribution keeps the gate's full strength on confident rows",
+  "derived_from": "v3.6 (submission/sonic_v3_6.ipynb), tested by test_linear_v3_7.py",
+  "probe_standardization_from": "results/ensemble_gate_eval/sonic_v3_3_mini_constants.json (NDIF benchmark runs)",
+  "probe_weights": "submission/whitebox_probe (shared trunk, all 3 families, balanced recipe)",
+  "judge_margin_sd": 1.199755138011975,
+  "judge_ulp": 0.125,
+  "judge_step_z": 0.10418792638565248,
+  "base_cap_steps": 2.0,
+  "base_cap": 0.20837585277130496,
+  "max_cap_steps": 12.0,
+  "max_cap": 1.2502551166278297,
+  "agreement_scale": null,
+  "probe_gain": 1.0,
+  "squash": "linear",
+  "probe_logit_mean": {
+    "qwen": -0.367495,
+    "gemma": -2.523992,
+    "nemotron": -6.329599
+  },
+  "probe_logit_sd": {
+    "qwen": 6.626051,
+    "gemma": 4.510691,
+    "nemotron": 3.268104
+  },
+  "default_probe_mean": -3.073695,
+  "default_probe_sd": 4.801615,
+  "threshold_judge_margin": 0.0,
+  "threshold_probe_only": 0.5,
+  "threshold_score": 0.2,
+  "gate": "sign",
+  "selection": {
+    "method": "sweep linear vs tanh across caps 2-20, sign gate kept, Iris edge +0.068, Notus probe at 0.5586 and 0.48 inverted",
+    "iris_regime": "judge blunted to probe_auroc - 0.068 (real Iris condition)",
+    "notus_regime": "probe blunted to measured 0.5586 (and 0.48 inverted), judge healthy",
+    "iris_linear_vs_tanh_at_cap12": 0.0022,
+    "notus_linear_vs_tanh_at_cap12": -0.0002,
+    "headline_linear_vs_tanh_at_cap12": 0.0010,
+    "headline_delta_vs_v3_5_tanh_cap4": {
+      "tanh_cap12": 0.0047,
+      "linear_cap8": 0.0047,
+      "linear_cap12": 0.0057
+    },
+    "chosen": "linear cap12",
+    "why_linear": "the tanh compresses probe_z above ~2, holding back the most confident rows on Iris where the probe is strong (0.9918 AUROC). Removing it lets those rows contribute at full strength.",
+    "why_12_not_8": "linear cap8 already matches v3.6 tanh cap12's gain, but it does so on different rows (slightly higher Iris, slightly lower Notus). Cap12 adds a clean +0.0010 on top for no measurable cost."
+  },
+  "selection_notes": {
+    "notus_blind_spot": "the local Notus proxy has the judge at 0.938 against real Notus's ~0.864 — same as v3.6",
+    "iris_capture_anomaly": "part of the Iris shortfall remains unexplained — same as v3.6",
+    "probe_in_sample_caveat": "the probe is in-sample on every dev fold — same as v3.6",
+    "extreme_disagreement_risk": "without tanh, a 5-sigma probe on a disagreement row contributes 0.208×5=1.04 judge-z units (vs 0.208 with tanh), which can flip a borderline (±1σ) judge. The measured cost on aggregate Notus is -0.0002, same as with tanh, because 5σ events are too rare to register. This is a principled cost of removing the squash."
+  }
+}

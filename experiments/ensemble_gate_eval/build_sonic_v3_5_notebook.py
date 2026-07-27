@@ -22,7 +22,7 @@ probe exactly where it would pay: the product captures 54% of the probe's edge
 against the sign test's 66%. The sign test keeps the direction check and drops
 the magnitude coupling. Selection and numbers: `fit_sign_gate_v3_5.py`.
 
-v3.5 holds `submission/` as of 2026-07-27; `sonic_v3_4.ipynb` moved to `staged/`
+v3.5 holds `submission/` as of 2026-07-27; `sonic_v3_4.ipynb` moved to `legacy_submissions/`
 unsubmitted, since the runner accepts exactly one notebook. v3.4 still answers
 whether v3.3's Iris loss was the probe or MAX_CAP, so it is worth a later run,
 but v3.5 supersedes it as a candidate.
@@ -39,7 +39,7 @@ from pathlib import Path
 import nbformat
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SOURCE = REPO_ROOT / "staged/sonic_v3_4.ipynb"
+DEFAULT_SOURCE = REPO_ROOT / "legacy_submissions/sonic_v3_4.ipynb"
 DEFAULT_OUTPUT = REPO_ROOT / "submission/sonic_v3_5.ipynb"
 DEFAULT_CONSTANTS = REPO_ROOT / "results/ensemble_gate_eval/sonic_v3_5_constants.json"
 

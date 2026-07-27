@@ -49,8 +49,7 @@ EXCLUDE_GLOBS = ["*.pyc", "*.pyo", "test_*.py", ".DS_Store", ".env", "submission
 OUR_EXCLUDE_DIRS = {
     "experiments",         # 132 MB, dominated by heterogeneous_adapter_ensemble/
     "legacy_probes",       # superseded probe weights; submission/whitebox_probe ships
-    "legacy_submissions",  # previously-submitted notebooks
-    "staged",              # next-in-line notebooks, not the one being submitted
+    "legacy_submissions",  # previously-submitted notebooks and superseded builds
 }
 EXCLUDE_DIRS |= OUR_EXCLUDE_DIRS
 

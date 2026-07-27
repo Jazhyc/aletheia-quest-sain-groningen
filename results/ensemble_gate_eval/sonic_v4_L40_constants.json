@@ -1,0 +1,16 @@
+{
+  "layer": 40,
+  "probe_weights": "submission/whitebox_probe_L40",
+  "probe_logit_mean": {
+    "qwen": -0.1446,
+    "gemma": -1.1305,
+    "nemotron": -6.4427
+  },
+  "probe_logit_sd": {
+    "qwen": 6.9730,
+    "gemma": 6.3143,
+    "nemotron": 3.5210
+  },
+  "default_probe_mean": -2.5726,
+  "default_probe_sd": 5.6028
+}

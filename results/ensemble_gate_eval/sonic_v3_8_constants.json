@@ -1,0 +1,39 @@
+{
+  "rule": "judge_z + (BASE_CAP + (judge_z*probe_z > 0) * (MAX_CAP-BASE_CAP)) * PROBE_GAIN * probe_z",
+  "purpose": "v3.7's linear (no-tanh) gate with MAX_CAP rolled back to 4 steps (v3.5's value) — gains the tanh removal's Iris headroom without the cap-raise Notus risk",
+  "derived_from": "v3.7 (submission/sonic_v3_7.ipynb) with MAX_CAP restored to v3.5's value",
+  "probe_standardization_from": "results/ensemble_gate_eval/sonic_v3_3_mini_constants.json",
+  "probe_weights": "submission/whitebox_probe (shared trunk, all 3 families, balanced recipe)",
+  "judge_margin_sd": 1.199755138011975,
+  "judge_step_z": 0.10418792638565248,
+  "base_cap_steps": 2.0,
+  "base_cap": 0.20837585277130496,
+  "max_cap_steps": 4.0,
+  "max_cap": 0.41675170554260993,
+  "agreement_scale": null,
+  "probe_gain": 1.0,
+  "squash": "linear",
+  "probe_logit_mean": {"qwen": -0.367495, "gemma": -2.523992, "nemotron": -6.329599},
+  "probe_logit_sd": {"qwen": 6.626051, "gemma": 4.510691, "nemotron": 3.268104},
+  "default_probe_mean": -3.073695,
+  "default_probe_sd": 4.801615,
+  "threshold_probe_only": 0.5,
+  "threshold_score": 0.2,
+  "gate": "sign",
+  "selection": {
+    "method": "v3.7 linear gate with cap reduced from 12 to 4 steps",
+    "iris_regime": "judge blunted to probe_auroc - 0.068",
+    "notus_regime": "probe blunted to 0.5586, judge healthy",
+    "harness_headline_delta_vs_v3_5_tanh_cap4": 0.0021,
+    "harness_iris_delta_vs_v3_5": 0.0044,
+    "harness_notus_delta_vs_v3_5": -0.0003,
+    "chosen": "linear cap4",
+    "why": "v3.6's cap12 raise cost -0.0210 on Gemma Notus. At cap4 the cap (0.416) is the binding constraint, not the tanh, so the Gemma Notus failure mode is bounded at v3.5's level. The tanh removal's Iris gain (+0.0044) survives because even at cap4, linear z > tanh(z) for |z| > 1."
+  },
+  "selection_notes": {
+    "v3_6_actual_results": "headline 0.9068 (+0.0022), Iris +0.0107, Notus -0.0064 (Gemma Notus -0.0210)",
+    "notus_proxy_blind_spot": "the harness Notus proxy has judge at 0.938 vs real 0.864 and missed v3.6's Notus cost by 30×",
+    "gemma_notus_risk": "at cap4 the probe contribution is bounded at 0.416×z regardless of squash; the Gemma Notus failure from v3.6 was driven by cap size, not by tanh",
+    "cap_is_binding": "at cap4, the max probe contribution on agreement rows is 0.416×z. The tanh removal helps on rows where |z|>1 (tanh compresses) but the cap still bounds the total at 0.416×z. So the risk ceiling is the same as v3.5's."
+  }
+}

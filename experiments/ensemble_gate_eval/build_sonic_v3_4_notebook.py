@@ -33,7 +33,7 @@ import nbformat
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SOURCE = REPO_ROOT / "legacy_submissions/sonic_v3_3.ipynb"
-DEFAULT_OUTPUT = REPO_ROOT / "staged/sonic_v3_4.ipynb"
+DEFAULT_OUTPUT = REPO_ROOT / "legacy_submissions/sonic_v3_4.ipynb"
 DEFAULT_CONSTANTS = REPO_ROOT / "results/ensemble_gate_eval/sonic_v3_4_constants.json"
 
 EXPECTED_CELLS = 13

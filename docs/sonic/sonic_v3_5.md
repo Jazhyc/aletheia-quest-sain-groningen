@@ -1,6 +1,6 @@
 # sonic v3.5
 
-**Built 2026-07-27. In `submission/`, ready to send. Not yet submitted.**
+**Built 2026-07-27, submitted 2026-07-27. Scored AUROC `0.9046` / BA `0.8275`. Moved to `legacy_submissions/`.**
 
 One line changes against v3.4. The cap opening becomes a direction test.
 
@@ -111,9 +111,9 @@ python experiments/ensemble_gate_eval/build_sonic_v3_5_notebook.py
 pytest experiments/ensemble_gate_eval/test_sonic_v3_5_notebook.py
 ```
 
-Source: `staged/sonic_v3_4.ipynb`. Constants:
+Source: `legacy_submissions/sonic_v3_4.ipynb`. Constants:
 `results/ensemble_gate_eval/sonic_v3_5_constants.json`. Swapping which notebook
-is queued: `staged/README.md`.
+is queued: `legacy_submissions/README.md`.
 
 ## Pre-flight, 2026-07-27
 
@@ -132,7 +132,7 @@ Run locally, against the shipped cells rather than a reimplementation.
 - Fallbacks work: judge-only (probe missing), probe-only at threshold `0.50`
   (judge missing), and the empty dataset.
 - `submit.py` packages 258 files / 11.8 MB, exactly one notebook, nothing from
-  `staged/`.
+  `legacy_submissions/`.
 
 Cosmetic, pre-existing and unchanged from v3.2: on an empty dataset the log line
 prints `agreement=nan`, because `np.mean` of an empty array is nan. No score is
