@@ -1,6 +1,7 @@
 # NDIF Truth Value Guard model swaps
 
-This benchmark compares the hosted base checkpoints
+This benchmark compares the hosted base checkpoints on the competition-specific
+NDIF endpoint, `https://aletheias.api.ndif.us`,
 `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` and
 `google/gemma-3-27b-it` as black-box deception judges on the frozen 821-row
 local test split. It uses the exact compact no-thinking Truth Value Guard
@@ -42,10 +43,13 @@ Nemotron completed all 821 rows:
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Nemotron Super 120B-A12B | `0.95655` | `0.98708` | `0.91583` | `0.89762` | `0.82619` | `0.03095` | `70/821` |
 
-The 26 resumable NDIF sessions took 185.6 seconds of scoring time. Gemma passed
-local tokenizer and prompt compatibility (`0` and `1` are distinct single
-tokens), but NDIF rejected two separate two-row smoke requests before model
-execution because `google/gemma-3-27b-it` was not pinned and this API key does
-not support hotswapping. This is an NDIF availability blocker, not a benchmark
-result. Re-run the Gemma-only command when the model is scheduled; no local
-model weights are required.
+The 26 resumable competition-NDIF sessions took 185.6 seconds of scoring time.
+Gemma passed local tokenizer and prompt compatibility (`0` and `1` are distinct
+single tokens), but the competition endpoint rejected two separate two-row
+smoke requests before model execution because `google/gemma-3-27b-it` was not
+pinned and this API key does not support hotswapping. The regular NDIF endpoint,
+`https://api.ndif.us`, listed Gemma as a hot Pilot-only deployment, but a
+separate approved two-row access check rejected the competition key as missing
+or invalid before accepting the trace. Therefore neither endpoint can currently
+run Gemma with the available key. This is an endpoint/access blocker, not a
+benchmark result; no local model weights are required.

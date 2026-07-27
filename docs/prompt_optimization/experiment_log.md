@@ -1,12 +1,13 @@
 # Prompt Experiment Log
 
-## 2026-07-27: NDIF Truth Value Guard model swaps
+## 2026-07-27: Competition-NDIF Truth Value Guard model swaps
 
 The exact compact no-thinking Truth Value Guard was evaluated as a direct
-binary-logit judge on the frozen 821-row local test. The renderer used the
-3,000-character tail, omitted source reasoning, appended `Prediction:`, and
-normalized literal `0|1` next-token logits. NDIF executed all model forwards;
-the cluster loaded tokenizers/configuration only.
+binary-logit judge on the frozen 821-row local test through
+`https://aletheias.api.ndif.us`, the competition-specific endpoint. The
+renderer used the 3,000-character tail, omitted source reasoning, appended
+`Prediction:`, and normalized literal `0|1` next-token logits. NDIF executed
+all model forwards; the cluster loaded tokenizers/configuration only.
 
 `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` completed with `0.95655`
 macro AUROC, `0.98708` instructed AUROC, and `0.91583` varied AUROC. Secondary
@@ -15,10 +16,12 @@ FPR. It produced only 70 unique probabilities across 821 rows. The 26
 resumable NDIF sessions took `185.6s` of scoring time.
 
 `google/gemma-3-27b-it` passed local tokenizer/prompt validation, but two
-separate two-row NDIF attempts were rejected before execution because the
-checkpoint was not pinned and the API key could not hotswap it. Record this as
-an availability blocker, not a model result. The Gemma-only run remains
-resumable when NDIF schedules the checkpoint.
+separate two-row competition-endpoint attempts were rejected before execution
+because the checkpoint was not pinned and the API key could not hotswap it.
+The regular `https://api.ndif.us` endpoint listed Gemma as hot and Pilot-only,
+but a separate approved access check rejected the competition key as missing or
+invalid before accepting the trace. Record this as an endpoint/access blocker,
+not a model result.
 
 Implementation and tests are in `experiments/ndif_tvg_model_swap/`; ignored
 artifacts are under

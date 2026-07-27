@@ -71,13 +71,14 @@ while sharing the same Alibaba endpoint, but retrying did not change provider
 or leave incomplete rows. Select 397B, not 122B, if proceeding with remote
 same-family soft supervision.
 
-### NDIF Nemotron/Gemma Truth Value Guard swaps (2026-07-27)
+### Competition-NDIF Nemotron/Gemma Truth Value Guard swaps (2026-07-27)
 
-The exact no-thinking binary Truth Value Guard boundary was also ported to
-NDIF for two cross-family model swaps. It retained the 3,000-character tail
-renderer, excluded source reasoning, appended `Prediction:`, requested only
-the final logits, and normalized the literal `0|1` choices. Tokenization was
-local, but no model weights were loaded on the cluster.
+The exact no-thinking binary Truth Value Guard boundary was also ported to the
+competition-specific `https://aletheias.api.ndif.us` endpoint for two
+cross-family model swaps. It retained the 3,000-character tail renderer,
+excluded source reasoning, appended `Prediction:`, requested only the final
+logits, and normalized the literal `0|1` choices. Tokenization was local, but
+no model weights were loaded on the cluster.
 
 Nemotron completed the frozen 821-row local test:
 
@@ -97,11 +98,14 @@ separate.
 
 Gemma passed the local renderer/tokenizer compatibility smoke: literal `0`
 and `1` are distinct single tokens and the two test prompts fit comfortably.
-However, two separate NDIF requests were rejected before inference because
-`google/gemma-3-27b-it` was not pinned and hotswapping was unavailable for the
-API key. This is an availability blocker, not a Gemma score. Do not substitute
-a local-cluster load or another provider into this matched NDIF benchmark;
-resume the Gemma-only run when NDIF schedules the checkpoint.
+However, two separate competition-endpoint requests were rejected before
+inference because `google/gemma-3-27b-it` was not pinned and hotswapping was
+unavailable for the API key. The regular `https://api.ndif.us` status listed
+Gemma as a hot Pilot-only deployment, but an explicitly approved two-row access
+check rejected the competition key as missing or invalid before accepting the
+trace. Thus neither endpoint can currently evaluate Gemma with the available
+key. This is an endpoint/access blocker, not a Gemma score. Do not substitute a
+local-cluster load or another provider into this matched benchmark.
 
 Runtime code and resumable artifacts are under
 `experiments/ndif_tvg_model_swap/` and
