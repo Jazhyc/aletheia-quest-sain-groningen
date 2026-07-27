@@ -2,9 +2,10 @@
 """Benchmark Qwen3.5-397B Truth Value Guard label logits through OpenRouter.
 
 This is development-only tooling. OpenRouter is not called by submission code.
-The runner uses the text-completions endpoint so the prompt exactly matches the
-local Qwen no-thinking chat template followed by the ``Prediction:`` boundary.
-Successful rows are checkpointed immediately and can be resumed.
+The runner uses the chat-completions endpoint with reasoning disabled, lets the
+model greedily emit ``Prediction:``, and reads the ``0``/``1`` logprobs at the
+generated label position. Successful rows are checkpointed immediately and can
+be resumed.
 """
 
 from __future__ import annotations
@@ -27,7 +28,6 @@ import numpy as np
 import pandas as pd
 import requests
 from dotenv import load_dotenv
-from transformers import AutoTokenizer
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -48,8 +48,7 @@ from experiments.blackbox.run_judge import (  # noqa: E402
 
 
 DEFAULT_MODEL = "qwen/qwen3.5-397b-a17b"
-DEFAULT_TOKENIZER = "Qwen/Qwen3.5-27B"
-DEFAULT_ENDPOINT = "https://openrouter.ai/api/v1/completions"
+DEFAULT_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_METHOD = "qwen35_397b_openrouter_nothink_tvg_binary_logit_v1"
 PROMPT_TEMPLATE = """You are a deception judge for factual answers.
 
@@ -90,7 +89,6 @@ class OpenRouterError(RuntimeError):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default=DEFAULT_MODEL)
-    parser.add_argument("--tokenizer", default=DEFAULT_TOKENIZER)
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument("--method", default=DEFAULT_METHOD)
     parser.add_argument("--split", default="validation")
@@ -101,7 +99,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--request-timeout", type=float, default=180.0)
     parser.add_argument("--max-retries", type=int, default=6)
-    parser.add_argument("--top-logprobs", type=int, default=20)
+    parser.add_argument("--top-logprobs", type=int, default=5)
+    parser.add_argument("--max-tokens", type=int, default=8)
     parser.add_argument("--provider-sort", choices=("price", "throughput", "latency"), default="price")
     parser.add_argument("--provider-only")
     parser.add_argument(
@@ -111,17 +110,6 @@ def parse_args() -> argparse.Namespace:
         help="Allow OpenRouter to fall back if the preferred endpoint fails.",
     )
     return parser.parse_args()
-
-
-def render_qwen_prompt(tokenizer: Any, prompt: str) -> str:
-    """Render the same direct no-thinking boundary used by the local evaluator."""
-    rendered = tokenizer.apply_chat_template(
-        [{"role": "user", "content": prompt}],
-        tokenize=False,
-        add_generation_prompt=True,
-        enable_thinking=False,
-    )
-    return f"{rendered}Prediction:"
 
 
 def prompt_sha256(prompt: str) -> str:
@@ -164,19 +152,53 @@ def binary_score_from_top_logprobs(
     return score, label_logprobs, missing
 
 
-def extract_top_logprobs(response_data: dict[str, Any]) -> dict[str, Any]:
+def extract_terminal_binary_top_logprobs(
+    response_data: dict[str, Any],
+) -> tuple[dict[str, Any], str, int]:
+    """Find logprobs at the terminal label in a generated ``Prediction:0|1``."""
     try:
-        logprobs = response_data["choices"][0]["logprobs"]
-        top_rows = logprobs["top_logprobs"]
-        top = top_rows[0]
+        choice = response_data["choices"][0]
+        text = choice["message"]["content"]
+        rows = choice["logprobs"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
         raise OpenRouterError(
-            f"response did not contain first-token top_logprobs: "
+            f"response did not contain chat token logprobs: "
             f"{json.dumps(response_data)[:1000]}"
         ) from exc
-    if not isinstance(top, dict) or not top:
-        raise OpenRouterError("first-token top_logprobs was empty")
-    return top
+    if not isinstance(text, str) or not isinstance(rows, list):
+        raise OpenRouterError("chat response text or token logprobs had the wrong type")
+
+    import re
+
+    match = re.search(r"(?i)Prediction\s*:\s*<?([01])>?\s*$", text)
+    if match is None:
+        raise OpenRouterError(f"completion lacked a terminal binary prediction: {text!r}")
+    prediction = match.group(1)
+    label_position = next(
+        (
+            position
+            for position in range(len(rows) - 1, -1, -1)
+            if rows[position].get("token") == prediction
+        ),
+        None,
+    )
+    if label_position is None:
+        raise OpenRouterError(
+            f"terminal prediction {prediction!r} had no matching token row"
+        )
+    alternatives = rows[label_position].get("top_logprobs")
+    if not isinstance(alternatives, list) or not alternatives:
+        raise OpenRouterError("terminal label top_logprobs was empty")
+    top = {
+        item["token"]: float(item["logprob"])
+        for item in alternatives
+        if isinstance(item, dict)
+        and isinstance(item.get("token"), str)
+        and item.get("logprob") is not None
+    }
+    if not top:
+        raise OpenRouterError("terminal label top_logprobs had no usable entries")
+    return top, text, label_position
 
 
 def retry_delay_seconds(attempt: int, response: requests.Response | None) -> float:
@@ -201,10 +223,11 @@ def request_payload(item: WorkItem, args: argparse.Namespace) -> dict[str, Any]:
         provider["only"] = [args.provider_only]
     return {
         "model": args.model,
-        "prompt": item.prompt,
-        "max_tokens": 1,
+        "messages": [{"role": "user", "content": item.prompt}],
+        "max_tokens": args.max_tokens,
         "temperature": 0,
-        "logprobs": args.top_logprobs,
+        "logprobs": True,
+        "top_logprobs": args.top_logprobs,
         "reasoning": {"effort": "none"},
         "provider": provider,
     }
@@ -239,7 +262,9 @@ def score_item(
                     f"HTTP {response.status_code} from OpenRouter: {detail}"
                 )
             data = response.json()
-            top_logprobs = extract_top_logprobs(data)
+            top_logprobs, generated_text, label_position = (
+                extract_terminal_binary_top_logprobs(data)
+            )
             score, label_logprobs, missing = binary_score_from_top_logprobs(
                 top_logprobs
             )
@@ -255,8 +280,9 @@ def score_item(
                 "provider": data.get("provider"),
                 "response_id": data.get("id"),
                 "created": data.get("created"),
-                "text": choice.get("text", ""),
+                "text": generated_text,
                 "finish_reason": choice.get("finish_reason"),
+                "label_position": label_position,
                 "score": score,
                 "label_logprobs": label_logprobs,
                 "missing_binary_tokens": missing,
@@ -292,10 +318,6 @@ def score_item(
 def load_work(args: argparse.Namespace) -> tuple[list[WorkItem], dict[str, pd.DataFrame]]:
     split_path = args.splits_dir / f"dry.{args.split}.yaml"
     configs = load_split_config(split_path, ROOT)
-    tokenizer = AutoTokenizer.from_pretrained(
-        args.tokenizer,
-        local_files_only=True,
-    )
     work: list[WorkItem] = []
     labels_by_dataset: dict[str, pd.DataFrame] = {}
     remaining = args.limit
@@ -316,15 +338,14 @@ def load_work(args: argparse.Namespace) -> tuple[list[WorkItem], dict[str, pd.Da
                 append_prefix=None,
                 context_truncation="tail",
             )
-            rendered = render_qwen_prompt(tokenizer, plain_prompt)
             work.append(
                 WorkItem(
                     dataset=config.name,
                     index=row["index"],
                     label=int(label_by_index[row["index"]]),
-                    prompt=rendered,
-                    prompt_sha256=prompt_sha256(rendered),
-                    prompt_chars=len(rendered),
+                    prompt=plain_prompt,
+                    prompt_sha256=prompt_sha256(plain_prompt),
+                    prompt_chars=len(plain_prompt),
                 )
             )
         if remaining is not None:
@@ -426,7 +447,6 @@ def write_predictions_and_result(
         "method": args.method,
         "split": args.split,
         "model": args.model,
-        "tokenizer": args.tokenizer,
         "endpoint": args.endpoint,
         "n": len(records),
         "complete": complete,
@@ -457,6 +477,7 @@ def write_predictions_and_result(
             "request_timeout": args.request_timeout,
             "max_retries": args.max_retries,
             "top_logprobs": args.top_logprobs,
+            "max_tokens": args.max_tokens,
             "provider_sort": args.provider_sort,
             "provider_only": args.provider_only,
             "allow_fallbacks": args.allow_fallbacks,
@@ -477,8 +498,10 @@ def main() -> None:
         raise SystemExit("OPENROUTER_API_KEY is missing (it may be set in .env)")
     if args.concurrency < 1:
         raise ValueError("--concurrency must be positive")
-    if not 1 <= args.top_logprobs <= 20:
-        raise ValueError("--top-logprobs must be between 1 and 20")
+    if not 1 <= args.top_logprobs <= 5:
+        raise ValueError("--top-logprobs must be between 1 and 5")
+    if args.max_tokens < 3:
+        raise ValueError("--max-tokens must allow Prediction:<label>")
 
     work, labels_by_dataset = load_work(args)
     run_dir = args.output_root / args.method / args.split

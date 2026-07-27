@@ -15,6 +15,37 @@ three-prompt Qwen ensemble in balanced accuracy (`0.9310` versus `0.9298`).
 GPT-OSS cannot be used directly in the submission, which motivates using it as
 a training-only teacher.
 
+### Qwen3.5-397B OpenRouter Truth Value Guard benchmark (2026-07-27)
+
+The newer `qwen/qwen3.5-397b-a17b` checkpoint was evaluated through OpenRouter
+on all 822 validation rows using the unchanged binary Truth Value Guard prompt.
+Reasoning was disabled. Because OpenRouter chat providers do not continue an
+assistant prefill, the model greedily generated the three-token
+`Prediction:<0|1>` response and the evaluator read the `0`/`1` top-logprobs at
+the generated label position. All calls were pinned to Alibaba; every row
+returned both binary labels within the provider's top-five limit.
+
+| teacher | macro AUROC | instructed AUROC | varied AUROC | BA | recall | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.5-27B local direct logits | 0.9574 | **0.9992** | 0.9018 | 0.9119 | **0.8857** | 0.0619 |
+| Qwen3.5-397B-A17B OpenRouter terminal logits | **0.9631** | 0.9981 | **0.9164** | **0.9179** | 0.8762 | **0.0405** |
+
+The 397B teacher gains 0.0057 macro AUROC overall and 0.0146 on varied
+deception, mainly through better ranking/calibration and fewer false positives,
+but it is not uniformly stronger. Among the nine varied dataset units it
+improves six and regresses three, including a sizable drop on the
+`a-mo-qwen3.5-27b-3` unit (`0.8113` to `0.7375`). Treat it as a promising
+same-family teacher rather than evidence that scale solves every factual blind
+spot.
+
+The complete run used 254,980 prompt tokens and 2,466 completion tokens, cost
+`$0.1042`, and finished in 147.0 seconds at concurrency eight. It produced 811
+unique scores across 822 rows, zero missing-label-logit rows, and eight rows
+that required a retry. Artifacts are under
+`results/blackbox/qwen35_397b_openrouter_nothink_tvg_binary_logit_v1/`.
+OpenRouter remains development/training infrastructure only; external API calls
+are not permitted in the submitted detector.
+
 ## Trace audit
 
 The teacher cache is nearly balanced: 3,360 usable label-0 targets and 3,210

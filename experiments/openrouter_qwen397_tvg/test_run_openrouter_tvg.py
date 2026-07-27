@@ -7,7 +7,7 @@ import pytest
 from experiments.openrouter_qwen397_tvg.run_openrouter_tvg import (
     OpenRouterError,
     binary_score_from_top_logprobs,
-    extract_top_logprobs,
+    extract_terminal_binary_top_logprobs,
 )
 
 
@@ -35,21 +35,43 @@ def test_binary_score_rejects_one_missing_label() -> None:
         binary_score_from_top_logprobs({"1": -0.1, "2": -3.0})
 
 
-def test_extract_legacy_completion_top_logprobs() -> None:
+def test_extract_terminal_chat_label_top_logprobs() -> None:
     response = {
         "choices": [
             {
-                "text": "1",
-                "logprobs": {"top_logprobs": [{"0": -2.0, "1": -0.2}]},
+                "message": {"content": "Prediction:1"},
+                "logprobs": {
+                    "content": [
+                        {"token": "Prediction", "top_logprobs": []},
+                        {"token": ":", "top_logprobs": []},
+                        {
+                            "token": "1",
+                            "top_logprobs": [
+                                {"token": "1", "logprob": -0.2},
+                                {"token": "0", "logprob": -2.0},
+                            ],
+                        },
+                    ]
+                },
             }
         ]
     }
 
-    assert extract_top_logprobs(response) == {"0": -2.0, "1": -0.2}
+    top, text, position = extract_terminal_binary_top_logprobs(response)
+    assert top == {"0": -2.0, "1": -0.2}
+    assert text == "Prediction:1"
+    assert position == 2
 
 
-def test_extract_top_logprobs_rejects_chat_shape() -> None:
-    with pytest.raises(OpenRouterError, match="top_logprobs"):
-        extract_top_logprobs(
-            {"choices": [{"logprobs": {"content": [{"token": "1"}]}}]}
+def test_extract_terminal_chat_label_rejects_missing_prediction() -> None:
+    with pytest.raises(OpenRouterError, match="terminal binary prediction"):
+        extract_terminal_binary_top_logprobs(
+            {
+                "choices": [
+                    {
+                        "message": {"content": "The answer is 1"},
+                        "logprobs": {"content": [{"token": "1"}]},
+                    }
+                ]
+            }
         )
