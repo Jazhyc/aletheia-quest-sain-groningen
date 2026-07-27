@@ -651,6 +651,30 @@ immediately before its final prediction token. The latter requires one extra
 scoring pass but measures the margin after the distilled reasoning rather than
 asking the model to classify out of format.
 
+### Qwen3.5-397B FP8 teacher cache on Lambda
+
+Use one Lambda `gpu_8x_a100_80gb_sxm4` instance for the official
+`Qwen/Qwen3.5-397B-A17B-FP8` checkpoint. After syncing and bootstrapping the
+committed repository, run:
+
+```bash
+bash experiments/privileged_information_distillation/run_qwen397_tvg_soft_teacher_lambda.sh
+```
+
+The job uses the exact frozen no-thinking Truth Value Guard renderer, tensor
+parallelism eight, a 4,096-token context cap, and 32 maximum concurrent
+sequences. It scores only the literal `0` and `1` tokens at the
+`Prediction:` boundary over all 2,880 varied training rows. The transferred
+result directory contains the requested label log-probabilities, normalized
+soft targets, rendered student prompts, configuration, hashes, and metrics:
+
+```text
+results/blackbox/qwen35_397b_fp8_nothink_truth_value_binary_logit_v1/
+```
+
+Pull that directory before terminating the instance. The model checkpoint is
+not part of the result bundle.
+
 The matched AUROC-loss ablation keeps reasoning-summary supervision while
 optionally adding direct binary CE and within-dataset pairwise logistic loss:
 

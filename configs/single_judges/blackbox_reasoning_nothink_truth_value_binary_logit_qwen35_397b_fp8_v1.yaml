@@ -1,0 +1,14 @@
+# @package _global_
+# Exact Truth Value Guard binary boundary on the official Qwen3.5-397B FP8 checkpoint.
+
+defaults:
+  - blackbox_reasoning_nothink_truth_value_binary_logit_qwen35_27b_v1
+  - _self_
+
+method: qwen35_397b_fp8_nothink_truth_value_binary_logit_v1
+
+judge:
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  served_model: qwen35-397b-fp8-teacher
+  tensor_parallel_size: 8
+  max_num_seqs: 32

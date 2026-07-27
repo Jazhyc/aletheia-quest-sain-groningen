@@ -522,15 +522,38 @@ def target_probs_from_logprobs(
     targets: list[dict[str, Any]],
     missing_logprob: float,
 ) -> dict[str, float]:
+    return {
+        name: math.exp(value)
+        for name, value in target_logprobs_from_logprobs(
+            first_token_logprobs,
+            targets=targets,
+            missing_logprob=missing_logprob,
+        ).items()
+    }
+
+
+def target_logprobs_from_logprobs(
+    first_token_logprobs: dict[Any, Any],
+    *,
+    targets: list[dict[str, Any]],
+    missing_logprob: float,
+) -> dict[str, float]:
+    """Aggregate requested token log-probabilities for each semantic target."""
     expanded = {
         int(token_id): logprob_value(value)
         for token_id, value in first_token_logprobs.items()
     }
-    return {
-        target["name"]: float(sum(math.exp(expanded.get(token_id, missing_logprob))
-                                  for token_id in target["ids"]))
-        for target in targets
-    }
+    aggregated: dict[str, float] = {}
+    for target in targets:
+        values = [
+            expanded.get(int(token_id), missing_logprob)
+            for token_id in target["ids"]
+        ]
+        maximum = max(values)
+        aggregated[target["name"]] = float(
+            maximum + math.log(sum(math.exp(value - maximum) for value in values))
+        )
+    return aggregated
 
 
 def score_from_target_probs(probs: dict[str, float], targets: list[dict[str, Any]]) -> float:
@@ -802,11 +825,15 @@ class OfflineVllmRatingJudge:
                 self.all_rating_ids,
             )
             if self.targets is not None:
-                target_probs = target_probs_from_logprobs(
+                target_logprobs = target_logprobs_from_logprobs(
                     first_token_logprobs,
                     targets=self.targets,
                     missing_logprob=self.missing_logprob,
                 )
+                target_probs = {
+                    name: math.exp(value)
+                    for name, value in target_logprobs.items()
+                }
                 score = score_from_target_probs(target_probs, self.targets)
                 total = sum(target_probs.values())
                 normalized_targets = {
@@ -817,6 +844,7 @@ class OfflineVllmRatingJudge:
                     "offset": offset,
                     "parse_error": False,
                     "score": score,
+                    "target_logprobs": target_logprobs,
                     "target_probs": normalized_targets,
                     "missing_rating_token_ids": missing_token_ids,
                 }

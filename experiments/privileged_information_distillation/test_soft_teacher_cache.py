@@ -14,6 +14,7 @@ from experiments.privileged_information_distillation.train_student_sft import (
     soft_binary_distillation_loss,
     soft_rating_distillation_loss,
 )
+from experiments.blackbox.run_judge import target_logprobs_from_logprobs
 
 
 def member(dataset: str, index: int, name: str, score: float, label: int = 1):
@@ -80,6 +81,20 @@ def test_build_binary_soft_targets_rejects_duplicate_rows() -> None:
     }
     with pytest.raises(ValueError, match="duplicate binary teacher row"):
         build_binary_soft_targets([record, record])
+
+
+def test_target_logprobs_preserve_binary_teacher_margin() -> None:
+    logprobs = target_logprobs_from_logprobs(
+        {10: -3.0, 11: -1.0},
+        targets=[
+            {"name": "honest", "ids": [10]},
+            {"name": "deceptive", "ids": [11]},
+        ],
+        missing_logprob=-30.0,
+    )
+
+    assert logprobs == pytest.approx({"honest": -3.0, "deceptive": -1.0})
+    assert logprobs["deceptive"] - logprobs["honest"] == pytest.approx(2.0)
 
 
 def test_attach_and_soft_binary_loss(tmp_path) -> None:

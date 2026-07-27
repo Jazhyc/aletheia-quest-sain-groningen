@@ -66,6 +66,26 @@ def test_binary_gate_uses_exact_no_thinking_truth_value_boundary() -> None:
     assert cfg.judge.prompt.endswith("Prediction:<0 or 1>")
 
 
+def test_qwen397_teacher_is_exact_tvg_model_and_resource_swap() -> None:
+    control = compose_single(
+        "blackbox_reasoning_nothink_truth_value_binary_logit_qwen35_27b_v1"
+    )
+    candidate = compose_single(
+        "blackbox_reasoning_nothink_truth_value_binary_logit_qwen35_397b_fp8_v1"
+    )
+
+    assert candidate.judge.model == "Qwen/Qwen3.5-397B-A17B-FP8"
+    assert candidate.judge.tensor_parallel_size == 8
+    assert candidate.judge.max_num_seqs == 32
+
+    ignored = {"model", "served_model", "tensor_parallel_size", "max_num_seqs"}
+    assert {
+        key: value for key, value in control.judge.items() if key not in ignored
+    } == {
+        key: value for key, value in candidate.judge.items() if key not in ignored
+    }
+
+
 def test_rating_gate_changes_only_the_output_parameterization() -> None:
     binary = compose_single(
         "blackbox_reasoning_nothink_truth_value_binary_logit_qwen35_27b_v1"
