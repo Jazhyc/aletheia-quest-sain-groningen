@@ -60,6 +60,52 @@ Runtime and resumable artifacts:
 - `experiments/privileged_information_distillation/run_openrouter_reasoning_teacher_pilot.py`
 - `results/blackbox/gpt56_luna_openrouter_privileged_tvg_reasoning_pilot_v1/`
 
+The selected full medium-effort cache subsequently completed over all 2,880
+varied-training rows. It used 1,560,183 prompt tokens, 315,301 completion
+tokens, of which 109,137 were reported as reasoning tokens, and cost `$1.70929`.
+All 2,880 calls used OpenAI's provider, stopped normally, required no retry,
+and yielded a parseable summary. Only ten visible finals included the redundant
+prediction line; the remaining authoritative labels were attached by the same
+deterministic fallback used for GPT-OSS. Wall time was 733.2 seconds at
+concurrency eight.
+
+The cache has exactly 160 examples per label in each of the nine varied units.
+Visible summaries average 44.15 words (median 44, p95 62, maximum 92). A
+mechanical leakage audit found no mention of ground truth, privileged
+information, an authoritative label, or the instructions. The sole occurrence
+of “teacher” was benign factual content identifying René Descartes as Queen
+Christina's teacher. The matched student uses the frozen one-epoch rank-16,
+alpha-32, AdamW `5e-5`, effective-batch-32 recipe.
+
+Full-cache artifacts and training config:
+
+- `results/blackbox/qwen9b_privileged_gpt56_luna_medium_tvg_variedonly_v1/`
+- `configs/pid_teacher_gpt56_luna_medium_varied_v1.yaml`
+
+Training job `30316452` completed all 90 optimizer steps in 963.4 seconds
+(`20m09s` including startup and saving), with reported loss `9.735`. The
+adapter weight SHA-256 is
+`da83f294a248a97ddf07ff7a458280f0990dea329e61fc5e2aec8faec8c61d17`.
+Continuous-margin validation job `30316477` then completed successfully over
+all 822 rows:
+
+| readout | macro AUROC/BA | instructed | varied | unique scores | missing/parse |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Generated binary | `0.89881` | `0.97500` | `0.79722` | `2/822` | `7` parse |
+| Direct `0|1` margin | `0.93762` | `0.99344` | `0.86319` | `350/822` | `0` missing |
+| Empty-summary margin | `0.93780` | `0.99375` | `0.86319` | `518/822` | `0` missing |
+| Post-reasoning margin | `0.93250` | `0.99167` | `0.85361` | `175/822` | `0` missing |
+| GPT-OSS privileged direct reference | `0.93815` | `0.99354` | `0.86431` | `348/822` | `0` missing |
+
+Luna's direct margin is `0.00054` below the frozen GPT-OSS privileged
+reference. The two direct score vectors have Pearson correlation `0.99937`
+and mean absolute difference `0.00630`; per-unit changes are small and mixed.
+This is a tie rather than evidence that the stronger teacher improves the
+student. Retain the GPT-OSS adapter as the validation selection and do not
+test-select the Luna adapter. The near-identical ranking is further evidence
+that, under this fixed one-epoch recipe and local Qwen-only varied split,
+teacher capability is not the dominant bottleneck.
+
 ### GPT-5.6 Sol privileged Truth Value Guard reasoning pilot (2026-07-27)
 
 The exact Luna pilot rows, seed, privileged Truth Value Guard prompt, 4,096
