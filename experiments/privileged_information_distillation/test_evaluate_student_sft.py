@@ -3,6 +3,8 @@ from pathlib import Path
 import sys
 
 import pandas as pd
+from safetensors.torch import save_file
+import torch
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -39,6 +41,7 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     rating_to_score,
     rating_prediction_to_score,
     vllm_max_lora_rank,
+    validate_qwen35_adapter_layout,
     set_reasoning_visibility,
     strict_pattern_for_config,
 )
@@ -59,6 +62,37 @@ def test_base_model_control_omits_lora_request_without_importing_vllm(
     tmp_path: Path,
 ) -> None:
     assert lora_request_or_none(tmp_path / "adapter", 1, use_lora=False) is None
+
+
+def test_qwen35_vllm_preflight_requires_canonical_adapter_keys(
+    tmp_path: Path,
+) -> None:
+    adapter = tmp_path / "adapter"
+    adapter.mkdir()
+    (adapter / "adapter_config.json").write_text(json.dumps({
+        "exclude_modules": ".*(visual|vision_tower|merger|patch_embed).*",
+    }))
+    canonical = (
+        "base_model.model.model.language_model.layers.0.self_attn."
+        "q_proj.lora_A.weight"
+    )
+    save_file(
+        {canonical: torch.ones(1)},
+        adapter / "adapter_model.safetensors",
+    )
+    validate_qwen35_adapter_layout(adapter, "Qwen/Qwen3.5-9B")
+
+    legacy = canonical.replace(".language_model.layers.", ".layers.")
+    save_file(
+        {legacy: torch.ones(1)},
+        adapter / "adapter_model.safetensors",
+    )
+    try:
+        validate_qwen35_adapter_layout(adapter, "Qwen/Qwen3.5-9B")
+    except ValueError as error:
+        assert "NDIF-incompatible" in str(error)
+    else:
+        raise AssertionError("legacy Qwen3.5 adapter keys must fail vLLM preflight")
 
 
 def test_parse_prediction_uses_last_explicit_prediction() -> None:

@@ -27,11 +27,46 @@ from experiments.privileged_information_distillation.train_student_sft import (
     student_prompt_with_reasoning_dropout,
     tokenize_record,
     training_warmup_steps,
+    validate_trainable_lora_layout,
 )
 from experiments.qwen_grpo_lora.run_qwen_grpo_lora import (
     MuonAdamW,
     muon_adamw_param_groups,
 )
+
+
+class FakeParameter:
+    def __init__(self, requires_grad: bool = True) -> None:
+        self.requires_grad = requires_grad
+
+
+class FakeModel:
+    def __init__(self, names: list[str]) -> None:
+        self.names = names
+
+    def named_parameters(self):
+        return [(name, FakeParameter()) for name in self.names]
+
+
+def test_canonical_lora_layout_requires_language_model_tree() -> None:
+    canonical = (
+        "base_model.model.model.language_model.layers.0.self_attn."
+        "q_proj.lora_A.default.weight"
+    )
+    assert validate_trainable_lora_layout(
+        FakeModel([canonical]), "image_text_to_text"
+    ) == [canonical]
+
+    legacy = (
+        "base_model.model.model.layers.0.self_attn."
+        "q_proj.lora_A.default.weight"
+    )
+    try:
+        validate_trainable_lora_layout(FakeModel([legacy]), "image_text_to_text")
+    except RuntimeError as error:
+        assert "non-language-model LoRA" in str(error)
+    else:
+        raise AssertionError("legacy text-only LoRA keys must fail canonical training")
 
 
 def test_load_records_filters_by_dataset_name(tmp_path) -> None:

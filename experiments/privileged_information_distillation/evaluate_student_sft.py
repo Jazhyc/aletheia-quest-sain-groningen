@@ -79,6 +79,41 @@ EMPTY_REASONING_PREFIX = (
 DIRECT_PREDICTION_PREFIX = "Prediction:"
 DIRECT_RATING_PREFIX = "Rating:"
 CONTINUOUS_MARGIN_CONDITIONS = ("direct", "empty", "reasoning")
+QWEN35_MODEL_IDS = {"Qwen/Qwen3.5-9B", "Qwen/Qwen3.5-27B"}
+QWEN35_CANONICAL_PREFIX = "base_model.model.model.language_model.layers."
+QWEN35_VISION_EXCLUDE_PATTERN = r".*(visual|vision_tower|merger|patch_embed).*"
+
+
+def validate_qwen35_adapter_layout(adapter_dir: Path, model_name: str) -> None:
+    """Fail before vLLM startup when a Qwen3.5 adapter uses legacy PEFT keys."""
+    if model_name not in QWEN35_MODEL_IDS:
+        return
+    from safetensors import safe_open
+
+    config_path = adapter_dir / "adapter_config.json"
+    weights_path = adapter_dir / "adapter_model.safetensors"
+    if not config_path.is_file() or not weights_path.is_file():
+        raise FileNotFoundError(
+            f"{adapter_dir} must contain adapter_config.json and "
+            "adapter_model.safetensors"
+        )
+    adapter_config = json.loads(config_path.read_text())
+    if adapter_config.get("exclude_modules") != QWEN35_VISION_EXCLUDE_PATTERN:
+        raise ValueError(
+            f"{adapter_dir} does not exclude Qwen3.5 visual modules"
+        )
+    with safe_open(weights_path, framework="pt", device="cpu") as handle:
+        keys = list(handle.keys())
+    if not keys:
+        raise ValueError(f"{weights_path} contains no adapter tensors")
+    noncanonical = [
+        key for key in keys if not key.startswith(QWEN35_CANONICAL_PREFIX)
+    ]
+    if noncanonical:
+        raise ValueError(
+            f"{adapter_dir} has NDIF-incompatible Qwen3.5 LoRA keys; "
+            f"first={noncanonical[:3]}"
+        )
 
 
 def parse_prediction(text: str) -> int | None:
@@ -949,6 +984,12 @@ def main() -> None:
 
     adapter_dirs = [path.resolve() for path in args.adapter_dir]
     configs = [yaml.safe_load((path.parent / "config.yaml").read_text()) for path in adapter_dirs]
+    if not args.base_model_control:
+        for adapter_dir, config in zip(adapter_dirs, configs, strict=True):
+            validate_qwen35_adapter_layout(
+                adapter_dir,
+                str(config["student"]["model"]),
+            )
     if args.prompt_config is not None:
         for config in configs:
             apply_student_prompt_config(config, args.prompt_config.resolve())

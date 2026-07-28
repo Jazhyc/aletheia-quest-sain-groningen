@@ -91,6 +91,39 @@ LABEL_ONLY_TARGET_KEY = "_label_only_target"
 DIRECT_PREDICTION_PREFIX = "Prediction:"
 DIRECT_RATING_PREFIX = "Rating:"
 SOFT_TARGET_KEY = "_soft_target"
+CANONICAL_QWEN35_LORA_FRAGMENT = ".model.language_model.layers."
+VISION_MODULE_MARKERS = ("visual", "vision_tower", "merger", "patch_embed")
+
+
+def validate_trainable_lora_layout(model: Any, model_loader: str) -> list[str]:
+    """Reject empty or NDIF-incompatible Qwen3.5 LoRA parameter matches."""
+    names = [
+        name
+        for name, parameter in model.named_parameters()
+        if parameter.requires_grad and "lora_" in name
+    ]
+    if not names:
+        raise RuntimeError("PEFT matched zero trainable LoRA parameters")
+    if model_loader == "image_text_to_text":
+        noncanonical = [
+            name for name in names if CANONICAL_QWEN35_LORA_FRAGMENT not in name
+        ]
+        if noncanonical:
+            raise RuntimeError(
+                "canonical Qwen3.5 training produced non-language-model LoRA "
+                f"parameters, first={noncanonical[:3]}"
+            )
+        visual = [
+            name
+            for name in names
+            if any(marker in name for marker in VISION_MODULE_MARKERS)
+        ]
+        if visual:
+            raise RuntimeError(
+                "canonical Qwen3.5 LoRA unexpectedly targets visual modules, "
+                f"first={visual[:3]}"
+            )
+    return names
 
 
 def binary_token_ids(tokenizer: Any) -> list[int]:
@@ -757,7 +790,13 @@ def tokenize_record(
 def main(cfg: DictConfig) -> None:
     from datasets import Dataset
     from peft import LoraConfig, PeftModel, get_peft_model
-    from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoModelForImageTextToText,
+        AutoTokenizer,
+        Trainer,
+        TrainingArguments,
+    )
 
     direct_loss_weight = float(OmegaConf.select(
         cfg, "student.training.direct_loss_weight", default=0.0
@@ -1182,7 +1221,16 @@ def main(cfg: DictConfig) -> None:
     if rating_counts:
         print(f"selected_rating_counts={dict(sorted(rating_counts.items()))}")
 
-    model = AutoModelForCausalLM.from_pretrained(
+    model_loader = str(OmegaConf.select(
+        cfg, "student.model_loader", default="causal_lm"
+    ))
+    model_loader_classes = {
+        "causal_lm": AutoModelForCausalLM,
+        "image_text_to_text": AutoModelForImageTextToText,
+    }
+    if model_loader not in model_loader_classes:
+        raise ValueError(f"unknown student.model_loader={model_loader!r}")
+    model = model_loader_classes[model_loader].from_pretrained(
         str(cfg.student.model),
         torch_dtype=torch.bfloat16,
     )
@@ -1190,11 +1238,17 @@ def main(cfg: DictConfig) -> None:
         cfg, "student.init_adapter", default=None
     )
     if init_adapter_value is None:
+        exclude_modules = OmegaConf.select(
+            cfg, "student.lora.exclude_modules", default=None
+        )
         model = get_peft_model(model, LoraConfig(
             r=int(cfg.student.lora.r),
             lora_alpha=int(cfg.student.lora.alpha),
             lora_dropout=float(cfg.student.lora.dropout),
             target_modules=list(cfg.student.lora.target_modules),
+            exclude_modules=(
+                None if exclude_modules is None else str(exclude_modules)
+            ),
             task_type="CAUSAL_LM",
         ))
     else:
@@ -1209,6 +1263,14 @@ def main(cfg: DictConfig) -> None:
             init_adapter.as_posix(),
             is_trainable=True,
         )
+    trainable_lora_names = validate_trainable_lora_layout(model, model_loader)
+    print(
+        f"model_loader={model_loader} "
+        f"resolved_model_class={model.get_base_model().__class__.__name__} "
+        f"trainable_lora_tensors={len(trainable_lora_names)} "
+        f"first_trainable_lora={trainable_lora_names[0]}",
+        flush=True,
+    )
     model.gradient_checkpointing_enable()
     model.enable_input_require_grads()
 

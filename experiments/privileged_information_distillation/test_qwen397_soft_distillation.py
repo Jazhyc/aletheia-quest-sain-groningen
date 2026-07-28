@@ -32,11 +32,15 @@ def test_qwen397_soft_student_matches_frozen_pure_boundary_recipe() -> None:
         "qwen35_397b_fp8_nothink_truth_value_binary_logit_v1/train/soft_targets.jsonl"
     )
     assert cfg.student.model == "Qwen/Qwen3.5-9B"
+    assert cfg.student.model_loader == "image_text_to_text"
     assert cfg.student.dataset_name_contains == "varied-deception"
     assert cfg.student.target_mode == "prediction_only"
     assert cfg.student.override_cached_prompt is True
     assert cfg.student.lora.r == 16
     assert cfg.student.lora.alpha == 32
+    assert cfg.student.lora.exclude_modules == (
+        ".*(visual|vision_tower|merger|patch_embed).*"
+    )
     assert cfg.student.training.optimizer == "adamw"
     assert cfg.student.training.learning_rate == 5.0e-5
     assert cfg.student.training.num_train_epochs == 1.0

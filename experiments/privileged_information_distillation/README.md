@@ -684,6 +684,11 @@ bash experiments/privileged_information_distillation/submit_qwen397_tvg_soft_dis
 
 The launcher checks the transferred hashes and requires exactly 2,880 rows in
 each JSONL artifact before scheduling the frozen one-epoch Qwen3.5-9B student.
+This student uses the canonical `AutoModelForImageTextToText` Qwen3.5 tree and
+excludes visual modules, so its saved PEFT keys live under
+`model.language_model.layers.*`. Training logs the resolved model class and
+first trainable LoRA key; evaluation rejects legacy text-only adapter keys
+before starting vLLM.
 
 The matched AUROC-loss ablation keeps reasoning-summary supervision while
 optionally adding direct binary CE and within-dataset pairwise logistic loss:
