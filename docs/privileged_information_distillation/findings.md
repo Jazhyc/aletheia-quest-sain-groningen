@@ -3214,6 +3214,73 @@ that teacher reasoning is unnecessary. Post-reasoning label margins reached
 `0.95571` macro AUROC (`0.99792` instructed, `0.89944` varied), slightly below
 direct no-thinking `0.95744`, while scoring took `723.3s` instead of `38.2s`.
 
+## Pure Qwen-397B FP8 TVG binary soft distillation (2026-07-28)
+
+Jobs `30342480`--`30342481` repeated the frozen Qwen-27B soft-only recipe with
+the completed 2,880-row `Qwen/Qwen3.5-397B-A17B-FP8` Lambda cache. The recipe
+remained a fresh rank-16/alpha-32 Qwen3.5-9B LoRA, varied-only data, one epoch,
+AdamW `5e-5`, effective batch size 32, and binary soft-target BCE only. There
+was no hard-label, completion, pairwise, or reasoning-summary loss.
+
+The teacher checkpoint stored FP8 weights and ran with BF16 activations. vLLM
+returned float32 log-probabilities; Python normalized and serialized them at
+float64 JSON precision. Training loaded float32 targets, used a BF16 frozen
+student base, and retained all 256 trainable LoRA tensors and AdamW state in
+float32. The binary margin and BCE were explicitly evaluated in float32.
+
+The locked Transformers environment cannot efficiently train the canonical
+multimodal Qwen3.5 class, so this run used the documented text-only
+`Qwen3_5ForCausalLM` fallback. The same Slurm job then inserted
+`language_model` into all 256 saved tensor paths and verified every tensor
+payload after serialization. The migration manifest records the pre/post file
+hashes. Evaluation refused legacy paths before vLLM startup.
+
+Training completed 90 optimizer steps in `884.0s` with reported train loss
+`4.114`; the complete job took `15m07s`. The direct-margin validation pass had
+zero missing scores. As with the Qwen-27B run, the intentionally one-token
+generated-output path made all 822 generated strings unparseable; only
+`score_metrics.direct_margin` is meaningful.
+
+| adapter | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen-397B FP8 soft student | `0.95048` | `0.99813` | `0.88694` | `0.90476` | `0.85714` | `0.04762` | `662/822` |
+| Historical Qwen-27B soft student | `0.94625` | `0.99500` | `0.88125` | `0.88810` | `0.83810` | `0.06190` | `544/822` |
+| Phoenix 4.4 GRPO reference | **`0.95137`** | **`0.99656`** | **`0.89111`** | `0.89643` | `0.84524` | `0.05238` | `79/822` |
+
+The 397B student improves the historical 27B soft row by `0.00423` macro
+AUROC and has substantially more score resolution, but remains `0.00090`
+below Phoenix 4.4 on frozen validation. Do not infer that a larger teacher
+guarantees promotion or test/private transfer from this small difference.
+
+| validation dataset unit | AUROC |
+| --- | ---: |
+| `instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-None` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.99250` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.98750` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-None` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-s-mo-gemma-3-27b-it` | `0.99750` |
+| `varied-deception-Qwen3.5-27B-None` | `0.98500` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.84750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.70500` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `0.85000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `0.98000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.90000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.82000` |
+| `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.95500` |
+| `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.94000` |
+
+The mandatory same-session vLLM activation fingerprint also passed. Adapter
+and base float32 score digests differed; only 12/822 scores were exactly equal,
+mean absolute difference was `0.08141`, and maximum absolute difference was
+`0.49463`. This rules out the silent-base failure for this evaluation.
+
 ## Leaderboard-aligned GRPO continuation logits (2026-07-27)
 
 An inference-input audit found that the saved GRPO configurations retained
