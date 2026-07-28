@@ -17,6 +17,11 @@ SUMMARY_PATH = (
     / "experiments/privileged_information_distillation"
     / "summarize_qwen397_speed_benchmark.py"
 )
+TRAINER_PATH = (
+    ROOT
+    / "experiments/privileged_information_distillation"
+    / "train_student_sft.py"
+)
 
 
 def load_summary_module():
@@ -35,6 +40,15 @@ def test_launcher_preserves_effective_batch_and_tests_compile() -> None:
     assert "student.training.torch_compile=${compile}" in source
     assert "--best-shell" in source
     assert 'compile_name="b${best_batch}_e32_compile"' in source
+    assert "benchmark condition failed; continuing" in source
+    assert "compile benchmark failed; retaining eager results" in source
+
+
+def test_eager_training_does_not_pass_non_null_compile_options() -> None:
+    source = TRAINER_PATH.read_text()
+
+    assert "torch_compile=torch_compile" in source
+    assert "if torch_compile\n            else None" in source
 
 
 def test_summary_selects_highest_sample_throughput(tmp_path: Path) -> None:

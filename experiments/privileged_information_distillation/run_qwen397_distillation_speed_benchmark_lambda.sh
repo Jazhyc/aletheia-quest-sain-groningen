@@ -53,13 +53,20 @@ accumulations=(16 8 4 2)
 conditions=()
 for index in "${!batch_sizes[@]}"; do
   name="b${batch_sizes[$index]}_e32_eager"
-  run_condition \
-    "${name}" \
-    "${batch_sizes[$index]}" \
-    "${accumulations[$index]}" \
-    false
-  conditions+=("${name}")
+  if run_condition \
+      "${name}" \
+      "${batch_sizes[$index]}" \
+      "${accumulations[$index]}" \
+      false; then
+    conditions+=("${name}")
+  else
+    echo "benchmark condition failed; continuing: ${name}" >&2
+  fi
 done
+if [[ "${#conditions[@]}" -eq 0 ]]; then
+  echo "all eager benchmark conditions failed" >&2
+  exit 1
+fi
 
 read -r best_batch best_accumulation < <(
   python experiments/privileged_information_distillation/summarize_qwen397_speed_benchmark.py \
@@ -69,8 +76,11 @@ read -r best_batch best_accumulation < <(
 )
 
 compile_name="b${best_batch}_e32_compile"
-run_condition "${compile_name}" "${best_batch}" "${best_accumulation}" true
-conditions+=("${compile_name}")
+if run_condition "${compile_name}" "${best_batch}" "${best_accumulation}" true; then
+  conditions+=("${compile_name}")
+else
+  echo "compile benchmark failed; retaining eager results" >&2
+fi
 
 python experiments/privileged_information_distillation/summarize_qwen397_speed_benchmark.py \
   --log-dir "${LOG_DIR}" \

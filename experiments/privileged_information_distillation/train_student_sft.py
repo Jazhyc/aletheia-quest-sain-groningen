@@ -1359,6 +1359,9 @@ def main(cfg: DictConfig) -> None:
     output_dir = Path(str(cfg.student.output_dir))
     if not output_dir.is_absolute():
         output_dir = root / output_dir
+    torch_compile = bool(OmegaConf.select(
+        cfg, "student.training.torch_compile", default=False
+    ))
     args = TrainingArguments(
         output_dir=output_dir.as_posix(),
         optim=str(cfg.student.training.optim),
@@ -1369,15 +1372,23 @@ def main(cfg: DictConfig) -> None:
         weight_decay=float(cfg.student.training.weight_decay),
         per_device_train_batch_size=int(cfg.student.training.per_device_train_batch_size),
         gradient_accumulation_steps=int(cfg.student.training.gradient_accumulation_steps),
-        torch_compile=bool(OmegaConf.select(
-            cfg, "student.training.torch_compile", default=False
-        )),
-        torch_compile_backend=str(OmegaConf.select(
-            cfg, "student.training.torch_compile_backend", default="inductor"
-        )),
-        torch_compile_mode=str(OmegaConf.select(
-            cfg, "student.training.torch_compile_mode", default="default"
-        )),
+        torch_compile=torch_compile,
+        # TrainingArguments silently enables compilation when either option is
+        # non-null, even if torch_compile=False. Keep eager runs genuinely eager.
+        torch_compile_backend=(
+            str(OmegaConf.select(
+                cfg, "student.training.torch_compile_backend", default="inductor"
+            ))
+            if torch_compile
+            else None
+        ),
+        torch_compile_mode=(
+            str(OmegaConf.select(
+                cfg, "student.training.torch_compile_mode", default="default"
+            ))
+            if torch_compile
+            else None
+        ),
         logging_steps=int(cfg.student.training.logging_steps),
         save_strategy="no",
         bf16=True,
