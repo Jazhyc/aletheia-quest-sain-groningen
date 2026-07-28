@@ -25,7 +25,7 @@ exec > >(tee -a "${LOG_DIR}/teacher.log") 2>&1
   --config-path ../../configs/single_judges \
   --config-name blackbox_reasoning_nothink_truth_value_binary_logit_qwen35_397b_fp8_v1 \
   split=train \
-  dataset_name_contains=varied-deception
+  +dataset_name_contains=varied-deception
 
 "${PYTHON}" experiments/privileged_information_distillation/build_soft_teacher_cache.py \
   "${RUN_DIR}/generations.jsonl" \
