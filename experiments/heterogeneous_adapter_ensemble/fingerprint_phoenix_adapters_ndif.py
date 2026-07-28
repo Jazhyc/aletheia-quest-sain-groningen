@@ -38,6 +38,9 @@ DEFAULT_OUTPUT = (
 )
 ADAPTERS = {
     "base_qwen": None,
+    "official_tutorial_qwen9": "NDIF/hackathon-imposter-eve-qwen9B",
+    "base_qwen27": None,
+    "official_qwen27_organism": "aletheias-quest/a-mo-qwen3.5-27b-1",
     "phoenix_4_0_gptoss_pi": "Jazhyc/aletheias-phoenix-wright-v2-adapter",
     "phoenix_5_1_gptoss_blind": (
         "Jazhyc/aletheias-phoenix-blind-reasoning-r16"
@@ -45,6 +48,10 @@ ADAPTERS = {
     "phoenix_5_2_luna_pi": (
         "Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16"
     ),
+}
+MODEL_IDS = {
+    "base_qwen27": "Qwen/Qwen3.5-27B",
+    "official_qwen27_organism": "Qwen/Qwen3.5-27B",
 }
 
 
@@ -86,6 +93,7 @@ def hosted_metadata(repo_id: str | None) -> dict[str, Any]:
 
 
 def score_adapter(
+    model_id: str,
     repo_id: str | None,
     messages: list[Any],
     *,
@@ -97,9 +105,9 @@ def score_adapter(
     from nnsight import LanguageModel
 
     model = (
-        LanguageModel("Qwen/Qwen3.5-9B")
+        LanguageModel(model_id)
         if repo_id is None
-        else LanguageModel("Qwen/Qwen3.5-9B", peft=repo_id)
+        else LanguageModel(model_id, peft=repo_id)
     )
     tokenizer = model.tokenizer
     tokenizer.padding_side = "left"
@@ -258,13 +266,18 @@ def main() -> None:
             flush=True,
         )
         fingerprint = score_adapter(
+            MODEL_IDS.get(name, "Qwen/Qwen3.5-9B"),
             repo_id,
             messages,
             batch_size=args.batch_size,
             max_prompt_tokens=args.max_prompt_tokens,
             renderer=args.renderer,
         )
-        adapter_results[name] = {**metadata, **fingerprint}
+        adapter_results[name] = {
+            "model_id": MODEL_IDS.get(name, "Qwen/Qwen3.5-9B"),
+            **metadata,
+            **fingerprint,
+        }
         print(
             f"finished {name} score_sha256="
             f"{fingerprint['score_sha256_float32']} "
