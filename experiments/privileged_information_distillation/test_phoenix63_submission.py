@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from experiments.privileged_information_distillation.upload_qwen397_tvg_adapter 
 
 ROOT = Path(__file__).resolve().parents[2]
 NOTEBOOK = ROOT / "submission/phoenix_wright_v6_3.ipynb"
+BUNDLED_ADAPTER = ROOT / "submission/phoenix_wright_adapters/main"
 
 
 def notebook_source() -> str:
@@ -42,3 +44,10 @@ def test_phoenix63_adapter_is_canonical_float32_rank16() -> None:
     validation = validate_adapter(ADAPTER_DIR)
     assert validation["tensor_count"] == 256
     assert validation["dtypes"] == ["torch.float32"]
+
+
+def test_bundled_main_is_the_exact_phoenix63_adapter() -> None:
+    for filename in ("adapter_config.json", "adapter_model.safetensors"):
+        trained = hashlib.sha256((ADAPTER_DIR / filename).read_bytes()).hexdigest()
+        bundled = hashlib.sha256((BUNDLED_ADAPTER / filename).read_bytes()).hexdigest()
+        assert bundled == trained
