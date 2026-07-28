@@ -3423,6 +3423,115 @@ regression is directly adverse to the continuous leaderboard metric. Do not
 spend a local-test evaluation, replace the published adapter, or select raw
 Huber/temperature variants post hoc from this result.
 
+## Qwen-397B soft-target DataRater filtering (2026-07-29)
+
+The earlier DataRater screen used hard-label meta gradients and
+reasoning-summary completion gradients, so it did not test whether dense
+Qwen-397B feedback makes gradient-based filtering more useful. This follow-up
+used the exact identity-probability BCE objective for both sides: the meta
+gradient and every candidate gradient scored the normalized literal `0|1`
+logits directly against the cached Qwen-397B soft target. Ground-truth labels
+were used only to preserve every dataset/label stratum.
+
+The rank-16 scoring probe covered the attention and MLP projections in the last
+Qwen3.5-9B block, or 1,277,952 trainable parameters. A 36-meta-row,
+72-candidate calibration compared exact per-example gradient dots with
+finite-difference scores. Jobs `30342926`--`30342929` produced:
+
+| finite-difference epsilon | Pearson vs exact | Spearman vs exact | sign agreement | top-half overlap |
+| ---: | ---: | ---: | ---: | ---: |
+| `0.01` | `0.10666` | `0.26482` | `0.23611` | `17/36` |
+| `0.03` | `0.86527` | `0.85120` | `0.80556` | `31/36` |
+| `0.10` | **`0.98666`** | **`0.99183`** | **`1.00000`** | **`34/36`** |
+
+The full scorer therefore froze epsilon `0.10`. Job `30342972` used 144
+dataset/label-stratified meta rows and scored the remaining 2,736 candidates
+in 24m52s. Each 50% manifest contained 1,368 rows, exactly 76 from each of 18
+dataset/label strata. Dot and loss had only weak score correlation (Pearson
+`0.1389`, Spearman `0.2094`) and selected materially different data:
+
+| selection | rows | mean gradient dot | mean soft BCE | positive-dot fraction |
+| --- | ---: | ---: | ---: | ---: |
+| All candidates | 2,736 | `+0.03924` | `0.31895` | `0.6173` |
+| Matched random | 1,368 | `+0.03694` | `0.33579` | `0.6060` |
+| High loss | 1,368 | `+0.06968` | `0.56585` | `0.6235` |
+| Gradient dot | 1,368 | `+0.24447` | `0.38710` | `0.7566` |
+
+Dot/loss shared 856 rows (Jaccard `0.4553`), dot/random shared 690
+(`0.3372`), and loss/random shared 698 (`0.3425`). Thus a negative downstream
+result cannot be attributed to the dot selector degenerating to either
+control.
+
+All students used a fresh rank-16/alpha-32 LoRA, AdamW `5e-5`, effective batch
+size 32, and exactly 90 optimizer steps. The first training jobs
+`30342973`--`30342975` exposed an Inductor `CantSplit` failure in the
+Qwen3.5 hybrid-layer backward graph before optimizer step one. Eager-mode
+one-step smoke `30343584` passed in 11.3s. Frozen reruns `30343636`--`30343638`
+therefore disabled the model's internal Dynamo compilation and completed in
+15m31s, 16m52s, and 15m37s. This changes execution only; the loss, initialization,
+data order, updates, and random control remain matched. Reported train losses
+were `3.890` random, `6.132` high-loss, and `2.481` gradient-dot.
+
+Shared vLLM jobs `30343639` and `30343641` loaded the full-data baseline,
+random, high-loss, and dot adapters in opposite orders. Every one-token
+generated string was intentionally unparseable, while the direct scorer had
+zero missing label margins. The table averages the two adapter positions:
+
+| training data | macro AUROC | delta vs baseline | instructed | varied | BA at 0.5 | recall | FPR | unique scores fwd/rev | within-unit cross-label ties fwd/rev |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Full varied baseline | `0.949673` | — | **`0.998073`** | `0.885139` | `0.903571` | **`0.854762`** | `0.047619` | `658/655` | `3/2` |
+| Random keep 50% | `0.950982` | `+0.001310` | `0.996771` | `0.889931` | `0.901786` | `0.853571` | `0.050000` | `669/673` | `2/0` |
+| High-loss keep 50% | **`0.951845`** | **`+0.002173`** | **`0.998125`** | **`0.890139`** | **`0.907738`** | `0.844048` | `0.028571` | `676/646` | `0/2` |
+| Gradient-dot keep 50% | `0.943363` | `-0.006310` | `0.995313` | `0.874097` | `0.809524` | `0.623810` | **`0.004762`** | `618/632` | `2/1` |
+
+Forward/reverse score Spearman correlations were `0.99954` baseline,
+`0.99952` random, `0.99837` loss, and `0.99918` dot. The corresponding macro
+AUROCs moved by `0.00101`, `0.00054`, `0.00036`, and `0.00101`. The original
+single-session baseline was `0.950476`; its new position average is
+`0.949673`, an additional warning against promoting the high-loss arm's small
+nominal gain.
+
+| validation dataset unit | full baseline | random 50% | high loss 50% | gradient dot 50% |
+| --- | ---: | ---: | ---: | ---: |
+| `instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None` | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-None` | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.99250` | `0.99250` | **`0.99500`** | `0.98875` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | **`1.00000`** | `0.99250` | `0.99750` | `0.99500` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | **`0.98750`** | `0.98000` | **`0.98750`** | `0.96750` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.99937` | **`1.00000`** | **`1.00000`** | **`1.00000`** |
+| `instructed-deception-gemma-3-27b-it-None` | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-s-mo-gemma-3-27b-it` | **`0.99750`** | `0.99625` | **`0.99750`** | `0.99250` |
+| `varied-deception-Qwen3.5-27B-None` | **`0.98438`** | `0.97625` | `0.97937` | `0.98063` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.84375` | **`0.87250`** | `0.80000` | `0.78750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.69625` | `0.72375` | **`0.75188`** | `0.72875` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `0.85375` | `0.85000` | **`0.87500`** | `0.84000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | **`0.98000`** | `0.97250` | **`0.98000`** | `0.96500` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.89500` | `0.91000` | `0.90750` | **`0.91875`** |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.82000` | `0.81500` | **`0.83875`** | `0.78500` |
+| `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.95375` | `0.94500` | `0.93875` | **`0.95625`** |
+| `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.93938` | **`0.94500`** | `0.94000` | `0.90500` |
+
+The dot selector's failure is not only threshold calibration. It lowers varied
+AUROC by `0.01104` against the matched baseline. Selection also makes the
+ground-truth-positive soft targets strongly asymmetric: their mean teacher
+probability is `0.7383` under random selection, `0.6625` under high loss, and
+only `0.5205` under gradient-dot selection. The fraction on the correct side
+of 0.5 is respectively `74.85%`, `66.96%`, and `51.17%`; for selected dot
+negatives it is `99.27%`. This concentrates ambiguous or teacher-conflicting
+positive targets, pulling validation positive scores down and cutting recall.
+
+Decision: retain the full identity-BCE student used by Phoenix 6.3. The
+gradient-dot selector is worse than both controls, while high-loss filtering
+misses the frozen `+0.005` validation promotion rule and beats matched random
+by only `0.00086`. Do not spend a local-test evaluation, promote either
+filtered adapter, or extend this screen to other keep fractions. Dense
+feedback does not rescue this initialization-state, last-block DataRater
+approximation on the already curated Qwen-only varied cache.
+
 ## Leaderboard-aligned GRPO continuation logits (2026-07-27)
 
 An inference-input audit found that the saved GRPO configurations retained
