@@ -4507,6 +4507,19 @@ candidate, but its interval still crosses zero. Regenerate the 397B logits and
 train a fresh student before attributing any benefit to the clarification; do
 not edit an adapter's inference prompt while retaining old targets.
 
+The matched follow-up completed. OpenRouter/Alibaba supplied all 2,880 regular
+Qwen3.5-397B training targets for `$0.46890`; a byte-exact clarified-prompt
+student then trained for one epoch. Its validation direct margin scored
+`0.94970` macro AUROC (`0.99500` instructed, `0.88931` varied), compared with
+`0.95048` (`0.99813`, `0.88694`) for the historical FP8-cache frozen-prompt
+student. The aggregate delta was `-0.00077`, with dataset-unit
+wins/ties/losses `6/9/6` and paired interval `[-0.00685, +0.00506]`.
+
+The clarification's varied gain transferred (`+0.00236`) but was offset by a
+larger instructed loss (`-0.00313`). Reject the new student under the AUROC
+selection rule. Do not spend local-test evaluation or promote the varied-only
+movement post hoc.
+
 ### Reasoning-context varied follow-up
 
 A frozen follow-up exposed each varied-deception organism's complete original

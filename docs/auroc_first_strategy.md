@@ -227,10 +227,18 @@ its paired interval also narrowly crossed zero (`[-0.00060, +0.00833]`).
 Both comparisons used Alibaba-only OpenRouter terminal-label logits and had
 zero missing labels.
 
-This does not warrant another 27B cache. It does justify a fresh, matched
-397B-cache student experiment: regenerate all teacher logits with the explicit
-contract, then train a new adapter. Do not combine clarified inference with
-the old frozen targets or modify the deployed Phoenix 6.3 prompt in place.
+This did not warrant another 27B cache. The matched 397B experiment regenerated
+all 2,880 varied training logits through regular Qwen3.5-397B on
+OpenRouter/Alibaba and trained a fresh one-epoch student with the explicit
+contract. It scored `0.94970` validation macro AUROC (`0.99500` instructed,
+`0.88931` varied), versus `0.95048` for the FP8-cache frozen-prompt student.
+The `-0.00077` paired delta had a 20,000-draw interval of
+`[-0.00685, +0.00506]`.
+
+Thus matched retraining recovered the inference-only prompt regression but did
+not improve aggregate ranking. Retain the existing Phoenix selection; do not
+test, publish, or deploy the OpenRouter/explicit adapter. Its small varied gain
+does not justify scenario-specific post-hoc selection.
 
 ## Phoenix Wright 4.0 deployment
 

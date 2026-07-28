@@ -431,11 +431,37 @@ The cache builder verified 2,880 aligned rows in each of `generations.jsonl`,
 requires every reconstructed student prompt SHA-256 to equal the prompt hash
 sent to OpenRouter. This caught and fixed YAML folded-scalar whitespace before
 training; the selected config uses a literal prompt block. The immutable
-artifacts are covered by `SHA256SUMS`. Matched one-epoch student job `30343909`
-and dependent direct-margin validation job `30343910` were submitted under the
-new method
-`qwen9b_qwen397_openrouter_explicit_tvg_binary_softonly_varied_v1`; do not
-compare it as a pure prompt-only ablation against the FP8 student.
+artifacts are covered by `SHA256SUMS`.
+
+Matched one-epoch student job `30343909` completed in 14m51s with train loss
+`3.919`; dependent direct-margin validation job `30343910` completed in 2m38s.
+The adapter weight SHA-256 is
+`514aa512b1112d6a30b5e0e5e880d227676fb1fff51317dd04b6d9965c70b82e`.
+The direct margin had zero missing labels and the base-versus-LoRA fingerprint
+passed.
+
+| student | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| FP8-Lambda 397B targets, frozen prompt | **`0.95048`** | **`0.99813`** | `0.88694` | **`0.90476`** | **`0.85714`** | `0.04762` | **`662/822`** |
+| regular-OpenRouter 397B targets, explicit prompt | `0.94970` | `0.99500` | **`0.88931`** | `0.89643` | `0.83571` | **`0.04286`** | `660/822` |
+| Phoenix 4.4 GRPO reference | **`0.95137`** | `0.99656` | **`0.89111`** | `0.89643` | `0.84524` | `0.05238` | `79/822` |
+
+Relative to the historical FP8 student, the new student changed macro AUROC by
+`-0.00077`: instructed fell `0.00313`, while varied improved `0.00236`.
+Dataset-unit wins/ties/losses were `6/9/6`. A 20,000-draw paired,
+within-dataset label-stratified bootstrap interval was
+`[-0.00685, +0.00506]`. The two score vectors had Pearson correlation
+`0.99353`, Spearman correlation `0.98390`, and mean absolute difference
+`0.02624`; 18 rows crossed 0.5. The new scores were more saturated, with 392
+outside `[0.01, 0.99]` versus 277 for the FP8 student, without gaining score
+resolution.
+
+Reject the regular-OpenRouter/explicit student as a Phoenix replacement. It
+does not beat either the historical FP8 soft student or Phoenix 4.4 on the
+primary validation macro AUROC, and its varied gain does not justify post-hoc
+scenario selection. Do not spend a local-test evaluation or publish/deploy the
+adapter. The comparison changes provider backend/precision and prompt jointly,
+so it is not a pure prompt-only ablation.
 
 The frozen local-test follow-up confirmed the 397B result and rejected 122B as
 a scale/efficiency compromise:
