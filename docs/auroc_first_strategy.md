@@ -236,9 +236,20 @@ The `-0.00077` paired delta had a 20,000-draw interval of
 `[-0.00685, +0.00506]`.
 
 Thus matched retraining recovered the inference-only prompt regression but did
-not improve aggregate ranking. Retain the existing Phoenix selection; do not
-test, publish, or deploy the OpenRouter/explicit adapter. Its small varied gain
-does not justify scenario-specific post-hoc selection.
+not improve validation ranking. The user explicitly authorized a frozen
+local-test transfer probe because instructed deception is nearly saturated and
+private data may place more weight on varied/OOD behavior. Job `30344308`
+scored `0.96030` macro AUROC (`0.99563` instructed, `0.91319` varied), narrowly
+above Phoenix 4.4's `0.95982` (`0.99073`, `0.91861`).
+
+That `+0.00048` macro gain is instructed-driven: the new student loses
+`0.00542` on varied deception, and its dataset-unit wins/ties/losses are
+`5/6/10`. A 20,000-draw paired within-dataset label-stratified bootstrap
+interval is `[-0.00935, +0.01083]`. Treat the adapter as a credible
+private-transfer probe with much higher score resolution (`636` versus `79`
+unique test scores), not as an established Phoenix 4.4 replacement or evidence
+for the varied/OOD hypothesis. Phoenix 4.4 wins any scenario-weighted average
+where varied units receive more than `47.47%` effective weight.
 
 ## Phoenix Wright 4.0 deployment
 

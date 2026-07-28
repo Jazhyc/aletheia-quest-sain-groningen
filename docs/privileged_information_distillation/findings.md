@@ -456,12 +456,33 @@ within-dataset label-stratified bootstrap interval was
 outside `[0.01, 0.99]` versus 277 for the FP8 student, without gaining score
 resolution.
 
-Reject the regular-OpenRouter/explicit student as a Phoenix replacement. It
-does not beat either the historical FP8 soft student or Phoenix 4.4 on the
-primary validation macro AUROC, and its varied gain does not justify post-hoc
-scenario selection. Do not spend a local-test evaluation or publish/deploy the
-adapter. The comparison changes provider backend/precision and prompt jointly,
-so it is not a pure prompt-only ablation.
+The frozen validation-only rule did not select the regular-OpenRouter/explicit
+student: it beat neither the historical FP8 soft student nor Phoenix 4.4 on
+validation macro AUROC. The user nevertheless authorized a local-test transfer
+probe because instructed deception is nearly saturated and private leaderboard
+data may contain more varied/OOD response modes. This remains a joint
+provider/backend/precision and prompt ablation, not a pure prompt-only result.
+
+Frozen local-test job `30344308` completed on one A100 in 10m35s, including a
+255-second cold vLLM startup. The direct `Prediction:` margin covered all 821
+rows with zero missing label logits; the one-token generated-output diagnostic
+was intentionally invalid and is not reported.
+
+| test student | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| regular-OpenRouter 397B targets, explicit prompt | **`0.96030`** | **`0.99563`** | `0.91319` | `0.88333` | `0.82857` | `0.06190` | **`636/821`** |
+| Phoenix 4.4 GRPO reference | `0.95982` | `0.99073` | **`0.91861`** | **`0.88690`** | `0.82857` | **`0.05476`** | `79/821` |
+
+The new student is the narrow macro winner by `+0.00048`, but that difference
+comes from instructed AUROC (`+0.00490`); it loses varied AUROC by `0.00542`.
+Dataset-unit wins/ties/losses are `5/6/10`, and a fixed-seed 20,000-draw
+paired within-dataset label-stratified bootstrap interval is
+`[-0.00935, +0.01083]`. Phoenix 4.4 is preferred if varied units receive more
+than `47.47%` effective weight, compared with `42.86%` in the current 12/9
+macro. The test therefore makes the adapter a credible private-transfer probe,
+but does not establish the hypothesized varied/OOD advantage over Phoenix 4.4
+or justify declaring either model the robust winner. No matched historical FP8
+student test artifact exists for a direct test-split comparison.
 
 The frozen local-test follow-up confirmed the 397B result and rejected 122B as
 a scale/efficiency compromise:

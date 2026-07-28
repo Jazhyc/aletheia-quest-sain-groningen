@@ -4515,10 +4515,21 @@ student then trained for one epoch. Its validation direct margin scored
 student. The aggregate delta was `-0.00077`, with dataset-unit
 wins/ties/losses `6/9/6` and paired interval `[-0.00685, +0.00506]`.
 
-The clarification's varied gain transferred (`+0.00236`) but was offset by a
-larger instructed loss (`-0.00313`). Reject the new student under the AUROC
-selection rule. Do not spend local-test evaluation or promote the varied-only
-movement post hoc.
+The clarification's varied validation gain transferred (`+0.00236`) but was
+offset by a larger instructed loss (`-0.00313`), so the frozen validation rule
+did not select the student. The user explicitly authorized a local-test
+transfer probe because instructed deception is nearly saturated and private
+data may contain more varied/OOD samples.
+
+Test job `30344308` scored `0.96030` macro AUROC (`0.99563` instructed,
+`0.91319` varied), narrowly above Phoenix 4.4's `0.95982` (`0.99073`,
+`0.91861`). The `+0.00048` macro difference is instructed-driven: varied
+deception falls `0.00542`, dataset-unit wins/ties/losses are `5/6/10`, and a
+20,000-draw paired within-dataset label-stratified bootstrap interval is
+`[-0.00935, +0.01083]`. The new student has 636 unique scores over 821 rows
+versus 79 for Phoenix 4.4, but Phoenix wins if varied units receive more than
+`47.47%` effective weight. Keep this as a credible private-transfer probe, not
+an established replacement or confirmation of the varied/OOD hypothesis.
 
 ### Reasoning-context varied follow-up
 
