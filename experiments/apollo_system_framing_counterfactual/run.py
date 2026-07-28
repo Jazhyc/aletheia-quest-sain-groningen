@@ -248,7 +248,9 @@ def query_group(
             "score_seconds": elapsed,
             "position_batches": position_batches,
             "prompt_tokens": prompt_tokens,
-            "conditions": list(CONDITIONS),
+            "conditions": sorted(Counter(
+                str(row["condition"]) for row in records
+            )),
             "question": AUDITOR_QUESTION,
             "context_truncation": "none",
             "source_reasoning": "retained where supplied",
