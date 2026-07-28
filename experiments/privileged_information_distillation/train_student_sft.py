@@ -1369,6 +1369,15 @@ def main(cfg: DictConfig) -> None:
         weight_decay=float(cfg.student.training.weight_decay),
         per_device_train_batch_size=int(cfg.student.training.per_device_train_batch_size),
         gradient_accumulation_steps=int(cfg.student.training.gradient_accumulation_steps),
+        torch_compile=bool(OmegaConf.select(
+            cfg, "student.training.torch_compile", default=False
+        )),
+        torch_compile_backend=str(OmegaConf.select(
+            cfg, "student.training.torch_compile_backend", default="inductor"
+        )),
+        torch_compile_mode=str(OmegaConf.select(
+            cfg, "student.training.torch_compile_mode", default="default"
+        )),
         logging_steps=int(cfg.student.training.logging_steps),
         save_strategy="no",
         bf16=True,

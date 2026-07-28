@@ -726,8 +726,14 @@ To optimize the pure Qwen-397B binary-soft student on a persistent single-GPU
 Lambda H100, push the frozen teacher cache and `dev_splits/`, then run:
 
 ```bash
+bash experiments/privileged_information_distillation/run_qwen397_distillation_speed_benchmark_lambda.sh
 bash experiments/privileged_information_distillation/run_qwen397_distillation_hparam_sweep_lambda.sh
 ```
+
+The speed benchmark holds effective batch size 32 fixed while comparing
+microbatches `2/4/8/16`, then tests `torch.compile` on the fastest eager
+microbatch. Apply its selected microbatch and compilation setting to the sweep
+before launching the full matrix.
 
 The first stage crosses rank-16 learning rates `1e-5`, `2e-5`, `5e-5`, and
 `1e-4` with `0.5`, `1`, and `2` epochs. Shared-session direct-margin validation
