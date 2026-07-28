@@ -112,11 +112,12 @@ def render_self_question_prompt(
     messages: Any,
     *,
     include_reasoning: bool = False,
+    self_question: str = SELF_QUESTION,
 ) -> str:
-    """Continue the original conversation with the frozen self-question."""
+    """Continue the original conversation with a selected self-question."""
     if not include_reasoning:
         conversation = normalized_messages(messages)
-        conversation.append({"role": "user", "content": SELF_QUESTION})
+        conversation.append({"role": "user", "content": self_question})
         return (
             apply_chat_template(
                 tokenizer,
@@ -138,7 +139,7 @@ def render_self_question_prompt(
     )
     follow_up = apply_chat_template(
         tokenizer,
-        [{"role": "user", "content": SELF_QUESTION}],
+        [{"role": "user", "content": self_question}],
         add_generation_prompt=True,
     )
     return original + follow_up + PREDICTION_PREFIX

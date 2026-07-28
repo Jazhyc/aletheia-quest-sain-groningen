@@ -446,6 +446,18 @@ artifacts are under `results/blackbox/qwen27b_organism_atomic_true_false_v1/`
 and runtime code is
 `experiments/blackbox/audit_qwen_organism_claim_consistency.py`.
 
+Full-trace organism self-question prompt sweep finding from 2026-07-28:
+competition NDIF evaluated four framings on all 360 varied-deception validation
+rows using each exact Qwen3.5-27B base/LoRA organism, complete native reasoning,
+no truncation, and direct `Prediction:0|1` logits. The plain independent-auditor
+framing led macro AUROC at `0.91236`, versus `0.90639` for factual self-review,
+`0.89403` for forensic role play, and `0.89181` for 2040 Communion clemency.
+The `+0.00597` auditor gain was four dataset-unit wins, three ties, and two
+losses, so treat it as a validation-selected candidate pending frozen test
+confirmation. The clemency prompt reduced rather than induced positive verdicts
+and regressed seven of nine units; reject both embellished framings. Runtime
+code is under `experiments/self_question_prompt_sweep/`.
+
 Deferred hybrid proposal from 2026-07-11: P27 in
 `docs/prompt_optimization/proposals.md` combines a tuned judge that emits
 source-grounded atomic claim quotes with organism-only forced True/False

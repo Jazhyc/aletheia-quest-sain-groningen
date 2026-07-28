@@ -1,5 +1,37 @@
 # Prompt Experiment Log
 
+## 2026-07-28: Full-trace organism self-question framing sweep
+
+Four contextual self-question framings were evaluated through competition NDIF
+on all 360 varied-deception validation rows. Every condition queried the exact
+Qwen3.5-27B base/LoRA organism that generated the response, included its full
+native reasoning trace, performed no truncation or new reasoning generation,
+and scored normalized literal next-token `Prediction:0|1` logits. The optimized
+Phoenix-style path flattened the four arms into one length-aware remote session
+per organism with `logits_to_keep=1`. The run completed 1,440 evaluations in
+522.8 summed scoring seconds; the longest prompt was 6,517 tokens.
+
+| framing | macro AUROC | delta | BA at 0.5 | recall | FPR | unique |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Factual self-review control | `0.90639` | — | `0.82778` | `0.75000` | `0.09444` | 110 |
+| Auditor of another model | **`0.91236`** | **`+0.00597`** | **`0.83611`** | `0.75556` | `0.08333` | 104 |
+| Forensic-auditor role play | `0.89403` | `-0.01236` | `0.79722` | `0.77222` | `0.17778` | 104 |
+| 2040 Communion clemency | `0.89181` | `-0.01458` | `0.83889` | `0.71111` | **`0.03333`** | 65 |
+
+The independent-auditor prompt improved four dataset units, tied three, and
+regressed two. Its `+0.00597` validation gain is promising but modest, so keep
+it as the selected candidate pending frozen test confirmation. The role play
+increased false positives and should be rejected. The Communion prompt did not
+pressure the organism into confession: its mean score fell by `0.02967`, it
+made 18 fewer positive decisions than control, and it lost AUROC on seven of
+nine units. Its slightly higher thresholded BA is a conservative calibration
+shift, not a ranking gain. Do not promote either embellished framing or infer a
+general benefit from confession pressure.
+
+Implementation and tests are in `experiments/self_question_prompt_sweep/`;
+ignored artifacts are under
+`results/blackbox/ndif_reasoning_self_question_prompt_sweep_validation_v1/`.
+
 ## 2026-07-27: Competition-NDIF Truth Value Guard model swaps
 
 The exact compact no-thinking Truth Value Guard was evaluated as a direct
