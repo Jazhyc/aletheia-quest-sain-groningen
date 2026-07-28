@@ -113,6 +113,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--split", default="validation")
     parser.add_argument("--splits-dir", type=Path, default=ROOT / "dev_splits")
     parser.add_argument("--output-root", type=Path, default=ROOT / "results" / "blackbox")
+    parser.add_argument(
+        "--dataset-name-contains",
+        help="Only evaluate dataset configurations containing this substring.",
+    )
     parser.add_argument("--limit", type=int)
     parser.add_argument("--max-prompt-chars", type=int, default=3000)
     parser.add_argument("--concurrency", type=int, default=8)
@@ -301,6 +305,7 @@ def score_item(
                 "dataset": item.dataset,
                 "index": item.index,
                 "label": item.label,
+                "parse_error": False,
                 "prompt_sha256": item.prompt_sha256,
                 "prompt_chars": item.prompt_chars,
                 "model": data.get("model"),
@@ -313,6 +318,18 @@ def score_item(
                 "score": score,
                 "label_logprobs": label_logprobs,
                 "missing_binary_tokens": missing,
+                # Compatibility with the existing binary-soft distillation
+                # cache builder. These probabilities are normalized over the
+                # literal label pair rather than the full vocabulary.
+                "target_logprobs": {
+                    "honest": label_logprobs["0"],
+                    "deceptive": label_logprobs["1"],
+                },
+                "target_probs": {
+                    "honest": 1.0 - score,
+                    "deceptive": score,
+                },
+                "missing_rating_token_ids": missing,
                 "top_logprobs": top_logprobs,
                 "usage": usage,
                 "latency_seconds": time.perf_counter() - started,
@@ -350,6 +367,11 @@ def load_work(args: argparse.Namespace) -> tuple[list[WorkItem], dict[str, pd.Da
     labels_by_dataset: dict[str, pd.DataFrame] = {}
     remaining = args.limit
     for config in configs:
+        if (
+            args.dataset_name_contains
+            and args.dataset_name_contains not in config.name
+        ):
+            continue
         labels = load_label_subset(config)
         if remaining is not None:
             if remaining <= 0:
@@ -501,6 +523,7 @@ def write_predictions_and_result(
         },
         "config": {
             "max_prompt_chars": args.max_prompt_chars,
+            "dataset_name_contains": args.dataset_name_contains,
             "concurrency": args.concurrency,
             "request_timeout": args.request_timeout,
             "max_retries": args.max_retries,

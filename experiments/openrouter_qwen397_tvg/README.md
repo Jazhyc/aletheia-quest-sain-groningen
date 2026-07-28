@@ -41,5 +41,18 @@ Use `--prompt-variant explicit_digits` for the clarified contract and
 separate `--method`, because resumable cache validation rejects prompt changes
 within an existing result directory.
 
+The selected regular-397B clarified-prompt distillation cache can be reproduced
+end to end with:
+
+```bash
+bash \
+  experiments/privileged_information_distillation/run_qwen397_openrouter_explicit_soft_teacher.sh
+```
+
+That command filters the train split to the 2,880 varied-deception rows,
+exports Lambda-cache-compatible binary probabilities, rebuilds public student
+prompts with the byte-exact teacher prompt, and writes a SHA-256 manifest.
+The resulting cache remains separate from the historical FP8 Lambda cache.
+
 OpenRouter is for development supervision and benchmarking only. Competition
 submissions cannot make external API calls at inference time.

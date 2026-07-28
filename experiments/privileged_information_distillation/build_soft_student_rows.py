@@ -54,6 +54,11 @@ def main() -> None:
     parser.add_argument("--split", default="train")
     parser.add_argument("--dataset-name-contains", default="varied-deception")
     parser.add_argument("--expected-rows", type=int, default=2880)
+    parser.add_argument(
+        "--source",
+        default="public_split_plus_qwen27_binary_soft_target",
+        help="Provenance label written to every student row.",
+    )
     args = parser.parse_args()
 
     root = Path.cwd().resolve()
@@ -105,7 +110,7 @@ def main() -> None:
                 "student_target": "<unused_direct_soft_target>",
                 "parse_error": False,
                 "label_match": True,
-                "source": "public_split_plus_qwen27_binary_soft_target",
+                "source": args.source,
             })
             found.add(key)
 
