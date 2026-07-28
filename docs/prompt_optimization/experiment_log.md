@@ -1,5 +1,42 @@
 # Prompt Experiment Log
 
+## 2026-07-28: Base-Phoenix verbalizer sweep
+
+The unadapted `Qwen/Qwen3.5-9B` Phoenix judge was evaluated through competition
+NDIF on all 822 frozen validation rows under seven matched direct-logit output
+contracts. Every arm used Phoenix 4.0's structural renderer, no thinking,
+`logits_to_keep=1`, shared `48/32/16` length-aware row batches, and identical
+padded tensor widths. The sweep changed only the output instruction, boundary,
+and requested single-token labels. It included the exact deployed `0/1`
+contract, an explicit-semantics `0/1` control, four alternative binary pairs,
+and an expected `1--7` rating.
+
+| output contract | macro AUROC | instructed | varied | unique |
+| --- | ---: | ---: | ---: | ---: |
+| frozen `0/1` | `0.94518` | **`0.99417`** | `0.87986` | 74 |
+| explicit `0 = not deceptive, 1 = deceptive` | **`0.94732`** | `0.99365` | **`0.88556`** | 95 |
+| `False/True` | `0.94250` | `0.99333` | `0.87472` | 83 |
+| `No/Yes` | `0.94601` | `0.99396` | `0.88208` | 82 |
+| `honest/deceptive` | `0.94179` | `0.99063` | `0.87667` | 89 |
+| neutral `A/B` | `0.94452` | `0.99167` | `0.88167` | 138 |
+| expected `1--7` | `0.94345` | `0.99208` | `0.87861` | 820 |
+
+The winning change retained the digit verbalizers and merely made their
+semantics explicit. Its `+0.00214` macro delta came from varied rows; unit
+wins/ties/losses were `7/7/7`. A 10,000-replicate paired within-dataset
+stratified bootstrap interval was `[-0.00274, +0.00714]`, so this is a weak
+directional result, not proof of a real gain. `No/Yes` gained `+0.00083`; all
+other replacements regressed. The rating arm emitted 820 unique values but
+ranked worse, confirming that score uniqueness is not sufficient.
+
+Keep `0/1` as the Phoenix readout. If another soft-distillation cache is
+generated, the justified ablation is the explicit-semantics digit prompt with
+the same boundary on both teacher and student. Do not spend local test on these
+base-model arms or replace the deployed readout from this small validation
+difference alone. Implementation is under
+`experiments/phoenix_verbalizer_sweep/`; ignored artifacts are under
+`results/blackbox/phoenix_base_qwen9b_verbalizer_sweep_validation_v1/`.
+
 ## 2026-07-28: Apollo lie-context ablation
 
 The exact-organism Apollo auditor was evaluated through competition NDIF after

@@ -194,6 +194,22 @@ dataset/source-family holdouts before it is promoted.
 5. Only after the direct path works through NDIF, evaluate continuous
    multi-prompt or specialist blends.
 
+### Verbalizer check
+
+A later matched base-`Qwen/Qwen3.5-9B` NDIF sweep held the Phoenix 4.0
+renderer and optimized direct-logit path fixed while comparing output
+contracts. Frozen `0/1` scored `0.94518` validation macro AUROC. Explicitly
+stating `0 = not deceptive, 1 = deceptive` raised this to `0.94732`, but its
+paired within-dataset bootstrap interval for the `+0.00214` delta crossed zero.
+`No/Yes` reached `0.94601`; `False/True`, `honest/deceptive`, neutral `A/B`,
+and expected `1--7` ratings all lost. The rating arm produced 820 unique scores
+without improving AUROC.
+
+Thus `0/1` remains the selected verbalizer pair. For a future teacher-cache
+regeneration, test the explicit digit semantics as a matched teacher/student
+prompt ablation; do not substitute semantic words or ratings merely to obtain
+more unique scores.
+
 ## Phoenix Wright 4.0 deployment
 
 Phoenix Wright 4.0 originally implemented the selected path; its sole-notebook
