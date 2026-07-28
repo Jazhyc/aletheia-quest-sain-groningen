@@ -17,12 +17,14 @@ Configuration (flags override environment):
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fnmatch
 import io
 import itertools
 import json
 import os
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -176,6 +178,23 @@ def build_zip(root: Path) -> bytes:
                  "Remove large files (e.g. heavy weights) before submitting.")
     _ok(f"packaged {_bold(str(n))} files  {_dim('·')}  {_bold(f'{size_mb:.1f} MB')}")
     return data
+
+
+@contextlib.contextmanager
+def _staged_submission_root(root: Path):
+    """Extract the real filtered upload payload into a temporary dry-run root.
+
+    The sandbox runner copies the root it receives. Passing the repository
+    directly would copy local-only artifacts such as ``results/``, ``.venv/``,
+    and ``.git/`` even though a real submission never uploads them.
+    """
+    payload = build_zip(root)
+    with tempfile.TemporaryDirectory(prefix="aletheia-dry-stage-") as tmp:
+        staged = Path(tmp) / "unpacked"
+        staged.mkdir()
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            archive.extractall(staged)
+        yield staged
 
 
 def submit(space_url: str, team: str, payload: bytes,
@@ -445,7 +464,14 @@ def run_dry(root: Path, ndif_api_key: str | None, hf_token: str | None,
             _bad(f"{tag} {_bold(ds)}   " + _dim(_shorten(ev.get("error") or "failed", 90)))
 
     try:
-        records = dry_run(root, ndif_api_key, hf_token, limit=limit, on_progress=_progress)
+        with _staged_submission_root(root) as staged_root:
+            records = dry_run(
+                staged_root,
+                ndif_api_key,
+                hf_token,
+                limit=limit,
+                on_progress=_progress,
+            )
     except (FileNotFoundError, ValueError) as e:
         # e.g. no/too-many notebooks, or a bad dry.yaml — a clear message beats
         # a traceback. (The Space reports the same rejection as a 400.)
