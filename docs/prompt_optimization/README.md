@@ -16,6 +16,10 @@ Guardrails:
 - Tune on `validation`; reserve local `test` for confirmation only.
 - Keep prompt logic general across organisms and scenarios.
 - Track every proposed prompt, threshold change, and run outcome in this folder.
+- For Qwen3.5 adapter deployment, follow
+  [`../peft_adapter_compatibility.md`](../peft_adapter_compatibility.md); NDIF's
+  canonical multimodal tree is not path-compatible with LoRAs saved directly
+  from the text-only `AutoModelForCausalLM` tree.
 - Prefer validation evidence over intuition. Each candidate should report mean
   AUROC, balanced accuracy, recall, FPR, score uniqueness/ties, parse errors,
   score time, and worst datasets.

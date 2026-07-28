@@ -8,7 +8,7 @@
   "corda_config": null,
   "ensure_weight_tying": false,
   "eva_config": null,
-  "exclude_modules": null,
+  "exclude_modules": ".*(visual|vision_tower|merger|patch_embed).*",
   "fan_in_fan_out": false,
   "inference_mode": true,
   "init_lora_weights": true,
