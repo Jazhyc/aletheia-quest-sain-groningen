@@ -4268,6 +4268,32 @@ results remain uncorrected. Reproducible code is under
 `experiments/phoenix_adapter_validation_ndif/`, with ignored results under
 `results/blackbox/phoenix_adapter_validation_ndif_v1/`.
 
+## 2026-07-28: Corrected GPT-OSS/Luna reason-then-score validation
+
+The migrated GPT-OSS PI and Luna PI adapters were rerun on all 822 validation
+rows with the frozen Phoenix 5.2.1 reason-then-score protocol. Each adapter
+generated its training-matched summary deterministically, the final generated
+label was removed, and normalized literal `0|1` logits were read at that
+position. A fresh direct arm shared the same subsequent NDIF scoring session.
+The optimized Phoenix path used one generation session with `32/24/16`
+length-aware batches, followed by one `48/32/16` scoring session with
+`logits_to_keep=1`.
+
+| adapter | direct macro AUROC | post-reasoning | delta | direct varied | reasoning varied |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| GPT-OSS PI | **`0.94911`** | `0.92381` | `-0.02530` | `0.88653` | `0.83806` |
+| Luna PI | **`0.94821`** | `0.92470` | `-0.02351` | `0.89319` | `0.84958` |
+
+The instructed changes were also negative but smaller (`-0.00792` GPT-OSS,
+`-0.00844` Luna). Post-reasoning improved/tied/lost `3/5/13` GPT-OSS units and
+`7/1/13` Luna units. GPT-OSS generated two 512-token repetitions without a
+terminal label, which used the predeclared canonical-boundary fallback; Luna
+had none. No generation or scoring prompt was truncated. The direct arms
+exactly reproduce the prior corrected adapter run, so direct scoring remains
+selected. Code is under `experiments/phoenix_adapter_reasoning_ndif/`; ignored
+artifacts are under
+`results/blackbox/phoenix_adapter_reasoning_ndif_v1/`.
+
 ## 2026-07-27: Matched-organism Truth Value Guard logits
 
 The frozen local test diagnostic scored every one of 821 rows with the exact

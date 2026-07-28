@@ -418,6 +418,12 @@ model organisms' activations or hidden state. Submit Phoenix 4.4 with
 > the corrected validation winner. Treat the adapter-dependent vLLM local-test
 > numbers in these sections as uncorrected as well. See the
 > privileged-distillation findings for prompt crosses and per-dataset AUROCs.
+>
+> A corrected reason-then-score NDIF follow-up also rejected inference-time
+> reasoning for these migrated students. GPT-OSS PI fell from `0.94911` direct
+> to `0.92381` post-reasoning; Luna PI fell from `0.94821` to `0.92470`.
+> Neither arm truncated a prompt. Keep the direct boundary despite the
+> reasoning arms producing more distinct scores.
 
 Phoenix 5.0 replaces only the ordinary Phoenix 4.4 component with the fresh
 rank-16/alpha-32 Qwen3.5-9B student soft-distilled from direct binary Truth
