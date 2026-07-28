@@ -1,0 +1,13 @@
+{
+ "rule": "sigmoid(judge_margin + cap * probe_z) -- v4 with the judge divisor folded into the caps and the threshold",
+ "derived_from": "results/ensemble_gate_eval/sonic_v4_constants.json",
+ "judge_margin_sd_removed": 1.199755138011975,
+ "base_cap": 0.25,
+ "max_cap": 0.5,
+ "probe_gain": 1.0,
+ "threshold_score": 0.15933105645935494,
+ "threshold_probe_only": 0.5,
+ "judge_step_in_raw_margin": 0.125,
+ "probe_standardisation": "unchanged from v4 -- frozen per-family mean/sd in cell 10",
+ "note": "a numerical identity with v4: same ranking, same threshold decisions"
+}

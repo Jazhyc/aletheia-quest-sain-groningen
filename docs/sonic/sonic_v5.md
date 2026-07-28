@@ -1,6 +1,11 @@
 # sonic v5 — escalation to the tested model on disagreement rows
 
-**Planned 2026-07-27. Not built, not submitted.**
+**Submitted 2026-07-28.  Headline AUROC 0.8480 / BA 0.7950.  Regression:
+−0.0581 AUROC vs v4 (0.9061).  The all-or-nothing escalation across all three
+families is too aggressive — Nemotron and gemma self-reads are near-chance
+on base-model data — but the Qwen big judge works (Notus flat, Iris Qwen
++0.0080).  A selective Qwen-only escalation is the next experiment.**
+See `docs/official_submissions.md` § "Sonic v5 counted detail".
 
 This document uses Simplified Technical English. The terms are the same as in
 `sonic_v4.md` — "the judge" is Phoenix Wright v4 (Qwen3.5-9B + LoRA),

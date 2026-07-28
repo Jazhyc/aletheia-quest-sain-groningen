@@ -342,7 +342,7 @@ NEW_NUDGE_BLOCK = """                mean_agreement = float(np.mean(agreement))
                       f"cap=[{BASE_CAP:.4f}, {MAX_CAP:.4f}])",
                       flush=True)
 
-                # v5: on the escalated rows the big judge REPLACES the cheap
+                # v5: on the escalated rows the big judge REPLACES the
                 # judge.  Those rows are where the judge and the probe
                 # conflict; on base-model data the 9B judge is the weaker
                 # reading, so the 27B/120B verdict decides them outright.
