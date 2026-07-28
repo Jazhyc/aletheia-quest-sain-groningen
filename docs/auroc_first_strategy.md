@@ -226,13 +226,29 @@ secondary threshold so the ordinary adapter is the only scoring change.
 
 The initial Phoenix 5.4 control was not an exact Phoenix 4.0 ablation: it kept
 Phoenix 5.3's renderer, HP-KR/action/intent routes, score blending, and
-threshold `0.19`. It was replaced before submission by
-`submission/phoenix_wright_v4_0_base.ipynb`. The replacement restores the
-historical Phoenix 4.0 visible-message renderer, direct `Prediction:` boundary,
-length-aware `48/32/16` batching, and threshold `0.15`; it removes `peft=` and
-all specialist routes. Every row therefore uses base `Qwen/Qwen3.5-9B` under
-the exact Phoenix 4.0 query. Submit it as a black-box control with `--tag
-black`.
+threshold `0.19`. The exact replacement restored the historical Phoenix 4.0
+visible-message renderer, direct `Prediction:` boundary, length-aware
+`48/32/16` batching, and threshold `0.15`; it removed `peft=` and all
+specialist routes. Its 2026-07-28 black-box submission reproduced the original
+private macro AUROC exactly at `0.893802`.
+
+The paired base-model 5.4 control scored only `0.846867`. The regression was
+entirely Notus: mean AUROC fell from `0.863992` to `0.770100`, while Iris was
+unchanged at `0.923613` versus `0.923633`. The ordinary rubric text, base model,
+direct label readout, and backend were the same. The remaining change is
+rendering: 5.x merges adjacent roles, keeps a raw 3,000-character context tail,
+removes truncation markers, and leaves the duplicated final output uncapped.
+Phoenix 4.0 instead bounds each message and output with head/tail retention and
+preserves message boundaries. This identifies private long/complex-context
+serialization as the leading mechanism, although aggregate results cannot
+distinguish many turns from one long message or output.
+
+Phoenix 4.1, 4.2, and 4.3 each retained the exact `0.893802` private result, so
+their frozen specialists did not cause the loss. Phoenix 6.0 is therefore the
+composition candidate: exact 4.0 base-Qwen rendering and scoring for ordinary
+rows, plus only the mutually exclusive HP-KR, action-report, and resolved-intent
+routes. It uses threshold `0.15` only for the secondary binary column and must
+be submitted with `--tag black`.
 
 An NDIF run on all 400 rows of
 `dev-varied-deception-Qwen3.5-27B-None` completed at batch 32 in `102.1s`,

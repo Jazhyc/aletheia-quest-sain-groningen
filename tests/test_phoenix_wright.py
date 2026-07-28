@@ -37,7 +37,7 @@ from submission.phoenix_wright import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v4_0_base.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v6_0.ipynb"
 
 
 class FakeTokenizer:
@@ -72,14 +72,20 @@ def notebook_cell_source(cell_id: str) -> str:
     )
 
 
-def test_notebook_is_exact_unrouted_phoenix4_base_control() -> None:
+def test_notebook_uses_phoenix4_base_for_ordinary_rows_and_frozen_specialists() -> None:
     source = notebook_source()
 
-    assert "model = LanguageModel(JUDGE_MODEL, **model_kwargs)" in source
-    assert "peft=" not in source
-    assert "ADAPTER_REPO" not in source
-    assert "build_exclusive_route_flags" not in source
-    assert "blend_intent_route_scores" not in source
+    assert 'if kind in {"main", "harm"}:' in source
+    assert "active_model = LanguageModel(JUDGE_MODEL, **model_kwargs)" in source
+    assert "ACTION_ADAPTER_REPO" in source
+    assert "INTENT_ADAPTER_REPO" in source
+    assert "build_exclusive_route_flags" in source
+    assert "blend_intent_route_scores" in source
+    main_branch = source.split('if kind in {"main", "harm"}:', 1)[1].split(
+        'elif kind == "action":',
+        1,
+    )[0]
+    assert "peft=" not in main_branch
     assert 'PHOENIX_THRESHOLD", "0.15"' in source
     assert "build_direct_prompt" in source
     assert '"logits_to_keep": 1' in source
@@ -96,7 +102,7 @@ def test_notebook_renderer_matches_historical_phoenix4() -> None:
         "Iterable": Iterable,
         "Mapping": Mapping,
     }
-    exec(notebook_cell_source("phoenix-v4-base-renderer"), namespace)
+    exec(notebook_cell_source("phoenix-v6-renderer"), namespace)
 
     cases = [
         [],
@@ -114,6 +120,65 @@ def test_notebook_renderer_matches_historical_phoenix4() -> None:
         assert namespace["build_member_prompt"](
             messages
         ) == historical.build_member_prompt(messages)
+        assert namespace["build_direct_prompt"](
+            messages,
+            FakeTokenizer(),
+        ) == "<chat>" + DIRECT_PREDICTION_PREFIX
+
+
+def test_phoenix6_route_composition_preserves_ordinary_phoenix4_scores() -> None:
+    scoring_tree = ast.parse(notebook_cell_source("phoenix-v6-scoring"))
+    score_messages_node = next(
+        node
+        for node in scoring_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "score_messages"
+    )
+    namespace = {
+        "np": np,
+        "blend_intent_route_scores": blend_intent_route_scores,
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[score_messages_node], type_ignores=[])
+            ),
+            str(NOTEBOOK),
+            "exec",
+        ),
+        namespace,
+    )
+
+    calls = []
+
+    def fake_score_message_subset(messages, positions, *, kind):
+        calls.append((kind, positions))
+        values = {
+            "main": np.array([0.1, 0.4]),
+            "harm": np.array([0.2]),
+            "action": np.array([0.3]),
+            "intent": np.array([0.6]),
+        }
+        return values[kind]
+
+    namespace["score_message_subset"] = fake_score_message_subset
+    scores, binary_scores = namespace["score_messages"](
+        [object(), object(), object(), object()],
+        np.array([False, True, False, False]),
+        np.array([False, False, True, False]),
+        np.array([False, False, False, True]),
+    )
+
+    assert calls == [
+        ("main", [0, 3]),
+        ("harm", [1]),
+        ("action", [2]),
+        ("intent", [3]),
+    ]
+    assert binary_scores.tolist() == [0.1, 0.2, 0.3, 0.4]
+    assert scores[:3].tolist() == binary_scores[:3].tolist()
+    assert scores[3] == pytest.approx(
+        mean_log_odds_scores([0.4], [0.6])[0]
+    )
 
 
 def test_main_prompt_stops_at_binary_decision_position() -> None:
@@ -413,21 +478,21 @@ def test_mean_log_odds_and_intent_mask_preserve_other_scores() -> None:
         blend_intent_route_scores(base, [], routes)
 
 
-def test_phoenix4_base_notebook_preserves_historical_runtime_contract() -> None:
+def test_phoenix6_notebook_preserves_historical_runtime_contract() -> None:
     source = notebook_source()
     ast.parse(source)
 
-    assert "method=phoenix_wright_v4.0 exact_base_control" in source
-    assert "model = LanguageModel(JUDGE_MODEL, **model_kwargs)" in source
-    assert "peft=" not in source
-    assert "ADAPTER_REPO" not in source
-    assert "build_exclusive_route_flags" not in source
-    assert "blend_intent_route_scores" not in source
-    assert "build_direct_prompt(value, tokenizer)" in source
+    assert "method=phoenix_wright_v6.0 phoenix4_renderer_frozen_specialists" in source
+    assert "ordinary_judge_source=base_qwen_no_peft" in source
+    assert 'if kind in {"main", "harm"}:' in source
+    assert "build_exclusive_route_flags" in source
+    assert "blend_intent_route_scores" in source
+    assert '"main": build_direct_prompt' in source
     assert '"logits_to_keep": 1' in source
-    assert "model.output.logits[:, -1, BINARY_TOKEN_IDS]" in source
+    assert "active_model.output.logits[:, -1, label_ids]" in source
     assert "torch.softmax(label_logits, dim=-1)[:, 1]" in source
-    assert "util.write_submission(indices, scores, threshold=SUBMISSION_THRESHOLD)" in source
+    assert "deceptive = binary_scores >= SUBMISSION_THRESHOLD" in source
+    assert "deceptive=deceptive" in source
     assert "model.generate" not in source
     assert "reply_to_score" not in source
     assert 'PHOENIX_BATCH_SIZE", "48"' in source

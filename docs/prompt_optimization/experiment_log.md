@@ -4131,6 +4131,32 @@ legacy weights-only adapter directory. Runtime and ignored artifacts are under
 `experiments/phoenix_system_framing_counterfactual/` and
 `results/blackbox/phoenix53_system_framing_counterfactual_v1/`.
 
+## 2026-07-28: Private renderer isolation and Phoenix 6.0
+
+The exact base-Qwen Phoenix 4.0 replay completed as a black-box submission at
+macro AUROC `0.893802`, exactly reproducing the original Phoenix 4.0 result.
+The paired Phoenix 5.4 base-model control scored `0.846867`. Mean Iris AUROC
+was unchanged (`0.923613` versus `0.923633`), while mean Notus AUROC fell from
+`0.863992` to `0.770100`; Notus therefore accounts for the full headline loss.
+
+The two controls use the same base, literal `0|1` direct margin, and ordinary
+rubric wording. The material difference is conversation rendering. Phoenix 4.0
+preserves message boundaries, applies 1,500-character per-message head/tail
+caps, retains a marked 3,000-character context tail, and separately bounds the
+output at 3,000 characters. The 5.x renderer merges adjacent roles, keeps an
+unmarked raw context tail, and repeats the final output without a character
+cap. Treat private long or structurally complex Notus inputs as the leading
+explanation; the aggregate metrics cannot distinguish many turns from one long
+message or output.
+
+Phoenix 4.1, 4.2, and 4.3 had all previously returned the exact same private
+`0.893802`, eliminating their frozen routes as the source of this regression.
+Phoenix 6.0 consequently restores the byte-exact 4.0 ordinary renderer on base
+Qwen while retaining the mutually exclusive HP-KR replacement, action-report
+replacement, and resolved-intent blend. Focused tests compare ordinary prompts
+against the frozen historical renderer and verify that specialist composition
+leaves ordinary and non-intent scores unchanged.
+
 ## 2026-07-27: Matched-organism Truth Value Guard logits
 
 The frozen local test diagnostic scored every one of 821 rows with the exact
