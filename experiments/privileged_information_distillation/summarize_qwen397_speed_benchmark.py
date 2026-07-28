@@ -13,9 +13,9 @@ CONDITION_RE = re.compile(
     r"^b(?P<batch>\d+)_e32_(?P<backend>eager|compile)$"
 )
 METRIC_RE = re.compile(
-    r"'train_runtime':\s*(?P<runtime>[0-9.]+).*?"
-    r"'train_samples_per_second':\s*(?P<samples>[0-9.]+).*?"
-    r"'train_steps_per_second':\s*(?P<steps>[0-9.]+)",
+    r"'train_runtime':\s*'?(?P<runtime>[0-9.]+)'?.*?"
+    r"'train_samples_per_second':\s*'?(?P<samples>[0-9.]+)'?.*?"
+    r"'train_steps_per_second':\s*'?(?P<steps>[0-9.]+)'?",
     re.S,
 )
 

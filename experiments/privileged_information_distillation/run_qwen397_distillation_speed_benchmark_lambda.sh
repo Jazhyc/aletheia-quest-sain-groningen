@@ -48,11 +48,25 @@ run_condition() {
     2>&1 | tee "${log}"
 }
 
-batch_sizes=(2 4 8 16)
-accumulations=(16 8 4 2)
+condition_complete() {
+  local name="$1"
+  python experiments/privileged_information_distillation/summarize_qwen397_speed_benchmark.py \
+    --log-dir "${LOG_DIR}" \
+    --best-shell \
+    "--condition=${name}" \
+    >/dev/null 2>&1
+}
+
+batch_sizes=(2 4 8 16 32)
+accumulations=(16 8 4 2 1)
 conditions=()
 for index in "${!batch_sizes[@]}"; do
   name="b${batch_sizes[$index]}_e32_eager"
+  if condition_complete "${name}"; then
+    echo "benchmark condition already complete; skipping: ${name}"
+    conditions+=("${name}")
+    continue
+  fi
   if run_condition \
       "${name}" \
       "${batch_sizes[$index]}" \
@@ -76,7 +90,10 @@ read -r best_batch best_accumulation < <(
 )
 
 compile_name="b${best_batch}_e32_compile"
-if run_condition "${compile_name}" "${best_batch}" "${best_accumulation}" true; then
+if condition_complete "${compile_name}"; then
+  echo "benchmark condition already complete; skipping: ${compile_name}"
+  conditions+=("${compile_name}")
+elif run_condition "${compile_name}" "${best_batch}" "${best_accumulation}" true; then
   conditions+=("${compile_name}")
 else
   echo "compile benchmark failed; retaining eager results" >&2

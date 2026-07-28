@@ -35,11 +35,13 @@ def load_summary_module():
 def test_launcher_preserves_effective_batch_and_tests_compile() -> None:
     source = LAUNCHER.read_text()
 
-    assert "batch_sizes=(2 4 8 16)" in source
-    assert "accumulations=(16 8 4 2)" in source
+    assert "batch_sizes=(2 4 8 16 32)" in source
+    assert "accumulations=(16 8 4 2 1)" in source
     assert "student.training.torch_compile=${compile}" in source
     assert "--best-shell" in source
     assert 'compile_name="b${best_batch}_e32_compile"' in source
+    assert "condition_complete()" in source
+    assert "benchmark condition already complete; skipping" in source
     assert "benchmark condition failed; continuing" in source
     assert "compile benchmark failed; retaining eager results" in source
 
@@ -58,8 +60,8 @@ def test_summary_selects_highest_sample_throughput(tmp_path: Path) -> None:
         "'train_steps_per_second': 0.4}\n"
     )
     (tmp_path / "b8_e32_eager.out").write_text(
-        "{'train_runtime': 8.0, 'train_samples_per_second': 15.0, "
-        "'train_steps_per_second': 0.5}\n"
+        "{'train_runtime': '8.0', 'train_samples_per_second': '15.0', "
+        "'train_steps_per_second': '0.5'}\n"
     )
 
     rows = [
