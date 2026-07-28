@@ -11,6 +11,11 @@ LAUNCHER = (
     / "experiments/privileged_information_distillation"
     / "submit_qwen397_tvg_soft_distillation.sh"
 )
+ABLATION_LAUNCHER = (
+    ROOT
+    / "experiments/privileged_information_distillation"
+    / "submit_qwen397_tvg_objective_ablation.sh"
+)
 
 
 def compose_config():
@@ -60,5 +65,40 @@ def test_qwen397_launcher_validates_cache_and_chains_direct_margin_eval() -> Non
     assert "--config-name \"${CONFIG}\"" in source
     assert "QWEN35_CANONICALIZE_ADAPTER=${ROOT}/${ADAPTER}" in source
     assert '--dependency="afterok:${STUDENT}"' in source
+    assert "--verify-lora-effect" in source
+    assert "--continuous-margin-condition direct" in source
+
+
+def test_qwen397_objective_configs_change_only_soft_target_geometry() -> None:
+    with initialize_config_dir(
+        version_base=None,
+        config_dir=str((ROOT / "configs").resolve()),
+    ):
+        bce = compose(
+            config_name="pid_qwen397_tvg_binary_soft_distillation_zscore_bce_v1"
+        )
+        huber = compose(
+            config_name="pid_qwen397_tvg_binary_soft_distillation_zscore_huber_v1"
+        )
+
+    assert bce.student.training.soft_loss_type == "bce"
+    assert huber.student.training.soft_loss_type == "huber"
+    for cfg in (bce, huber):
+        assert cfg.student.training.soft_target_logit_center == -2.291015627315462
+        assert cfg.student.training.soft_target_logit_scale == 6.31331511070083
+        assert cfg.student.training.soft_huber_delta == 1.0
+        assert cfg.student.training.completion_loss_weight == 0.0
+        assert cfg.student.training.direct_loss_weight == 0.0
+        assert cfg.student.training.pairwise_loss_weight == 0.0
+        assert cfg.student.training.soft_loss_weight == 1.0
+
+
+def test_qwen397_objective_launcher_submits_both_dependent_evaluations() -> None:
+    source = ABLATION_LAUNCHER.read_text()
+
+    assert 'sha256sum -c "${CACHE_ROOT}/SHA256SUMS"' in source
+    assert "pid_qwen397_tvg_binary_soft_distillation_zscore_bce_v1" in source
+    assert "pid_qwen397_tvg_binary_soft_distillation_zscore_huber_v1" in source
+    assert '--dependency="afterok:${student}"' in source
     assert "--verify-lora-effect" in source
     assert "--continuous-margin-condition direct" in source

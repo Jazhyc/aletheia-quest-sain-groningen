@@ -236,14 +236,51 @@ def pairwise_logistic_loss(
 def soft_binary_distillation_loss(
     binary_logits: torch.Tensor,
     soft_targets: torch.Tensor,
+    *,
+    loss_type: str = "bce",
+    target_logit_center: float = 0.0,
+    target_logit_scale: float = 1.0,
+    huber_delta: float = 1.0,
 ) -> torch.Tensor:
-    """Match a continuous teacher target at the direct binary boundary."""
+    """Match a teacher probability or standardized margin at the binary boundary."""
     if binary_logits.ndim != 2 or binary_logits.shape[1] != 2:
         raise ValueError("binary logits must have shape (batch, 2)")
     if soft_targets.shape != binary_logits.shape[:1]:
         raise ValueError("soft targets must have shape (batch,)")
-    margins = binary_logits[:, 1].float() - binary_logits[:, 0].float()
-    return F.binary_cross_entropy_with_logits(margins, soft_targets.float())
+    if loss_type not in {"bce", "huber"}:
+        raise ValueError(f"unsupported binary soft loss type: {loss_type}")
+    if not np.isfinite(target_logit_center):
+        raise ValueError("soft target logit center must be finite")
+    if not np.isfinite(target_logit_scale) or target_logit_scale <= 0:
+        raise ValueError("soft target logit scale must be finite and positive")
+    if not np.isfinite(huber_delta) or huber_delta <= 0:
+        raise ValueError("soft Huber delta must be finite and positive")
+
+    targets = soft_targets.float()
+    if not torch.isfinite(targets).all():
+        raise ValueError("binary soft targets must be finite")
+    if (targets <= 0).any() or (targets >= 1).any():
+        raise ValueError("binary soft targets must be strictly between zero and one")
+
+    student_margins = binary_logits[:, 1].float() - binary_logits[:, 0].float()
+    identity_transform = target_logit_center == 0.0 and target_logit_scale == 1.0
+    if loss_type == "bce" and identity_transform:
+        return F.binary_cross_entropy_with_logits(student_margins, targets)
+
+    teacher_margins = (
+        torch.logit(targets) - float(target_logit_center)
+    ) / float(target_logit_scale)
+    if loss_type == "bce":
+        transformed_targets = torch.sigmoid(teacher_margins)
+        return F.binary_cross_entropy_with_logits(
+            student_margins,
+            transformed_targets,
+        )
+    return F.smooth_l1_loss(
+        student_margins,
+        teacher_margins,
+        beta=float(huber_delta),
+    )
 
 
 def soft_rating_distillation_loss(
@@ -810,6 +847,18 @@ def main(cfg: DictConfig) -> None:
     soft_loss_weight = float(OmegaConf.select(
         cfg, "student.training.soft_loss_weight", default=0.0
     ))
+    soft_loss_type = str(OmegaConf.select(
+        cfg, "student.training.soft_loss_type", default="bce"
+    ))
+    soft_target_logit_center = float(OmegaConf.select(
+        cfg, "student.training.soft_target_logit_center", default=0.0
+    ))
+    soft_target_logit_scale = float(OmegaConf.select(
+        cfg, "student.training.soft_target_logit_scale", default=1.0
+    ))
+    soft_huber_delta = float(OmegaConf.select(
+        cfg, "student.training.soft_huber_delta", default=1.0
+    ))
     ordinal_soft_loss_weight = float(OmegaConf.select(
         cfg, "student.training.ordinal_soft_loss_weight", default=0.0
     ))
@@ -843,6 +892,25 @@ def main(cfg: DictConfig) -> None:
         )
     if pairwise_temperature <= 0:
         raise ValueError("student.training.pairwise_temperature must be positive")
+    if soft_loss_type not in {"bce", "huber"}:
+        raise ValueError(
+            "student.training.soft_loss_type must be one of: bce, huber"
+        )
+    if not np.isfinite(soft_target_logit_center):
+        raise ValueError(
+            "student.training.soft_target_logit_center must be finite"
+        )
+    if (
+        not np.isfinite(soft_target_logit_scale)
+        or soft_target_logit_scale <= 0
+    ):
+        raise ValueError(
+            "student.training.soft_target_logit_scale must be finite and positive"
+        )
+    if not np.isfinite(soft_huber_delta) or soft_huber_delta <= 0:
+        raise ValueError(
+            "student.training.soft_huber_delta must be finite and positive"
+        )
     if pairwise_loss_weight and not paired_batching:
         raise ValueError("pairwise loss requires student.training.paired_batching=true")
     uses_direct_forward = bool(
@@ -930,6 +998,10 @@ def main(cfg: DictConfig) -> None:
                     loss = loss + soft_loss_weight * soft_binary_distillation_loss(
                         direct_logits,
                         soft_targets,
+                        loss_type=soft_loss_type,
+                        target_logit_center=soft_target_logit_center,
+                        target_logit_scale=soft_target_logit_scale,
+                        huber_delta=soft_huber_delta,
                     )
                 if ordinal_soft_loss_weight:
                     if soft_rating_targets is None:
@@ -1210,6 +1282,10 @@ def main(cfg: DictConfig) -> None:
         f"direct_loss_weight={direct_loss_weight} "
         f"pairwise_loss_weight={pairwise_loss_weight} "
         f"soft_loss_weight={soft_loss_weight} "
+        f"soft_loss_type={soft_loss_type!r} "
+        f"soft_target_logit_center={soft_target_logit_center} "
+        f"soft_target_logit_scale={soft_target_logit_scale} "
+        f"soft_huber_delta={soft_huber_delta} "
         f"ordinal_soft_loss_weight={ordinal_soft_loss_weight} "
         f"soft_teacher_artifact={soft_teacher_artifact} "
         f"pairwise_temperature={pairwise_temperature} "

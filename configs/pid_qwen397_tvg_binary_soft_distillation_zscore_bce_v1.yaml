@@ -1,0 +1,15 @@
+defaults:
+  - pid_qwen397_tvg_binary_soft_distillation_v1
+  - _self_
+
+method: qwen9b_qwen397_tvg_binary_zscorebce_varied_v1
+output_dir: results/blackbox/${method}
+
+student:
+  output_dir: ${output_dir}/adapter
+  training:
+    soft_loss_type: bce
+    # Frozen label-blind population statistics over all 2,880 teacher margins.
+    soft_target_logit_center: -2.291015627315462
+    soft_target_logit_scale: 6.31331511070083
+    soft_huber_delta: 1.0

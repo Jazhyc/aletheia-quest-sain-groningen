@@ -102,6 +102,10 @@ student:
     pairwise_loss_weight: 0.0
     pairwise_temperature: 1.0
     soft_loss_weight: 0.0
+    soft_loss_type: bce
+    soft_target_logit_center: 0.0
+    soft_target_logit_scale: 1.0
+    soft_huber_delta: 1.0
     ordinal_soft_loss_weight: 0.0
     paired_batching: false
 
