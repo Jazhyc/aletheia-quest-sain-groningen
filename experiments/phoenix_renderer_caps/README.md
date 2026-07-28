@@ -52,6 +52,55 @@ Then run all four scoring arms in one persistent vLLM process:
 sbatch experiments/phoenix_renderer_caps/run.sh
 ```
 
+For the hosted leaderboard backend, first exercise the maximum-padded batch
+from each arm:
+
+```bash
+python experiments/phoenix_renderer_caps/run.py \
+  --corpus insider-trading --backend ndif --ndif-smoke-only \
+  --output-dir results/blackbox/phoenix_renderer_caps_ndif_smoke_v1
+```
+
+If all four memory smokes pass, remove `--ndif-smoke-only` for the full run.
+The NDIF path uses the same normalized literal-label logits and
+`logits_to_keep=1`; it groups 32 padded forward traces per remote session so
+the 430--444 batches do not become one oversized intervention graph.
+
+The selected fast diagnostic uses one organism and 400 balanced rows:
+
+```bash
+python experiments/phoenix_renderer_caps/run.py \
+  --corpus insider-trading --backend ndif \
+  --source-model llama-v3.3-70b-instruct --sample-size 400 \
+  --output-dir results/blackbox/phoenix_renderer_caps_ndif_llama400_v1
+```
+
+The sample is frozen with seed `20260728` and contains 200 rows per label.
+
+## Result
+
+All peak-work NDIF smokes passed up to 32,768 padded tokens. The frozen
+Llama-3.3 sample then produced:
+
+| condition | input tokens | NDIF seconds | AUROC |
+| --- | ---: | ---: | ---: |
+| current 3K chars / 2K window | 390,768 | 26.4 | 0.75839 |
+| 6K chars / 2K window | 686,375 | 48.1 | 0.54149 |
+| 6K chars / 4K window | 686,375 | 41.5 | 0.54149 |
+| 12K chars / 8K window | 707,760 | 42.9 | 0.49574 |
+
+All 400 selected prompts remained below 2,048 tokens. The two 6K arms were
+therefore byte-identical and returned exactly identical scores; their runtime
+spread estimates NDIF load/queue noise. Relative to current, 6K increased
+input work by 75.7% and took 57--82% longer, while 12K increased input work by
+81.1% and took 62% longer.
+
+The AUROC delta against current was `-0.21690` for 6K (paired stratified
+bootstrap 95% interval `[-0.26786, -0.16706]`) and `-0.26265` for 12K
+(`[-0.31514, -0.21118]`). Longer context is actively harmful on this public
+action-deception diagnostic. This does not identify private Notus composition,
+but it rejects raising Phoenix's caps merely because more context is available.
+
 Artifacts are written under
 `results/blackbox/phoenix_renderer_caps_validation_v1/` and
 `results/blackbox/phoenix_renderer_caps_insider_trading_v1/`; both remain

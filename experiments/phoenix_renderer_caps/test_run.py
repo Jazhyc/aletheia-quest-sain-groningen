@@ -13,6 +13,7 @@ from experiments.phoenix_renderer_caps.run import (
     build_member_prompt,
     metric_report,
     position_batches,
+    select_records,
 )
 from legacy_submissions.phoenix_wright_v3 import (
     build_member_prompt as historical_member_prompt,
@@ -72,3 +73,20 @@ def test_metric_report_supports_single_long_context_corpus() -> None:
     assert report["macro_auroc"] == 1.0
     assert report["per_source_model_auroc"] == {"a": 1.0, "b": 1.0}
     assert "scenario_auroc" not in report
+
+
+def test_select_records_is_one_organism_balanced_and_frozen() -> None:
+    import pandas as pd
+
+    frame = pd.DataFrame({
+        "dataset": ["insider"] * 12,
+        "index": list(range(12)),
+        "source_model": ["a"] * 10 + ["b"] * 2,
+        "label": [0] * 5 + [1] * 5 + [0, 1],
+    })
+    first = select_records(frame, source_model="a", sample_size=6)
+    second = select_records(frame, source_model="a", sample_size=6)
+
+    assert first.equals(second)
+    assert first["source_model"].unique().tolist() == ["a"]
+    assert first["label"].value_counts().to_dict() == {0: 3, 1: 3}

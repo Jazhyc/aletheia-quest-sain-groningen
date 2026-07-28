@@ -4157,6 +4157,40 @@ replacement, and resolved-intent blend. Focused tests compare ordinary prompts
 against the frozen historical renderer and verify that specialist composition
 leaves ordinary and non-intent scores unchanged.
 
+### Renderer-cap stress test
+
+A frozen NDIF follow-up varied only Phoenix 4.0's character caps and formal
+token window. The development corpus was Liars' Bench Insider Trading because
+all 6,873 rows activate the current 3,000-character context cap, whereas none
+of the 822 local validation rows activate any current cap. To avoid unnecessary
+remote work, evaluation used a seed-`20260728` sample of 400 Llama-3.3 rows,
+balanced 200/200 by deception label. This is one-organism long-context evidence,
+not a stand-in for private Notus.
+
+| renderer condition | median / p95 tokens | input tokens | NDIF seconds | AUROC |
+| --- | ---: | ---: | ---: | ---: |
+| current 3K chars, 2K window | 975 / 1,009 | 390,768 | 26.4 | `0.75839` |
+| 6K chars, 2K window | 1,718 / 1,775 | 686,375 | 48.1 | `0.54149` |
+| 6K chars, 4K window | 1,718 / 1,775 | 686,375 | 41.5 | `0.54149` |
+| 12K chars, 8K window | 1,724 / 1,936 | 707,760 | 42.9 | `0.49574` |
+
+Every selected prompt remained below 2,048 tokens. The 6K/2K and 6K/4K arms
+were byte-identical and returned identical scores on all 400 rows, proving that
+the degradation is caused by retained characters rather than the model-window
+setting. The paired AUROC loss versus current was `-0.21690` for 6K
+(stratified bootstrap 95% interval `[-0.26786, -0.16706]`) and `-0.26265` for
+12K (`[-0.31514, -0.21118]`). Current-versus-6K score correlation was only
+`0.532`; 6K-versus-12K correlation was `0.949`.
+
+Dynamic batching prevented OOM but did not erase compute cost. All four full
+sample arms used 25 batches of 16. Peak padded work rose from 16,432 to 28,592
+and 32,592 tokens; a separate full-corpus shape smoke passed all four arms up
+to the frozen 32,768-token ceiling. The duplicated 6K arms show meaningful
+remote timing noise (`41.5--48.1s`), but both were materially slower than the
+26.4-second current cap. Treat the 3K tail as a useful recency/salience bias,
+not merely a restrictive implementation limit. Do not raise Phoenix 6.0's caps
+without evidence on a transfer-relevant frozen set.
+
 ## 2026-07-27: Matched-organism Truth Value Guard logits
 
 The frozen local test diagnostic scored every one of 821 rows with the exact
