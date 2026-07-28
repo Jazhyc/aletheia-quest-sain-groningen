@@ -604,3 +604,28 @@ runtime gain as usable. Preserve length-sorted, left-padded `48/32/16`
 inference. Revisit only after the hosted deployment explicitly supports packed
 Qwen3.5 Gated DeltaNet and causal-convolution boundaries, then repeat the
 score-parity gate before benchmarking speed.
+
+## NDIF batch-scheduling follow-up
+
+A full 822-row validation sweep on 2026-07-28 tested whether the Phoenix 6.2
+direct-margin path benefits from wider short batches or from replacing the
+`48/32/16` tiers with dynamic padded-token batching. The dynamic scheduler
+greedily selected the largest length-sorted batch under both a row cap and a
+28,800 padded-token budget. The row cap remains necessary even though this is
+prefill-only inference: Qwen3.5's Gated DeltaNet has batch-shaped recurrent
+state, and the earlier batch-64 OOM shows that padded tokens alone are not a
+safe memory proxy.
+
+The frozen `48/32/16` reference took `22.163s` in 18 traces. Fixed short widths
+52 and 56 took `20.747s` and `20.952s`, gains of only `6.8%` and `5.8%`.
+Dynamic row caps 48 and 56 took `22.440s` and `21.266s` in 18 and 16 traces.
+The dynamic-56 arm therefore gained only `4.2%` over the reference and was
+slightly slower than fixed 56. Macro AUROC ranged from `0.95238` to `0.95387`
+across arms versus `0.95375` for the reference, consistent with the known
+batch-shape sensitivity rather than exact score invariance.
+
+Dynamic dual-cap batching works, but the current tiers already approximate it
+well on the observed length distribution. Keep `48/32/16` in the submission:
+the one-off 4--7% timing differences are not a compelling promotion. If future
+private-structure-equivalent testing revisits the scheduler, constrain both
+rows and padded tokens rather than dynamically sizing on token count alone.
