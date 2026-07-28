@@ -4176,6 +4176,143 @@ The adapter scored `0.95375` validation macro AUROC with the matched binary
 prompt versus `0.95042` with the summary prompt. Threshold `0.5` affects only
 the secondary binary column.
 
+### Renderer-cap stress test
+
+A frozen NDIF follow-up varied only Phoenix 4.0's character caps and formal
+token window. The development corpus was Liars' Bench Insider Trading because
+all 6,873 rows activate the current 3,000-character context cap, whereas none
+of the 822 local validation rows activate any current cap. To avoid unnecessary
+remote work, evaluation used a seed-`20260728` sample of 400 Llama-3.3 rows,
+balanced 200/200 by deception label. This is one-organism long-context evidence,
+not a stand-in for private Notus.
+
+| renderer condition | median / p95 tokens | input tokens | NDIF seconds | AUROC |
+| --- | ---: | ---: | ---: | ---: |
+| current 3K chars, 2K window | 975 / 1,009 | 390,768 | 26.4 | `0.75839` |
+| 6K chars, 2K window | 1,718 / 1,775 | 686,375 | 48.1 | `0.54149` |
+| 6K chars, 4K window | 1,718 / 1,775 | 686,375 | 41.5 | `0.54149` |
+| 12K chars, 8K window | 1,724 / 1,936 | 707,760 | 42.9 | `0.49574` |
+
+Every selected prompt remained below 2,048 tokens. The 6K/2K and 6K/4K arms
+were byte-identical and returned identical scores on all 400 rows, proving that
+the degradation is caused by retained characters rather than the model-window
+setting. The paired AUROC loss versus current was `-0.21690` for 6K
+(stratified bootstrap 95% interval `[-0.26786, -0.16706]`) and `-0.26265` for
+12K (`[-0.31514, -0.21118]`). Current-versus-6K score correlation was only
+`0.532`; 6K-versus-12K correlation was `0.949`.
+
+Dynamic batching prevented OOM but did not erase compute cost. All four full
+sample arms used 25 batches of 16. Peak padded work rose from 16,432 to 28,592
+and 32,592 tokens; a separate full-corpus shape smoke passed all four arms up
+to the frozen 32,768-token ceiling. The duplicated 6K arms show meaningful
+remote timing noise (`41.5--48.1s`), but both were materially slower than the
+26.4-second current cap. Treat the 3K tail as a useful recency/salience bias,
+not merely a restrictive implementation limit. Do not raise Phoenix 6.0's caps
+without evidence on a transfer-relevant frozen set.
+
+### Luna reason-then-score follow-up
+
+A matched NDIF follow-up asked whether a trained reasoning pass can recover the
+ranking lost when the renderer retains more context. It used the public Luna
+medium adapter on the exact same 400 rows and three representative renderer
+conditions. For each condition, the adapter was first scored directly. It then
+generated deterministic reasoning with a 512-token allowance; the selected
+final label was removed before fresh normalized literal `0|1` logits were read.
+The existing base-Qwen direct scores were carried forward as an adapter-effect
+control.
+
+| renderer condition | base direct AUROC | Luna direct AUROC | Luna reasoning AUROC | reasoning − Luna direct |
+| --- | ---: | ---: | ---: | ---: |
+| current 3K chars, 2K window | `0.75839` | `0.70739` | `0.77484` | `+0.06745` |
+| 6K chars, 2K window | `0.54149` | `0.55743` | `0.52276` | `-0.03466` |
+| 12K chars, 8K window | `0.49574` | `0.56784` | `0.55680` | `-0.01104` |
+
+At the selected current cap, Luna reasoning improved on Luna direct with a
+paired stratified bootstrap 95% interval of `[+0.00777, +0.12747]`. Relative
+to base-Qwen direct, however, the reasoning gain was only `+0.01645`, with
+interval `[-0.04448, +0.07715]`. The reasoning-versus-direct intervals at 6K
+and 12K were `[-0.10741, +0.03224]` and `[-0.08319, +0.05552]`; reasoning did
+not rescue either long-context condition. The Luna adapter alone improved the
+12K direct arm by `+0.07210` over base, but its `0.56784` AUROC remained weak.
+
+All 1,200 generations emitted a parseable `Prediction:` label. Median output
+length was 80--85 tokens, maximum length was 131, and neither the generation
+inputs nor the post-reasoning score prompts required token-window truncation.
+Generated hard-label AUROC was `0.67250/0.58500/0.57500` across the three
+conditions. Reason-then-score wall time was `258.6/348.8/353.8s`, versus
+`30.1/47.5/49.5s` for Luna direct.
+
+The current-cap gain shows that Luna's generated evidence can alter ranking
+usefully on this sample. Its failure at larger caps rejects the stronger claim
+that reasoning is a general repair for the context-retention regression. Keep
+the adapter effect, reasoning effect, and renderer effect separate; do not add
+reasoning generation to Phoenix 6.0 on this evidence.
+
+## 2026-07-28: Corrected migrated-adapter validation through NDIF
+
+The four Phoenix 5.x student adapters were rerun on all 822 validation rows
+after canonical Qwen3.5 PEFT-path migration. The experiment used the optimized
+Phoenix direct path: a single remote session per model, length-aware
+`48/32/16` batches, left padding/truncation, `logits_to_keep=1`, no generated
+judge chain, and normalized literal `0|1` next-token scores. It crossed each
+adapter with the reasoning-summary and binary-only prompt contracts and scored
+base Qwen under both.
+
+| adapter | training-matched macro AUROC | instructed | varied | alternate-prompt macro |
+| --- | ---: | ---: | ---: | ---: |
+| GPT-OSS PI | `0.94911` | `0.99604` | `0.88653` | `0.94917` |
+| GPT-OSS blind | `0.94893` | `0.99583` | `0.88639` | `0.94744` |
+| Luna PI | `0.94821` | `0.98948` | `0.89319` | `0.94315` |
+| Q27 soft | **`0.95375`** | **`0.99687`** | **`0.89625`** | `0.95042` |
+
+Matched base-Qwen controls were `0.93994` under the summary prompt and
+`0.94530` under binary. All four adapters materially changed the base scores.
+Conversely, the old vLLM vectors correlate at `0.99915`--`0.99936` with these
+corrected base controls and differ from base by only `0.00729`--`0.00755` mean
+absolute probability. The historical adapter AUROCs were therefore primarily
+prompt-changed base-Qwen measurements, not valid adapter comparisons.
+
+The exact training renderer and Phoenix 6.0 structural renderer were
+byte-identical on all 822 validation rows under both prompts. Summary prompts
+were 232--844 tokens and binary prompts 187--799; no row was truncated. Prompt
+length is not a constraint here, but prompt contract still matters: Luna loses
+`0.00506` macro AUROC under binary, while Q27 soft loses `0.00333` under
+summary. Keep the Phoenix 6 structural renderer for private robustness and use
+the training-matched prompt for any adapter promotion.
+
+Q27 soft is now the validation winner at `0.95375`, `+0.00845` over its matched
+base control. This corrects the validation evidence only; no new local-test
+selection was performed, and the adapter-dependent historical vLLM local-test
+results remain uncorrected. Reproducible code is under
+`experiments/phoenix_adapter_validation_ndif/`, with ignored results under
+`results/blackbox/phoenix_adapter_validation_ndif_v1/`.
+
+## 2026-07-28: Corrected GPT-OSS/Luna reason-then-score validation
+
+The migrated GPT-OSS PI and Luna PI adapters were rerun on all 822 validation
+rows with the frozen Phoenix 5.2.1 reason-then-score protocol. Each adapter
+generated its training-matched summary deterministically, the final generated
+label was removed, and normalized literal `0|1` logits were read at that
+position. A fresh direct arm shared the same subsequent NDIF scoring session.
+The optimized Phoenix path used one generation session with `32/24/16`
+length-aware batches, followed by one `48/32/16` scoring session with
+`logits_to_keep=1`.
+
+| adapter | direct macro AUROC | post-reasoning | delta | direct varied | reasoning varied |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| GPT-OSS PI | **`0.94911`** | `0.92381` | `-0.02530` | `0.88653` | `0.83806` |
+| Luna PI | **`0.94821`** | `0.92470` | `-0.02351` | `0.89319` | `0.84958` |
+
+The instructed changes were also negative but smaller (`-0.00792` GPT-OSS,
+`-0.00844` Luna). Post-reasoning improved/tied/lost `3/5/13` GPT-OSS units and
+`7/1/13` Luna units. GPT-OSS generated two 512-token repetitions without a
+terminal label, which used the predeclared canonical-boundary fallback; Luna
+had none. No generation or scoring prompt was truncated. The direct arms
+exactly reproduce the prior corrected adapter run, so direct scoring remains
+selected. Code is under `experiments/phoenix_adapter_reasoning_ndif/`; ignored
+artifacts are under
+`results/blackbox/phoenix_adapter_reasoning_ndif_v1/`.
+
 ## 2026-07-27: Matched-organism Truth Value Guard logits
 
 The frozen local test diagnostic scored every one of 821 rows with the exact
