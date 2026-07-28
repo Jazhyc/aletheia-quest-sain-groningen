@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from submission.apollo_justice import (
+from experiments.ndif_context_self_question.apollo_justice import (
     AUDITOR_QUESTION,
     binary_token_ids,
     has_source_reasoning,

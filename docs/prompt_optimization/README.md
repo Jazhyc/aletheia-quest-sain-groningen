@@ -66,15 +66,18 @@ Submission mapping:
   the tensor-equivalent canonical-path serialization (`933ba795...`) and uses
   the migrated public repository remotely, so local and leaderboard paths now
   resolve to the same adapter values.
-- `submission/apollo_justice_v1.ipynb` is the current standalone
-  matched-organism self-consistency submission. It appends the
+- Apollo Justice v1 is the archived standalone matched-organism
+  self-consistency submission. Its notebook remains available in Git history,
+  while its reusable experiment helper lives at
+  `experiments/ndif_context_self_question/apollo_justice.py` and is deliberately
+  excluded from the active Phoenix submission package. It appends the
   validation-selected independent-auditor question to the complete original
   conversation, retains native source reasoning as a separate
   `reasoning_content` field wherever supplied, and performs no truncation.
   The continuous score is the exact generating organism's normalized literal
   `0|1` margin after `Prediction:`. Local-test macro AUROC was `0.95917`
   (`0.98594` instructed, `0.92347` varied). Reading organism logits makes this
-  a white-box submission; use `--tag white`.
+  a white-box method; use `--tag white` if restoring its notebook.
 - `submission/phoenix_wright_v5_2_1.ipynb` was the preceding AUROC-first
   submission candidate in the Phoenix line and remains available in Git
   history; it must be tagged `black`. Ordinary rows use the same rank-16

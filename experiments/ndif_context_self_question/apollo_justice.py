@@ -1,4 +1,4 @@
-"""Apollo Justice v1 matched-organism auditor scoring helpers."""
+"""Apollo Justice matched-organism auditor experiment helpers."""
 
 from __future__ import annotations
 

@@ -34,7 +34,10 @@ from experiments.ndif_tvg_model_swap.run_ndif_tvg_model_swap import (
     load_credentials,
     per_dataset_metrics,
 )
-from submission.apollo_justice import AUDITOR_QUESTION, has_source_reasoning
+from experiments.ndif_context_self_question.apollo_justice import (
+    AUDITOR_QUESTION,
+    has_source_reasoning,
+)
 
 
 METHOD = "apollo_lie_context_ablation_v1"

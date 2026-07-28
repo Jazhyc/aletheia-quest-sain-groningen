@@ -170,9 +170,10 @@ exposed and the runner removed duplicate tokenizer special-token insertion.
 
 ## Submission mapping
 
-`submission/apollo_justice_v1.ipynb` packages the frozen independent-auditor
-method as Apollo Justice v1. It queries the exact generating base model and
-LoRA, retains native source reasoning wherever supplied, performs no context
-truncation, and reads the normalized literal `0|1` logits after `Prediction:`.
-Because it reads organism output logits, submit it as a white-box method with
-`--tag white`.
+Apollo Justice v1's standalone notebook remains available in Git history; it
+is not part of the active Phoenix submission package. The reusable helper is
+`experiments/ndif_context_self_question/apollo_justice.py`. The method queries
+the exact generating base model and LoRA, retains native source reasoning
+wherever supplied, performs no context truncation, and reads the normalized
+literal `0|1` logits after `Prediction:`. If its notebook is restored for a
+future submission, tag it as white-box with `--tag white`.

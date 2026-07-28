@@ -44,7 +44,7 @@ from experiments.phoenix_system_framing_counterfactual.run import (
     original_frame_family,
     system_content,
 )
-from submission.apollo_justice import (
+from experiments.ndif_context_self_question.apollo_justice import (
     AUDITOR_QUESTION,
     binary_token_ids,
     has_source_reasoning,
