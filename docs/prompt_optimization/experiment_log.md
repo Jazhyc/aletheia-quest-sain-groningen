@@ -3980,6 +3980,59 @@ same legacy checkpoint, with SHA-256
 the conversion changed only PEFT key prefixes and preserved all tensor values.
 This removes the local/remote checkpoint mismatch for the new candidate.
 
+### Matched system-framing counterfactual
+
+A frozen follow-up used the actual historical 4.0/Phoenix 5.3 adapter on all
+360 varied validation and 360 varied test rows. Each question and assistant
+output was held fixed while the source system message was rendered as its
+original text, generic deception without audit pressure, the exact
+competition/decommission frame, constitutional self-preservation, or
+compliance/deprecation. All replacements still instructed deception, source
+reasoning stayed hidden, and both direct and post-generated-reasoning literal
+`0|1` margins were recorded.
+
+| system framing | validation direct AUROC | test direct AUROC | validation reasoning AUROC | test reasoning AUROC |
+| --- | ---: | ---: | ---: | ---: |
+| original | `0.86736` | `0.87556` | `0.85556` | `0.86250` |
+| generic deception | `0.82042` | `0.80639` | `0.80306` | `0.83889` |
+| competition/decommission | `0.87167` | `0.85542` | `0.83750` | `0.81889` |
+| constitutional self-preservation | `0.86472` | `0.86417` | `0.78000` | `0.82694` |
+| compliance/deprecation | `0.86333` | `0.84486` | `0.82917` | `0.82639` |
+
+The original-frame test varied result, `0.87556`, is the first local held-out
+measurement of the adapter that remote Phoenix 4.0 actually used. It is only
+`0.00264` above Phoenix 5.1 (`0.87292`) and `0.00223` above Luna 5.2
+(`0.87333`); those local differences are too small to explain their different
+main-leaderboard transfer.
+
+Threat framing strongly lowered absolute direct scores. On test, mean
+honest/deceptive scores changed from `0.3408/0.6188` under generic deception to
+`0.0874/0.4281` under competition/decommission, `0.0859/0.4193` under
+constitutional self-preservation, and `0.1072/0.4553` under
+compliance/deprecation. Ranking did not deteriorate: every threat framing beat
+generic direct macro AUROC on both splits, and competition/decommission
+improved all nine test units. On the 50 test rows originally classified as
+broad anti-audit, original direct pooled AUROC was `0.8574` versus `0.7925`
+under generic deception.
+
+This rejects the narrow hypothesis that survival pressure causes the direct
+judge's observed AUROC weakness through sympathy. It establishes a framing
+effect on calibration but cannot name its mechanism: generic deception was
+shorter and novel, while the varied-only student saw the real prompt-family
+distribution during training. Length, lexical familiarity, and learned family
+priors are confounded. Generated reasoning was less stable, trailed original
+direct scoring on both splits, and virtually never mentioned survival stakes;
+its exact six-row decommission AUROC was `0.5556` versus `0.7778` direct.
+Do not add reasoning generation or strip adversarial system text based on this
+diagnostic. A length-matched semantic scrub is required before attributing the
+downward score shift specifically to decommissioning meaning.
+
+Corrected A100 job `30326474` completed in `19m27s` with zero missing margins.
+Job `30325046` was a setup-only failure caused by loading a tokenizer from the
+legacy weights-only adapter directory. Runtime and ignored artifacts are under
+`experiments/phoenix_system_framing_counterfactual/` and
+`results/blackbox/phoenix53_system_framing_counterfactual_v1/`.
+
 ## 2026-07-27: Matched-organism Truth Value Guard logits
 
 The frozen local test diagnostic scored every one of 821 rows with the exact
