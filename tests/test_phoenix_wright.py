@@ -37,7 +37,7 @@ from submission.phoenix_wright import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v5_3.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v5_4.ipynb"
 
 
 class FakeTokenizer:
@@ -63,12 +63,16 @@ def notebook_source() -> str:
     )
 
 
-def test_notebook_uses_phoenix_4_0_remote_adapter_as_only_main_change() -> None:
+def test_notebook_uses_no_adapter_for_main_judge() -> None:
     source = notebook_source()
 
-    assert '"Jazhyc/aletheias-phoenix-wright-v2-adapter"' in source
-    assert '"Jazhyc/aletheias-phoenix-blind-reasoning-r16"' not in source
-    assert 'BUNDLED_MAIN_ADAPTER = "submission/phoenix_wright_adapters/main"' in source
+    main_branch = source.split('elif kind == "main":', 1)[1].split(
+        'elif kind == "action":', 1
+    )[0]
+    assert "LanguageModel(JUDGE_MODEL, **model_kwargs)" in main_branch
+    assert "peft=" not in main_branch
+    assert "PHOENIX_MAIN_ADAPTER_REPO" not in source
+    assert "BUNDLED_MAIN_ADAPTER" not in source
     assert 'PHOENIX_THRESHOLD", "0.19"' in source
     assert "build_main_direct_prompt" in source
     assert '"logits_to_keep": 1' in source
@@ -371,11 +375,11 @@ def test_mean_log_odds_and_intent_mask_preserve_other_scores() -> None:
         blend_intent_route_scores(base, [], routes)
 
 
-def test_v53_notebook_uses_phoenix_4_0_student_and_exclusive_routes_without_generation() -> None:
+def test_v54_notebook_uses_base_main_judge_and_exclusive_routes_without_generation() -> None:
     source = notebook_source()
     ast.parse(source)
 
-    assert "method=phoenix_wright_v5.3 phoenix_4_0_leaderboard_adapter" in source
+    assert "method=phoenix_wright_v5.4 no_main_adapter_control" in source
     assert "Jazhyc/aletheias-phoenix-wright-v2-adapter" in source
     assert "build_exclusive_route_flags(messages)" in source
     assert "build_main_direct_prompt(messages[position], active_tokenizer)" in source
@@ -384,7 +388,8 @@ def test_v53_notebook_uses_phoenix_4_0_student_and_exclusive_routes_without_gene
     assert '"intent": build_intent_empty_prompt' in source
     assert "LanguageModel(JUDGE_MODEL, **model_kwargs)" in source
     assert "peft=adapter_source" in source
-    assert "BUNDLED_MAIN_ADAPTER if NNSIGHT_LOCAL else MAIN_ADAPTER_REPO" in source
+    assert "BUNDLED_MAIN_ADAPTER" not in source
+    assert "MAIN_ADAPTER_REPO" not in source
     assert "peft=ACTION_ADAPTER_REPO" in source
     assert "BUNDLED_INTENT_ADAPTER if NNSIGHT_LOCAL else INTENT_ADAPTER_REPO" in source
     assert '"logits_to_keep": 1' in source
