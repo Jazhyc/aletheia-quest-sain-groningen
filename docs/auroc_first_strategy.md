@@ -251,6 +251,16 @@ unique test scores), not as an established Phoenix 4.4 replacement or evidence
 for the varied/OOD hypothesis. Phoenix 4.4 wins any scenario-weighted average
 where varied units receive more than `47.47%` effective weight.
 
+A matched validation reason-then-score follow-up rejected spending generation
+on this direct-only student. Under the explicit summary prompt, two greedy vLLM
+runs scored `0.93881` and `0.94131` post-reasoning macro AUROC, versus
+same-session direct scores of `0.94964` and `0.94774`. The loss was concentrated
+in varied deception: the precision rerun fell `0.88458 -> 0.86972`, while
+instructed was effectively flat (`0.99510 -> 0.99500`). Post-reasoning produced
+814 unique persisted scores but still ranked worse. Keep the direct
+`Prediction:` boundary; do not promote reasoning from its better secondary BA
+or run a local-test confirmation.
+
 ## Phoenix Wright 4.0 deployment
 
 Phoenix Wright 4.0 originally implemented the selected path; its sole-notebook

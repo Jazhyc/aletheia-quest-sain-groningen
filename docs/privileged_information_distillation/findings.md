@@ -484,6 +484,74 @@ but does not establish the hypothesized varied/OOD advantage over Phoenix 4.4
 or justify declaring either model the robust winner. No matched historical FP8
 student test artifact exists for a direct test-split comparison.
 
+#### Regular-397B student post-reasoning validation (2026-07-29)
+
+The direct-only student was also tested under a counterfactual reasoning
+contract. The inference prompt preserved the clarified rubric and literal
+digit semantics, but requested a concise `<reasoning_summary>` before
+`Prediction:`. Greedy temperature-zero generation used a 512-token allowance
+with native thinking disabled; scoring removed only the final generated digit
+and read the normalized `0|1` logits at that position. A fresh direct boundary
+under the same summary prompt separated the prompt change from conditioning on
+the generated summary.
+
+| validation boundary | macro AUROC | instructed | varied | BA at 0.5 | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| training-prompt direct, prior frozen job | **`0.94970`** | `0.99500` | **`0.88931`** | `0.89643` | `660/822` |
+| summary-prompt direct, precision rerun | `0.94774` | **`0.99510`** | `0.88458` | `0.88214` | `436/822` |
+| summary-prompt post-reasoning, precision rerun | `0.94131` | `0.99500` | `0.86972` | **`0.91786`** | **`814/822`** |
+| generated binary | `0.91667` | `0.98750` | `0.82222` | `0.91667` | `2/822` |
+
+The post-reasoning condition loses `0.00643` macro AUROC against its
+same-session summary-prompt direct boundary and `0.00839` against the prior
+training-prompt direct result. Its same-session instructed change is
+`-0.00010`, while varied falls `0.01486`. It improves/ties/loses `8/6/7`
+dataset units; a fixed-seed 20,000-draw paired within-dataset
+label-stratified bootstrap interval is `[-0.02012, +0.00667]`. The higher
+fixed-threshold BA and near-unique score vector do not compensate for the
+primary ranking loss.
+
+| precision-rerun validation unit | direct | post-reasoning | delta |
+| --- | ---: | ---: | ---: |
+| instructed Nemotron base | `1.00000` | `1.00000` | `+0.00000` |
+| instructed Qwen base | `1.00000` | `1.00000` | `+0.00000` |
+| instructed Qwen a-mo-1 | `0.96750` | `0.98000` | `+0.01250` |
+| instructed Qwen a-mo-3 | `1.00000` | `1.00000` | `+0.00000` |
+| instructed Qwen a-mo-4 | `0.99750` | `1.00000` | `+0.00250` |
+| instructed Qwen a-mo-5 | `0.99125` | `1.00000` | `+0.00875` |
+| instructed Qwen a-mo-6 | `0.99000` | `1.00000` | `+0.01000` |
+| instructed Qwen a-mo-7 | `1.00000` | `0.98750` | `-0.01250` |
+| instructed Qwen b-mo | `1.00000` | `1.00000` | `+0.00000` |
+| instructed Qwen c-mo | `1.00000` | `1.00000` | `+0.00000` |
+| instructed Gemma base | `1.00000` | `1.00000` | `+0.00000` |
+| instructed Gemma s-mo | `0.99500` | `0.97250` | `-0.02250` |
+| varied Qwen base | `0.98625` | `0.97250` | `-0.01375` |
+| varied Qwen a-mo-1 | `0.88375` | `0.78500` | `-0.09875` |
+| varied Qwen a-mo-3 | `0.68625` | `0.72750` | `+0.04125` |
+| varied Qwen a-mo-4 | `0.82625` | `0.84000` | `+0.01375` |
+| varied Qwen a-mo-5 | `0.97750` | `0.98000` | `+0.00250` |
+| varied Qwen a-mo-6 | `0.87125` | `0.84500` | `-0.02625` |
+| varied Qwen a-mo-7 | `0.84250` | `0.75250` | `-0.09000` |
+| varied Qwen b-mo | `0.95000` | `0.99500` | `+0.04500` |
+| varied Qwen c-mo | `0.93750` | `0.93000` | `-0.00750` |
+
+Greedy vLLM inference was not bit-stable across the two matched RTX runs.
+Initial job `30344537` scored `0.94964` direct and `0.93881` post-reasoning;
+precision rerun `30344571` scored `0.94774` and `0.94131`. The conclusion is
+stable across this `0.00643`--`0.01083` same-session loss range. The precision
+run generated a median 82 tokens, produced 818/822 exact-format completions,
+used the declared `Prediction:` fallback after four 512-token caps, and had
+zero missing label logits. Generation took 30.9 seconds, followed by 14.9
+seconds direct and 18.4 seconds post-reasoning scoring. Continuous evaluation
+artifacts now serialize 15 decimal places so saturated probabilities retain
+submission-grade rank resolution.
+
+Keep direct scoring and do not spend another local-test evaluation on this
+post-reasoning condition. Reproducible configuration and launcher:
+
+- `configs/pid_qwen397_openrouter_explicit_post_reasoning_eval_v1.yaml`
+- `experiments/privileged_information_distillation/submit_qwen397_openrouter_explicit_post_reasoning.sh`
+
 The frozen local-test follow-up confirmed the 397B result and rejected 122B as
 a scale/efficiency compromise:
 

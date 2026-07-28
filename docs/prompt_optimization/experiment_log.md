@@ -4538,6 +4538,23 @@ adapter repository remains
 hyperparameter search is in progress; this interim prompt/adapter pairing is
 not the matched trained condition above.
 
+The same regular-397B student was then tested with a counterfactual explicit
+summary prompt. It generated a concise `<reasoning_summary>`, removed only the
+terminal digit, and normalized literal `0|1` logits at that boundary. Two
+matched RTX validation runs showed small greedy/backend movement but the same
+decision: post-reasoning scored `0.93881/0.94131`, versus same-session direct
+`0.94964/0.94774`.
+
+The 15-decimal precision rerun scored `0.94131` macro AUROC (`0.99500`
+instructed, `0.86972` varied), losing `0.00643` overall and `0.01486` varied
+against its summary-prompt direct arm. It improved/tied/lost `8/6/7` units and
+had paired interval `[-0.02012, +0.00667]`. Four of 822 summaries hit the
+512-token cap and used the canonical `Prediction:` fallback; no requested
+label logits were missing. Post-reasoning produced 814 unique persisted scores,
+but the ranking loss rejects a test run. The evaluator now writes continuous
+JSONL scores at 15-decimal precision so saturation does not create artificial
+ties in saved artifacts.
+
 ### Reasoning-context varied follow-up
 
 A frozen follow-up exposed each varied-deception organism's complete original

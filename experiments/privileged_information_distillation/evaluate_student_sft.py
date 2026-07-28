@@ -1253,7 +1253,12 @@ def main() -> None:
             if multi_condition:
                 output_dir = output_dir / condition_name
             output_dir.mkdir(parents=True, exist_ok=True)
-            evaluated.to_json(output_dir / "generations.jsonl", orient="records", lines=True)
+            evaluated.to_json(
+                output_dir / "generations.jsonl",
+                orient="records",
+                lines=True,
+                double_precision=15,
+            )
             per_dataset = {}
             for dataset, group in evaluated.groupby("dataset", sort=True):
                 per_dataset[dataset] = binary_metrics(
@@ -1369,7 +1374,10 @@ def main() -> None:
             output_dir = adapter_dir.parent / (args.run_name or args.split) / "max_aggregate"
             output_dir.mkdir(parents=True, exist_ok=True)
             aggregated.to_json(
-                output_dir / "generations.jsonl", orient="records", lines=True
+                output_dir / "generations.jsonl",
+                orient="records",
+                lines=True,
+                double_precision=15,
             )
             per_dataset = {
                 dataset: binary_metrics(

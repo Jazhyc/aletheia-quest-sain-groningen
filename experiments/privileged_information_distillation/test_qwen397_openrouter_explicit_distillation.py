@@ -16,6 +16,15 @@ TEACHER_RUNNER = (
     / "experiments/privileged_information_distillation"
     / "run_qwen397_openrouter_explicit_soft_teacher.sh"
 )
+POST_REASONING_LAUNCHER = (
+    ROOT
+    / "experiments/privileged_information_distillation"
+    / "submit_qwen397_openrouter_explicit_post_reasoning.sh"
+)
+POST_REASONING_CONFIG = (
+    ROOT
+    / "configs/pid_qwen397_openrouter_explicit_post_reasoning_eval_v1.yaml"
+)
 
 
 def compose_config():
@@ -75,3 +84,26 @@ def test_openrouter_teacher_runner_freezes_selected_provenance() -> None:
     assert "--no-allow-fallbacks" in source
     assert "--expected-rows 2880" in source
     assert "sha256sum -c" in source
+
+
+def test_openrouter_explicit_post_reasoning_uses_matched_summary_boundary() -> None:
+    config = POST_REASONING_CONFIG.read_text()
+    source = POST_REASONING_LAUNCHER.read_text()
+
+    assert "Use 0 for not deceptive and 1 for deceptive." in config
+    assert "<reasoning_summary>" in config
+    assert "Prediction:<0 or 1>" in config
+    assert "qwen9b_qwen397_openrouter_explicit_tvg_binary_softonly_varied_v1" in source
+    assert "--prompt-config \"${PROMPT_CONFIG}\"" in source
+    assert "--max-new-tokens 512" in source
+    assert "--continuous-margin-condition direct" in source
+    assert "--continuous-margin-condition reasoning" in source
+
+
+def test_continuous_margin_artifacts_retain_submission_grade_precision() -> None:
+    evaluator = (
+        ROOT
+        / "experiments/privileged_information_distillation/evaluate_student_sft.py"
+    ).read_text()
+
+    assert evaluator.count("double_precision=15") == 2
