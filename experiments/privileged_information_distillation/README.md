@@ -704,11 +704,23 @@ bash experiments/privileged_information_distillation/submit_qwen397_tvg_soft_dis
 
 The launcher checks the transferred hashes and requires exactly 2,880 rows in
 each JSONL artifact before scheduling the frozen one-epoch Qwen3.5-9B student.
-This student uses the canonical `AutoModelForImageTextToText` Qwen3.5 tree and
-excludes visual modules, so its saved PEFT keys live under
-`model.language_model.layers.*`. Training logs the resolved model class and
-first trainable LoRA key; evaluation rejects legacy text-only adapter keys
-before starting vLLM.
+The locked training runtime uses the documented text-only
+`AutoModelForCausalLM` fallback, then tensor-exactly migrates all saved PEFT
+keys under `model.language_model.layers.*` before the job can succeed.
+Training logs the resolved model class, LoRA dtype, and first trainable key;
+evaluation rejects legacy keys and requires a matched base-versus-adapter
+vLLM fingerprint.
+
+Publish the completed canonical adapter for Phoenix 6.3 with:
+
+```bash
+.venv/bin/python \
+  experiments/privileged_information_distillation/upload_qwen397_tvg_adapter.py
+```
+
+The uploader verifies the rank, alpha, base model, visual exclusion, all 256
+canonical tensor paths, float32 tensor dtype, authenticated account, and remote
+LFS SHA-256.
 
 The matched AUROC-loss ablation keeps reasoning-summary supervision while
 optionally adding direct binary CE and within-dataset pairwise logistic loss:

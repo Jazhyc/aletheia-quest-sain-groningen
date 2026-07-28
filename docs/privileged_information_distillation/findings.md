@@ -3281,6 +3281,12 @@ and base float32 score digests differed; only 12/822 scores were exactly equal,
 mean absolute difference was `0.08141`, and maximum absolute difference was
 `0.49463`. This rules out the silent-base failure for this evaluation.
 
+The canonical adapter was promoted as Phoenix 6.3 and published at
+`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16`, revision
+`59a9c57982c8430ff9e8bb64c3e53b8fb775dbc2`. The remote LFS weight digest
+matches the local validated file:
+`fac7b031bf52bc5597ee02a6dec20f355b3c3297bf110d3bb0233f629a69004d`.
+
 ## Leaderboard-aligned GRPO continuation logits (2026-07-27)
 
 An inference-input audit found that the saved GRPO configurations retained

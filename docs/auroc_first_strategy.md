@@ -270,6 +270,21 @@ margin remains primary. Corrected NDIF validation scored this adapter at
 `0.95375` macro AUROC under the binary prompt. Phoenix 6.2 remains black-box
 and must be submitted with `--tag black`.
 
+Phoenix 6.3 replaces only 6.2's ordinary Qwen3.5-27B soft student with
+`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16`, trained from the matched
+Qwen3.5-397B-A17B-FP8 boundary cache. The binary-only rubric, exact Phoenix 4.0
+structural renderer, direct literal `0|1` scoring, `48/32/16` batching,
+threshold `0.5`, and all specialist routes are unchanged. Local vLLM validation
+scored `0.95048` macro AUROC (`0.99813` instructed, `0.88694` varied), with
+662 unique scores over 822 rows. A same-session base/adapter fingerprint found
+only 12 exact score matches and mean absolute difference `0.08141`, confirming
+that the canonical adapter was active. Phoenix 6.3 is a private-transfer bet
+and remains black-box; submit it with `--tag black`.
+The public adapter revision is
+`59a9c57982c8430ff9e8bb64c3e53b8fb775dbc2`; its remote LFS SHA-256 matches
+the locally validated canonical weights,
+`fac7b031bf52bc5597ee02a6dec20f355b3c3297bf110d3bb0233f629a69004d`.
+
 An NDIF run on all 400 rows of
 `dev-varied-deception-Qwen3.5-27B-None` completed at batch 32 in `102.1s`,
 emitting 82 distinct scores over `[0.00218, 0.95257]` and AUROC `0.93946`.

@@ -4176,6 +4176,19 @@ The adapter scored `0.95375` validation macro AUROC with the matched binary
 prompt versus `0.95042` with the summary prompt. Threshold `0.5` affects only
 the secondary binary column.
 
+Phoenix 6.3 replaces only that ordinary adapter with the matched
+Qwen3.5-397B-A17B-FP8 soft-distillation student. Its local vLLM direct margin
+scored `0.95048` validation macro AUROC (`0.99813` instructed, `0.88694`
+varied), with 662 unique scores and zero missing margins. The same-session
+activation fingerprint differed from base on 810/822 rows (mean absolute
+difference `0.08141`). The binary rubric, exact 4.0 renderer, specialist
+precedence, batching, and threshold `0.5` are unchanged. This is explicitly a
+private-transfer promotion rather than a frozen local-validation winner.
+The canonical adapter was published at
+`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16`, revision
+`59a9c57982c8430ff9e8bb64c3e53b8fb775dbc2`, with verified LFS weight digest
+`fac7b031bf52bc5597ee02a6dec20f355b3c3297bf110d3bb0233f629a69004d`.
+
 ### Renderer-cap stress test
 
 A frozen NDIF follow-up varied only Phoenix 4.0's character caps and formal
