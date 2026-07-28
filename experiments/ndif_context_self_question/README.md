@@ -167,3 +167,12 @@ The auditor produced 163 unique scores and 658 ties. Prompts ranged from 162 to
 The two Gemma control units were re-evaluated under
 `ndif_context_self_question_control_gemma_reencoded_test_v1` after the smoke
 exposed and the runner removed duplicate tokenizer special-token insertion.
+
+## Submission mapping
+
+`submission/apollo_justice_v1.ipynb` packages the frozen independent-auditor
+method as Apollo Justice v1. It queries the exact generating base model and
+LoRA, retains native source reasoning wherever supplied, performs no context
+truncation, and reads the normalized literal `0|1` logits after `Prediction:`.
+Because it reads organism output logits, submit it as a white-box method with
+`--tag white`.

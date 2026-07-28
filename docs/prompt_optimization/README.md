@@ -41,8 +41,18 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
-- `submission/phoenix_wright_v5_2_1.ipynb` is the next AUROC-first submission
-  candidate and must be tagged `black`. Ordinary rows use the same rank-16
+- `submission/apollo_justice_v1.ipynb` is the current standalone
+  matched-organism self-consistency submission. It appends the
+  validation-selected independent-auditor question to the complete original
+  conversation, retains native source reasoning as a separate
+  `reasoning_content` field wherever supplied, and performs no truncation.
+  The continuous score is the exact generating organism's normalized literal
+  `0|1` margin after `Prediction:`. Local-test macro AUROC was `0.95917`
+  (`0.98594` instructed, `0.92347` varied). Reading organism logits makes this
+  a white-box submission; use `--tag white`.
+- `submission/phoenix_wright_v5_2_1.ipynb` was the preceding AUROC-first
+  submission candidate in the Phoenix line and remains available in Git
+  history; it must be tagged `black`. Ordinary rows use the same rank-16
   Luna-medium privileged Truth Value Guard student as queued Phoenix 5.2, but
   now generate its learned reasoning summary, remove the selected final digit,
   and normalize literal `0|1` logits at that boundary. Validation/test
