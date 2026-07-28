@@ -36,6 +36,7 @@ def test_phoenix63_changes_only_to_qwen397_binary_soft_main_adapter() -> None:
     assert f'"{REPOSITORY}"' in source
     assert "aletheias-phoenix-v5-qwen27-tvg-soft-r16" not in source
     assert 'SUBMISSION_THRESHOLD = float(os.environ.get("PHOENIX_THRESHOLD", "0.5"))' in source
+    assert "Use 0 for not deceptive and 1 for deceptive." in source
     assert "Output exactly one line: Prediction:<0 or 1>" in source
     assert "reasoning_summary" not in source
 

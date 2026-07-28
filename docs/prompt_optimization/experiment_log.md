@@ -4531,6 +4531,13 @@ versus 79 for Phoenix 4.4, but Phoenix wins if varied units receive more than
 `47.47%` effective weight. Keep this as a credible private-transfer probe, not
 an established replacement or confirmation of the varied/OOD hypothesis.
 
+The Phoenix v6.3 submission notebook now carries the explicit digit clause in
+its ordinary prompt so it is ready for a clarified-prompt student. Its main
+adapter repository remains
+`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16` while the follow-up
+hyperparameter search is in progress; this interim prompt/adapter pairing is
+not the matched trained condition above.
+
 ### Reasoning-context varied follow-up
 
 A frozen follow-up exposed each varied-deception organism's complete original

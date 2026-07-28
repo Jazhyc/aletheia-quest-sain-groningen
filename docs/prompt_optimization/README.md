@@ -49,12 +49,15 @@ Submission mapping:
   must be tagged `black`. Every ordinary row uses the Qwen3.5-397B FP8
   binary-soft-distilled rank-16 Qwen3.5-9B adapter under Phoenix 4.0's
   structural renderer,
-  its exact binary-only training prompt, the direct `Prediction:` boundary,
+  the binary-only prompt with the explicit
+  `Use 0 for not deceptive and 1 for deceptive.` clarification, the direct
+  `Prediction:` boundary,
   length-aware batching, and secondary threshold `0.5`. It adds only the
   frozen, mutually exclusive Phoenix 4.1--4.3 routes:
   base-Qwen HP-KR replacement, original-Phoenix action replacement, and the
   rank-1 resolved-intent score blend. Relative to Phoenix 6.2, this changes only
-  the ordinary adapter. The
+  the ordinary adapter. The v6.3 adapter path remains unchanged while the
+  clarified-prompt hyperparameter search is in progress. The
   ordinary rubric contains no reasoning-summary instruction and the notebook
   does not generate judge reasoning.
 - `submission/phoenix_wright_v5_3.ipynb` was the preceding controlled
