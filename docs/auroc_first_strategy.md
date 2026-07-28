@@ -250,6 +250,15 @@ rows, plus only the mutually exclusive HP-KR, action-report, and resolved-intent
 routes. It uses threshold `0.15` only for the secondary binary column and must
 be submitted with `--tag black`.
 
+Phoenix 6.1 replaces only 6.0's ordinary base-Qwen weights with the frozen
+Luna-medium rank-16 adapter while preserving the byte-exact Phoenix 4.0
+renderer, direct `Prediction:` margin, batching, and specialist precedence.
+The Luna adapter's validation-selected `0.19` threshold supplies only the
+secondary binary column. This is a private-transfer composition rather than a
+locally validated renderer/adapter pairing: Luna was trained and evaluated
+under the 5.x tail-only renderer. It generates no judge reasoning and remains
+black-box, so submit it with `--tag black`.
+
 An NDIF run on all 400 rows of
 `dev-varied-deception-Qwen3.5-27B-None` completed at batch 32 in `102.1s`,
 emitting 82 distinct scores over `[0.00218, 0.95257]` and AUROC `0.93946`.

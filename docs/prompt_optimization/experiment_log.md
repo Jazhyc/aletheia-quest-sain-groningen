@@ -4157,6 +4157,15 @@ replacement, and resolved-intent blend. Focused tests compare ordinary prompts
 against the frozen historical renderer and verify that specialist composition
 leaves ordinary and non-intent scores unchanged.
 
+Phoenix 6.1 is the requested Luna composition for the next main-leaderboard
+submission. It changes only the ordinary judge from base Qwen to
+`Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16` and restores Luna's frozen
+secondary threshold `0.19`. The exact Phoenix 4.0 renderer, direct label-margin
+readout, length-aware batches, and mutually exclusive HP-KR/action/intent routes
+remain unchanged. This pairing is an explicit private-transfer probe because
+Luna's local validation used the 5.x tail-only renderer; no local metric is
+claimed for the new renderer/adapter combination.
+
 ## 2026-07-27: Matched-organism Truth Value Guard logits
 
 The frozen local test diagnostic scored every one of 821 rows with the exact

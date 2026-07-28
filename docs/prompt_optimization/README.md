@@ -45,15 +45,16 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
-- `submission/phoenix_wright_v6_0.ipynb` is the current Phoenix candidate and
-  must be tagged `black`. Every ordinary row uses base `Qwen/Qwen3.5-9B`
-  without `peft=` under the byte-exact historical Phoenix 4.0 renderer,
+- `submission/phoenix_wright_v6_1.ipynb` is the current Phoenix candidate and
+  must be tagged `black`. Every ordinary row uses the Luna-medium rank-16
+  Qwen3.5-9B adapter under the byte-exact historical Phoenix 4.0 renderer,
   direct `Prediction:` boundary, length-aware batching, and secondary threshold
-  `0.15`. It adds only the frozen, mutually exclusive Phoenix 4.1--4.3 routes:
+  `0.19`. It adds only the frozen, mutually exclusive Phoenix 4.1--4.3 routes:
   base-Qwen HP-KR replacement, original-Phoenix action replacement, and the
-  rank-1 resolved-intent score blend. The preceding exact unrouted base control
-  reproduced the historical private AUROC at `0.893802`; its notebook remains
-  available in Git history.
+  rank-1 resolved-intent score blend. This changes only Phoenix 6.0's ordinary
+  judge weights and binary threshold; its private-validated renderer and all
+  specialist routes remain frozen. The Luna adapter was selected for direct
+  scoring, so the notebook does not generate judge reasoning.
 - `submission/phoenix_wright_v5_3.ipynb` was the preceding controlled
   leaderboard-consistency submission candidate and must be tagged `black`. It
   keeps Phoenix 5.1's direct-logit inference, mutually exclusive

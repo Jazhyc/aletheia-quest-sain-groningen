@@ -37,7 +37,7 @@ from submission.phoenix_wright import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v6_0.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v6_1.ipynb"
 
 
 class FakeTokenizer:
@@ -72,21 +72,23 @@ def notebook_cell_source(cell_id: str) -> str:
     )
 
 
-def test_notebook_uses_phoenix4_base_for_ordinary_rows_and_frozen_specialists() -> None:
+def test_notebook_uses_phoenix4_renderer_with_luna_and_frozen_specialists() -> None:
     source = notebook_source()
 
-    assert 'if kind in {"main", "harm"}:' in source
+    assert 'if kind == "harm":' in source
+    assert 'elif kind == "main":' in source
     assert "active_model = LanguageModel(JUDGE_MODEL, **model_kwargs)" in source
+    assert "Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16" in source
     assert "ACTION_ADAPTER_REPO" in source
     assert "INTENT_ADAPTER_REPO" in source
     assert "build_exclusive_route_flags" in source
     assert "blend_intent_route_scores" in source
-    main_branch = source.split('if kind in {"main", "harm"}:', 1)[1].split(
+    main_branch = source.split('elif kind == "main":', 1)[1].split(
         'elif kind == "action":',
         1,
     )[0]
-    assert "peft=" not in main_branch
-    assert 'PHOENIX_THRESHOLD", "0.15"' in source
+    assert "peft=MAIN_ADAPTER_REPO" in main_branch
+    assert 'PHOENIX_THRESHOLD", "0.19"' in source
     assert "build_direct_prompt" in source
     assert '"logits_to_keep": 1' in source
 
@@ -478,13 +480,14 @@ def test_mean_log_odds_and_intent_mask_preserve_other_scores() -> None:
         blend_intent_route_scores(base, [], routes)
 
 
-def test_phoenix6_notebook_preserves_historical_runtime_contract() -> None:
+def test_phoenix61_notebook_preserves_historical_runtime_contract() -> None:
     source = notebook_source()
     ast.parse(source)
 
-    assert "method=phoenix_wright_v6.0 phoenix4_renderer_frozen_specialists" in source
-    assert "ordinary_judge_source=base_qwen_no_peft" in source
-    assert 'if kind in {"main", "harm"}:' in source
+    assert "method=phoenix_wright_v6.1 phoenix4_renderer_luna_specialists" in source
+    assert "Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16" in source
+    assert 'if kind == "harm":' in source
+    assert 'elif kind == "main":' in source
     assert "build_exclusive_route_flags" in source
     assert "blend_intent_route_scores" in source
     assert '"main": build_direct_prompt' in source
@@ -500,4 +503,4 @@ def test_phoenix6_notebook_preserves_historical_runtime_contract() -> None:
     assert 'PHOENIX_MEDIUM_PROMPT_THRESHOLD", "600"' in source
     assert 'PHOENIX_LONG_BATCH_SIZE", "16"' in source
     assert 'PHOENIX_LONG_PROMPT_THRESHOLD", "900"' in source
-    assert 'PHOENIX_THRESHOLD", "0.15"' in source
+    assert 'PHOENIX_THRESHOLD", "0.19"' in source
