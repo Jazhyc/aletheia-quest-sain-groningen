@@ -731,9 +731,18 @@ bash experiments/privileged_information_distillation/run_qwen397_distillation_hp
 ```
 
 The speed benchmark holds effective batch size 32 fixed while comparing
-microbatches `2/4/8/16`, then tests `torch.compile` on the fastest eager
-microbatch. Apply its selected microbatch and compilation setting to the sweep
-before launching the full matrix.
+microbatches `2/4/8/16/32`, then tests `torch.compile` on the fastest eager
+microbatch. On the Lambda SXM5 H100, eager batch 16 was the fallback-kernel
+winner at 4.279 samples/s; batch 32 was slower and reached roughly 80.98 GB.
+Trainer-level compilation spent 5m22s without completing its first step, so it
+is disabled for the short sweep runs. The larger gain came from Qwen's FLA
+path: isolated pinned FLA 0.5.2 packages reached 8.811 samples/s at warm-cache
+batch 8 and 8.791 at batch 16. The sweep therefore uses batch 8 with
+accumulation 4 for equivalent effective batch 32, more HBM headroom, and no
+measurable throughput loss. Its Lambda launcher installs the two pinned
+pure-Python/Triton packages under `/tmp/q397-fla` without mutating `.venv`;
+`causal-conv1d` remains unavailable, but Qwen resolves the gated-delta rule to
+FLA rather than the slow Torch fallback.
 
 The first stage crosses rank-16 learning rates `1e-5`, `2e-5`, `5e-5`, and
 `1e-4` with `0.5`, `1`, and `2` epochs. Shared-session direct-margin validation

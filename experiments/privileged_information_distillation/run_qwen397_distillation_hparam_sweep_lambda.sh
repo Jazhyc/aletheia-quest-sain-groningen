@@ -19,6 +19,35 @@ export HF_HOME="${HF_HOME:-${HOME}/.cache/huggingface}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
 export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"
 
+KERNEL_PATH="${Q397_KERNEL_PATH:-/tmp/q397-fla}"
+MICRO_BATCH="${Q397_MICRO_BATCH:-8}"
+GRADIENT_ACCUMULATION="${Q397_GRADIENT_ACCUMULATION:-4}"
+if [[ ! -d "${KERNEL_PATH}/fla/ops" ]]; then
+  uv pip install \
+    --python .venv/bin/python \
+    --target "${KERNEL_PATH}" \
+    flash-linear-attention==0.5.2 \
+    fla-core==0.5.2 \
+    --no-deps
+fi
+export PYTHONPATH="${KERNEL_PATH}${PYTHONPATH:+:${PYTHONPATH}}"
+python - <<'PY'
+from fla.ops.gated_delta_rule import (
+    chunk_gated_delta_rule,
+    fused_recurrent_gated_delta_rule,
+)
+from transformers.utils.import_utils import is_flash_linear_attention_available
+
+if not is_flash_linear_attention_available():
+    raise RuntimeError("Transformers did not recognize Flash Linear Attention")
+print(
+    "qwen_fast_kernel="
+    f"{chunk_gated_delta_rule.__module__} "
+    f"recurrent_kernel={fused_recurrent_gated_delta_rule.__module__}",
+    flush=True,
+)
+PY
+
 CAMPAIGN_METHOD="qwen397_soft_distillation_hparam_sweep_v1"
 LOG_DIR="logs/lambda/${CAMPAIGN_METHOD}"
 RUN_NAME="validation_hparam_sweep"
@@ -79,7 +108,10 @@ train_adapter() {
     "student.lora.r=${rank}" \
     "student.lora.alpha=${alpha}" \
     "student.training.learning_rate=${learning_rate}" \
-    "student.training.num_train_epochs=${epoch}"
+    "student.training.num_train_epochs=${epoch}" \
+    "student.training.per_device_train_batch_size=${MICRO_BATCH}" \
+    "student.training.gradient_accumulation_steps=${GRADIENT_ACCUMULATION}" \
+    "student.training.torch_compile=false"
 
   python experiments/heterogeneous_adapter_ensemble/migrate_qwen35_peft_paths.py \
     --local-only \

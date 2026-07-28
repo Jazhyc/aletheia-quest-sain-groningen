@@ -35,6 +35,10 @@ def test_launcher_freezes_cache_and_rank16_grid() -> None:
     assert "train_adapter \\\n      16 32" in source
     assert "--continuous-margin-condition direct" in source
     assert "--verify-lora-effect" in source
+    assert "flash-linear-attention==0.5.2" in source
+    assert 'MICRO_BATCH="${Q397_MICRO_BATCH:-8}"' in source
+    assert 'GRADIENT_ACCUMULATION="${Q397_GRADIENT_ACCUMULATION:-4}"' in source
+    assert '"student.training.torch_compile=false"' in source
 
 
 def test_launcher_uses_selected_rank16_response_surface_for_rank24() -> None:
