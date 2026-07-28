@@ -3954,6 +3954,32 @@ competition key; setting the same `NDIF_HOST` supplied by the leaderboard fixed
 the harness without a notebook change. The adapter model card was updated at
 commit `efbb2cf750b8e60ab789ea369e797fb7c6cbbdf2`; weights are unchanged.
 
+## 2026-07-28: Phoenix 4.0 adapter audit and Phoenix 5.3
+
+Phoenix 5.3 was prepared as an adapter-only leaderboard-consistency probe from
+the direct-scoring Phoenix 5.1 notebook. It preserves the existing
+HP-KR/action/intent routes, prompt renderers, length-aware `48/32/16` batches,
+`logits_to_keep=1`, and the inherited secondary threshold `0.19`. Only the
+ordinary adapter changes.
+
+The historical Phoenix 4.0 notebook exposed a previously undocumented split
+between local and remote execution. Its local bundle was the Phoenix v2.1/v3
+rank-16 adapter with SHA-256 `1407d885...`, but the remote default was
+`Jazhyc/aletheias-phoenix-wright-v2-adapter`. Repository and Git-LFS inspection
+shows that the latter used legacy checkpoint SHA-256
+`1dff12c68935117da59f9969c2b26141d294f0ffb1be7dfe0193cfd5863c2b29`.
+Both have 256 identically named tensors, but their tensor values differ.
+Consequently the Phoenix 4.0 private row cannot be assumed to be evidence for
+the `1407d885...` checkpoint used in P80's local margin sweep.
+
+Phoenix 5.3 treats the actual remote default as the experimental target. The
+notebook again loads `Jazhyc/aletheias-phoenix-wright-v2-adapter` remotely.
+Its bundled main adapter is the verified canonical-Qwen-path conversion of the
+same legacy checkpoint, with SHA-256
+`933ba79505cd1b73e69c5df05ed87c12246da355581e03f0b1a1bb7295cff494`;
+the conversion changed only PEFT key prefixes and preserved all tensor values.
+This removes the local/remote checkpoint mismatch for the new candidate.
+
 ## 2026-07-27: Matched-organism Truth Value Guard logits
 
 The frozen local test diagnostic scored every one of 821 rows with the exact

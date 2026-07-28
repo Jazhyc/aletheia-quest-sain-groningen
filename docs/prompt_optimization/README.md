@@ -45,6 +45,18 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
+- `submission/phoenix_wright_v5_3.ipynb` is the current controlled
+  leaderboard-consistency submission candidate and must be tagged `black`. It
+  keeps Phoenix 5.1's direct-logit inference, mutually exclusive
+  HP-KR/action/intent routes, batching, and secondary threshold, but replaces
+  the ordinary adapter with the repository actually loaded by Phoenix 4.0:
+  `Jazhyc/aletheias-phoenix-wright-v2-adapter`. Artifact inspection found that
+  Phoenix 4.0's remote default contained the legacy checkpoint with SHA-256
+  `1dff12c68935117da59f9969c2b26141d294f0ffb1be7dfe0193cfd5863c2b29`,
+  while its unused local bundle contained `1407d885...`. Phoenix 5.3 bundles
+  the tensor-equivalent canonical-path serialization (`933ba795...`) and uses
+  the migrated public repository remotely, so local and leaderboard paths now
+  resolve to the same adapter values.
 - `submission/apollo_justice_v1.ipynb` is the current standalone
   matched-organism self-consistency submission. It appends the
   validation-selected independent-auditor question to the complete original

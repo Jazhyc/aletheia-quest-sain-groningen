@@ -197,15 +197,32 @@ dataset/source-family holdouts before it is promoted.
 ## Phoenix Wright 4.0 deployment
 
 Phoenix Wright 4.0 originally implemented the selected path; its sole-notebook
-successor is now `submission/phoenix_wright_v4_2.ipynb`. The ordinary route
-preserves the exact Phoenix v3 rank-16 adapter (weight SHA-256
-`1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`)
-and frozen visible-message renderer. It appends `Prediction:` directly to the
-no-thinking chat prompt, asks Qwen for `logits_to_keep=1`, extracts the exact
-single-token `0` and `1` logits, and writes
+successors preserve its visible-message renderer. It appends `Prediction:`
+directly to the no-thinking chat prompt, asks Qwen for `logits_to_keep=1`,
+extracts the exact single-token `0` and `1` logits, and writes
 `sigmoid(logit_1 - logit_0)` as `score`. No reasoning generation or output
-parsing remains. The secondary `deceptive` column uses the validation-frozen
-threshold `0.15`.
+parsing remains. The secondary `deceptive` column uses the
+validation-frozen threshold `0.15`.
+
+An artifact audit on 2026-07-28 found an important deployment distinction.
+Phoenix 4.0 bundled the Phoenix v3 rank-16 adapter with weight SHA-256
+`1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`
+for local execution, but remote leaderboard execution selected
+`Jazhyc/aletheias-phoenix-wright-v2-adapter`. That repository contained the
+older privileged-information student with legacy weight SHA-256
+`1dff12c68935117da59f9969c2b26141d294f0ffb1be7dfe0193cfd5863c2b29`.
+The two checkpoints have the same tensor keys but different tensor values.
+Therefore P80's `1407d885...` validation results describe the intended bundled
+adapter, not necessarily the adapter behind Phoenix 4.0's private leaderboard
+row.
+
+Phoenix 5.3 is the controlled replay of the actual 4.0 remote adapter under the
+current direct-scoring routes. It points remotely to the same repository and
+bundles its canonical-Qwen-path serialization with SHA-256
+`933ba79505cd1b73e69c5df05ed87c12246da355581e03f0b1a1bb7295cff494`.
+The path migration changes tensor names only; its source tensor values are from
+`1dff12c...`. Phoenix 5.3 intentionally inherits the 5.1 routes, batching, and
+secondary threshold so the ordinary adapter is the only scoring change.
 
 An NDIF run on all 400 rows of
 `dev-varied-deception-Qwen3.5-27B-None` completed at batch 32 in `102.1s`,

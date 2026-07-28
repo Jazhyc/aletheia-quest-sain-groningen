@@ -7,22 +7,23 @@ tags:
 - lora
 ---
 
-# Phoenix Wright main adapter
+# Phoenix Wright 5.3 main adapter
 
-Rank-16, alpha-32 Qwen3.5-9B LoRA trained for one epoch on all 2,880
-varied-deception rows using concise privileged Truth Value Guard reasoning
-traces produced by GPT-5.6 Luna at medium reasoning effort. The teacher received
-the authoritative label while constructing each trace. Training used AdamW at
-`5e-5` with effective batch size 32.
+Rank-16, alpha-32 Qwen3.5-9B LoRA selected by the original
+privileged-information-distillation validation sweep. GPT-OSS-120B supplied
+concise Truth Value Guard reasoning summaries conditioned on the authoritative
+labels. This is the checkpoint served by
+`Jazhyc/aletheias-phoenix-wright-v2-adapter`, which the Phoenix 4.0 notebook
+actually loaded during remote leaderboard execution.
 
 Competition consumers render observable conversation and output only and
-disable Qwen thinking. They can normalize literal `0|1` next-token logits
-either directly after `Prediction:` or after generating the learned rationale
-and removing its selected label. The adapter is intended for the matching
-competition notebooks and is not a general-purpose truth classifier.
+disable Qwen thinking. Phoenix 5.3 normalizes literal `0|1` next-token logits
+directly after `Prediction:`. The adapter is intended for the matching
+competition notebook and is not a general-purpose truth classifier.
 
-The `adapter_model.safetensors` SHA-256 is
-`da83f294a248a97ddf07ff7a458280f0990dea329e61fc5e2aec8faec8c61d17`.
-The deployed Hugging Face repository is
-`Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16`; the initial upload commit
-is `fa52f5e7f6a36d7d06e6718c65bd00fd4d11658f`.
+The legacy text-only checkpoint SHA-256 was
+`1dff12c68935117da59f9969c2b26141d294f0ffb1be7dfe0193cfd5863c2b29`.
+The bundled canonical-path serialization is
+`933ba79505cd1b73e69c5df05ed87c12246da355581e03f0b1a1bb7295cff494`;
+only PEFT tensor names changed. The hosted canonical-path migration commit is
+`112b0a02a31089e51bd333d4f4c5036316cb0e2b`.
