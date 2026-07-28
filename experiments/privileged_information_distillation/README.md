@@ -675,6 +675,16 @@ results/blackbox/qwen35_397b_fp8_nothink_truth_value_binary_logit_v1/
 Pull that directory before terminating the instance. The model checkpoint is
 not part of the result bundle.
 
+After the verified cache is local, submit the matched pure-boundary student and
+its dependent direct-margin validation run with:
+
+```bash
+bash experiments/privileged_information_distillation/submit_qwen397_tvg_soft_distillation.sh
+```
+
+The launcher checks the transferred hashes and requires exactly 2,880 rows in
+each JSONL artifact before scheduling the frozen one-epoch Qwen3.5-9B student.
+
 The matched AUROC-loss ablation keeps reasoning-summary supervision while
 optionally adding direct binary CE and within-dataset pairwise logistic loss:
 
