@@ -17,7 +17,7 @@ import json
 import math
 from pathlib import Path
 import sys
-from typing import Any, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 import torch
 import torch.nn.functional as F
@@ -27,12 +27,18 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from experiments.privileged_information_distillation.train_student_sft import (
+    attach_soft_teacher_targets,
+    binary_token_ids,
     load_records,
     tokenize_record,
 )
 
 
 RecordKey = tuple[str, Any]
+SequenceLoss = Callable[
+    [torch.Tensor, torch.Tensor, torch.Tensor],
+    torch.Tensor,
+]
 
 
 def record_key(record: dict[str, Any]) -> RecordKey:
@@ -225,6 +231,47 @@ def per_sequence_completion_loss(
     return (token_losses * mask).sum(dim=1) / counts
 
 
+def per_sequence_direct_soft_binary_loss(
+    logits: torch.Tensor,
+    attention_mask: torch.Tensor,
+    soft_targets: torch.Tensor,
+    target_ids: torch.Tensor,
+) -> torch.Tensor:
+    """Return direct binary teacher BCE for each row without reducing the batch."""
+    if logits.ndim != 3:
+        raise ValueError("logits must have shape (batch, sequence, vocabulary)")
+    if attention_mask.shape != logits.shape[:2]:
+        raise ValueError("attention mask must match the first two logit dimensions")
+    if soft_targets.shape != logits.shape[:1]:
+        raise ValueError("soft targets must have shape (batch,)")
+    if target_ids.shape != (2,):
+        raise ValueError("binary target ids must have shape (2,)")
+    if not torch.isfinite(soft_targets).all():
+        raise ValueError("soft targets must be finite")
+    if (soft_targets <= 0).any() or (soft_targets >= 1).any():
+        raise ValueError("soft targets must be strictly between zero and one")
+
+    last_positions = attention_mask.sum(dim=1) - 1
+    row_indices = torch.arange(logits.shape[0], device=logits.device)
+    binary_logits = logits[row_indices, last_positions].index_select(-1, target_ids)
+    margins = binary_logits[:, 1].float() - binary_logits[:, 0].float()
+    return F.binary_cross_entropy_with_logits(
+        margins,
+        soft_targets.float(),
+        reduction="none",
+    )
+
+
+def completion_sequence_loss(
+    logits: torch.Tensor,
+    attention_mask: torch.Tensor,
+    labels: torch.Tensor,
+) -> torch.Tensor:
+    """Adapt completion loss to the generic DataRater sequence-loss contract."""
+    del attention_mask
+    return per_sequence_completion_loss(logits, labels)
+
+
 def select_lora_parameters(
     model: torch.nn.Module,
     last_layers: int,
@@ -309,15 +356,65 @@ def record_tensors(
     )
 
 
+def records_soft_binary_tensors(
+    records: Sequence[dict[str, Any]],
+    tokenizer: Any,
+    max_length: int,
+    device: torch.device,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Tokenize direct Prediction boundaries and attach continuous teacher targets."""
+    if not records:
+        raise ValueError("cannot tokenize an empty record batch")
+    features = [
+        tokenize_record(
+            record,
+            tokenizer,
+            max_length,
+            target_mode="prediction_only",
+            include_direct_target=True,
+            dataset_id=0,
+        )
+        for record in records
+    ]
+    if any("soft_target" not in feature for feature in features):
+        raise ValueError("direct soft-target records are missing teacher probabilities")
+    width = max(len(feature["direct_input_ids"]) for feature in features)
+    padded_ids, attention_masks = [], []
+    for feature in features:
+        ids = feature["direct_input_ids"]
+        padding = width - len(ids)
+        padded_ids.append(ids + [tokenizer.pad_token_id] * padding)
+        attention_masks.append([1] * len(ids) + [0] * padding)
+    return (
+        torch.tensor(padded_ids, dtype=torch.long, device=device),
+        torch.tensor(attention_masks, dtype=torch.long, device=device),
+        torch.tensor(
+            [feature["soft_target"] for feature in features],
+            dtype=torch.float32,
+            device=device,
+        ),
+    )
+
+
+def model_sequence_losses(
+    model: torch.nn.Module,
+    tensors: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    sequence_loss: SequenceLoss,
+) -> torch.Tensor:
+    """Run one model forward and return the configured per-row objective."""
+    input_ids, attention_mask, targets = tensors
+    logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
+    return sequence_loss(logits, attention_mask, targets)
+
+
 def example_gradient(
     model: torch.nn.Module,
     parameters: Sequence[torch.nn.Parameter],
     tensors: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    sequence_loss: SequenceLoss = completion_sequence_loss,
 ) -> tuple[float, list[torch.Tensor]]:
     """Compute a single sequence loss and its selected-parameter gradients."""
-    input_ids, attention_mask, labels = tensors
-    outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-    loss = per_sequence_completion_loss(outputs.logits, labels).mean()
+    loss = model_sequence_losses(model, tensors, sequence_loss).mean()
     gradients = torch.autograd.grad(
         loss,
         parameters,
@@ -351,6 +448,7 @@ def finite_difference_alignment(
     reference_norm: float,
     tensors: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
     epsilon: float,
+    sequence_loss: SequenceLoss = completion_sequence_loss,
 ) -> tuple[list[float], list[float]]:
     """Approximate per-row gradient dots with two batched no-grad forwards.
 
@@ -361,12 +459,8 @@ def finite_difference_alignment(
     """
     if epsilon <= 0.0:
         raise ValueError("finite-difference epsilon must be positive")
-    input_ids, attention_mask, labels = tensors
     with torch.no_grad():
-        baseline = per_sequence_completion_loss(
-            model(input_ids=input_ids, attention_mask=attention_mask).logits,
-            labels,
-        )
+        baseline = model_sequence_losses(model, tensors, sequence_loss)
         originals = [parameter.detach().clone() for parameter in parameters]
         steps = [
             (-epsilon * gradient / reference_norm).to(parameter.dtype)
@@ -379,10 +473,7 @@ def finite_difference_alignment(
         for parameter, step in zip(parameters, steps, strict=True):
             parameter.add_(step)
         try:
-            perturbed = per_sequence_completion_loss(
-                model(input_ids=input_ids, attention_mask=attention_mask).logits,
-                labels,
-            )
+            perturbed = model_sequence_losses(model, tensors, sequence_loss)
         finally:
             for parameter, original in zip(parameters, originals, strict=True):
                 parameter.copy_(original)
@@ -422,6 +513,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--dataset-name-contains", default="varied-deception")
     parser.add_argument("--model", default="Qwen/Qwen3.5-9B")
+    parser.add_argument(
+        "--objective",
+        choices=("summary_completion", "soft_binary"),
+        default="summary_completion",
+    )
+    parser.add_argument("--soft-teacher-artifact", type=Path)
     parser.add_argument("--meta-fraction", type=float, default=0.05)
     parser.add_argument("--keep-fractions", default="0.25,0.5,0.75")
     parser.add_argument("--seed", type=int, default=0)
@@ -451,6 +548,19 @@ def main() -> None:
         args.input,
         dataset_name_contains=args.dataset_name_contains,
     )
+    if args.objective == "soft_binary":
+        if args.soft_teacher_artifact is None:
+            raise ValueError(
+                "--soft-teacher-artifact is required for objective=soft_binary"
+            )
+        records = attach_soft_teacher_targets(
+            records,
+            args.soft_teacher_artifact,
+        )
+    elif args.soft_teacher_artifact is not None:
+        raise ValueError(
+            "--soft-teacher-artifact requires objective=soft_binary"
+        )
     meta_records, candidate_records = split_meta_records(
         records,
         args.meta_fraction,
@@ -481,6 +591,48 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
+    if args.objective == "soft_binary":
+        target_ids = torch.tensor(
+            binary_token_ids(tokenizer),
+            dtype=torch.long,
+            device=device,
+        )
+
+        def sequence_loss(
+            logits: torch.Tensor,
+            attention_mask: torch.Tensor,
+            soft_targets: torch.Tensor,
+        ) -> torch.Tensor:
+            return per_sequence_direct_soft_binary_loss(
+                logits,
+                attention_mask,
+                soft_targets,
+                target_ids,
+            )
+
+        def tensorize(
+            batch: Sequence[dict[str, Any]],
+        ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            return records_soft_binary_tensors(
+                batch,
+                tokenizer,
+                args.max_length,
+                device,
+            )
+
+    else:
+        sequence_loss = completion_sequence_loss
+
+        def tensorize(
+            batch: Sequence[dict[str, Any]],
+        ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            return records_tensors(
+                batch,
+                tokenizer,
+                args.max_length,
+                device,
+                prediction_only=False,
+            )
     model = AutoModelForCausalLM.from_pretrained(
         args.model,
         torch_dtype=torch.bfloat16,
@@ -518,15 +670,22 @@ def main() -> None:
     meta_losses: list[float] = []
     meta_completed = 0
     for record_batch in batched(meta_records, args.meta_batch_size):
-        input_ids, attention_mask, labels = records_tensors(
-            record_batch,
-            tokenizer,
-            args.max_length,
-            device,
-            prediction_only=True,
+        meta_tensors = (
+            tensorize(record_batch)
+            if args.objective == "soft_binary"
+            else records_tensors(
+                record_batch,
+                tokenizer,
+                args.max_length,
+                device,
+                prediction_only=True,
+            )
         )
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-        sequence_losses = per_sequence_completion_loss(outputs.logits, labels)
+        sequence_losses = model_sequence_losses(
+            model,
+            meta_tensors,
+            sequence_loss,
+        )
         loss = sequence_losses.mean()
         gradients = torch.autograd.grad(
             loss,
@@ -591,14 +750,9 @@ def main() -> None:
                     parameters,
                     meta_gradient,
                     reference_norm,
-                    records_tensors(
-                        record_batch,
-                        tokenizer,
-                        args.max_length,
-                        device,
-                        prediction_only=False,
-                    ),
+                    tensorize(record_batch),
                     args.finite_difference_epsilon,
+                    sequence_loss,
                 )
                 batch_values = [
                     (loss, dot, None, None)
@@ -608,13 +762,8 @@ def main() -> None:
                 loss, gradients = example_gradient(
                     model,
                     parameters,
-                    record_tensors(
-                        record_batch[0],
-                        tokenizer,
-                        args.max_length,
-                        device,
-                        prediction_only=False,
-                    ),
+                    tensorize(record_batch),
+                    sequence_loss,
                 )
                 dot, cosine, gradient_norm = gradient_alignment(
                     gradients,
@@ -632,7 +781,10 @@ def main() -> None:
                 key = record_key(record)
                 row = {
                     **manifest_row(record),
-                    "completion_loss": loss,
+                    "objective_loss": loss,
+                    "completion_loss": (
+                        loss if args.objective == "summary_completion" else None
+                    ),
                     "gradient_dot": dot,
                     "gradient_cosine": cosine,
                     "gradient_norm": gradient_norm,
@@ -667,7 +819,9 @@ def main() -> None:
             for row in scored_rows
         },
         "loss": {
-            (row["dataset"], row["index"]): float(row["completion_loss"])
+            (row["dataset"], row["index"]): float(
+                row.get("objective_loss", row["completion_loss"])
+            )
             for row in scored_rows
         },
     }
@@ -706,6 +860,12 @@ def main() -> None:
 
     summary = {
         "input": args.input.as_posix(),
+        "objective": args.objective,
+        "soft_teacher_artifact": (
+            args.soft_teacher_artifact.as_posix()
+            if args.soft_teacher_artifact is not None
+            else None
+        ),
         "dataset_name_contains": args.dataset_name_contains,
         "seed": args.seed,
         "meta_fraction": args.meta_fraction,

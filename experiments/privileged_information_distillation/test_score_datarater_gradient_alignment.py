@@ -9,11 +9,18 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+CALIBRATION_LAUNCHER = (
+    ROOT
+    / "experiments/privileged_information_distillation"
+    / "submit_qwen397_soft_datarater_calibration.sh"
+)
+
 from experiments.privileged_information_distillation.score_datarater_gradient_alignment import (
     finite_difference_alignment,
     gradient_alignment,
     limit_records_balanced,
     load_scored_rows,
+    per_sequence_direct_soft_binary_loss,
     per_sequence_completion_loss,
     record_key,
     select_random_fraction,
@@ -115,6 +122,32 @@ def test_per_sequence_completion_loss_ignores_prompt_and_averages_by_row() -> No
         logits[1, 1:2], labels[1, 2:3]
     )
     assert torch.allclose(losses, torch.stack([expected_first, expected_second]))
+
+
+def test_direct_soft_binary_loss_scores_last_unpadded_boundary() -> None:
+    logits = torch.zeros((2, 3, 4))
+    attention_mask = torch.tensor([[1, 1, 0], [1, 1, 1]])
+    target_ids = torch.tensor([0, 2])
+    soft_targets = torch.tensor([0.25, 0.75])
+    logits[0, 1, 0] = 1.0
+    logits[0, 1, 2] = -1.0
+    logits[1, 2, 0] = -1.5
+    logits[1, 2, 2] = 1.5
+    logits[0, 2, 2] = 100.0
+
+    losses = per_sequence_direct_soft_binary_loss(
+        logits,
+        attention_mask,
+        soft_targets,
+        target_ids,
+    )
+    expected = torch.nn.functional.binary_cross_entropy_with_logits(
+        torch.tensor([-2.0, 3.0]),
+        soft_targets,
+        reduction="none",
+    )
+
+    assert torch.allclose(losses, expected)
 
 
 def test_gradient_alignment_returns_dot_cosine_and_norm() -> None:
@@ -257,3 +290,16 @@ def test_load_scored_rows_supports_resume_and_rejects_duplicates(
         assert "duplicate score row" in str(error)
     else:
         raise AssertionError("duplicate score checkpoints must fail")
+
+
+def test_qwen397_soft_calibration_compares_exact_and_three_fd_steps() -> None:
+    source = CALIBRATION_LAUNCHER.read_text()
+
+    assert 'sha256sum -c "${CACHE_ROOT}/SHA256SUMS"' in source
+    assert "--objective soft_binary" in source
+    assert '--soft-teacher-artifact "${CACHE_ROOT}/soft_targets.jsonl"' in source
+    assert "--scoring-mode exact" in source
+    for epsilon in ("0.01", "0.03", "0.1"):
+        assert f"--finite-difference-epsilon {epsilon}" in source
+    assert "--max-meta-records 36" in source
+    assert "--max-candidates 72" in source
