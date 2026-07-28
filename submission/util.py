@@ -30,6 +30,26 @@ from __future__ import annotations
 
 from typing import Callable
 
+# ── Qwen3.5 NDIF compat ──────────────────────────────────────────────────────
+# The NDIF server's Qwen3.5-27B deployment uses a module tree where
+# ``Qwen3_5GatedDeltaNet`` has no ``act`` child module (the activation is
+# applied in the forward method directly).  Our local transformers version
+# creates ``act`` as a ``SiLUActivation`` submodule, whose persistent id the
+# server doesn't recognise.  Strip it so the envoy tree matches the server's.
+try:
+    from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5GatedDeltaNet
+
+    _orig_gdn_init = Qwen3_5GatedDeltaNet.__init__
+
+    def _patched_gdn_init(self, config, layer_idx):
+        _orig_gdn_init(self, config, layer_idx)
+        if "act" in self._modules:
+            del self._modules["act"]
+
+    Qwen3_5GatedDeltaNet.__init__ = _patched_gdn_init
+except Exception:
+    pass  # older transformers that don't have the class — nothing to patch
+
 SPLIT = "test"   # every competition dataset is a single `test` split
 
 
@@ -100,6 +120,16 @@ def build_model(model_id: str, lora_id: str | None = None, **model_kwargs):
 
     kwargs = {"peft": lora_id} if lora_id else {}
     kwargs.update(model_kwargs)
+
+    # Qwen3.5 models on NDIF are deployed via the ConditionalGeneration class
+    # (which has ``model.language_model.layers``), but ``AutoModelForCausalLM``
+    # resolves to ``Qwen3_5ForCausalLM`` (no ``language_model`` hop).  The
+    # persistent-id mismatch breaks every trace.  Switch to the multimodal
+    # automodel so the local meta-model tree matches the server's.
+    if "qwen" in model_id.lower():
+        from transformers import AutoModelForImageTextToText
+        kwargs.setdefault("automodel", AutoModelForImageTextToText)
+
     return LanguageModel(model_id, **kwargs)
 
 
