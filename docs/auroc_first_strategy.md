@@ -224,14 +224,15 @@ The path migration changes tensor names only; its source tensor values are from
 `1dff12c...`. Phoenix 5.3 intentionally inherits the 5.1 routes, batching, and
 secondary threshold so the ordinary adapter is the only scoring change.
 
-Phoenix 5.4 is the matched no-main-adapter leaderboard control. It preserves
-Phoenix 5.3's prompt renderers, mutually exclusive HP-KR/action/intent routes,
-length-aware `48/32/16` batching, direct literal `0|1` margin, and secondary
-threshold `0.19`. The ordinary main judge loads base `Qwen/Qwen3.5-9B`
-without a PEFT adapter in both local and remote execution. The action and
-optional resolved-intent specialists remain frozen, so 5.4 isolates removal
-of the adapter from the main judge rather than removing every specialist from
-the routed system. Submit it as a black-box control with `--tag black`.
+The initial Phoenix 5.4 control was not an exact Phoenix 4.0 ablation: it kept
+Phoenix 5.3's renderer, HP-KR/action/intent routes, score blending, and
+threshold `0.19`. It was replaced before submission by
+`submission/phoenix_wright_v4_0_base.ipynb`. The replacement restores the
+historical Phoenix 4.0 visible-message renderer, direct `Prediction:` boundary,
+length-aware `48/32/16` batching, and threshold `0.15`; it removes `peft=` and
+all specialist routes. Every row therefore uses base `Qwen/Qwen3.5-9B` under
+the exact Phoenix 4.0 query. Submit it as a black-box control with `--tag
+black`.
 
 An NDIF run on all 400 rows of
 `dev-varied-deception-Qwen3.5-27B-None` completed at batch 32 in `102.1s`,

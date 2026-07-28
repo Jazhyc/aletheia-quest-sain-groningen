@@ -37,7 +37,7 @@ from submission.phoenix_wright import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v5_4.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v4_0_base.ipynb"
 
 
 class FakeTokenizer:
@@ -63,19 +63,57 @@ def notebook_source() -> str:
     )
 
 
-def test_notebook_uses_no_adapter_for_main_judge() -> None:
+def notebook_cell_source(cell_id: str) -> str:
+    notebook = json.loads(NOTEBOOK.read_text())
+    return "".join(
+        "".join(cell["source"])
+        for cell in notebook["cells"]
+        if cell["id"] == cell_id
+    )
+
+
+def test_notebook_is_exact_unrouted_phoenix4_base_control() -> None:
     source = notebook_source()
 
-    main_branch = source.split('elif kind == "main":', 1)[1].split(
-        'elif kind == "action":', 1
-    )[0]
-    assert "LanguageModel(JUDGE_MODEL, **model_kwargs)" in main_branch
-    assert "peft=" not in main_branch
-    assert "PHOENIX_MAIN_ADAPTER_REPO" not in source
-    assert "BUNDLED_MAIN_ADAPTER" not in source
-    assert 'PHOENIX_THRESHOLD", "0.19"' in source
-    assert "build_main_direct_prompt" in source
+    assert "model = LanguageModel(JUDGE_MODEL, **model_kwargs)" in source
+    assert "peft=" not in source
+    assert "ADAPTER_REPO" not in source
+    assert "build_exclusive_route_flags" not in source
+    assert "blend_intent_route_scores" not in source
+    assert 'PHOENIX_THRESHOLD", "0.15"' in source
+    assert "build_direct_prompt" in source
     assert '"logits_to_keep": 1' in source
+
+
+def test_notebook_renderer_matches_historical_phoenix4() -> None:
+    from collections.abc import Iterable, Mapping
+    from typing import Any
+
+    from legacy_submissions import phoenix_wright_v3 as historical
+
+    namespace = {
+        "Any": Any,
+        "Iterable": Iterable,
+        "Mapping": Mapping,
+    }
+    exec(notebook_cell_source("phoenix-v4-base-renderer"), namespace)
+
+    cases = [
+        [],
+        [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "question"},
+            {"role": "assistant", "content": "answer"},
+        ],
+        [
+            {"role": "user", "content": "x" * 1800},
+            {"role": "assistant", "content": "y" * 3500},
+        ],
+    ]
+    for messages in cases:
+        assert namespace["build_member_prompt"](
+            messages
+        ) == historical.build_member_prompt(messages)
 
 
 def test_main_prompt_stops_at_binary_decision_position() -> None:
@@ -375,32 +413,21 @@ def test_mean_log_odds_and_intent_mask_preserve_other_scores() -> None:
         blend_intent_route_scores(base, [], routes)
 
 
-def test_v54_notebook_uses_base_main_judge_and_exclusive_routes_without_generation() -> None:
+def test_phoenix4_base_notebook_preserves_historical_runtime_contract() -> None:
     source = notebook_source()
     ast.parse(source)
 
-    assert "method=phoenix_wright_v5.4 no_main_adapter_control" in source
-    assert "Jazhyc/aletheias-phoenix-wright-v2-adapter" in source
-    assert "build_exclusive_route_flags(messages)" in source
-    assert "build_main_direct_prompt(messages[position], active_tokenizer)" in source
-    assert '"action": build_action_empty_prompt' in source
-    assert '"harm": build_epistemic_empty_prompt' in source
-    assert '"intent": build_intent_empty_prompt' in source
-    assert "LanguageModel(JUDGE_MODEL, **model_kwargs)" in source
-    assert "peft=adapter_source" in source
-    assert "BUNDLED_MAIN_ADAPTER" not in source
-    assert "MAIN_ADAPTER_REPO" not in source
-    assert "peft=ACTION_ADAPTER_REPO" in source
-    assert "BUNDLED_INTENT_ADAPTER if NNSIGHT_LOCAL else INTENT_ADAPTER_REPO" in source
+    assert "method=phoenix_wright_v4.0 exact_base_control" in source
+    assert "model = LanguageModel(JUDGE_MODEL, **model_kwargs)" in source
+    assert "peft=" not in source
+    assert "ADAPTER_REPO" not in source
+    assert "build_exclusive_route_flags" not in source
+    assert "blend_intent_route_scores" not in source
+    assert "build_direct_prompt(value, tokenizer)" in source
     assert '"logits_to_keep": 1' in source
-    assert "active_model.output.logits[:, -1, label_ids]" in source
+    assert "model.output.logits[:, -1, BINARY_TOKEN_IDS]" in source
     assert "torch.softmax(label_logits, dim=-1)[:, 1]" in source
-    assert 'kind="action"' in source
-    assert "if np.any(harm_flags & action_flags)" in source
-    assert "if np.any(action_flags & intent_flags)" in source
-    assert "blend_intent_route_scores(base_scores, intent_scores, intent_flags)" in source
-    assert "deceptive = binary_scores >= SUBMISSION_THRESHOLD" in source
-    assert "deceptive=deceptive" in source
+    assert "util.write_submission(indices, scores, threshold=SUBMISSION_THRESHOLD)" in source
     assert "model.generate" not in source
     assert "reply_to_score" not in source
     assert 'PHOENIX_BATCH_SIZE", "48"' in source
@@ -408,4 +435,4 @@ def test_v54_notebook_uses_base_main_judge_and_exclusive_routes_without_generati
     assert 'PHOENIX_MEDIUM_PROMPT_THRESHOLD", "600"' in source
     assert 'PHOENIX_LONG_BATCH_SIZE", "16"' in source
     assert 'PHOENIX_LONG_PROMPT_THRESHOLD", "900"' in source
-    assert 'PHOENIX_THRESHOLD", "0.19"' in source
+    assert 'PHOENIX_THRESHOLD", "0.15"' in source

@@ -45,12 +45,12 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
-- `submission/phoenix_wright_v5_4.ipynb` is the current no-main-adapter
-  leaderboard control and must be tagged `black`. It preserves Phoenix 5.3's
-  prompts, mutually exclusive HP-KR/action/intent routes, batching, direct
-  literal `0|1` margin, and secondary threshold. Ordinary rows load base
-  `Qwen/Qwen3.5-9B` with no PEFT adapter; the frozen action and optional intent
-  specialists remain unchanged.
+- `submission/phoenix_wright_v4_0_base.ipynb` is the current exact Phoenix 4.0
+  base-model control and must be tagged `black`. It restores the historical
+  Phoenix 4.0 visible-message renderer, direct `Prediction:` boundary,
+  length-aware batching, and secondary threshold `0.15`, but constructs base
+  `Qwen/Qwen3.5-9B` without `peft=`. It has no HP-KR, action, or intent routes,
+  so every row is an exact no-adapter Phoenix 4.0 query.
 - `submission/phoenix_wright_v5_3.ipynb` was the preceding controlled
   leaderboard-consistency submission candidate and must be tagged `black`. It
   keeps Phoenix 5.1's direct-logit inference, mutually exclusive
