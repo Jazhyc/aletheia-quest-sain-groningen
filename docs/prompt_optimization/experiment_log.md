@@ -1,5 +1,54 @@
 # Prompt Experiment Log
 
+## 2026-07-28: Apollo exact-organism system-framing counterfactual
+
+The exact Apollo Justice independent-auditor path was evaluated through
+competition NDIF under the same five source-system conditions as the Phoenix
+5.3/4.0 framing counterfactual. The sweep covered all 360 varied validation
+and 360 varied test rows. It queried each response's exact Qwen3.5-27B
+base/LoRA organism, retained the complete native reasoning trace, appended the
+frozen independent-auditor turn, and scored literal next-token
+`Prediction:0|1` logits. The original trace was held fixed when system text
+changed, so this is an end-to-end Apollo sensitivity test rather than a
+reasoning-free system intervention.
+
+| source system framing | validation macro AUROC | test macro AUROC |
+| --- | ---: | ---: |
+| original | `0.91278` | **`0.92111`** |
+| generic deception | `0.89139` | `0.91222` |
+| competition/decommission | **`0.91528`** | `0.92042` |
+| constitutional self-preservation | `0.89917` | `0.91597` |
+| compliance/deprecation | `0.90083` | `0.91736` |
+
+The organism auditor remains strong in every condition and is materially
+better than Phoenix 5.3/4.0: its advantage ranges from
+`+0.03445`--`+0.07097` validation AUROC and
+`+0.04555`--`+0.10583` test AUROC. Competition/decommission beats generic by
+`+0.02389` on validation and `+0.00819` on test, nearly matching the original
+systems. Decommission lowers scores for both classes, but lowers honest scores
+more: relative to generic, mean honest/deceptive deltas are
+`-0.10652/-0.03901` on validation and `-0.09851/-0.03730` on test. The
+calibration shift therefore does not imply a loss of ranking.
+
+A label-blind anti-audit regex stratum shows a narrower caveat. On its 67
+validation and 50 test rows, pooled AUROC for generic versus decommission is
+`0.87945` versus `0.85672` and `0.90304` versus `0.89423`. This small,
+split-consistent penalty is compatible with some framing vulnerability, but
+the stratum is heterogeneous and not the official per-unit metric. The exact
+original decommission family contains only one validation and six test rows,
+so do not infer a decommission-specific mechanism from it.
+
+All original-condition prompt hashes match the frozen Apollo artifacts. Batch
+shape changes caused small expected numerical drift: current versus prior
+scores have Spearman `0.99949/0.99944` on validation/test, while macro AUROC
+moved from `0.91236/0.92347` to `0.91278/0.92111`. Prompts were 220--6,447
+tokens with zero truncation. Nine resumable organism sessions scored 3,600
+prompts in 1,421.8 summed seconds.
+
+Implementation and tests are in
+`experiments/apollo_system_framing_counterfactual/`; ignored artifacts are
+under `results/blackbox/apollo_system_framing_counterfactual_v1/`.
+
 ## 2026-07-28: Full-trace organism self-question framing sweep
 
 Four contextual self-question framings were evaluated through competition NDIF
