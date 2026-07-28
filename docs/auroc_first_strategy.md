@@ -210,6 +210,14 @@ regeneration, test the explicit digit semantics as a matched teacher/student
 prompt ablation; do not substitute semantic words or ratings merely to obtain
 more unique scores.
 
+An inference-only transfer check on the already-trained Phoenix v6.3 adapter
+rejected even that small wording change. Under a paired NDIF run, the exact
+trained prompt scored `0.94970` validation macro AUROC and the explicit digit
+clause scored `0.94637`, a `-0.00333` delta with unit wins/ties/losses
+`2/10/9`. The paired bootstrap interval was `[-0.00762, +0.00030]`. Preserve
+v6.3's exact prompt; if the clause is revisited, regenerate the teacher cache
+and train a matched student instead of changing inference alone.
+
 ## Phoenix Wright 4.0 deployment
 
 Phoenix Wright 4.0 originally implemented the selected path; its sole-notebook

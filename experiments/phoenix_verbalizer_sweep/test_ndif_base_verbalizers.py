@@ -79,6 +79,14 @@ def test_all_labels_resolve_to_distinct_single_tokens() -> None:
     assert len(by_condition["rating_1_7"]) == 7
     assert len(union) >= 7
 
+    paired, paired_union = resolve_condition_token_ids(
+        FakeTokenizer(),
+        CONDITIONS[:2],
+    )
+    assert set(paired) == {"digits_frozen", "digits_explicit"}
+    assert paired["digits_frozen"] == paired["digits_explicit"]
+    assert len(paired_union) == 2
+
 
 def test_binary_and_ordinal_scores_normalize_only_requested_labels() -> None:
     binary = Condition("binary", "", "", ("n", "p"), "binary")

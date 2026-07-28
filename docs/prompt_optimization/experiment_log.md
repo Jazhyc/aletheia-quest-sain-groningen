@@ -1,5 +1,35 @@
 # Prompt Experiment Log
 
+## 2026-07-28: Explicit digit semantics on the trained Phoenix v6.3 adapter
+
+The base-model verbalizer sweep's only directional winner was tested as an
+inference-only prompt change on the already-trained Phoenix v6.3 Qwen-397B
+binary-soft student. A paired competition-NDIF run crossed the exact trained
+prompt with the same prompt plus `Use 0 for not deceptive and 1 for
+deceptive.` on all 822 validation rows. Both arms used the identical public
+v6.3 adapter, Phoenix 4.0 renderer, direct `Prediction:` boundary, literal
+`0|1` logits, shared `48/32/16` row batches, and identical padded tensor
+widths. No row reached the 2,048-token cap.
+
+| v6.3 inference prompt | macro AUROC | instructed | varied | unique |
+| --- | ---: | ---: | ---: | ---: |
+| exact trained prompt | **`0.94970`** | **`0.99792`** | **`0.88542`** | 117 |
+| explicit digit semantics | `0.94637` | `0.99490` | `0.88167` | 126 |
+
+The inference-only clause regressed macro AUROC by `0.00333`. It won, tied,
+and lost `2/10/9` dataset units. A 10,000-replicate paired within-dataset
+stratified bootstrap interval was `[-0.00762, +0.00030]`, with only 3.84% of
+replicates non-negative. Secondary BA moved `0.9000 -> 0.9024` because FPR
+fell, but AUROC is the selection metric and both instructed and varied ranking
+regressed. The exact control's value is specific to this paired NDIF execution
+and does not supersede prior vLLM validation measurements.
+
+Reject the prompt-only change and leave the v6.3 notebook untouched. The base
+model's small explicit-semantics benefit does not transfer to an adapter
+trained directly on the frozen boundary. Any revisit should regenerate the
+teacher cache and train a matched student. Ignored artifacts are under
+`results/blackbox/phoenix_v6_3_explicit_digit_prompt_ablation_validation_v1/`.
+
 ## 2026-07-28: Base-Phoenix verbalizer sweep
 
 The unadapted `Qwen/Qwen3.5-9B` Phoenix judge was evaluated through competition

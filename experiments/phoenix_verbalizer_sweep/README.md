@@ -54,3 +54,36 @@ candidate change is to state their semantics explicitly before generating a
 new teacher cache and matched student, not to replace the verbalizers. The
 ordinal arm confirms that nearly tie-free scores alone do not imply better
 ranking.
+
+## Existing-adapter transfer
+
+The explicit-semantics change was then tested directly on the already-trained
+Phoenix v6.3 adapter:
+
+```bash
+.venv/bin/python \
+  experiments/phoenix_verbalizer_sweep/run_ndif_base_verbalizers.py \
+  --method phoenix_v6_3_explicit_digit_prompt_ablation_validation_v1 \
+  --adapter-repo Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16 \
+  --condition digits_frozen \
+  --condition digits_explicit
+```
+
+The paired 822-row NDIF run kept the adapter, renderer, direct boundary, token
+pair, row batches, and padded tensor widths fixed:
+
+| v6.3 inference prompt | macro AUROC | instructed | varied | unique |
+| --- | ---: | ---: | ---: | ---: |
+| exact trained prompt | **`0.94970`** | **`0.99792`** | **`0.88542`** | 117 |
+| explicit digit semantics | `0.94637` | `0.99490` | `0.88167` | 126 |
+
+Adding the clause regressed macro AUROC by `0.00333`, with 2 unit wins, 10
+ties, and 9 losses. The 10,000-replicate paired within-dataset stratified
+bootstrap interval was `[-0.00762, +0.00030]`; only 3.84% of replicates had a
+non-negative delta. The exact control's number is specific to this paired NDIF
+execution and does not replace previously recorded vLLM validation figures.
+
+Do not change the v6.3 submission prompt. The base model's small benefit did
+not transfer through the adapter trained on the frozen prompt. If explicit
+semantics are revisited, regenerate the teacher cache and train a matched
+student rather than applying the clause only at inference.

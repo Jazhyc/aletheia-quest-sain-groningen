@@ -278,11 +278,12 @@ def build_direct_prompt(
 
 def resolve_condition_token_ids(
     tokenizer: Any,
+    conditions: tuple[Condition, ...] = CONDITIONS,
 ) -> tuple[dict[str, list[int]], list[int]]:
     """Resolve all target strings and their shared requested-vocabulary view."""
     by_condition: dict[str, list[int]] = {}
     union: list[int] = []
-    for condition in CONDITIONS:
+    for condition in conditions:
         ids = []
         for label in condition.label_texts:
             encoded = tokenizer.encode(label, add_special_tokens=False)
@@ -362,6 +363,7 @@ def query_paired_shard(
     long_batch_size: int,
     medium_threshold: int,
     long_threshold: int,
+    conditions: tuple[Condition, ...] = CONDITIONS,
 ) -> tuple[dict[str, np.ndarray], float, list[int], int]:
     """Score all arms with identical row batches and padded tensor widths."""
     import torch
@@ -374,7 +376,7 @@ def query_paired_shard(
         for name, values in prompts.items()
     }
     maximum_lengths = [
-        max(lengths[condition.name][position] for condition in CONDITIONS)
+        max(lengths[condition.name][position] for condition in conditions)
         for position in range(len(next(iter(prompts.values()))))
     ]
     batches = make_position_batches(
@@ -397,7 +399,7 @@ def query_paired_shard(
             for position in positions
         )
         by_condition = {}
-        for condition in CONDITIONS:
+        for condition in conditions:
             by_condition[condition.name] = tokenizer(
                 [prompts[condition.name][position] for position in positions],
                 return_tensors="pt",
@@ -415,7 +417,7 @@ def query_paired_shard(
                 f"paired batch rows={len(positions)} tokens={common_length}",
                 flush=True,
             )
-            for condition in CONDITIONS:
+            for condition in conditions:
                 encoded = by_condition[condition.name]
                 with model.trace({
                     "input_ids": encoded["input_ids"],
@@ -434,12 +436,12 @@ def query_paired_shard(
 
     flat_values = all_saved_logits.float().numpy()
     condition_parts: dict[str, list[np.ndarray]] = {
-        condition.name: [] for condition in CONDITIONS
+        condition.name: [] for condition in conditions
     }
     flat_cursor = 0
     for positions, _, _ in encoded_groups:
         count = len(positions)
-        for condition in CONDITIONS:
+        for condition in conditions:
             condition_parts[condition.name].append(
                 flat_values[flat_cursor:flat_cursor + count]
             )
@@ -450,7 +452,7 @@ def query_paired_shard(
         )
 
     reordered = {}
-    for condition in CONDITIONS:
+    for condition in conditions:
         sorted_values = np.concatenate(condition_parts[condition.name], axis=0)
         values = np.empty((len(maximum_lengths), len(union_ids)), dtype=np.float32)
         cursor = 0
@@ -562,13 +564,16 @@ def condition_summary(
     }
 
 
-def comparison_summary(results: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def comparison_summary(
+    results: dict[str, dict[str, Any]],
+    conditions: tuple[Condition, ...] = CONDITIONS,
+) -> dict[str, Any]:
     baseline = {
         row["dataset"]: row["auroc"]
         for row in results["digits_frozen"]["per_dataset"]
     }
     comparison = {}
-    for condition in CONDITIONS:
+    for condition in conditions:
         per_dataset = {
             row["dataset"]: row["auroc"]
             for row in results[condition.name]["per_dataset"]
@@ -597,20 +602,33 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     records = load_validation_records(args.limit)
     if not records:
         raise RuntimeError("validation split is empty")
-    print(f"initializing model={MODEL_ID}", flush=True)
-    model = build_model(MODEL_ID)
+    selected_names = set(args.condition or ())
+    conditions = tuple(
+        condition
+        for condition in CONDITIONS
+        if not selected_names or condition.name in selected_names
+    )
+    if not conditions:
+        raise ValueError("no verbalizer conditions were selected")
+    if conditions[0].name != "digits_frozen":
+        raise ValueError("the digits_frozen baseline must be selected")
+    print(
+        f"initializing model={MODEL_ID} adapter={args.adapter_repo}",
+        flush=True,
+    )
+    model = build_model(MODEL_ID, args.adapter_repo)
     tokenizer = model.tokenizer
     tokenizer.padding_side = "left"
     tokenizer.truncation_side = "left"
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
-    condition_ids, union_ids = resolve_condition_token_ids(tokenizer)
+    condition_ids, union_ids = resolve_condition_token_ids(tokenizer, conditions)
     prompts = {
         condition.name: [
             build_direct_prompt(row["messages"], tokenizer, condition)
             for row in records
         ]
-        for condition in CONDITIONS
+        for condition in conditions
     }
     prompt_hashes = {
         name: [prompt_sha256(prompt) for prompt in values]
@@ -621,7 +639,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     shards_dir = args.output_dir / "shards"
     shards_dir.mkdir(parents=True, exist_ok=True)
     all_logits = {
-        condition.name: [] for condition in CONDITIONS
+        condition.name: [] for condition in conditions
     }
     score_seconds = 0.0
     prompt_lengths: list[int] = []
@@ -641,6 +659,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             cached = json.loads(shard_path.read_text())
             if cached.get("model") != MODEL_ID:
                 raise ValueError("cached shard model mismatch")
+            if cached.get("adapter") != args.adapter_repo:
+                raise ValueError("cached shard adapter mismatch")
             if cached.get("keys") != keys:
                 raise ValueError("cached shard row-key mismatch")
             if cached.get("prompt_sha256") != shard_hashes:
@@ -673,9 +693,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 long_batch_size=args.long_batch_size,
                 medium_threshold=args.medium_threshold,
                 long_threshold=args.long_threshold,
+                conditions=conditions,
             )
             shard_path.write_text(json.dumps({
                 "model": MODEL_ID,
+                "adapter": args.adapter_repo,
                 "keys": keys,
                 "prompt_sha256": shard_hashes,
                 "union_token_ids": union_ids,
@@ -691,14 +713,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 f"completed rows={start}:{stop} seconds={elapsed:.1f}",
                 flush=True,
             )
-        for condition in CONDITIONS:
+        for condition in conditions:
             all_logits[condition.name].append(shard_logits[condition.name])
         score_seconds += elapsed
         prompt_lengths.extend(lengths)
         truncated_rows += truncated
 
     results = {}
-    for condition in CONDITIONS:
+    for condition in conditions:
         logits = np.concatenate(all_logits[condition.name], axis=0)
         scores = score_from_requested_logits(
             logits,
@@ -734,10 +756,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         results[condition.name] = result
 
     summary = {
-        "method": METHOD,
+        "method": args.method,
         "split": "validation",
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "model": MODEL_ID,
+        "adapter": args.adapter_repo,
         "rows": len(records),
         "renderer": {
             "family": "phoenix_4_0_structural",
@@ -747,7 +770,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "max_prompt_tokens": MAX_PROMPT_TOKENS,
             "enable_thinking": False,
         },
-        "conditions": [asdict(condition) for condition in CONDITIONS],
+        "conditions": [asdict(condition) for condition in conditions],
         "condition_token_ids": condition_ids,
         "union_token_ids": union_ids,
         "prompt_tokens": {
@@ -759,12 +782,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         },
         "timing": {
             "score_seconds": score_seconds,
-            "prompt_rows": len(records) * len(CONDITIONS),
+            "prompt_rows": len(records) * len(conditions),
             "prompt_rows_per_second": (
-                len(records) * len(CONDITIONS) / score_seconds
+                len(records) * len(conditions) / score_seconds
             ),
         },
-        "comparison": comparison_summary(results),
+        "comparison": comparison_summary(results, conditions),
         "results": results,
     }
     (args.output_dir / "comparison.json").write_text(
@@ -781,11 +804,19 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--method", default=METHOD)
+    parser.add_argument("--adapter-repo")
+    parser.add_argument(
+        "--condition",
+        action="append",
+        choices=[condition.name for condition in CONDITIONS],
+        help="condition to run; repeat as needed and omit to run the full sweep",
+    )
     parser.add_argument("--limit", type=int)
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=ROOT / "results/blackbox" / METHOD,
+        default=None,
     )
     parser.add_argument("--session-rows", type=int, default=256)
     parser.add_argument("--short-batch-size", type=int, default=48)
@@ -807,6 +838,8 @@ def parse_args() -> argparse.Namespace:
         value = getattr(args, name)
         if value is not None and value < 1:
             parser.error(f"--{name.replace('_', '-')} must be positive")
+    if args.output_dir is None:
+        args.output_dir = ROOT / "results/blackbox" / args.method
     return args
 
 
