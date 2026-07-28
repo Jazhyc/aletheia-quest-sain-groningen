@@ -409,6 +409,34 @@ Because the existing training cache came from the FP8 Lambda checkpoint rather
 than OpenRouter, record that backend as part of the ablation and do not claim
 the OpenRouter delta transfers exactly before the cache is evaluated.
 
+The selected regular-model cache then completed through OpenRouter as
+`qwen35_397b_openrouter_nothink_tvg_binary_logit_explicit_digits_v1`.
+All 2,880 varied-deception training rows were served by Alibaba as
+`qwen/qwen3.5-397b-a17b`, with fallback disabled, zero retries, and zero missing
+binary labels. The run consumed 1,162,601 prompt tokens and 8,640 completion
+tokens, cost `$0.46890`, and took 448.8 seconds at concurrency eight. It
+produced 2,761 unique scores and reached descriptive train macro AUROC
+`0.92040`; training labels were not used to generate, filter, or normalize the
+identity soft targets.
+
+The regular-OpenRouter and historical FP8-Lambda target vectors had Pearson
+correlation `0.99175`, Spearman correlation `0.98780`, and mean absolute
+difference `0.01742`; 41/2,880 rows crossed 0.5. OpenRouter improved descriptive
+train macro AUROC by only `0.00062`, so this is a modest teacher redistribution
+rather than a wholesale replacement. The comparison remains jointly confounded
+by provider backend/precision and the explicit prompt clause.
+
+The cache builder verified 2,880 aligned rows in each of `generations.jsonl`,
+`soft_targets.jsonl`, and `student_rows.jsonl`. A byte-level audit additionally
+requires every reconstructed student prompt SHA-256 to equal the prompt hash
+sent to OpenRouter. This caught and fixed YAML folded-scalar whitespace before
+training; the selected config uses a literal prompt block. The immutable
+artifacts are covered by `SHA256SUMS`. Matched one-epoch student job `30343909`
+and dependent direct-margin validation job `30343910` were submitted under the
+new method
+`qwen9b_qwen397_openrouter_explicit_tvg_binary_softonly_varied_v1`; do not
+compare it as a pure prompt-only ablation against the FP8 student.
+
 The frozen local-test follow-up confirmed the 397B result and rejected 122B as
 a scale/efficiency compromise:
 
