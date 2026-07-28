@@ -348,7 +348,7 @@ def main() -> None:
     from transformers import AutoTokenizer
     from vllm import LLM, SamplingParams
 
-    tokenizer = AutoTokenizer.from_pretrained(adapter_dir)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL)
     records = pd.concat(
         [
             load_counterfactual_records(
@@ -368,7 +368,7 @@ def main() -> None:
 
     llm = LLM(
         model=MODEL,
-        tokenizer=adapter_dir.as_posix(),
+        tokenizer=MODEL,
         dtype="bfloat16",
         tensor_parallel_size=1,
         gpu_memory_utilization=args.gpu_memory_utilization,
