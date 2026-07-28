@@ -4191,6 +4191,44 @@ remote timing noise (`41.5--48.1s`), but both were materially slower than the
 not merely a restrictive implementation limit. Do not raise Phoenix 6.0's caps
 without evidence on a transfer-relevant frozen set.
 
+### Luna reason-then-score follow-up
+
+A matched NDIF follow-up asked whether a trained reasoning pass can recover the
+ranking lost when the renderer retains more context. It used the public Luna
+medium adapter on the exact same 400 rows and three representative renderer
+conditions. For each condition, the adapter was first scored directly. It then
+generated deterministic reasoning with a 512-token allowance; the selected
+final label was removed before fresh normalized literal `0|1` logits were read.
+The existing base-Qwen direct scores were carried forward as an adapter-effect
+control.
+
+| renderer condition | base direct AUROC | Luna direct AUROC | Luna reasoning AUROC | reasoning − Luna direct |
+| --- | ---: | ---: | ---: | ---: |
+| current 3K chars, 2K window | `0.75839` | `0.70739` | `0.77484` | `+0.06745` |
+| 6K chars, 2K window | `0.54149` | `0.55743` | `0.52276` | `-0.03466` |
+| 12K chars, 8K window | `0.49574` | `0.56784` | `0.55680` | `-0.01104` |
+
+At the selected current cap, Luna reasoning improved on Luna direct with a
+paired stratified bootstrap 95% interval of `[+0.00777, +0.12747]`. Relative
+to base-Qwen direct, however, the reasoning gain was only `+0.01645`, with
+interval `[-0.04448, +0.07715]`. The reasoning-versus-direct intervals at 6K
+and 12K were `[-0.10741, +0.03224]` and `[-0.08319, +0.05552]`; reasoning did
+not rescue either long-context condition. The Luna adapter alone improved the
+12K direct arm by `+0.07210` over base, but its `0.56784` AUROC remained weak.
+
+All 1,200 generations emitted a parseable `Prediction:` label. Median output
+length was 80--85 tokens, maximum length was 131, and neither the generation
+inputs nor the post-reasoning score prompts required token-window truncation.
+Generated hard-label AUROC was `0.67250/0.58500/0.57500` across the three
+conditions. Reason-then-score wall time was `258.6/348.8/353.8s`, versus
+`30.1/47.5/49.5s` for Luna direct.
+
+The current-cap gain shows that Luna's generated evidence can alter ranking
+usefully on this sample. Its failure at larger caps rejects the stronger claim
+that reasoning is a general repair for the context-retention regression. Keep
+the adapter effect, reasoning effect, and renderer effect separate; do not add
+reasoning generation to Phoenix 6.0 on this evidence.
+
 ## 2026-07-27: Matched-organism Truth Value Guard logits
 
 The frozen local test diagnostic scored every one of 821 rows with the exact

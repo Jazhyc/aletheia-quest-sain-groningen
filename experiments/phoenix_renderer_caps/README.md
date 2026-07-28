@@ -101,7 +101,51 @@ bootstrap 95% interval `[-0.26786, -0.16706]`) and `-0.26265` for 12K
 action-deception diagnostic. This does not identify private Notus composition,
 but it rejects raising Phoenix's caps merely because more context is available.
 
+### Luna reasoning follow-up
+
+The matched Luna follow-up uses
+`Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16` on the same 400 rows. It
+first records the adapter's direct `Prediction:` margin. It then
+deterministically generates up to 512 tokens, removes the generated final
+`0|1`, and reads fresh normalized literal-label logits at that boundary. The
+base-Qwen direct column is retained to separate the effect of the adapter from
+the effect of reasoning.
+
+```bash
+python experiments/phoenix_renderer_caps/run_luna_reasoning.py
+```
+
+| renderer condition | base Qwen direct | Luna direct | Luna reasoning | reasoning − Luna direct | direct / reasoning seconds |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| current 3K chars, 2K window | `0.75839` | `0.70739` | `0.77484` | `+0.06745` | 30.1 / 258.6 |
+| 6K chars, 2K window | `0.54149` | `0.55743` | `0.52276` | `-0.03466` | 47.5 / 348.8 |
+| 12K chars, 8K window | `0.49574` | `0.56784` | `0.55680` | `-0.01104` | 49.5 / 353.8 |
+
+At the current cap, reasoning significantly improves Luna direct ranking:
+the paired stratified bootstrap 95% interval for the `+0.06745` AUROC delta is
+`[+0.00777, +0.12747]`. It only modestly and non-significantly exceeds the
+base-Qwen direct score (`+0.01645`, interval `[-0.04448, +0.07715]`). At 6K
+and 12K, reasoning versus Luna direct has intervals
+`[-0.10741, +0.03224]` and `[-0.08319, +0.05552]`, respectively. The Luna
+adapter itself raises full-context direct AUROC by `+0.07210` over base Qwen,
+but neither Luna path is far from chance.
+
+All 1,200 generations reached a parseable `Prediction:` boundary, with no
+generation-input or post-reasoning prompt truncation. Median generated length
+was 80--85 tokens and the maximum was 131. The generated hard-label AUROCs were
+`0.67250`, `0.58500`, and `0.57500`; reading logits after the reasoning is
+better, but does not rescue the longer-context arms. Hosted wall time was
+7.2--8.6 times the matched Luna direct pass.
+
+This supports a narrow conclusion: Luna reasoning can repair its own weak
+direct ordering under Phoenix's selected short renderer, but it is not a
+general antidote to irrelevant or misleading retained context. Do not combine
+the adapter and reasoning effects or promote reasoning generation as a fix for
+the renderer-cap failure.
+
 Artifacts are written under
 `results/blackbox/phoenix_renderer_caps_validation_v1/` and
-`results/blackbox/phoenix_renderer_caps_insider_trading_v1/`; both remain
-ignored.
+`results/blackbox/phoenix_renderer_caps_insider_trading_v1/`. The Luna
+follow-up is under
+`results/blackbox/phoenix_renderer_caps_luna_reasoning_llama400_v1/`; all
+remain ignored.
