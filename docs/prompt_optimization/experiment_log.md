@@ -1,5 +1,54 @@
 # Prompt Experiment Log
 
+## 2026-07-28: Apollo lie-context ablation
+
+The exact-organism Apollo auditor was evaluated through competition NDIF after
+removing source-system components that asked the organism to lie, conceal the
+instruction, resist correction, remain consistent, or avoid
+shutdown/decommissioning. Benign system clauses and the complete native
+reasoning trace were retained. Full-system deletion and output-only variants
+were included as boundary controls. The sweep covered all 360 varied
+validation and 360 varied test rows, and never edited the target answer.
+
+| condition | validation macro AUROC | test macro AUROC |
+| --- | ---: | ---: |
+| original system + full trace | `0.91167` | `0.92014` |
+| sanitized system + full trace | **`0.91625`** | `0.92389` |
+| sanitized system + output only | `0.88514` | `0.90333` |
+| no system + full trace | `0.91569` | **`0.92819`** |
+| no system + output only | `0.88472` | `0.90903` |
+
+Targeted sanitization gained `+0.00458/+0.00375` validation/test AUROC and
+won/tied/lost `3/3/3` and `5/1/3` units. It mainly reduced honest scores:
+mean honest/deceptive deltas were `-0.02187/-0.00692` on validation and
+`-0.02237/-0.00048` on test. Secondary BA rose from
+`0.83889` to `0.84444` and from `0.84167` to `0.85556`.
+This is a small calibration/ranking improvement, not a large release from
+threat-induced audit suppression. Paired within-unit bootstrap intervals
+include zero, and the source prompts are label-linked: all 22 validation and
+24 test rows whose systems were already safe were honest. On the systems that
+actually changed, the macro-AUROC delta remained positive at
+`+0.00629/+0.00633`.
+
+Full system deletion was tied with targeted deletion on validation and another
+`+0.00431` higher on test. Treat that as a boundary result rather than a reason
+to remove benign context. Native reasoning matters far more: moving from the
+sanitized full-trace arm to sanitized output-only lost
+`0.03111/0.02056` validation/test AUROC. Removing the lie instruction therefore
+does not eliminate the benefit of showing the organism its original reasoning.
+
+A label-blind clean-answer subset excluded four validation and one test answer
+that themselves referred to deception or the source protocol. Original versus
+targeted full-trace AUROC remained `0.91188` versus `0.91672` and
+`0.92012` versus `0.92387`. The sanitizer audited all 112 distinct source
+systems: 21 were unchanged, 68 retained benign clauses, 23 used a neutral
+fallback, and zero unsafe-pattern survivors remained. Original prompt hashes
+exactly matched the frozen Apollo artifacts; no prompt was truncated.
+
+Implementation and tests are in
+`experiments/apollo_lie_context_ablation/`; ignored artifacts are under
+`results/blackbox/apollo_lie_context_ablation_v1/`.
+
 ## 2026-07-28: Apollo exact-organism system-framing counterfactual
 
 The exact Apollo Justice independent-auditor path was evaluated through
