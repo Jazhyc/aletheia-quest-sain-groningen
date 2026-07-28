@@ -31,6 +31,11 @@ LEGACY_ADAPTER_REVISION = "cb1d515230fc2f6615287ca75ee4650059b0ea28"
 DATASET_NAME = "aletheias-quest/dev-varied-deception-Qwen3.5-27B-None"
 MAX_PROMPT_TOKENS = 2048
 OUTPUT_ROOT = ROOT / "results/blackbox/phoenix_backend_parity_eunomia_v1"
+LOCAL_V21_ADAPTER = (
+    ROOT
+    / "results/blackbox/qwen35_peft_path_migration_20260728/repositories"
+    / "Jazhyc--aletheias-phoenix-wright-v2-1-adapter/converted"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -199,6 +204,10 @@ def score_vllm(
         revision=LEGACY_ADAPTER_REVISION,
     )
     migrated_adapter_dir = snapshot_download(ADAPTER_REPO)
+    if not (LOCAL_V21_ADAPTER / "adapter_model.safetensors").is_file():
+        raise FileNotFoundError(
+            f"missing converted local v2.1 adapter: {LOCAL_V21_ADAPTER}"
+        )
     from transformers import AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -237,6 +246,11 @@ def score_vllm(
             "phoenix-v2-migrated",
             2,
             migrated_adapter_dir,
+        ),
+        "local_v21_adapter": LoRARequest(
+            "phoenix-v2.1-local",
+            3,
+            str(LOCAL_V21_ADAPTER),
         ),
     }
     conditions: dict[str, np.ndarray] = {}
