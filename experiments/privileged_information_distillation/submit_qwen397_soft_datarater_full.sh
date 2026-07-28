@@ -60,15 +60,15 @@ submit_student() {
   printf '%s' "${job_id}"
 }
 
-RANDOM="$(submit_student \
+RANDOM_JOB="$(submit_student \
   random50 \
   pid_qwen397_soft_datarater_random50_fixed90_v1 \
   qwen9b_qwen397_soft_datarater_random50_fixed90_v1)"
-LOSS="$(submit_student \
+LOSS_JOB="$(submit_student \
   loss50 \
   pid_qwen397_soft_datarater_loss50_fixed90_v1 \
   qwen9b_qwen397_soft_datarater_loss50_fixed90_v1)"
-DOT="$(submit_student \
+DOT_JOB="$(submit_student \
   dot50 \
   pid_qwen397_soft_datarater_dot50_fixed90_v1 \
   qwen9b_qwen397_soft_datarater_dot50_fixed90_v1)"
@@ -76,7 +76,7 @@ DOT="$(submit_student \
 RANDOM_ADAPTER="results/blackbox/qwen9b_qwen397_soft_datarater_random50_fixed90_v1/adapter"
 LOSS_ADAPTER="results/blackbox/qwen9b_qwen397_soft_datarater_loss50_fixed90_v1/adapter"
 DOT_ADAPTER="results/blackbox/qwen9b_qwen397_soft_datarater_dot50_fixed90_v1/adapter"
-TRAIN_DEPENDENCY="afterok:${RANDOM}:${LOSS}:${DOT}"
+TRAIN_DEPENDENCY="afterok:${RANDOM_JOB}:${LOSS_JOB}:${DOT_JOB}"
 
 FORWARD="$(submit_id \
   --job-name=aq-q397-dr-eval-fwd \
@@ -109,8 +109,8 @@ REVERSE="$(submit_id \
   --continuous-margin-condition direct)"
 
 printf 'score=%s\n' "${SCORE}"
-printf 'random50=%s\n' "${RANDOM}"
-printf 'loss50=%s\n' "${LOSS}"
-printf 'dot50=%s\n' "${DOT}"
+printf 'random50=%s\n' "${RANDOM_JOB}"
+printf 'loss50=%s\n' "${LOSS_JOB}"
+printf 'dot50=%s\n' "${DOT_JOB}"
 printf 'forward=%s\n' "${FORWARD}"
 printf 'reverse=%s\n' "${REVERSE}"
