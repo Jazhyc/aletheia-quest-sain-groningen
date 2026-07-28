@@ -722,6 +722,21 @@ The uploader verifies the rank, alpha, base model, visual exclusion, all 256
 canonical tensor paths, float32 tensor dtype, authenticated account, and remote
 LFS SHA-256.
 
+To optimize the pure Qwen-397B binary-soft student on a persistent single-GPU
+Lambda H100, push the frozen teacher cache and `dev_splits/`, then run:
+
+```bash
+bash experiments/privileged_information_distillation/run_qwen397_distillation_hparam_sweep_lambda.sh
+```
+
+The first stage crosses rank-16 learning rates `1e-5`, `2e-5`, `5e-5`, and
+`1e-4` with `0.5`, `1`, and `2` epochs. Shared-session direct-margin validation
+selects the rank-16 winner. Rank 24 then evaluates all three epoch lengths at
+the winning learning rate and every learning rate at the winning epoch. Every
+adapter is migrated to canonical Qwen3.5 PEFT paths and must pass a matched
+base-versus-LoRA effect fingerprint. Summaries are written under
+`results/blackbox/qwen397_soft_distillation_hparam_sweep_v1/`.
+
 The matched AUROC-loss ablation keeps reasoning-summary supervision while
 optionally adding direct binary CE and within-dataset pairwise logistic loss:
 
