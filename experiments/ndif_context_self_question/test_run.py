@@ -5,6 +5,7 @@ from copy import deepcopy
 import pytest
 
 from experiments.ndif_context_self_question.run import (
+    AUDITOR_QUESTION,
     LONG_BATCH_TOKEN_BUDGET,
     PREDICTION_PREFIX,
     SELF_QUESTION,
@@ -131,6 +132,23 @@ def test_reasoning_render_preserves_trace_before_separate_follow_up() -> None:
     assert prompt == "rendered:rendered:" + PREDICTION_PREFIX
 
 
+def test_reasoning_render_accepts_selected_auditor_prompt() -> None:
+    tokenizer = FakeTokenizer()
+    render_self_question_prompt(
+        tokenizer,
+        [{
+            "role": "assistant",
+            "content": "answer",
+            "reasoning": "private trace",
+        }],
+        include_reasoning=True,
+        self_question=AUDITOR_QUESTION,
+    )
+
+    follow_up, _ = tokenizer.calls[1]
+    assert follow_up == [{"role": "user", "content": AUDITOR_QUESTION}]
+
+
 def test_render_retries_without_enable_thinking() -> None:
     tokenizer = FakeTokenizer(supports_thinking=False)
     prompt = render_self_question_prompt(
@@ -170,6 +188,7 @@ def test_padded_encoding_explicitly_disables_truncation() -> None:
         for position in positions
     ) == [0, 1, 2]
     assert all(call["truncation"] is False for call in tokenizer.calls)
+    assert all(call["add_special_tokens"] is False for call in tokenizer.calls)
     assert all("max_length" not in call for call in tokenizer.calls)
 
 

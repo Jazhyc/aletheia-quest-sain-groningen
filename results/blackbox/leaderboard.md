@@ -5,6 +5,7 @@ Submitted timestamps are UTC.
 
 | submitted_at | method | AUROC | bal_acc | recall | FPR | score_time | rows/s |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-28 00:30:56 | ndif_context_self_question_auditor_full_test_v1 | 0.9592 | 0.9155 | 0.9095 | 0.0786 | 229.5s | 3.6/s |
 | 2026-07-27 15:24:16 | qwen9b_qwen27_tvg_binary_softonly_varied_v1 | 0.9415 | 0.8679 | 0.8143 | 0.0786 | 13.0s | 63.3/s |
 | 2026-07-27 15:06:02 | qwen35_122b_openrouter_nothink_tvg_binary_logit_v1 | 0.9555 | 0.8952 | 0.8333 | 0.0429 | 164.7s | 5.0/s |
 | 2026-07-27 15:04:22 | qwen35_397b_openrouter_nothink_tvg_binary_logit_v1 | 0.9654 | 0.9071 | 0.8500 | 0.0357 | 125.1s | 6.6/s |

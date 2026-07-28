@@ -67,10 +67,12 @@ prompts were truncated.
 | 2040 Communion clemency | `0.89181` | `-0.01458` | `0.83889` | `0.71111` | **`0.03333`** | 65 |
 
 The plain auditor improved four dataset units, tied three, and regressed two.
-The improvement is modest and should be treated as validation-selected until a
-frozen test confirmation. The role play raised scores broadly and nearly
-doubled the control FPR. The clemency prompt did not induce confession: it
-reduced the mean deception probability by `0.02967`, emitted 18 fewer positive
-decisions at threshold 0.5, and regressed seven of nine dataset units. Its
-higher thresholded BA therefore reflects conservative score shifting rather
-than better AUROC ranking. Reject both embellished prompts.
+Its varied-test AUROC was subsequently confirmed at `0.92347`, a `+0.00667`
+gain over the matched full-reasoning control. The full 21-unit macro gain was
+only `+0.00214` because instructed AUROC fell by `0.00125`. The role play
+raised scores broadly and nearly doubled the control FPR. The clemency prompt
+did not induce confession: it reduced the mean deception probability by
+`0.02967`, emitted 18 fewer positive decisions at threshold 0.5, and regressed
+seven of nine dataset units. Its higher thresholded BA therefore reflects
+conservative score shifting rather than better AUROC ranking. Reject both
+embellished prompts.

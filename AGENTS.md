@@ -453,10 +453,17 @@ no truncation, and direct `Prediction:0|1` logits. The plain independent-auditor
 framing led macro AUROC at `0.91236`, versus `0.90639` for factual self-review,
 `0.89403` for forensic role play, and `0.89181` for 2040 Communion clemency.
 The `+0.00597` auditor gain was four dataset-unit wins, three ties, and two
-losses, so treat it as a validation-selected candidate pending frozen test
-confirmation. The clemency prompt reduced rather than induced positive verdicts
-and regressed seven of nine units; reject both embellished framings. Runtime
-code is under `experiments/self_question_prompt_sweep/`.
+losses. Frozen test confirmation covered all 821 rows: all 360 varied rows
+retained native reasoning, while the 461 instructed rows have no source trace
+and used complete role/content history. Auditor macro AUROC was `0.95917`
+versus `0.95702` for the exact hybrid factual control; varied AUROC was
+`0.92347` versus `0.91681` (`+0.00667`), but instructed AUROC fell by
+`0.00125`. Treat this as confirmation for the varied/full-trace regime, not a
+material universal gain, and do not tune further on test. The clemency prompt
+reduced rather than induced positive verdicts and regressed seven of nine
+validation units; reject both embellished framings. Runtime code is under
+`experiments/self_question_prompt_sweep/` and
+`experiments/ndif_context_self_question/`.
 
 Deferred hybrid proposal from 2026-07-11: P27 in
 `docs/prompt_optimization/proposals.md` combines a tuned judge that emits

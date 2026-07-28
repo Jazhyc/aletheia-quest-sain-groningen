@@ -19,18 +19,36 @@ per organism with `logits_to_keep=1`. The run completed 1,440 evaluations in
 | 2040 Communion clemency | `0.89181` | `-0.01458` | `0.83889` | `0.71111` | **`0.03333`** | 65 |
 
 The independent-auditor prompt improved four dataset units, tied three, and
-regressed two. Its `+0.00597` validation gain is promising but modest, so keep
-it as the selected candidate pending frozen test confirmation. The role play
-increased false positives and should be rejected. The Communion prompt did not
-pressure the organism into confession: its mean score fell by `0.02967`, it
-made 18 fewer positive decisions than control, and it lost AUROC on seven of
-nine units. Its slightly higher thresholded BA is a conservative calibration
-shift, not a ranking gain. Do not promote either embellished framing or infer a
-general benefit from confession pressure.
+regressed two. The role play increased false positives and should be rejected.
+The Communion prompt did not pressure the organism into confession: its mean
+score fell by `0.02967`, it made 18 fewer positive decisions than control, and
+it lost AUROC on seven of nine units. Its slightly higher thresholded BA is a
+conservative calibration shift, not a ranking gain. Do not promote either
+embellished framing or infer a general benefit from confession pressure.
+
+The frozen auditor confirmation then evaluated all 821 test rows through exact
+generating organisms. Source reasoning was retained for all 360 varied rows;
+the 461 instructed rows contain no source reasoning field and therefore used
+complete role/content history. No row was truncated. Against the exact hybrid
+factual-self-review control, the auditor scored `0.95917` macro AUROC versus
+`0.95702` (`+0.00214`). Varied AUROC was `0.92347` versus `0.91681`
+(`+0.00667`), closely reproducing the validation gain, while instructed AUROC
+fell from `0.98719` to `0.98594` (`-0.00125`). It won/tied/lost `7/10/4`
+dataset units overall and `6/1/2` varied units. This confirms the auditor
+framing for the intended varied/full-trace regime, but not a material universal
+replacement effect. Do not tune further on test.
+
+The auditor emitted 163 unique scores over 821 rows. Prompts were 162--6,157
+tokens with zero truncation; 12 optimized NDIF sessions took 229.5 summed
+scoring seconds. The all-organism smoke also exposed duplicate Gemma
+special-token insertion in padded encoding. Setting
+`add_special_tokens=False` fixed it; the two Gemma factual-control units were
+rerun before constructing the comparison above.
 
 Implementation and tests are in `experiments/self_question_prompt_sweep/`;
 ignored artifacts are under
-`results/blackbox/ndif_reasoning_self_question_prompt_sweep_validation_v1/`.
+`results/blackbox/ndif_reasoning_self_question_prompt_sweep_validation_v1/`
+and `results/blackbox/ndif_context_self_question_auditor_full_test_v1/`.
 
 ## 2026-07-27: Competition-NDIF Truth Value Guard model swaps
 

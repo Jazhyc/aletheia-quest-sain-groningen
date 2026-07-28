@@ -62,6 +62,18 @@ The reasoning variant renders the original final assistant trace through
 Qwen's native `reasoning_content` field before appending the self-question. It
 does not generate a new reasoning chain.
 
+Run the validation-selected independent-auditor framing on the complete test
+split:
+
+```bash
+bash experiments/ndif_context_self_question/run.sh --auditor-full-test
+```
+
+This mode retains native source reasoning wherever the dataset supplies it.
+All 360 varied rows have such a trace; none of the 461 instructed rows do.
+Instructed rows therefore receive their complete role/content history without
+a reasoning field. Neither path truncates context.
+
 Group caches are validated against dataset/index keys and prompt hashes, so a
 failed run can be resumed without repeating completed organisms. Smoke results
 must use a separate output directory so their caches cannot be mistaken for the
@@ -124,3 +136,34 @@ it is not cross-family evidence.
 
 Artifacts are under
 `results/blackbox/ndif_context_self_question_reasoning_varied_test_v1/`.
+
+## Independent-auditor frozen confirmation
+
+The validation-selected independent-auditor prompt was evaluated on all 821
+test rows. The matched control below combines factual self-review scores:
+instructed Qwen/Nemotron rows use the frozen complete-conversation artifact,
+the two Gemma units use the corrected re-encoding described below, and varied
+rows use the frozen complete-reasoning artifact. The keys and labels match all
+821 auditor rows exactly.
+
+| framing | macro AUROC | instructed | varied | BA | recall | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| independent auditor | **`0.95917`** | `0.98594` | **`0.92347`** | **`0.91548`** | **`0.90952`** | `0.07857` |
+| matched factual self-review | `0.95702` | **`0.98719`** | `0.91681` | `0.91190` | `0.90476` | `0.08095` |
+| auditor delta | **`+0.00214`** | `-0.00125` | **`+0.00667`** | `+0.00357` | `+0.00476` | `-0.00238` |
+
+The varied validation gain (`+0.00597`) transferred almost exactly
+(`+0.00667`), with six wins, one tie, and two losses over its nine units.
+Instructed performance regressed slightly: one win, nine ties, and two losses.
+Across all 21 units the auditor won seven, tied ten, and lost four. Thus the
+auditor framing is confirmed for the intended varied/full-trace regime, but its
+universal macro gain is only `0.00214`; do not treat it as a large general
+replacement effect.
+
+The auditor produced 163 unique scores and 658 ties. Prompts ranged from 162 to
+6,157 tokens with zero truncation. The 12 exact-organism NDIF sessions took
+229.5 summed scoring seconds. Artifacts are under
+`results/blackbox/ndif_context_self_question_auditor_full_test_v1/`.
+The two Gemma control units were re-evaluated under
+`ndif_context_self_question_control_gemma_reencoded_test_v1` after the smoke
+exposed and the runner removed duplicate tokenizer special-token insertion.
