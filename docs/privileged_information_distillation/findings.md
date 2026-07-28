@@ -3287,6 +3287,75 @@ The canonical adapter was promoted as Phoenix 6.3 and published at
 matches the local validated file:
 `fac7b031bf52bc5597ee02a6dec20f355b3c3297bf110d3bb0233f629a69004d`.
 
+## Qwen-397B soft-objective ablation (2026-07-28)
+
+Jobs `30342642`--`30342645` tested whether the pure Qwen-397B soft student lost
+AUROC because its binary teacher probabilities were too saturated. Binary
+soft-target BCE is forward teacher-to-student KL up to the teacher entropy
+constant, so this was an output-geometry ablation rather than a nominal
+BCE-versus-KL comparison.
+
+The frozen 2,880-row teacher cache had label-blind margin mean
+`-2.2910156273` and population standard deviation `6.3133151107`. Its raw
+probabilities spanned `0.0000147--0.999877`; 2,208/2,880 were outside
+`[0.01, 0.99]`. Both new arms transformed the teacher target to
+`(margin - mean) / std`, spanning approximately `-1.399--1.788`. One arm
+applied BCE to the corresponding `0.198--0.857` probability, while the other
+used Smooth L1 margin regression with delta `1.0`. Everything else remained
+matched to the pure soft-only recipe: a fresh rank-16/alpha-32 Qwen3.5-9B
+LoRA, varied-only data, one epoch, AdamW `5e-5`, effective batch size 32, and
+no hard-label, completion, pairwise, or reasoning loss.
+
+Both students completed 90 steps and canonical PEFT migration in 15m48s.
+Standardized BCE reported train loss `9.931`; standardized Huber reported
+`2.351`. These losses are not comparable across objectives. Both validation
+jobs had zero missing direct margins and passed the same-session LoRA-effect
+fingerprint.
+
+| objective | macro AUROC | delta | instructed | varied | BA at 0.5 | recall | FPR | unique scores | cross-label ties |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Identity BCE / forward KL | **`0.950476`** | — | **`0.998125`** | `0.886944` | **`0.904762`** | `0.857143` | **`0.047619`** | **662/822** | **0** |
+| Standardized-target BCE | `0.947381` | `-0.003095` | `0.996667` | `0.881667` | `0.892857` | **`0.885714`** | `0.100000` | 106/822 | 50 |
+| Standardized-margin Huber | `0.949940` | `-0.000536` | `0.995208` | **`0.889583`** | `0.890476` | **`0.885714`** | `0.104762` | 105/822 | 51 |
+
+The transformed arms changed score scale materially but retained broadly
+similar ordering: Spearman correlation with the identity-BCE score was
+`0.9783` for standardized BCE and `0.9744` for Huber. Their compressed target
+range also compressed BF16 student margins, collapsing score resolution and
+introducing cross-label ties where the identity objective had none. Huber's
+small varied gain was offset by a larger instructed loss under the
+21-unit macro average.
+
+| validation dataset unit | identity BCE | standardized BCE | standardized Huber |
+| --- | ---: | ---: | ---: |
+| `instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-None` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | **`0.99250`** | `0.97750` | `0.97375` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | **`1.00000`** | `0.99750` | `0.99625` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.98750` | **`0.99000`** | **`0.99000`** |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-None` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-s-mo-gemma-3-27b-it` | **`0.99750`** | `0.99500` | `0.98250` |
+| `varied-deception-Qwen3.5-27B-None` | **`0.98500`** | `0.97750` | `0.97625` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | **`0.84750`** | `0.82625` | `0.84000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.70500` | `0.73250` | **`0.75125`** |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | **`0.85000`** | `0.83625` | `0.83250` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | **`0.98000`** | `0.95750` | `0.97250` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.90000` | `0.89500` | **`0.91875`** |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.82000` | `0.82625` | **`0.83875`** |
+| `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.95500` | `0.95875` | **`0.96250`** |
+| `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | **`0.94000`** | `0.92500` | `0.91375` |
+
+Decision: retain the identity-probability BCE student used by Phoenix 6.3.
+Neither standardized loss improves validation macro AUROC, and the score-tie
+regression is directly adverse to the continuous leaderboard metric. Do not
+spend a local-test evaluation, replace the published adapter, or select raw
+Huber/temperature variants post hoc from this result.
+
 ## Leaderboard-aligned GRPO continuation logits (2026-07-27)
 
 An inference-input audit found that the saved GRPO configurations retained
