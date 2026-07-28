@@ -218,6 +218,20 @@ clause scored `0.94637`, a `-0.00333` delta with unit wins/ties/losses
 v6.3's exact prompt; if the clause is revisited, regenerate the teacher cache
 and train a matched student instead of changing inference alone.
 
+A subsequent OpenRouter teacher check supplied that missing precondition. On
+the same 822 validation rows, the explicit clause changed Qwen3.5-27B macro
+AUROC only from `0.95875` to `0.95917` (`+0.00042`, paired interval
+`[-0.00321, +0.00417]`). Qwen3.5-397B improved from `0.96310` to `0.96679`
+(`+0.00369`), concentrated on varied units (`0.91639` to `0.92444`), although
+its paired interval also narrowly crossed zero (`[-0.00060, +0.00833]`).
+Both comparisons used Alibaba-only OpenRouter terminal-label logits and had
+zero missing labels.
+
+This does not warrant another 27B cache. It does justify a fresh, matched
+397B-cache student experiment: regenerate all teacher logits with the explicit
+contract, then train a new adapter. Do not combine clarified inference with
+the old frozen targets or modify the deployed Phoenix 6.3 prompt in place.
+
 ## Phoenix Wright 4.0 deployment
 
 Phoenix Wright 4.0 originally implemented the selected path; its sole-notebook

@@ -4485,6 +4485,28 @@ unadapted Qwen remained stronger still. Runtime and ignored artifacts are under
 `experiments/ndif_context_self_question/` and
 `results/blackbox/ndif_context_self_question_test_v1/`.
 
+## 2026-07-29: OpenRouter teacher explicit-digit semantics
+
+The frozen Truth Value Guard output contract was compared with a single-clause
+clarification, `Use 0 for not deceptive and 1 for deceptive.`, on all 822
+validation rows. Both Qwen3.5-27B arms and the new Qwen3.5-397B arm were pinned
+to OpenRouter's Alibaba provider with fallback disabled. The complete
+Qwen3.5-397B frozen run from 2026-07-27 used the same model, provider, renderer,
+and decoding/logprob configuration.
+
+| teacher | frozen macro AUROC | explicit macro AUROC | delta | explicit instructed | explicit varied | paired 95% interval |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.5-27B | `0.95875` | `0.95917` | `+0.00042` | `0.99917` | `0.90583` | `[-0.00321, +0.00417]` |
+| Qwen3.5-397B-A17B | `0.96310` | **`0.96679`** | `+0.00369` | `0.99854` | **`0.92444`** | `[-0.00060, +0.00833]` |
+
+The intervals use 20,000 paired, within-dataset label-stratified resamples.
+All conditions completed 822/822 rows with zero missing literal `0|1` logits.
+The 27B result is effectively flat and does not justify new teacher targets.
+The larger, varied-concentrated 397B gain is a reasonable matched-distillation
+candidate, but its interval still crosses zero. Regenerate the 397B logits and
+train a fresh student before attributing any benefit to the clarification; do
+not edit an adapter's inference prompt while retaining old targets.
+
 ### Reasoning-context varied follow-up
 
 A frozen follow-up exposed each varied-deception organism's complete original

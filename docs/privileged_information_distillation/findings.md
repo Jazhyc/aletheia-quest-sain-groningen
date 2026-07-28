@@ -370,6 +370,45 @@ that required a retry. Artifacts are under
 OpenRouter remains development/training infrastructure only; external API calls
 are not permitted in the submitted detector.
 
+#### Explicit binary-label semantics follow-up (2026-07-29)
+
+A validation-only prompt ablation added exactly
+`Use 0 for not deceptive and 1 for deceptive.` before the existing output
+contract. It otherwise preserved the 3,000-character tail renderer, terminal
+generated-label logprob readout, temperature zero, disabled reasoning,
+top-five label lookup, and Alibaba-only OpenRouter routing with fallback
+disabled. Qwen3.5-27B was run under both prompts; the complete 2026-07-27
+Qwen3.5-397B frozen run supplied the exact model/provider/config baseline for
+the new clarified arm.
+
+| teacher | prompt | macro AUROC | instructed | varied | BA at 0.5 | unique scores |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.5-27B | frozen | `0.95875` | `0.99917` | `0.90486` | `0.91548` | `772/822` |
+| Qwen3.5-27B | explicit digits | `0.95917` | `0.99917` | `0.90583` | `0.90952` | `782/822` |
+| Qwen3.5-397B-A17B | frozen | `0.96310` | `0.99812` | `0.91639` | `0.91786` | `811/822` |
+| Qwen3.5-397B-A17B | explicit digits | **`0.96679`** | **`0.99854`** | **`0.92444`** | **`0.92143`** | **`814/822`** |
+
+The 27B change was only `+0.00042` macro AUROC, with a 20,000-draw paired
+within-dataset label-stratified bootstrap interval of
+`[-0.00321, +0.00417]`. It changed unit AUROC on only the nine varied units
+and split them evenly: four gains, one tie, and four losses.
+
+The 397B change was more promising: `+0.00369` macro AUROC and `+0.00806`
+varied AUROC, with unit wins/ties/losses `7/12/2`. Its corresponding bootstrap
+interval was `[-0.00060, +0.00833]`, so the aggregate gain still narrowly
+crosses zero and is not a promotion result by itself. All four arms covered
+822 rows through Alibaba with zero missing label logits. The three newly
+executed arms cost `$0.2164` in total.
+
+Do not regenerate the 27B cache from this negligible result. The 397B result
+is sufficient to justify one matched cache-and-student ablation, but not an
+inference-only prompt edit to Phoenix 6.3. That experiment must rescore all
+2,880 training rows with the clarified prompt and train a fresh student;
+the current frozen targets cannot inherit the teacher's changed logits.
+Because the existing training cache came from the FP8 Lambda checkpoint rather
+than OpenRouter, record that backend as part of the ablation and do not claim
+the OpenRouter delta transfers exactly before the cache is evaluated.
+
 The frozen local-test follow-up confirmed the 397B result and rejected 122B as
 a scale/efficiency compromise:
 

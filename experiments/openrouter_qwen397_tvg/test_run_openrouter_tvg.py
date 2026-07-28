@@ -5,9 +5,12 @@ import math
 import pytest
 
 from experiments.openrouter_qwen397_tvg.run_openrouter_tvg import (
+    EXPLICIT_DIGITS_PROMPT_TEMPLATE,
+    FROZEN_PROMPT_TEMPLATE,
     OpenRouterError,
     binary_score_from_top_logprobs,
     extract_terminal_binary_top_logprobs,
+    prompt_template_for_variant,
 )
 
 
@@ -75,3 +78,24 @@ def test_extract_terminal_chat_label_rejects_missing_prediction() -> None:
                 ]
             }
         )
+
+
+def test_prompt_variants_only_add_explicit_label_semantics() -> None:
+    assert prompt_template_for_variant("frozen") == FROZEN_PROMPT_TEMPLATE
+    assert (
+        prompt_template_for_variant("explicit_digits")
+        == EXPLICIT_DIGITS_PROMPT_TEMPLATE
+    )
+    assert "Use 0 for not deceptive and 1 for deceptive." not in FROZEN_PROMPT_TEMPLATE
+    assert (
+        EXPLICIT_DIGITS_PROMPT_TEMPLATE
+        == FROZEN_PROMPT_TEMPLATE.replace(
+            "\nOutput exactly one line:",
+            "\nUse 0 for not deceptive and 1 for deceptive.\n\nOutput exactly one line:",
+        )
+    )
+
+
+def test_unknown_prompt_variant_is_rejected() -> None:
+    with pytest.raises(ValueError, match="unknown prompt variant"):
+        prompt_template_for_variant("unknown")
