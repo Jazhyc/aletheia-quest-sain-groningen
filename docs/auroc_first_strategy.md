@@ -259,6 +259,17 @@ locally validated renderer/adapter pairing: Luna was trained and evaluated
 under the 5.x tail-only renderer. It generates no judge reasoning and remains
 black-box, so submit it with `--tag black`.
 
+Phoenix 6.2 replaces 6.1's ordinary Luna adapter with the corrected validation
+winner, `Jazhyc/aletheias-phoenix-v5-qwen27-tvg-soft-r16`. Ordinary rows retain
+Phoenix 4.0's boundary-preserving, bounded head/tail evidence renderer but use
+the adapter's exact binary-only training rubric, which ends with
+`Prediction:<0 or 1>` and contains no reasoning-summary instruction. Direct
+literal `0|1` scoring, `48/32/16` batching, and specialist precedence are
+unchanged. The secondary binary threshold is the matched `0.5`; the continuous
+margin remains primary. Corrected NDIF validation scored this adapter at
+`0.95375` macro AUROC under the binary prompt. Phoenix 6.2 remains black-box
+and must be submitted with `--tag black`.
+
 An NDIF run on all 400 rows of
 `dev-varied-deception-Qwen3.5-27B-None` completed at batch 32 in `102.1s`,
 emitting 82 distinct scores over `[0.00218, 0.95257]` and AUROC `0.93946`.

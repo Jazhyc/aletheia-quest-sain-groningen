@@ -4166,6 +4166,16 @@ remain unchanged. This pairing is an explicit private-transfer probe because
 Luna's local validation used the 5.x tail-only renderer; no local metric is
 claimed for the new renderer/adapter combination.
 
+Phoenix 6.2 replaces the ordinary Luna route with the corrected NDIF validation
+winner, `Jazhyc/aletheias-phoenix-v5-qwen27-tvg-soft-r16`. The ordinary prompt
+now matches that adapter's binary-only training contract and removes every
+reasoning-summary instruction while still ending at the same direct
+`Prediction:` margin. Phoenix 4.0's structural message/output caps and marked
+tail retention remain exact; HP-KR, action, and intent routing is unchanged.
+The adapter scored `0.95375` validation macro AUROC with the matched binary
+prompt versus `0.95042` with the summary prompt. Threshold `0.5` affects only
+the secondary binary column.
+
 ## 2026-07-27: Matched-organism Truth Value Guard logits
 
 The frozen local test diagnostic scored every one of 821 rows with the exact

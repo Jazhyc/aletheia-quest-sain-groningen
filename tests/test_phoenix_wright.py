@@ -37,7 +37,7 @@ from submission.phoenix_wright import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v6_1.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v6_2.ipynb"
 
 
 class FakeTokenizer:
@@ -72,13 +72,13 @@ def notebook_cell_source(cell_id: str) -> str:
     )
 
 
-def test_notebook_uses_phoenix4_renderer_with_luna_and_frozen_specialists() -> None:
+def test_notebook_uses_phoenix4_renderer_with_qwen27_soft_and_specialists() -> None:
     source = notebook_source()
 
     assert 'if kind == "harm":' in source
     assert 'elif kind == "main":' in source
     assert "active_model = LanguageModel(JUDGE_MODEL, **model_kwargs)" in source
-    assert "Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16" in source
+    assert "Jazhyc/aletheias-phoenix-v5-qwen27-tvg-soft-r16" in source
     assert "ACTION_ADAPTER_REPO" in source
     assert "INTENT_ADAPTER_REPO" in source
     assert "build_exclusive_route_flags" in source
@@ -88,12 +88,12 @@ def test_notebook_uses_phoenix4_renderer_with_luna_and_frozen_specialists() -> N
         1,
     )[0]
     assert "peft=MAIN_ADAPTER_REPO" in main_branch
-    assert 'PHOENIX_THRESHOLD", "0.19"' in source
+    assert 'PHOENIX_THRESHOLD", "0.5"' in source
     assert "build_direct_prompt" in source
     assert '"logits_to_keep": 1' in source
 
 
-def test_notebook_renderer_matches_historical_phoenix4() -> None:
+def test_notebook_structural_renderer_matches_historical_phoenix4() -> None:
     from collections.abc import Iterable, Mapping
     from typing import Any
 
@@ -119,13 +119,41 @@ def test_notebook_renderer_matches_historical_phoenix4() -> None:
         ],
     ]
     for messages in cases:
-        assert namespace["build_member_prompt"](
+        assert namespace["format_example"](messages) == historical.format_example(
             messages
-        ) == historical.build_member_prompt(messages)
+        )
+        context, output = historical.format_example(messages)
+        assert namespace["build_member_prompt"](messages) == (
+            f"{namespace['DECEPTION_PROMPT']}\n\n<context>\n{context}\n</context>"
+            f"\n\n<output>\n{output}\n</output>"
+        )
         assert namespace["build_direct_prompt"](
             messages,
             FakeTokenizer(),
         ) == "<chat>" + DIRECT_PREDICTION_PREFIX
+
+
+def test_notebook_ordinary_prompt_matches_qwen27_binary_training_contract() -> None:
+    from collections.abc import Iterable, Mapping
+    from typing import Any
+
+    import yaml
+
+    namespace = {
+        "Any": Any,
+        "Iterable": Iterable,
+        "Mapping": Mapping,
+    }
+    exec(notebook_cell_source("phoenix-v6-renderer"), namespace)
+    expected = yaml.safe_load(
+        (ROOT / "configs/pid_qwen27_tvg_binary_soft_distillation_v1.yaml").read_text()
+    )["student"]["prompt"]
+
+    assert namespace["DECEPTION_PROMPT"] == expected
+    assert "reasoning" not in namespace["DECEPTION_PROMPT"].lower()
+    assert namespace["DECEPTION_PROMPT"].endswith(
+        "Output exactly one line: Prediction:<0 or 1>"
+    )
 
 
 def test_phoenix6_route_composition_preserves_ordinary_phoenix4_scores() -> None:
@@ -480,12 +508,15 @@ def test_mean_log_odds_and_intent_mask_preserve_other_scores() -> None:
         blend_intent_route_scores(base, [], routes)
 
 
-def test_phoenix61_notebook_preserves_historical_runtime_contract() -> None:
+def test_phoenix62_notebook_preserves_historical_runtime_contract() -> None:
     source = notebook_source()
     ast.parse(source)
 
-    assert "method=phoenix_wright_v6.1 phoenix4_renderer_luna_specialists" in source
-    assert "Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16" in source
+    assert (
+        "method=phoenix_wright_v6.2 "
+        "phoenix4_renderer_qwen27_soft_specialists"
+    ) in source
+    assert "Jazhyc/aletheias-phoenix-v5-qwen27-tvg-soft-r16" in source
     assert 'if kind == "harm":' in source
     assert 'elif kind == "main":' in source
     assert "build_exclusive_route_flags" in source
@@ -503,4 +534,4 @@ def test_phoenix61_notebook_preserves_historical_runtime_contract() -> None:
     assert 'PHOENIX_MEDIUM_PROMPT_THRESHOLD", "600"' in source
     assert 'PHOENIX_LONG_BATCH_SIZE", "16"' in source
     assert 'PHOENIX_LONG_PROMPT_THRESHOLD", "900"' in source
-    assert 'PHOENIX_THRESHOLD", "0.19"' in source
+    assert 'PHOENIX_THRESHOLD", "0.5"' in source
