@@ -1,5 +1,102 @@
 # Findings and Decisions
 
+## Corrected NDIF adapter validation after PEFT migration (2026-07-28)
+
+The earlier vLLM validation margins for the GPT-OSS privileged, GPT-OSS blind,
+Luna privileged, and Qwen3.5-27B soft-distillation students did not measure the
+intended adapters. After migrating their PEFT tensor paths to the canonical
+Qwen3.5 NDIF model tree, all four were rerun on the complete 822-row,
+21-dataset validation split through competition NDIF.
+
+The rerun used the optimized Phoenix direct path: one remote session per
+base/adapter, length sorting with `48/32/16` tiers, left padding and truncation,
+`logits_to_keep=1`, no judge generation, and normalized literal next-token
+`0|1` probabilities after `Prediction:`. Both prompt contracts were scored in
+the same session. The first three students were trained on the compact
+reasoning-summary prompt; Q27 soft was trained on the shorter binary-only
+prompt.
+
+| model | matched prompt | corrected macro AUROC | instructed | varied | old vLLM | corrected minus old | unique |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Base Qwen | summary | `0.93994` | `0.99375` | `0.86819` | — | — | `95/822` |
+| Base Qwen | binary | `0.94530` | `0.99438` | `0.87986` | — | — | `73/822` |
+| GPT-OSS PI | summary | `0.94911` | `0.99604` | `0.88653` | `0.93815` | `+0.01095` | `37/822` |
+| GPT-OSS blind | summary | `0.94893` | `0.99583` | `0.88639` | `0.93762` | `+0.01131` | `61/822` |
+| Luna PI | summary | `0.94821` | `0.98948` | `0.89319` | `0.93762` | `+0.01060` | `53/822` |
+| Q27 soft | binary | **`0.95375`** | **`0.99687`** | **`0.89625`** | `0.94625` | `+0.00750` | `100/822` |
+
+The old vectors confirm the silent-base diagnosis more directly than the
+aggregate changes. Each historical vLLM vector correlates at `0.99915` to
+`0.99936` with the corrected NDIF base vector under the same prompt, with mean
+absolute differences of only `0.00729` to `0.00755`. Against the corrected
+adapter vectors, correlations fall to `0.91197`--`0.95908` and mean absolute
+differences rise to `0.06829`--`0.21036`. The corrected adapter-versus-base
+mean absolute movements are `0.20196` for GPT-OSS PI, `0.06623` for blind,
+`0.20785` for Luna, and `0.08479` for Q27 soft. These are active adapters, not
+prompt-only base controls.
+
+Prompt compatibility was tested directly:
+
+| adapter | summary prompt | binary prompt | matched minus alternate |
+| --- | ---: | ---: | ---: |
+| GPT-OSS PI | `0.94911` | `0.94917` | `-0.00006` |
+| GPT-OSS blind | `0.94893` | `0.94744` | `+0.00149` |
+| Luna PI | `0.94821` | `0.94315` | `+0.00506` |
+| Q27 soft | `0.95042` | `0.95375` | `+0.00333` |
+
+Thus prompt length is not the issue: the complete prompts were only 232--844
+tokens for summary and 187--799 for binary, and no row was truncated. Wording
+and the learned output contract can still affect ranking. Luna should retain
+the summary prompt, and Q27 soft should retain its binary training prompt.
+GPT-OSS PI is effectively invariant in AUROC, although prompt changes still
+move its calibration.
+
+The training renderer and Phoenix 6.0 structural renderer produced
+byte-identical evidence on `822/822` rows under both prompts. Phoenix 6.0 is
+therefore structurally compatible on this validation set. This does not erase
+the private long-context renderer result: no validation row activates the
+character caps that distinguish the renderers.
+
+Per-dataset matched-prompt AUROC:
+
+| validation unit | GPT-OSS PI | GPT-OSS blind | Luna PI | Q27 soft |
+| --- | ---: | ---: | ---: | ---: |
+| instructed Nemotron, base | `1.00000` | `1.00000` | `0.96250` | `1.00000` |
+| instructed Qwen, base | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| instructed Qwen, a-mo-1 | `0.97375` | `0.98000` | `0.97250` | `0.98875` |
+| instructed Qwen, a-mo-3 | `1.00000` | `1.00000` | `0.99875` | `1.00000` |
+| instructed Qwen, a-mo-4 | `1.00000` | `0.99875` | `0.99625` | `1.00000` |
+| instructed Qwen, a-mo-5 | `0.99250` | `0.99000` | `0.98625` | `1.00000` |
+| instructed Qwen, a-mo-6 | `0.98875` | `0.98500` | `0.97250` | `0.97875` |
+| instructed Qwen, a-mo-7 | `1.00000` | `1.00000` | `0.99875` | `1.00000` |
+| instructed Qwen, b-mo | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| instructed Qwen, c-mo | `1.00000` | `1.00000` | `0.99125` | `1.00000` |
+| instructed Gemma, base | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| instructed Gemma, s-mo | `0.99750` | `0.99625` | `0.99500` | `0.99500` |
+| varied Qwen, base | `0.96875` | `0.97375` | `0.97875` | `0.97500` |
+| varied Qwen, a-mo-1 | `0.88000` | `0.87500` | `0.87375` | `0.88750` |
+| varied Qwen, a-mo-3 | `0.72750` | `0.73875` | `0.78500` | `0.73625` |
+| varied Qwen, a-mo-4 | `0.85875` | `0.83750` | `0.84625` | `0.87000` |
+| varied Qwen, a-mo-5 | `0.94750` | `0.95750` | `0.97750` | `0.96000` |
+| varied Qwen, a-mo-6 | `0.88000` | `0.88250` | `0.86875` | `0.89750` |
+| varied Qwen, a-mo-7 | `0.83500` | `0.83875` | `0.83750` | `0.85125` |
+| varied Qwen, b-mo | `0.95000` | `0.93625` | `0.92125` | `0.95375` |
+| varied Qwen, c-mo | `0.93125` | `0.93750` | `0.95000` | `0.93500` |
+
+Q27 soft is the corrected validation winner. It gains `0.00845` over base Qwen
+under the same binary prompt. Under the unchanged summary prompt it still
+scores `0.95042`, `0.01048` above the summary base, but that is below its
+training-matched result. This rerun supersedes the affected historical vLLM
+adapter-inference rankings below, including adapter-dependent local-test
+numbers. It does not invalidate the teacher caches or training runs. No
+corrected local-test selection was performed, and this validation rerun does
+not authorize one.
+
+Reproducible code and ignored artifacts:
+
+- `experiments/phoenix_adapter_validation_ndif/`
+- `results/blackbox/phoenix_adapter_validation_ndif_v1/`
+
 ## Teacher baseline
 
 Before privileged trace generation, the unchanged Truth Value Guard prompt was

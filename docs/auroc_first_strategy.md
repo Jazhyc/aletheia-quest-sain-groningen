@@ -409,6 +409,16 @@ model organisms' activations or hidden state. Submit Phoenix 4.4 with
 
 ## Phoenix Wright 5.0 Qwen-27B TVG soft student
 
+> **2026-07-28 correction:** the vLLM validation margins quoted in the Phoenix
+> 5.0--5.2 sections below were largely base-Qwen scores because the adapters
+> were not applied. A corrected competition-NDIF rerun after PEFT migration
+> scored Q27 soft at `0.95375`, GPT-OSS PI at `0.94911`, GPT-OSS blind at
+> `0.94893`, and Luna PI at `0.94821` using their training-matched prompts.
+> Base controls were `0.94530` for binary and `0.93994` for summary. Q27 soft is
+> the corrected validation winner. Treat the adapter-dependent vLLM local-test
+> numbers in these sections as uncorrected as well. See the
+> privileged-distillation findings for prompt crosses and per-dataset AUROCs.
+
 Phoenix 5.0 replaces only the ordinary Phoenix 4.4 component with the fresh
 rank-16/alpha-32 Qwen3.5-9B student soft-distilled from direct binary Truth
 Value Guard margins of Qwen3.5-27B. The exact main renderer matches training:

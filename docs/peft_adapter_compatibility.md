@@ -122,3 +122,26 @@ The full score digest was
 `eec505b47956755185748eba462eb21c70667556ada03228983913c38610daa8`.
 This is a deployment confirmation on one public unit, not a new
 validation-selected promotion result.
+
+## Corrected four-adapter validation
+
+A complete competition-NDIF rerun then evaluated the migrated GPT-OSS
+privileged, GPT-OSS blind, Luna privileged, and Qwen3.5-27B soft-distillation
+adapters on all 822 validation rows. It used Phoenix's optimized direct-logit
+path: one session per model, length-aware `48/32/16` batches,
+`logits_to_keep=1`, no generation, and normalized literal `0|1` scores.
+
+| adapter | training prompt | corrected macro AUROC | old vLLM macro AUROC |
+| --- | --- | ---: | ---: |
+| GPT-OSS PI | summary | `0.94911` | `0.93815` |
+| GPT-OSS blind | summary | `0.94893` | `0.93762` |
+| Luna PI | summary | `0.94821` | `0.93762` |
+| Q27 soft | binary | **`0.95375`** | `0.94625` |
+
+The historical score vectors correlate at `0.99915`--`0.99936` with corrected
+base-Qwen scores under the same prompts, demonstrating that they were
+predominantly base-model measurements. The corrected adapters differ
+materially from base. See
+`docs/privileged_information_distillation/findings.md` and
+`experiments/phoenix_adapter_validation_ndif/` for prompt crosses, activation
+statistics, and per-dataset AUROCs.

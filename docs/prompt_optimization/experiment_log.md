@@ -4229,6 +4229,45 @@ that reasoning is a general repair for the context-retention regression. Keep
 the adapter effect, reasoning effect, and renderer effect separate; do not add
 reasoning generation to Phoenix 6.0 on this evidence.
 
+## 2026-07-28: Corrected migrated-adapter validation through NDIF
+
+The four Phoenix 5.x student adapters were rerun on all 822 validation rows
+after canonical Qwen3.5 PEFT-path migration. The experiment used the optimized
+Phoenix direct path: a single remote session per model, length-aware
+`48/32/16` batches, left padding/truncation, `logits_to_keep=1`, no generated
+judge chain, and normalized literal `0|1` next-token scores. It crossed each
+adapter with the reasoning-summary and binary-only prompt contracts and scored
+base Qwen under both.
+
+| adapter | training-matched macro AUROC | instructed | varied | alternate-prompt macro |
+| --- | ---: | ---: | ---: | ---: |
+| GPT-OSS PI | `0.94911` | `0.99604` | `0.88653` | `0.94917` |
+| GPT-OSS blind | `0.94893` | `0.99583` | `0.88639` | `0.94744` |
+| Luna PI | `0.94821` | `0.98948` | `0.89319` | `0.94315` |
+| Q27 soft | **`0.95375`** | **`0.99687`** | **`0.89625`** | `0.95042` |
+
+Matched base-Qwen controls were `0.93994` under the summary prompt and
+`0.94530` under binary. All four adapters materially changed the base scores.
+Conversely, the old vLLM vectors correlate at `0.99915`--`0.99936` with these
+corrected base controls and differ from base by only `0.00729`--`0.00755` mean
+absolute probability. The historical adapter AUROCs were therefore primarily
+prompt-changed base-Qwen measurements, not valid adapter comparisons.
+
+The exact training renderer and Phoenix 6.0 structural renderer were
+byte-identical on all 822 validation rows under both prompts. Summary prompts
+were 232--844 tokens and binary prompts 187--799; no row was truncated. Prompt
+length is not a constraint here, but prompt contract still matters: Luna loses
+`0.00506` macro AUROC under binary, while Q27 soft loses `0.00333` under
+summary. Keep the Phoenix 6 structural renderer for private robustness and use
+the training-matched prompt for any adapter promotion.
+
+Q27 soft is now the validation winner at `0.95375`, `+0.00845` over its matched
+base control. This corrects the validation evidence only; no new local-test
+selection was performed, and the adapter-dependent historical vLLM local-test
+results remain uncorrected. Reproducible code is under
+`experiments/phoenix_adapter_validation_ndif/`, with ignored results under
+`results/blackbox/phoenix_adapter_validation_ndif_v1/`.
+
 ## 2026-07-27: Matched-organism Truth Value Guard logits
 
 The frozen local test diagnostic scored every one of 821 rows with the exact
