@@ -1,0 +1,40 @@
+#!/bin/bash
+#SBATCH --job-name=aq-phx53-frame
+#SBATCH --time=01:30:00
+#SBATCH --mem=32GB
+#SBATCH --partition=gpushort
+#SBATCH --gpus-per-node=rtx_pro_6000:1
+#SBATCH --cpus-per-task=1
+#SBATCH --output=logs/slurm/%x-%j.bootstrap.out
+
+set -euo pipefail
+cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
+
+if command -v module >/dev/null 2>&1; then
+  module load Python/3.12.3-GCCcore-13.3.0
+  module load CUDA/13.2.0
+fi
+source .venv/bin/activate
+
+LOG_DIR="logs/slurm/phoenix_system_framing_counterfactual"
+mkdir -p "${LOG_DIR}"
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  exec >"${LOG_DIR}/validation-test-${SLURM_JOB_ID}.out" 2>&1
+  rm -f "logs/slurm/${SLURM_JOB_NAME:-aq-phx53-frame}-${SLURM_JOB_ID}.bootstrap.out"
+  echo "job_id=${SLURM_JOB_ID}"
+fi
+
+if [[ -f .env ]]; then
+  set -a
+  source .env
+  set +a
+fi
+
+export TOKENIZERS_PARALLELISM=false
+export HF_HOME="${HF_HOME:-${SCRATCH:-/scratch/${USER}}/.huggingface}"
+export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
+export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+
+python experiments/phoenix_system_framing_counterfactual/run.py "$@"
