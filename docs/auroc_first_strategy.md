@@ -582,3 +582,25 @@ threshold is validation-selected at `0.38`; it does not affect AUROC. A direct
 one-row competition-NDIF notebook smoke completed successfully and emitted a
 continuous score of `0.00109873`. Phoenix 5.2.1 remains black-box and must be
 submitted with `--tag black`.
+
+## NDIF padding-free packing rejection
+
+A 2026-07-28 deployment experiment tested padding-free inference for the
+Phoenix 6.2 direct margin. Qwen3.5 packing was constructed with the documented
+complete hybrid boundary contract: reset `position_ids`, FlashAttention
+`cu_seq_lens_q/k`, causal-convolution `seq_idx`, no `attention_mask`, and a
+tensor `logits_to_keep` selecting only each prompt's final position.
+
+On a 96-row competition-NDIF smoke, packing reduced two padded traces
+(`48x260`, `48x351`) to one 25,079-token trace and moved wall time from `8.37s`
+to `7.72s`. It failed the required parity gate: only 2/96 scores agreed within
+`1e-5`, mean absolute drift was `0.12111`, maximum drift was `0.52512`, and
+macro AUROC moved from `0.99524` to `0.97619`. This is not ordinary
+batch-shape noise; it is consistent with incomplete packed-boundary isolation
+in the hosted hybrid Qwen3.5 path.
+
+Do not deploy packing on the current NDIF backend or interpret the small
+runtime gain as usable. Preserve length-sorted, left-padded `48/32/16`
+inference. Revisit only after the hosted deployment explicitly supports packed
+Qwen3.5 Gated DeltaNet and causal-convolution boundaries, then repeat the
+score-parity gate before benchmarking speed.
