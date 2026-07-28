@@ -283,6 +283,26 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   student.output_dir=results/blackbox/qwen9b_privileged_gptoss120b_summary_smoke/adapter
 ```
 
+The Qwen397 run uses the documented text-only training fallback because the
+canonical multimodal class requires an optimized Gated DeltaNet runtime that
+is not available in the locked training environment. Canonicalize the saved
+checkpoint in the same job:
+
+```bash
+QWEN35_CANONICALIZE_ADAPTER="${PWD}/results/blackbox/qwen9b_qwen397_tvg_binary_softonly_varied_smoke_v1/adapter" \
+QWEN35_CANONICALIZATION_WORK_DIR="${PWD}/results/blackbox/qwen9b_qwen397_tvg_binary_softonly_varied_smoke_v1/peft_path_migration" \
+  sbatch --export=ALL,QWEN35_CANONICALIZE_ADAPTER,QWEN35_CANONICALIZATION_WORK_DIR \
+  experiments/privileged_information_distillation/run_student_sft.sh \
+  --config-name pid_qwen397_tvg_binary_soft_distillation_v1 \
+  method=qwen9b_qwen397_tvg_binary_softonly_varied_smoke_v1 \
+  student.train_limit=32 student.training.max_steps=1
+```
+
+The migration verifies tensor equality after inserting `language_model` into
+every saved decoder key and records the source and converted hashes. The
+evaluator independently rejects legacy text-only keys before starting vLLM.
+A base-versus-adapter score fingerprint remains mandatory before deployment.
+
 Restrict an ablation to cached varied-deception targets without regenerating
 teacher traces:
 

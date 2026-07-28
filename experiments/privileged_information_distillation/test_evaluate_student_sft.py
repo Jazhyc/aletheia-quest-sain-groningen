@@ -44,6 +44,7 @@ from experiments.privileged_information_distillation.evaluate_student_sft import
     validate_qwen35_adapter_layout,
     set_reasoning_visibility,
     strict_pattern_for_config,
+    summarize_lora_effect,
 )
 from experiments.privileged_information_distillation.analyze_continuous_margins import (
     cross_label_tie_fraction,
@@ -62,6 +63,27 @@ def test_base_model_control_omits_lora_request_without_importing_vllm(
     tmp_path: Path,
 ) -> None:
     assert lora_request_or_none(tmp_path / "adapter", 1, use_lora=False) is None
+
+
+def test_lora_effect_fingerprint_rejects_silent_base_scores() -> None:
+    base = pd.DataFrame({
+        "dataset": ["unit", "unit"],
+        "index": [1, 2],
+        "direct_margin_score": [0.25, 0.75],
+    })
+    try:
+        summarize_lora_effect(base.copy(), base, "direct_margin_score")
+    except RuntimeError as error:
+        assert "fingerprint failed" in str(error)
+    else:
+        raise AssertionError("bit-identical adapter/base scores must fail")
+
+    adapter = base.copy()
+    adapter.loc[1, "direct_margin_score"] = 0.8
+    result = summarize_lora_effect(adapter, base, "direct_margin_score")
+    assert result["exact_equal"] == 1
+    assert result["max_absolute_difference"] > 0.0
+    assert result["adapter_sha256_float32"] != result["base_sha256_float32"]
 
 
 def test_qwen35_vllm_preflight_requires_canonical_adapter_keys(

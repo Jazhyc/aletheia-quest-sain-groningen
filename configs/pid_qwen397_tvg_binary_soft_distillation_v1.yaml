@@ -9,7 +9,7 @@ teacher:
   artifact: results/blackbox/qwen35_397b_fp8_nothink_truth_value_binary_logit_v1/train/student_rows.jsonl
 
 student:
-  model_loader: image_text_to_text
+  model_loader: causal_lm
   soft_teacher_artifact: results/blackbox/qwen35_397b_fp8_nothink_truth_value_binary_logit_v1/train/soft_targets.jsonl
   output_dir: ${output_dir}/adapter
   lora:

@@ -32,7 +32,7 @@ def test_qwen397_soft_student_matches_frozen_pure_boundary_recipe() -> None:
         "qwen35_397b_fp8_nothink_truth_value_binary_logit_v1/train/soft_targets.jsonl"
     )
     assert cfg.student.model == "Qwen/Qwen3.5-9B"
-    assert cfg.student.model_loader == "image_text_to_text"
+    assert cfg.student.model_loader == "causal_lm"
     assert cfg.student.dataset_name_contains == "varied-deception"
     assert cfg.student.target_mode == "prediction_only"
     assert cfg.student.override_cached_prompt is True
@@ -58,5 +58,7 @@ def test_qwen397_launcher_validates_cache_and_chains_direct_margin_eval() -> Non
     assert 'sha256sum -c "${CACHE_ROOT}/SHA256SUMS"' in source
     assert 'if [[ "${rows}" -ne 2880 ]]' in source
     assert "--config-name \"${CONFIG}\"" in source
+    assert "QWEN35_CANONICALIZE_ADAPTER=${ROOT}/${ADAPTER}" in source
     assert '--dependency="afterok:${STUDENT}"' in source
+    assert "--verify-lora-effect" in source
     assert "--continuous-margin-condition direct" in source

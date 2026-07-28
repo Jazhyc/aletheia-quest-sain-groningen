@@ -1264,10 +1264,16 @@ def main(cfg: DictConfig) -> None:
             is_trainable=True,
         )
     trainable_lora_names = validate_trainable_lora_layout(model, model_loader)
+    trainable_lora_dtypes = sorted({
+        str(parameter.dtype)
+        for name, parameter in model.named_parameters()
+        if name in trainable_lora_names
+    })
     print(
         f"model_loader={model_loader} "
         f"resolved_model_class={model.get_base_model().__class__.__name__} "
         f"trainable_lora_tensors={len(trainable_lora_names)} "
+        f"trainable_lora_dtypes={trainable_lora_dtypes} "
         f"first_trainable_lora={trainable_lora_names[0]}",
         flush=True,
     )
