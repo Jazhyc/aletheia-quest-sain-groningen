@@ -54,7 +54,7 @@ submit_student() {
     --job-name="aq-q397-dr-${arm}" \
     --time=01:00:00 \
     --dependency="afterok:${SCORE}" \
-    --export="ALL,QWEN35_CANONICALIZE_ADAPTER=${ROOT}/${adapter},QWEN35_CANONICALIZATION_WORK_DIR=${ROOT}/${migration}" \
+    --export="ALL,TORCHDYNAMO_DISABLE=1,QWEN35_CANONICALIZE_ADAPTER=${ROOT}/${adapter},QWEN35_CANONICALIZATION_WORK_DIR=${ROOT}/${migration}" \
     "${ROOT}/experiments/privileged_information_distillation/run_student_sft.sh" \
     --config-name "${config}")"
   printf '%s' "${job_id}"

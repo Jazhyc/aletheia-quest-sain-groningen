@@ -52,6 +52,7 @@ def test_soft_datarater_launcher_freezes_score_train_and_order_controls() -> Non
     assert "--finite-difference-epsilon 0.1" in source
     assert "--keep-fractions 0.5" in source
     assert '--dependency="afterok:${SCORE}"' in source
+    assert "TORCHDYNAMO_DISABLE=1" in source
     assert 'TRAIN_DEPENDENCY="afterok:${RANDOM_JOB}:${LOSS_JOB}:${DOT_JOB}"' in source
     assert "--run-name validation_datarater_forward_v1" in source
     assert "--run-name validation_datarater_reverse_v1" in source
