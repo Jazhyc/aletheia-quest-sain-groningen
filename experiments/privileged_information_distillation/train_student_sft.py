@@ -160,7 +160,7 @@ def order_records_for_paired_batches(
     records: list[dict[str, Any]],
     seed: int,
 ) -> list[dict[str, Any]]:
-    """Interleave stable within-dataset positive/negative pairs for batch size two."""
+    """Interleave stable within-dataset positive/negative pairs for even batches."""
     by_dataset: dict[str, dict[int, list[dict[str, Any]]]] = {}
     for record in records:
         dataset = str(record.get("dataset", ""))
@@ -209,6 +209,14 @@ def order_records_for_paired_batches(
     }:
         raise AssertionError("paired record ordering must preserve every input row once")
     return ordered
+
+
+def validate_paired_batch_size(batch_size: int) -> None:
+    """Require an even microbatch so consecutive label pairs stay intact."""
+    if batch_size <= 0 or batch_size % 2:
+        raise ValueError(
+            "paired batching requires a positive even per-device batch size"
+        )
 
 
 def pairwise_logistic_loss(
@@ -1184,8 +1192,9 @@ def main(cfg: DictConfig) -> None:
         bool(record.get(LABEL_ONLY_TARGET_KEY)) for record in records
     )
     if paired_batching:
-        if int(cfg.student.training.per_device_train_batch_size) != 2:
-            raise ValueError("paired batching currently requires per-device batch size 2")
+        validate_paired_batch_size(
+            int(cfg.student.training.per_device_train_batch_size)
+        )
         records = order_records_for_paired_batches(records, int(cfg.seed))
     dataset_id_by_name = {
         name: dataset_id

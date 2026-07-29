@@ -15,6 +15,11 @@ RANK32_CONFIG = (
     / "configs"
     / "pid_kimi_k3_openrouter_tvg_binary_soft_full_r32a64_ep2_bf16_v1.yaml"
 )
+PAIRWISE_CONFIG = (
+    ROOT
+    / "configs"
+    / "pid_kimi_k3_openrouter_tvg_binary_soft_pairwise03_full_r16_ep2_v1.yaml"
+)
 TEACHER = (
     ROOT
     / "experiments"
@@ -56,6 +61,12 @@ RANK32_LAMBDA = (
     / "experiments"
     / "privileged_information_distillation"
     / "run_kimi_k3_full_r32a64_bf16_lambda.sh"
+)
+PAIRWISE_LAMBDA = (
+    ROOT
+    / "experiments"
+    / "privileged_information_distillation"
+    / "run_kimi_k3_full_pairwise03_lambda.sh"
 )
 
 
@@ -171,6 +182,32 @@ def test_kimi_rank32_runner_evaluates_exact_bf16_package() -> None:
     assert 'GRADIENT_ACCUMULATION="${KIMI_GRADIENT_ACCUMULATION:-4}"' in source
     assert "--dtype bfloat16" in source
     assert "expected all BF16 LoRA tensors" in source
+    assert '--adapter-dir "${ADAPTER}"' in source
+    assert "--split validation" in source
+    assert "--split test" not in source
+    assert "--continuous-margin-condition direct" in source
+
+
+def test_kimi_pairwise_config_adds_one_frozen_ranking_term() -> None:
+    config = yaml.safe_load(PAIRWISE_CONFIG.read_text())
+
+    assert (
+        config["defaults"][0]
+        == "pid_kimi_k3_openrouter_tvg_binary_soft_full_r16_ep2_v1"
+    )
+    assert config["student"]["training"] == {
+        "pairwise_loss_weight": 0.3,
+        "pairwise_temperature": 1.0,
+        "paired_batching": True,
+    }
+
+
+def test_kimi_pairwise_runner_uses_batch8_and_joint_anchor_validation() -> None:
+    source = PAIRWISE_LAMBDA.read_text()
+
+    assert 'MICRO_BATCH="${KIMI_MICRO_BATCH:-8}"' in source
+    assert 'GRADIENT_ACCUMULATION="${KIMI_GRADIENT_ACCUMULATION:-4}"' in source
+    assert '--adapter-dir "${ANCHOR_ADAPTER}"' in source
     assert '--adapter-dir "${ADAPTER}"' in source
     assert "--split validation" in source
     assert "--split test" not in source

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import sys
 
+import pytest
 import torch
 from omegaconf import OmegaConf
 
@@ -28,6 +29,7 @@ from experiments.privileged_information_distillation.train_student_sft import (
     student_prompt_with_reasoning_dropout,
     tokenize_record,
     training_warmup_steps,
+    validate_paired_batch_size,
     validate_trainable_lora_layout,
 )
 from experiments.qwen_grpo_lora.run_qwen_grpo_lora import (
@@ -618,6 +620,14 @@ def test_paired_order_puts_opposite_labels_from_same_dataset_together() -> None:
         first, second = ordered[offset:offset + 2]
         assert first["dataset"] == second["dataset"]
         assert first["label"] != second["label"]
+
+
+def test_paired_batch_size_accepts_throughput_batch_and_rejects_odd() -> None:
+    validate_paired_batch_size(2)
+    validate_paired_batch_size(8)
+
+    with pytest.raises(ValueError, match="positive even"):
+        validate_paired_batch_size(7)
 
 
 def test_pairwise_logistic_loss_rewards_correct_within_dataset_order() -> None:
