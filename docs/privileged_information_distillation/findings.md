@@ -4010,6 +4010,70 @@ The lower rank-32 training loss alongside worse AUROC is evidence against
 student capacity or training-objective optimization being the active
 validation bottleneck at these settings.
 
+### Full-data Kimi pairwise-ranking ablation
+
+A frozen AUROC-oriented follow-up retained the best full-data rank-16 recipe
+and added hard-label within-dataset RankNet loss at weight `0.3` to Kimi
+soft-target BCE at weight `1.0`. Its temperature-1 loss was
+`softplus(-(margin_positive - margin_negative))`. Stable pairing covered 3,213
+positive/negative pairs, or 6,426/6,573 rows. The 147 unmatched Nemotron
+negatives retained ordinary BCE but contributed no pairwise term. An
+implementation follow-up generalized the already tested sequential pair
+ordering from microbatch 2 to any positive even microbatch; batch 8 with
+accumulation 4 preserved effective batch size 32 and kept every consecutive
+pair intact.
+
+The H100 run completed 412 optimizer steps in `1,078s`. Its reported train loss
+was `0.6953`, which is not comparable with pure BCE because it includes the
+weighted ranking term. The migrated 256-tensor adapter SHA-256 is
+`def9b2c7a11cf770a587dc0fbd1dc16ad5b012ab7017837dbc76187f6879aa95`.
+
+Shared-session validation loaded the existing BCE anchor first and the
+pairwise adapter second in one vLLM engine:
+
+| objective | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Kimi soft BCE | `0.96304` | `0.99854` | `0.91569` | `0.92143` | `0.87857` | `0.03571` | `766/822` |
+| **Kimi soft BCE + pairwise 0.3** | **`0.96613`** | **`0.99917`** | **`0.92208`** | **`0.92500`** | **`0.88333`** | **`0.03333`** | **`777/822`** |
+
+The pairwise term gained `0.00310` macro AUROC, `0.00063` instructed, and
+`0.00639` varied. It also reduced duplicate-score excess from 56 to 45 and rows
+participating in a tie from 100 to 79; both adapters had macro cross-label tie
+fraction `0.000119`. All 822 direct margins were present, and the LoRA
+fingerprint passed with only 4 exact base/adapter score matches. The preserved
+pairwise generations SHA-256 is
+`415f5c4b8fa0d23aa8dde19f8ed00f5dc6f32d8b89546b90a0539802382f12e7`.
+
+| validation dataset suffix | BCE AUROC | pairwise AUROC | delta |
+| --- | ---: | ---: | ---: |
+| instructed / Nemotron base | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Qwen base | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Qwen a1 | `0.9875` | `0.9975` | `+0.0100` |
+| instructed / Qwen a3 | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Qwen a4 | `1.0000` | `0.9950` | `-0.0050` |
+| instructed / Qwen a5 | `0.9950` | `0.9975` | `+0.0025` |
+| instructed / Qwen a6 | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Qwen a7 | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Qwen b | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Qwen c | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Gemma base | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Gemma s | `1.0000` | `1.0000` | `+0.0000` |
+| varied / Qwen base | `0.9900` | `0.9850` | `-0.0050` |
+| varied / Qwen a1 | `0.8625` | `0.8550` | `-0.0075` |
+| varied / Qwen a3 | `0.8550` | `0.8600` | `+0.0050` |
+| varied / Qwen a4 | `0.8900` | `0.9125` | `+0.0225` |
+| varied / Qwen a5 | `0.9775` | `0.9850` | `+0.0075` |
+| varied / Qwen a6 | `0.9075` | `0.9275` | `+0.0200` |
+| varied / Qwen a7 | `0.8450` | `0.8450` | `+0.0000` |
+| varied / Qwen b | `0.9625` | `0.9600` | `-0.0025` |
+| varied / Qwen c | `0.9513` | `0.9688` | `+0.0175` |
+
+The direction is encouraging and concentrated in varied deception, but the
+same-session `+0.00310` gain misses the frozen `+0.005` promotion gate. Do not
+run local test, promote this checkpoint, or tune the pairwise weight from these
+validation labels. This result supports ranking loss as a useful signal, not
+yet as a selected replacement.
+
 ### Frozen Kimi student local-test confirmation
 
 After closing the validation sweep, the already submitted `5e-5`, two-epoch
