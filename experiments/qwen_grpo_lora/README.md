@@ -224,6 +224,14 @@ The frozen pre-GRPO vLLM reference scored validation macro AUROC `0.95369`
 `0.95393` AUROC is backend-level numeric variation; compare all GRPO candidates
 against the vLLM `0.95369` reference.
 
+After GRPO had already been rejected on validation, the user authorized a
+single frozen test evaluation of the pre-GRPO soft-distilled reference. It
+scored `0.95869` macro AUROC (`0.99542` instructed, `0.90972` varied), with
+threshold-0.5 balanced accuracy `0.88690`, recall `0.82381`, FPR `0.05000`,
+and `774/821` unique scores. Scoring took `8.54s` (`96.11` rows/s). This does
+not authorize a GRPO test run or test-set tuning; Phoenix 4.4 remains narrowly
+higher at `0.95982` macro AUROC.
+
 Matched 16-step H100 SXM5 speed probes selected generation batch 32. A cold
 batch-32 run took `230.5s` because it paid one-time Triton/TileLang autotuning;
 the warm repeat took `139.7s` (`8.73s/step`). Generation batch 64 with a larger

@@ -353,6 +353,15 @@ The public adapter revision is
 the locally validated canonical weights,
 `da32c67a2ea0d9834fb90b93dac84a9ee68f05b2a2023b8ea272704fdb58c40d`.
 
+Its first frozen local-test evaluation used the matched vLLM original-prompt
+`Prediction:` readout and scored `0.95869` macro AUROC (`0.99542` instructed,
+`0.90972` varied), with `774/821` unique scores. Threshold-0.5 balanced
+accuracy was `0.88690`, recall `0.82381`, and FPR `0.05000`. This is `0.00113`
+below Phoenix 4.4's `0.95982` test macro AUROC, so the test result confirms
+strong transfer but not a clear local superiority claim. Retain the
+validation-selected adapter and do not tune the prompt, readout, or threshold
+on this test vector.
+
 An NDIF run on all 400 rows of
 `dev-varied-deception-Qwen3.5-27B-None` completed at batch 32 in `102.1s`,
 emitting 82 distinct scores over `[0.00218, 0.95257]` and AUROC `0.93946`.

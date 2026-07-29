@@ -5,6 +5,7 @@ Submitted timestamps are UTC.
 
 | submitted_at | method | AUROC | bal_acc | recall | FPR | score_time | rows/s |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-29 07:53:49 | qwen9b_qwen397_tvg_soft_r16_lr5e5_ep2_v1_vllm_logits_prediction_plain | 0.9587 | 0.8869 | 0.8238 | 0.0500 | 8.5s | 96.1/s |
 | 2026-07-28 23:25:23 | qwen9b_qwen397_openrouter_explicit_tvg_binary_softonly_varied_v1 | 0.9603 | 0.8833 | 0.8286 | 0.0619 | 26.8s | 30.7/s |
 | 2026-07-28 00:30:56 | ndif_context_self_question_auditor_full_test_v1 | 0.9592 | 0.9155 | 0.9095 | 0.0786 | 229.5s | 3.6/s |
 | 2026-07-27 15:24:16 | qwen9b_qwen27_tvg_binary_softonly_varied_v1 | 0.9415 | 0.8679 | 0.8143 | 0.0786 | 13.0s | 63.3/s |

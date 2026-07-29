@@ -3568,6 +3568,61 @@ validated local digest above. The notebook retains its existing filename,
 restores the exact original training rubric, and was not submitted while the
 competition queue remained active.
 
+The user then authorized the first and only frozen local-test evaluation of
+this validation-selected adapter. The matched vLLM path used the exact original
+prompt, excluded source reasoning, and scored normalized literal next-token
+`0|1` logits directly after `Prediction:`. All 821 rows were scored.
+
+| split | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| validation, matched vLLM | `0.95369` | `0.99792` | `0.89472` | `0.90833` | `0.85476` | `0.03810` | `768/822` |
+| frozen local test | **`0.95869`** | `0.99542` | **`0.90972`** | `0.88690` | `0.82381` | `0.05000` | `774/821` |
+
+Test macro AUROC is `+0.00500` over the matched vLLM validation reference
+(`+0.00476` over the canonical `0.95393` result). It is `0.00113` below the
+Phoenix 4.4 GRPO test reference (`0.95982`) and `0.00161` below the separate
+regular-OpenRouter/explicit-prompt student (`0.96030`). The direct 397B teacher
+test ceiling remains higher at `0.9654`; that teacher used the regular
+OpenRouter checkpoint rather than the FP8 cache used to train this student.
+These small cross-method differences do not justify test-set retuning.
+
+The threshold-0.5 metrics above remain the frozen binary diagnostics. A
+test-only threshold sweep peaked at `0.91548` balanced accuracy at
+`0.13296423`, but this is diagnostic and must not replace the validation-frozen
+submission threshold. The test vector has 47 duplicate-score excess rows and
+84 rows participating in ties. One-token scoring took `8.54s`
+(`96.11` rows/s), excluding model startup. The exact preserved predictions CSV
+has SHA-256
+`4323c98bf8a6fa67211d8e3dfcbceaf2fde5d2ec10539a365176973a15b5d1cf`.
+
+| test dataset unit | AUROC |
+| --- | ---: |
+| `instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-None` | `0.99000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.97750` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.99750` |
+| `instructed-deception-gemma-3-27b-it-None` | `0.98000` |
+| `instructed-deception-gemma-3-27b-it-s-mo-gemma-3-27b-it` | `1.00000` |
+| `varied-deception-Qwen3.5-27B-None` | `0.95500` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.85750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.86750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `0.87000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `0.94250` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.97250` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.88250` |
+| `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.89750` |
+| `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.94250` |
+
+Ignored reproducibility artifacts:
+
+- `results/blackbox/qwen9b_qwen397_tvg_soft_r16_lr5e5_ep2_v1/test_vllm_logits/`
+
 ## Qwen-397B soft-objective ablation (2026-07-28)
 
 Jobs `30342642`--`30342645` tested whether the pure Qwen-397B soft student lost
