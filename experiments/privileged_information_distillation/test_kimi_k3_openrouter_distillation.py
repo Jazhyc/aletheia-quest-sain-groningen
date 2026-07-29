@@ -17,6 +17,12 @@ SUBMIT = (
     / "privileged_information_distillation"
     / "submit_kimi_k3_openrouter_soft_distillation.sh"
 )
+LAMBDA = (
+    ROOT
+    / "experiments"
+    / "privileged_information_distillation"
+    / "run_kimi_k3_distillation_lambda.sh"
+)
 
 
 def test_kimi_config_uses_matched_binary_soft_recipe() -> None:
@@ -47,3 +53,15 @@ def test_kimi_student_only_schedules_validation() -> None:
     assert "--split test" not in source
     assert "--continuous-margin-condition direct" in source
     assert "--verify-lora-effect" in source
+
+
+def test_kimi_lambda_runner_uses_selected_h100_recipe() -> None:
+    source = LAMBDA.read_text()
+
+    assert "flash-linear-attention==0.5.2" in source
+    assert 'MICRO_BATCH="${KIMI_MICRO_BATCH:-8}"' in source
+    assert 'GRADIENT_ACCUMULATION="${KIMI_GRADIENT_ACCUMULATION:-4}"' in source
+    assert "--config-name \"${BASE_CONFIG}\"" in source
+    assert "--split validation" in source
+    assert "--split test" not in source
+    assert "--continuous-margin-condition direct" in source
