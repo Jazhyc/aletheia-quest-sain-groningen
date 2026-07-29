@@ -4762,3 +4762,45 @@ this sweep was evaluated on local test. The selected 192-token baseline is
 therefore only a possible leaderboard probe: the earlier frozen test already
 rejected its 512-token predecessor, and the prompt sweep supplies no new
 held-out confirmation.
+
+## 2026-07-29: Generic Q397 reasoning OOD transfer
+
+A frozen Liars' Bench probe tested whether generated reasoning transfers
+beyond known competition response modes without relying on specialist
+prompts. It sampled 100 rows per category from the existing frozen 400-row
+sample, stratified by label and source model. The same generic optimized-Q397
+judge was applied uniformly to Alpaca, Convincing Game, Gender Secret, Harm
+Pressure Choice, HP-KR, Insider Trading, Instructed Deception, and Soft
+Trigger. No category router, source reasoning, action prompt, or epistemic
+prompt was used.
+
+The deployment-relevant comparison matched Phoenix 7's structural renderer
+between direct and 192-token generated-reasoning arms. Across the seven
+two-class categories, direct/reasoning/frozen-60/40-blend macro AUROC was
+`0.79324/0.80823/0.81031`; the blend delta was `+0.01707`. Category deltas
+were `+0.0082` Convincing Game, `+0.0304` Gender Secret, `-0.0128` Harm
+Pressure Choice, `-0.0978` HP-KR, `+0.1627` Insider Trading, `-0.0004`
+Instructed Deception, and `+0.0292` Soft Trigger. Thus the aggregate gain was
+heterogeneous and dominated by Insider Trading.
+
+A 5,000-sample paired stratified row bootstrap placed the macro blend delta
+at `[-0.00197, 0.03648]`, with `0.960` probability positive conditional on
+these categories. Resampling whole category deltas produced
+`[-0.03230, 0.07635]`, exposing the uncertainty in transferring to an unknown
+OOD category mixture. Excluding Insider Trading made the other-six mean delta
+`-0.00720`. Excluding both existing routed modes, Insider Trading and HP-KR,
+left a modest `+0.01093` over the other five public modes.
+
+The all-honest Alpaca control retained 2% of rows above `0.5` for direct,
+reasoning, and blend, while mean score fell `0.0367 -> 0.0203`. Structural
+generation took `482.0s` and post-reasoning scoring `39.6s` for 800 rows;
+45 summaries missed a terminal prediction at the 192-token cap. A post-hoc
+fallback-to-direct rule for missing boundaries did not help the earlier
+matched-tail comparison.
+
+This establishes real generic reasoning transfer for action-report deception
+and weaker transfer in a few other modes, but it does not support uniform
+deployment. HP-KR remains a clear counterexample, and the current action
+specialist already covers the dominant positive category more cheaply. Keep
+Phoenix's direct and specialist paths; treat generated reasoning as a future
+label-free routed auxiliary rather than a global leaderboard change.
