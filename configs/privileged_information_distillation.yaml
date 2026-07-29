@@ -51,6 +51,7 @@ student:
   train_limit: null
   train_fraction: 1.0
   train_fraction_seed: ${seed}
+  selection_manifest: null
   dataset_name_contains: null
   max_prompt_chars: 3000
   context_truncation: tail
@@ -111,6 +112,7 @@ student:
     soft_huber_delta: 1.0
     ordinal_soft_loss_weight: 0.0
     paired_batching: false
+    paired_batching_mode: interleaved
 
 hydra:
   run:

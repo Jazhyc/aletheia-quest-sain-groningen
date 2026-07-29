@@ -211,6 +211,103 @@ def order_records_for_paired_batches(
     return ordered
 
 
+def order_records_for_grouped_pair_batches(
+    records: list[dict[str, Any]],
+    seed: int,
+    batch_size: int,
+) -> list[dict[str, Any]]:
+    """Build same-dataset batches with equal labels whenever both are available."""
+    validate_paired_batch_size(batch_size)
+    half_batch = batch_size // 2
+    by_dataset: dict[str, dict[int, list[dict[str, Any]]]] = {}
+    for record in records:
+        dataset = str(record.get("dataset", ""))
+        label = int(record["label"])
+        if label not in (0, 1):
+            raise ValueError(f"binary label required, got {label}")
+        by_dataset.setdefault(dataset, {0: [], 1: []})[label].append(record)
+
+    def digest(*parts: Any) -> bytes:
+        return hashlib.sha256(
+            "\0".join(str(part) for part in (seed, *parts)).encode("utf-8")
+        ).digest()
+
+    blocks: list[tuple[bytes, list[dict[str, Any]]]] = []
+    tails: list[tuple[bytes, dict[str, Any]]] = []
+    for dataset, groups in sorted(by_dataset.items()):
+        negative = sorted(
+            groups[0],
+            key=lambda record: digest(dataset, 0, record.get("index")),
+        )
+        positive = sorted(
+            groups[1],
+            key=lambda record: digest(dataset, 1, record.get("index")),
+        )
+        block_index = 0
+        while len(negative) >= half_batch and len(positive) >= half_batch:
+            block = negative[:half_batch] + positive[:half_batch]
+            del negative[:half_batch]
+            del positive[:half_batch]
+            block.sort(
+                key=lambda record: digest(
+                    dataset, "within", block_index, record.get("index")
+                )
+            )
+            blocks.append((
+                digest(dataset, "block", block_index),
+                block,
+            ))
+            block_index += 1
+
+        # If one label has fewer than half a batch left, preserve all of those
+        # examples in one final mixed block and fill it from the majority.
+        if negative and positive and len(negative) + len(positive) >= batch_size:
+            if len(negative) < len(positive):
+                minority, majority = negative, positive
+            else:
+                minority, majority = positive, negative
+            take_majority = batch_size - len(minority)
+            block = list(minority) + majority[:take_majority]
+            del majority[:take_majority]
+            minority.clear()
+            block.sort(
+                key=lambda record: digest(
+                    dataset, "within", block_index, record.get("index")
+                )
+            )
+            blocks.append((
+                digest(dataset, "block", block_index),
+                block,
+            ))
+            block_index += 1
+
+        remainder = negative + positive
+        while len(remainder) >= batch_size:
+            block = remainder[:batch_size]
+            del remainder[:batch_size]
+            blocks.append((
+                digest(dataset, "block", block_index),
+                block,
+            ))
+            block_index += 1
+        tails.extend(
+            (digest(dataset, "tail", record.get("index")), record)
+            for record in remainder
+        )
+
+    ordered = [
+        record
+        for _, block in sorted(blocks, key=lambda item: item[0])
+        for record in block
+    ]
+    ordered.extend(record for _, record in sorted(tails, key=lambda item: item[0]))
+    if len(ordered) != len(records) or {id(record) for record in ordered} != {
+        id(record) for record in records
+    }:
+        raise AssertionError("grouped pair ordering must preserve every input row once")
+    return ordered
+
+
 def validate_paired_batch_size(batch_size: int) -> None:
     """Require an even microbatch so consecutive label pairs stay intact."""
     if batch_size <= 0 or batch_size % 2:
@@ -876,6 +973,9 @@ def main(cfg: DictConfig) -> None:
     paired_batching = bool(OmegaConf.select(
         cfg, "student.training.paired_batching", default=False
     ))
+    paired_batching_mode = str(OmegaConf.select(
+        cfg, "student.training.paired_batching_mode", default="interleaved"
+    ))
     if any(weight < 0 for weight in (
         completion_loss_weight,
         direct_loss_weight,
@@ -921,6 +1021,10 @@ def main(cfg: DictConfig) -> None:
         )
     if pairwise_loss_weight and not paired_batching:
         raise ValueError("pairwise loss requires student.training.paired_batching=true")
+    if paired_batching_mode not in {"interleaved", "same_dataset"}:
+        raise ValueError(
+            "student.training.paired_batching_mode must be interleaved or same_dataset"
+        )
     uses_direct_forward = bool(
         direct_loss_weight
         or pairwise_loss_weight
@@ -1192,10 +1296,16 @@ def main(cfg: DictConfig) -> None:
         bool(record.get(LABEL_ONLY_TARGET_KEY)) for record in records
     )
     if paired_batching:
-        validate_paired_batch_size(
-            int(cfg.student.training.per_device_train_batch_size)
-        )
-        records = order_records_for_paired_batches(records, int(cfg.seed))
+        micro_batch_size = int(cfg.student.training.per_device_train_batch_size)
+        validate_paired_batch_size(micro_batch_size)
+        if paired_batching_mode == "same_dataset":
+            records = order_records_for_grouped_pair_batches(
+                records,
+                int(cfg.seed),
+                micro_batch_size,
+            )
+        else:
+            records = order_records_for_paired_batches(records, int(cfg.seed))
     dataset_id_by_name = {
         name: dataset_id
         for dataset_id, name in enumerate(sorted({
@@ -1298,7 +1408,8 @@ def main(cfg: DictConfig) -> None:
         f"ordinal_soft_loss_weight={ordinal_soft_loss_weight} "
         f"soft_teacher_artifact={soft_teacher_artifact} "
         f"pairwise_temperature={pairwise_temperature} "
-        f"paired_batching={paired_batching}"
+        f"paired_batching={paired_batching} "
+        f"paired_batching_mode={paired_batching_mode!r}"
     )
     rating_counts = Counter(
         record.get("rating") for record in records if record.get("rating") is not None

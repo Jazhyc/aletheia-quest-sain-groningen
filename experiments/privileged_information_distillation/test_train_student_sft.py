@@ -17,6 +17,7 @@ from experiments.privileged_information_distillation.train_student_sft import (
     has_reasoning_block,
     load_record_sources,
     load_records,
+    order_records_for_grouped_pair_batches,
     order_records_for_paired_batches,
     pairwise_logistic_loss,
     select_rating_uncertainty_fraction,
@@ -628,6 +629,31 @@ def test_paired_batch_size_accepts_throughput_batch_and_rejects_odd() -> None:
 
     with pytest.raises(ValueError, match="positive even"):
         validate_paired_batch_size(7)
+
+
+def test_grouped_pair_batches_use_four_by_four_same_dataset_blocks() -> None:
+    records = [
+        {"dataset": dataset, "index": f"{dataset}-{label}-{index}", "label": label}
+        for dataset in ("a", "b")
+        for label in (0, 1)
+        for index in range(8)
+    ]
+
+    ordered = order_records_for_grouped_pair_batches(
+        records,
+        seed=9,
+        batch_size=8,
+    )
+
+    assert len(ordered) == len(records)
+    assert {record["index"] for record in ordered} == {
+        record["index"] for record in records
+    }
+    for offset in range(0, len(ordered), 8):
+        batch = ordered[offset:offset + 8]
+        assert len({record["dataset"] for record in batch}) == 1
+        assert [record["label"] for record in batch].count(0) == 4
+        assert [record["label"] for record in batch].count(1) == 4
 
 
 def test_pairwise_logistic_loss_rewards_correct_within_dataset_order() -> None:
