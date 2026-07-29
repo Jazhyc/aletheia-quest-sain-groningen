@@ -77,7 +77,10 @@ def notebook_cell_source(cell_id: str) -> str:
 def test_notebook_uses_one_kimi_student_pass_without_intent_adapter() -> None:
     source = notebook_source()
 
-    assert "Jazhyc/aletheias-phoenix-v7-kimi-k3-tvg-soft-r16-ep2" in source
+    assert (
+        "Jazhyc/aletheias-phoenix-v8-kimi-k3-tvg-soft-full-r16-ep2"
+        in source
+    )
     assert "ACTION_ADAPTER_REPO" not in source
     assert 'kind == "harm"' not in source
     assert 'kind == "action"' not in source
@@ -554,7 +557,10 @@ def test_phoenix80_notebook_preserves_direct_runtime_contract() -> None:
     ast.parse(source)
 
     assert "method=phoenix_wright_v8.0 kimi_k3_distilled_routes" in source
-    assert "Jazhyc/aletheias-phoenix-v7-kimi-k3-tvg-soft-r16-ep2" in source
+    assert (
+        "Jazhyc/aletheias-phoenix-v8-kimi-k3-tvg-soft-full-r16-ep2"
+        in source
+    )
     assert 'kind == "harm"' not in source
     assert 'kind == "action"' not in source
     assert "build_primary_route_flags" in source

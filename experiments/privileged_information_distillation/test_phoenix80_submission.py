@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from experiments.privileged_information_distillation.upload_kimi_k3_tvg_adapter import (
+from experiments.privileged_information_distillation.upload_kimi_k3_full_tvg_adapter import (
     REPOSITORY,
     validate_adapter,
 )
@@ -72,7 +72,7 @@ def test_phoenix80_main_adapter_is_canonical_float32_rank16() -> None:
     assert validation["dtypes"] == ["torch.float32"]
     assert (
         validation["weight_sha256"]
-        == "c5025a39dd05af16405c692a0c1b70657afd4f8e4a4e634bd789b5d67b4a9eb0"
+        == "c3be0b58b5caf5750b3dea06b5a1490cb735483adaba51f6f09568054531edc0"
     )
 
 
@@ -80,4 +80,4 @@ def test_bundled_main_config_matches_published_phoenix80_adapter() -> None:
     digest = hashlib.sha256(
         (BUNDLED_ADAPTER / "adapter_config.json").read_bytes()
     ).hexdigest()
-    assert digest == "d9ba5c277d1843409fa8b4162fc219f992feeed80638dc32788927cf6fe178ae"
+    assert digest == "c563ef249c1de0160e4e488253342da6ef42c64ea6dc2f5bc07c02f51c22f193"

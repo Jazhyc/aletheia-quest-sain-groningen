@@ -59,9 +59,10 @@ Submission mapping:
   Length-aware `48/32/16` batching,
   `logits_to_keep=1`, and secondary threshold `0.5` remain unchanged. The
   adapter is published at
-  `Jazhyc/aletheias-phoenix-v7-kimi-k3-tvg-soft-r16-ep2`. Its frozen ordinary
-  validation macro AUROC was `0.95994`, improving on the Q397 student's
-  `0.95393`. The
+  `Jazhyc/aletheias-phoenix-v8-kimi-k3-tvg-soft-full-r16-ep2`. It uses all
+  3,693 instructed and 2,880 varied training rows. Its frozen ordinary
+  validation macro AUROC was `0.96411` (`0.99854` instructed, `0.91819`
+  varied), improving on the varied-only Kimi adapter's `0.95994`. The
   ordinary rubric contains no reasoning-summary instruction and the notebook
   does not generate judge reasoning. A matched one-epoch reasoning-GRPO
   prior Q397 reasoning-GRPO continuation regressed from `0.95369` to `0.94500`

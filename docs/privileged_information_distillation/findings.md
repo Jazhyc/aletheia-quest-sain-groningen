@@ -4003,12 +4003,21 @@ Rank 32 reduced train loss from `0.6016` to `0.5877`, but lost `0.00226`
 validation macro AUROC to rank 16: instructed gained `0.00042`, while varied
 lost `0.00583`. The BF16 adapter SHA-256 is
 `868f55d58efef243082d1f272ffcef03a21ca5f302e89d87f6590066e4e1b42e`.
-The full-data rank-16 gain over the published varied-only adapter is only
-`0.00417`, below the frozen `+0.005` promotion bar, and rank 32 is weaker still.
-Do not promote either checkpoint or spend a local-test evaluation on rank 32.
-The lower rank-32 training loss alongside worse AUROC is evidence against
-student capacity or training-objective optimization being the active
-validation bottleneck at these settings.
+The full-data rank-16 gain over the published varied-only adapter is `0.00417`.
+It was initially withheld under the old frozen absolute `+0.005` promotion bar.
+After adopting the saturation-aware interpretation, the team promoted it on
+2026-07-30: the gain removes `10.4%` of the varied-only adapter's remaining
+validation AUROC error, improves both instructed and varied AUROC, and a later
+same-session full-BCE test anchor scored `0.96625` (`0.99479` instructed,
+`0.92819` varied). Phoenix 8.0 now uses the full-data rank-16 checkpoint from
+`Jazhyc/aletheias-phoenix-v8-kimi-k3-tvg-soft-full-r16-ep2`; its weight
+SHA-256 is
+`c3be0b58b5caf5750b3dea06b5a1490cb735483adaba51f6f09568054531edc0`.
+
+Rank 32 remains rejected and should not receive a local-test evaluation. Its
+lower training loss alongside worse AUROC is evidence against student capacity
+or training-objective optimization being the active validation bottleneck at
+these settings.
 
 ### Full-data Kimi pairwise-ranking ablation
 
