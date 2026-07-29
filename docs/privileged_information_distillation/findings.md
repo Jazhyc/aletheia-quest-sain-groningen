@@ -3746,6 +3746,36 @@ filtered adapter, or extend this screen to other keep fractions. Dense
 feedback does not rescue this initialization-state, last-block DataRater
 approximation on the already curated Qwen-only varied cache.
 
+## Optimized Qwen-397B reasoning-GRPO continuation (2026-07-29)
+
+The validation-selected original-prompt soft student
+`qwen9b_qwen397_tvg_soft_r16_lr5e5_ep2_v1` initialized a new rank-16
+varied-only GRPO run. GRPO received only observable output text and an explicit
+instruction to produce its own concise `<reasoning>...</reasoning>` analysis
+before `Prediction:0|1`; source assistant reasoning remained excluded.
+Promotion scoring used the exact original binary-only student/Phoenix prompt
+and one constrained vLLM next-token pass.
+
+H100 speed probes held batch 4 and four generations fixed. Generation batch 32
+needed `139.7s` for 16 warm steps, versus `214.8s` at generation batch 64.
+The selected `0.35` vLLM memory fraction was the smallest tested viable setting
+on the 80 GB H100; `0.25` left no KV-cache blocks. The full one-epoch run
+completed 360 steps in `2863.9s`. Its adapter SHA-256 is
+`f5098fd8da0642dd8e5ff5f5bf63a9a1bddce2ecad050d3f894425d128e82384`.
+Reasoning shortened from roughly 140 tokens early to 60 tokens in the final
+logged batch, while clipping fell from about 14% to zero.
+
+| adapter | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Optimized SFT, matched vLLM | **`0.95369`** | **`0.99792`** | **`0.89472`** | **`0.90833`** | **`0.85476`** | **`0.03810`** | **`768/822`** |
+| Reasoning GRPO epoch 1 | `0.94500` | `0.99385` | `0.87986` | `0.88452` | `0.83333` | `0.06429` | `582/822` |
+
+The GRPO score loses `0.00869` macro AUROC and `0.01486` varied AUROC. Cleaner
+reasoning and lower training loss therefore do not imply a better direct
+ranking. The initial continuation fails the conditional gate for further
+learning-rate/epoch tuning: preserve it remotely as a negative result, but do
+not test it, upload it, or replace the Phoenix 6.3 SFT adapter.
+
 ## Leaderboard-aligned GRPO continuation logits (2026-07-27)
 
 An inference-input audit found that the saved GRPO configurations retained

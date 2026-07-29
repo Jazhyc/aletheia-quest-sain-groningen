@@ -59,7 +59,10 @@ Submission mapping:
   optimized original-prompt adapter is published at
   `Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2`. The
   ordinary rubric contains no reasoning-summary instruction and the notebook
-  does not generate judge reasoning.
+  does not generate judge reasoning. A matched one-epoch reasoning-GRPO
+  continuation from this checkpoint regressed from `0.95369` to `0.94500`
+  validation macro AUROC under the same vLLM direct-logit scorer, so Phoenix
+  6.3 deliberately retains the optimized SFT adapter.
 - `submission/phoenix_wright_v5_3.ipynb` was the preceding controlled
   leaderboard-consistency submission candidate and must be tagged `black`. It
   keeps Phoenix 5.1's direct-logit inference, mutually exclusive

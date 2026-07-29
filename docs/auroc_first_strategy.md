@@ -641,6 +641,29 @@ The exact main adapter is published at
 `fa52f5e7f6a36d7d06e6718c65bd00fd4d11658f`. Its weight SHA-256 is
 `da83f294a248a97ddf07ff7a458280f0990dea329e61fc5e2aec8faec8c61d17`.
 
+## Optimized Qwen-397B GRPO continuation rejection
+
+Phoenix 6.3's optimized two-epoch Qwen-397B soft-distilled adapter was used as
+the exact initialization for a one-epoch varied-only reasoning-GRPO
+continuation. Training received no source `assistant_reasoning`; the model was
+explicitly instructed to produce its own concise `<reasoning>` analysis before
+the binary prediction. Promotion evaluation returned to the exact original
+Phoenix binary-only prompt and scored direct literal `0|1` logits, so no
+reasoning generation was required at inference.
+
+On the matched vLLM backend, the frozen SFT reference scored `0.95369` validation
+macro AUROC (`0.99792` instructed, `0.89472` varied). The one-epoch GRPO adapter
+fell to `0.94500` (`0.99385` instructed, `0.87986` varied), with balanced
+accuracy `0.88452`, recall `0.83333`, FPR `0.06429`, and only `582/822` unique
+scores. The SFT reference had `768/822` unique scores. The regression is present
+on both scenarios and is largest on the varied units used for GRPO.
+
+Training completed cleanly in `2863.9s` on the Lambda H100 and learned shorter,
+well-formatted reasoning, but that does not compensate for the ranking loss.
+Per the conditional tuning plan, do not launch the learning-rate/epoch sweep,
+spend a local-test evaluation, upload this checkpoint, or replace the Phoenix
+6.3 adapter. The optimized SFT adapter and original prompt remain selected.
+
 ## Phoenix Wright 5.2.1 Luna post-reasoning OOD probe
 
 Phoenix 5.2.1 keeps the exact 5.2 adapter, renderer, and mutually exclusive
