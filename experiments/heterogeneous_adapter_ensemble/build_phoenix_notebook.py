@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the current Phoenix Wright notebook."""
+"""Build the historical Phoenix Wright 5.2.1 notebook."""
 
 from pathlib import Path
 

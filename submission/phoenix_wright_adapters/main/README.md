@@ -8,10 +8,10 @@ tags:
 - deception-detection
 ---
 
-# Phoenix Wright 6.3 main adapter
+# Phoenix Wright 7.0 primary adapter
 
 Rank-16/alpha-32 LoRA for `Qwen/Qwen3.5-9B`, trained as the ordinary-row judge
-in Phoenix Wright 6.3. The teacher was
+in Phoenix Wright 6.3 and reused for all primary routes in Phoenix 7.0. The teacher was
 `Qwen/Qwen3.5-397B-A17B-FP8`, evaluated at the literal `0|1` boundary after
 `Prediction:` with the frozen no-thinking Truth Value Guard prompt. The student
 used all 2,880 varied-deception training rows for two epochs with AdamW at
@@ -23,9 +23,10 @@ hard-label loss, completion loss, or pairwise loss. Its 256 tensors use
 canonical Qwen3.5 paths under `model.language_model.layers` and exclude visual
 modules.
 
-Phoenix 6.3 applies the exact Phoenix 4.0 observable-input renderer and scores
-the normalized literal `0|1` next-token margin directly, without generating
-judge reasoning. Frozen local validation macro AUROC was `0.95393`
+Phoenix 7.0 applies the exact Phoenix 4.0 observable-input renderer on ordinary
+rows and the frozen HP-KR/action empty-scaffold prompts on their routed rows.
+It scores the normalized literal `0|1` next-token margin directly, without
+generating judge reasoning. Frozen ordinary local validation macro AUROC was `0.95393`
 (`0.99833` instructed, `0.89472` varied), with 665 unique scores over 822 rows.
 
 The matching public repository is

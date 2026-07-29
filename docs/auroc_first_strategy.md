@@ -799,3 +799,32 @@ Do not promote the validation-leading reasoning-plus-rank1 arm because it
 regressed below both the current blend and reasoning-only Q397 on frozen test.
 Full provenance, prompt hashes, tie counts, and per-unit/source metrics are in
 `results/blackbox/specialist_necessity_ndif_v1/report.json`.
+
+## Phoenix Wright 7.0 deployment
+
+Phoenix 7.0 implements the specialist-necessity result without changing any
+selected prompt or blend. Ordinary, HP-KR, and action-report rows all use
+`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2`. Ordinary rows retain
+the byte-exact Phoenix 4.0 structural renderer and direct `Prediction:`
+boundary; HP-KR and action rows retain their frozen prompts and empty
+`<reasoning_summary>` scaffolds.
+
+All three primary prompt types are length-sorted together and scored in one
+Q397 model/session pass. This removes the separate base-Qwen HP-KR load and
+legacy-v2 action-adapter load. Eligible trace-bearing ordinary rows still use
+the frozen rank-1 resolved-intent adapter in a second pass, combined with their
+unblended Q397 ordinary score by the established mean log-odds rule. HP-KR,
+action, and intent precedence remains mutually exclusive. The required binary
+column continues to threshold the unblended primary score at `0.5`.
+
+Preserve `48/32/16` batching, the 2,048-token left-truncation rule,
+`logits_to_keep=1`, literal `0|1` normalization, and black-box submission tag.
+Do not add the rejected Harm Pressure Choice prompt or expose source reasoning
+to the Q397 primary judge in this version.
+
+A four-row trace-bearing end-to-end dry rehearsal passed on 2026-07-29 in
+`1m27s`. It exercised the consolidated Q397 pass and the retained rank-1
+intent pass, packaged 783 files at 130.3 MB, and produced a contract-valid
+submission. The four-row smoke was one-class, so its AUROC and balanced
+accuracy are intentionally undefined; it is execution evidence, not a method
+evaluation.

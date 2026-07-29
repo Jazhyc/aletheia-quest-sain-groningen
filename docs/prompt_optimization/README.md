@@ -45,24 +45,24 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
-- `submission/phoenix_wright_v6_3.ipynb` is the current Phoenix candidate and
-  must be tagged `black`. Every ordinary row uses the validation-selected
+- `submission/phoenix_wright_v7_0.ipynb` is the current Phoenix candidate and
+  must be tagged `black`. Every primary route uses the validation-selected
   two-epoch Qwen3.5-397B FP8 binary-soft-distilled rank-16 Qwen3.5-9B adapter
-  under Phoenix 4.0's structural renderer, the exact original binary-only
-  training prompt without the later explicit-digit sentence, the direct
-  `Prediction:` boundary,
-  length-aware batching, and secondary threshold `0.5`. It adds only the
-  frozen, mutually exclusive Phoenix 4.1--4.3 routes:
-  base-Qwen HP-KR replacement, original-Phoenix action replacement, and the
-  rank-1 resolved-intent score blend. Relative to Phoenix 6.2, this changes only
-  the ordinary adapter. The v6.3 adapter path remains unchanged while the
-  optimized original-prompt adapter is published at
+  and normalized direct literal `0|1` margins. Ordinary rows preserve Phoenix
+  4.0's structural renderer and the exact original binary-only training prompt.
+  HP-KR and action rows retain their independently frozen empty-scaffold
+  prompts but now share the same Q397 adapter/model session, replacing the
+  base-Qwen and legacy-v2 sessions. Remaining eligible trace-bearing rows retain
+  the rank-1 resolved-intent log-odds blend. Routes are mutually exclusive with
+  HP-KR, action, then intent precedence. Length-aware `48/32/16` batching,
+  `logits_to_keep=1`, and secondary threshold `0.5` remain unchanged. The
+  optimized adapter is published at
   `Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2`. The
   ordinary rubric contains no reasoning-summary instruction and the notebook
   does not generate judge reasoning. A matched one-epoch reasoning-GRPO
   continuation from this checkpoint regressed from `0.95369` to `0.94500`
   validation macro AUROC under the same vLLM direct-logit scorer, so Phoenix
-  6.3 deliberately retains the optimized SFT adapter.
+  7.0 deliberately retains the optimized distilled adapter.
 - `submission/phoenix_wright_v5_3.ipynb` was the preceding controlled
   leaderboard-consistency submission candidate and must be tagged `black`. It
   keeps Phoenix 5.1's direct-logit inference, mutually exclusive

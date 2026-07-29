@@ -4627,3 +4627,20 @@ and `0.91111 -> 0.92069` on test. The current output-only Q397 plus rank-1
 log-odds blend scored `0.89750/0.92778`; the reasoning-plus-rank1 blend scored
 `0.90333/0.91833`. Retain the current intent blend. Do not promote the
 validation-leading reasoning-plus-rank1 arm after its frozen-test regression.
+
+## 2026-07-29: Phoenix Wright 7.0
+
+Phoenix 7.0 deploys the frozen specialist-necessity decision. Its single
+primary Q397 adapter now scores ordinary, HP-KR, and action-report rows with
+their selected prompts in one length-sorted NDIF session. The separate
+base-Qwen HP-KR and legacy-v2 action sessions are removed. The mutually
+exclusive rank-1 intent pass and mean-log-odds blend remain unchanged, and the
+secondary binary column still uses the unblended primary score at threshold
+`0.5`.
+
+The notebook preserves literal normalized next-token `0|1` logits,
+`logits_to_keep=1`, 2,048-token left truncation, and `48/32/16` batching. A
+four-row trace-bearing dry rehearsal passed in `1m27s`, packaged at 130.3 MB,
+and exercised both the consolidated primary adapter and rank-1 intent adapter.
+The smoke's labels were one-class, so it supplies execution rather than AUROC
+evidence.

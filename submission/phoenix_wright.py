@@ -360,7 +360,7 @@ def prefix_before_prediction(text: str) -> str:
 
 
 def build_epistemic_empty_prompt(messages: Any, tokenizer: Any) -> str:
-    """Render the confirmed base-Qwen HP-KR empty-summary margin position."""
+    """Render the confirmed HP-KR empty-summary margin position."""
     chat = tokenizer.apply_chat_template(
         [{"role": "user", "content": build_epistemic_member_prompt(messages)}],
         tokenize=False,
@@ -371,7 +371,7 @@ def build_epistemic_empty_prompt(messages: Any, tokenizer: Any) -> str:
 
 
 def build_action_empty_prompt(messages: Any, tokenizer: Any) -> str:
-    """Render the selected Phoenix-backed action-report margin position."""
+    """Render the selected action-report empty-summary margin position."""
     chat = tokenizer.apply_chat_template(
         [{"role": "user", "content": build_action_member_prompt(messages)}],
         tokenize=False,
