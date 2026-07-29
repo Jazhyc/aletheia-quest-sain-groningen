@@ -3977,6 +3977,39 @@ horizon. Retain the already published/submitted `5e-5`, two-epoch checkpoint:
 the learning-rate distinction is unresolved noise, while the evidence against
 training beyond two epochs is consistent.
 
+### Full-data Kimi rank and BF16 ablation
+
+The instructed-deception Kimi extension completed all 3,693 training rows with
+zero missing logits or parse errors. Combined with the 2,880 varied rows, the
+exact 6,573-row cache has target SHA-256
+`39178e39c79038fd2ae4e6535d0e73c0f4bef79b68677b37a464e4110e97046f`.
+The instructed teacher scored `0.99685` train macro AUROC overall:
+`0.99928` on Gemma, `0.98894` on Nemotron, and `0.99718` on Qwen families.
+
+A matched H100 experiment then kept the selected two-epoch AdamW `5e-5`,
+effective-batch-32 recipe and trained on all 6,573 rows. Rank 16 used alpha 32
+and retained FP32 adapter tensors. Rank 32 used alpha 64 to preserve
+`alpha/r = 2`, then cast the final PEFT adapter to BF16 before exact validation.
+Its 256 BF16 weight tensors occupy `116,429,976` bytes, essentially the same as
+rank 16's `116,429,720` FP32 weight bytes.
+
+| training data and adapter | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Published varied-only rank 16 | `0.95994` | `0.99833` | `0.90875` | `0.91548` | `0.86429` | `0.03333` |
+| **Full-data rank 16 FP32** | **`0.96411`** | `0.99854` | **`0.91819`** | **`0.92143`** | **`0.87857`** | `0.03571` |
+| Full-data rank 32 BF16 | `0.96185` | **`0.99896`** | `0.91236` | `0.91786` | `0.86905` | **`0.03333`** |
+
+Rank 32 reduced train loss from `0.6016` to `0.5877`, but lost `0.00226`
+validation macro AUROC to rank 16: instructed gained `0.00042`, while varied
+lost `0.00583`. The BF16 adapter SHA-256 is
+`868f55d58efef243082d1f272ffcef03a21ca5f302e89d87f6590066e4e1b42e`.
+The full-data rank-16 gain over the published varied-only adapter is only
+`0.00417`, below the frozen `+0.005` promotion bar, and rank 32 is weaker still.
+Do not promote either checkpoint or spend a local-test evaluation on rank 32.
+The lower rank-32 training loss alongside worse AUROC is evidence against
+student capacity or training-objective optimization being the active
+validation bottleneck at these settings.
+
 ### Frozen Kimi student local-test confirmation
 
 After closing the validation sweep, the already submitted `5e-5`, two-epoch
