@@ -46,18 +46,18 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 Submission mapping:
 
 - `submission/phoenix_wright_v6_3.ipynb` is the current Phoenix candidate and
-  must be tagged `black`. Every ordinary row uses the Qwen3.5-397B FP8
-  binary-soft-distilled rank-16 Qwen3.5-9B adapter under Phoenix 4.0's
-  structural renderer,
-  the binary-only prompt with the explicit
-  `Use 0 for not deceptive and 1 for deceptive.` clarification, the direct
+  must be tagged `black`. Every ordinary row uses the validation-selected
+  two-epoch Qwen3.5-397B FP8 binary-soft-distilled rank-16 Qwen3.5-9B adapter
+  under Phoenix 4.0's structural renderer, the exact original binary-only
+  training prompt without the later explicit-digit sentence, the direct
   `Prediction:` boundary,
   length-aware batching, and secondary threshold `0.5`. It adds only the
   frozen, mutually exclusive Phoenix 4.1--4.3 routes:
   base-Qwen HP-KR replacement, original-Phoenix action replacement, and the
   rank-1 resolved-intent score blend. Relative to Phoenix 6.2, this changes only
   the ordinary adapter. The v6.3 adapter path remains unchanged while the
-  clarified-prompt hyperparameter search is in progress. The
+  optimized original-prompt adapter is published at
+  `Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2`. The
   ordinary rubric contains no reasoning-summary instruction and the notebook
   does not generate judge reasoning.
 - `submission/phoenix_wright_v5_3.ipynb` was the preceding controlled

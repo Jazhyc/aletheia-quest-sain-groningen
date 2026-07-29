@@ -338,19 +338,20 @@ margin remains primary. Corrected NDIF validation scored this adapter at
 and must be submitted with `--tag black`.
 
 Phoenix 6.3 replaces only 6.2's ordinary Qwen3.5-27B soft student with
-`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16`, trained from the matched
-Qwen3.5-397B-A17B-FP8 boundary cache. The binary-only rubric, exact Phoenix 4.0
-structural renderer, direct literal `0|1` scoring, `48/32/16` batching,
-threshold `0.5`, and all specialist routes are unchanged. Local vLLM validation
-scored `0.95048` macro AUROC (`0.99813` instructed, `0.88694` varied), with
-662 unique scores over 822 rows. A same-session base/adapter fingerprint found
-only 12 exact score matches and mean absolute difference `0.08141`, confirming
-that the canonical adapter was active. Phoenix 6.3 is a private-transfer bet
-and remains black-box; submit it with `--tag black`.
+`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2`, trained from the
+matched Qwen3.5-397B-A17B-FP8 boundary cache with the validation-selected
+rank-16/alpha-32, AdamW `5e-5`, two-epoch recipe. The exact original
+binary-only rubric, Phoenix 4.0 structural renderer, direct literal `0|1`
+scoring, `48/32/16` batching, threshold `0.5`, and all specialist routes are
+unchanged. Local vLLM validation scored `0.95393` macro AUROC (`0.99833`
+instructed, `0.89472` varied), with 665 unique scores over 822 rows. A
+same-session base/adapter fingerprint found only 4 exact score matches and mean
+absolute difference `0.10250`, confirming that the canonical adapter was
+active. Phoenix 6.3 remains black-box; submit it with `--tag black`.
 The public adapter revision is
-`59a9c57982c8430ff9e8bb64c3e53b8fb775dbc2`; its remote LFS SHA-256 matches
+`11cd26e44b77cf86064ed2246504952681d25695`; its remote LFS SHA-256 matches
 the locally validated canonical weights,
-`fac7b031bf52bc5597ee02a6dec20f355b3c3297bf110d3bb0233f629a69004d`.
+`da32c67a2ea0d9834fb90b93dac84a9ee68f05b2a2023b8ea272704fdb58c40d`.
 
 An NDIF run on all 400 rows of
 `dev-varied-deception-Qwen3.5-27B-None` completed at batch 32 in `102.1s`,

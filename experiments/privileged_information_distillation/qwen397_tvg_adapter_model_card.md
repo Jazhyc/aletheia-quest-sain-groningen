@@ -18,7 +18,7 @@ in the Phoenix Wright 6.3 Aletheia's Quest submission.
 The teacher was `Qwen/Qwen3.5-397B-A17B-FP8`. It scored the normalized literal
 `0|1` boundary immediately after `Prediction:` with the frozen no-thinking
 Truth Value Guard prompt. The student used all 2,880 varied-deception training
-rows for one epoch with AdamW at `5e-5`, effective batch size 32, and only
+rows for two epochs with AdamW at `5e-5`, effective batch size 32, and only
 binary soft-target BCE. It received no generated reasoning, hard-label loss,
 completion loss, or pairwise loss.
 
@@ -31,11 +31,11 @@ Local validation direct-margin results:
 
 | metric | value |
 | --- | ---: |
-| Macro AUROC | 0.95048 |
-| Instructed AUROC | 0.99813 |
-| Varied AUROC | 0.88694 |
-| Balanced accuracy at 0.5 | 0.90476 |
-| Unique scores | 662 / 822 |
+| Macro AUROC | 0.95393 |
+| Instructed AUROC | 0.99833 |
+| Varied AUROC | 0.89472 |
+| Balanced accuracy at 0.5 | 0.90595 |
+| Unique scores | 665 / 822 |
 
 These results are local competition diagnostics and do not guarantee transfer
 to private datasets. The adapter is intended for continuous direct-boundary

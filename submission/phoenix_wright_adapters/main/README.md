@@ -14,7 +14,7 @@ Rank-16/alpha-32 LoRA for `Qwen/Qwen3.5-9B`, trained as the ordinary-row judge
 in Phoenix Wright 6.3. The teacher was
 `Qwen/Qwen3.5-397B-A17B-FP8`, evaluated at the literal `0|1` boundary after
 `Prediction:` with the frozen no-thinking Truth Value Guard prompt. The student
-used all 2,880 varied-deception training rows for one epoch with AdamW at
+used all 2,880 varied-deception training rows for two epochs with AdamW at
 `5e-5`, effective batch size 32, and binary soft-target BCE only.
 
 The Qwen3.5-9B base ran in BF16. Soft targets, LoRA weights, AdamW state,
@@ -25,13 +25,13 @@ modules.
 
 Phoenix 6.3 applies the exact Phoenix 4.0 observable-input renderer and scores
 the normalized literal `0|1` next-token margin directly, without generating
-judge reasoning. Frozen local validation macro AUROC was `0.95048`
-(`0.99813` instructed, `0.88694` varied), with 662 unique scores over 822 rows.
+judge reasoning. Frozen local validation macro AUROC was `0.95393`
+(`0.99833` instructed, `0.89472` varied), with 665 unique scores over 822 rows.
 
 The matching public repository is
-`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16` at revision
-`59a9c57982c8430ff9e8bb64c3e53b8fb775dbc2`. The canonical
+`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2` at revision
+`11cd26e44b77cf86064ed2246504952681d25695`. The canonical
 `adapter_model.safetensors` SHA-256 is
-`fac7b031bf52bc5597ee02a6dec20f355b3c3297bf110d3bb0233f629a69004d`.
+`da32c67a2ea0d9834fb90b93dac84a9ee68f05b2a2023b8ea272704fdb58c40d`.
 This adapter is intended for the matching competition notebook and is not a
 general-purpose truth classifier.

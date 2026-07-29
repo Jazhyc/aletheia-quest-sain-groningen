@@ -19,9 +19,9 @@ from safetensors import safe_open
 ROOT = Path(__file__).resolve().parents[2]
 ADAPTER_DIR = (
     ROOT
-    / "results/blackbox/qwen9b_qwen397_tvg_binary_softonly_varied_v1/adapter"
+    / "results/blackbox/qwen9b_qwen397_tvg_soft_r16_lr5e5_ep2_v1/adapter"
 )
-REPOSITORY = "Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16"
+REPOSITORY = "Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2"
 MODEL_CARD = (
     ROOT
     / "experiments/privileged_information_distillation/"
@@ -93,7 +93,7 @@ def main() -> None:
         private=False,
         exist_ok=True,
     )
-    with tempfile.TemporaryDirectory(prefix="phoenix63-adapter-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="phoenix63-ep2-adapter-") as temp_dir:
         staging = Path(temp_dir) / "adapter"
         shutil.copytree(ADAPTER_DIR, staging)
         shutil.copy2(MODEL_CARD, staging / "README.md")
@@ -101,7 +101,9 @@ def main() -> None:
             repo_id=REPOSITORY,
             repo_type="model",
             folder_path=staging,
-            commit_message="Upload Phoenix 6.3 Qwen397 soft-distillation adapter",
+            commit_message=(
+                "Upload optimized Phoenix 6.3 Qwen397 soft-distillation adapter"
+            ),
         )
     info = api.model_info(
         REPOSITORY,

@@ -3552,6 +3552,22 @@ remains. Retain this rank-16/two-epoch arm as the validation-selected
 Qwen-397B distillation result. Any test or private-leaderboard promotion should
 be a frozen follow-up, not another validation retune.
 
+The same optimized recipe was then applied to the regular-OpenRouter 397B
+explicit-digit cache. It reached `0.95173` validation macro AUROC (`0.99500`
+instructed, `0.89403` varied), improving its matched one-epoch predecessor by
+`0.00202` but losing to the original-prompt optimized adapter by `0.00220`.
+It produced 787 unique scores over 822 rows, 35 duplicate-score excess rows,
+and zero missing margins. Keep it as a completed prompt-transfer ablation; do
+not replace the original-prompt winner.
+
+The original-prompt winner is now the bundled Phoenix 6.3 main adapter and is
+published at
+`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2`, revision
+`11cd26e44b77cf86064ed2246504952681d25695`. The remote LFS SHA-256 equals the
+validated local digest above. The notebook retains its existing filename,
+restores the exact original training rubric, and was not submitted while the
+competition queue remained active.
+
 ## Qwen-397B soft-objective ablation (2026-07-28)
 
 Jobs `30342642`--`30342645` tested whether the pure Qwen-397B soft student lost
