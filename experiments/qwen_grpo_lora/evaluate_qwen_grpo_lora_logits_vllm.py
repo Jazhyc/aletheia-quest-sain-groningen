@@ -14,6 +14,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "experiments" / "qwen_grpo_lora"))
@@ -58,6 +59,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-num-seqs", type=int)
     parser.add_argument("--disable-language-model-only", action="store_true")
     return parser.parse_args()
+
+
+def load_evaluation_config(adapter_dir: Path) -> dict[str, Any]:
+    """Load either a GRPO result config or a privileged-distillation YAML."""
+    try:
+        return load_training_config(adapter_dir)
+    except FileNotFoundError:
+        config_path = adapter_dir.parent / "config.yaml"
+        if not config_path.is_file():
+            raise
+        config = yaml.safe_load(config_path.read_text()) or {}
+        student = config["student"]
+        return {
+            "method": config["method"],
+            "model": student["model"],
+            "judge": {
+                "prompt": student["prompt"],
+                "enable_thinking": False,
+                "max_prompt_chars": student["max_prompt_chars"],
+                "context_truncation": student["context_truncation"],
+                "include_reasoning": student["include_reasoning"],
+                "reasoning_max_chars": student["reasoning_max_chars"],
+                "reasoning_truncation": student["reasoning_truncation"],
+            },
+            "inference": {"prompt": student["prompt"]},
+            "training": {"max_prompt_length": student["max_length"]},
+            "source_config": config,
+        }
 
 
 def logprob_value(value: Any) -> float:
@@ -124,7 +153,7 @@ def score_condition(
 def main() -> None:
     args = parse_args()
     adapter_dir = args.adapter_dir.resolve()
-    training_config = load_training_config(adapter_dir)
+    training_config = load_evaluation_config(adapter_dir)
     variants = args.prefix_variant or ["prediction", "empty_reasoning"]
     output_root = (
         args.output_dir.resolve()

@@ -80,8 +80,8 @@ log_dir = pathlib.Path(sys.argv[1])
 rows = []
 for log_path in sorted(log_dir.glob("*.out")):
     text = log_path.read_text()
-    runtime = re.findall(r"'train_runtime': ([0-9.]+)", text)
-    steps_per_second = re.findall(r"'train_steps_per_second': ([0-9.]+)", text)
+    runtime = re.findall(r"'train_runtime': ['\"]?([0-9.]+)", text)
+    steps_per_second = re.findall(r"'train_steps_per_second': ['\"]?([0-9.]+)", text)
     rows.append({
         "condition": log_path.stem,
         "train_runtime": float(runtime[-1]) if runtime else None,
