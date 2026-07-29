@@ -4598,3 +4598,32 @@ of cross-family transfer because every varied row is Qwen. Do not infer that
 opaque leaderboard methods expose reasoning, and do not integrate this
 test-measured variant into Phoenix without a separately frozen promotion
 decision.
+
+## 2026-07-29: Phoenix 6.3 specialist necessity through NDIF
+
+A frozen 27-condition NDIF benchmark compared the optimized two-epoch Q397
+adapter against the current routed action, HP-KR, harm-choice, and rank-1
+intent members. It used direct normalized `0|1` logits, the exact
+2,048-token left truncation, and optimized `48/32/16` batching. The
+17-condition Q397 pass ran in one session.
+
+The separate action checkpoint is no longer needed, but the route is. Q397
+with the frozen action prompt and empty scaffold scored `0.80725` AUROC
+(`0.78220/0.82880` development/confirmation), versus `0.55705` for the
+notebook's legacy-v2 action adapter and `0.52775` for Q397 ordinary direct.
+The earlier P86 action result used the historical privileged-distillation
+checkpoint, resolving the checkpoint-provenance discrepancy.
+
+The separate no-PEFT HP-KR session is also unnecessary, but its semantic route
+remains important. Q397 epistemic-empty scored `0.93935`
+(`0.91880/0.95880`), versus `0.92570` (`0.89800/0.95220`) for base Qwen and
+`0.88075` for Q397 ordinary direct. Actual Harm Pressure Choice did not benefit
+from a specialist prompt: Q397 ordinary scored `0.77325`, Q397 harm-empty
+`0.75785`, and base harm-empty `0.62690`.
+
+On the nine trace-bearing varied units, showing the final 4,000 reasoning
+characters to Q397 moved macro AUROC from `0.89500 -> 0.89639` on validation
+and `0.91111 -> 0.92069` on test. The current output-only Q397 plus rank-1
+log-odds blend scored `0.89750/0.92778`; the reasoning-plus-rank1 blend scored
+`0.90333/0.91833`. Retain the current intent blend. Do not promote the
+validation-leading reasoning-plus-rank1 arm after its frozen-test regression.

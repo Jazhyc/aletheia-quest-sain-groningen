@@ -744,3 +744,58 @@ well on the observed length distribution. Keep `48/32/16` in the submission:
 the one-off 4--7% timing differences are not a compelling promotion. If future
 private-structure-equivalent testing revisits the scheduler, constrain both
 rows and padded tokens rather than dynamically sizing on token count alone.
+
+## Phoenix 6.3 specialist-necessity benchmark
+
+A frozen NDIF benchmark tested whether Phoenix 6.3's optimized Qwen-397B
+soft-distilled adapter still needs separate action, HP-KR, harm-choice, and
+intent models. It used direct normalized literal `0|1` logits,
+`logits_to_keep=1`, length-aware `48/32/16` batches, and the deployment
+2,048-token left-truncation rule. Action, HP-KR, and Harm Pressure Choice each
+used 200 balanced public Liars' Bench rows with deterministic 100/100
+development/confirmation halves.
+
+The optimized adapter with the action prompt and empty reasoning-summary
+scaffold scored `0.80725` AUROC (`0.78220/0.82880` by half), versus `0.55705`
+(`0.48020/0.64460`) for the notebook's current legacy-v2 action adapter and
+`0.52775` for optimized ordinary direct scoring. It improved every source
+family over the legacy adapter. This is consistent with P86's earlier
+`0.7974/0.8148` action result: P86 used the historical privileged-distillation
+checkpoint, not the legacy remote-v2 checkpoint now configured as the action
+adapter. Keep the action router and empty-scaffold action prompt, but use the
+optimized main adapter; the separate action checkpoint/session is unnecessary.
+
+On HP-KR, optimized ordinary direct scoring reached `0.88075`. The frozen
+base-Qwen epistemic route reached `0.92570` (`0.89800/0.95220`), while the same
+epistemic empty-scaffold prompt on the optimized adapter reached **`0.93935`**
+(`0.91880/0.95880`) and improved all three source families. Keep the semantic
+HP-KR router and prompt, but it no longer requires the no-PEFT base session.
+The notebook variable `harm_routes` refers to this HP-KR route; it is not Harm
+Pressure Choice.
+
+On actual Harm Pressure Choice, optimized ordinary direct scoring won at
+`0.77325` (`0.79620/0.75080`). The matched Q397 harm prompt reached `0.75785`
+and base Qwen reached `0.62690`, both using the empty scaffold. Do not add a
+harm-choice specialist from this evidence.
+
+The intent study covered all 360 reasoning-bearing varied rows on both
+validation and test. It retained the final 4,000 reasoning characters; this
+character cap affected 99 validation and 112 test rows, while no complete
+prompt exceeded 2,048 tokens. Macro AUROC was:
+
+| intent condition | validation | test |
+| --- | ---: | ---: |
+| optimized Q397, output only | `0.89500` | `0.91111` |
+| optimized Q397, reasoning visible | `0.89639` | `0.92069` |
+| current rank-1 member alone | `0.88347` | `0.88611` |
+| output-only Q397 + rank-1 log-odds blend | `0.89750` | **`0.92778`** |
+| reasoning-visible Q397 + rank-1 blend | **`0.90333`** | `0.91833` |
+
+Reasoning visibility therefore helps the optimized judge (`+0.00139`
+validation, `+0.00958` test). The rank-1 adapter remains useful but not
+decisive: the frozen current blend narrowly beats reasoning-only Q397 on
+validation and by `0.00708` on test. Retain the current intent blend for now.
+Do not promote the validation-leading reasoning-plus-rank1 arm because it
+regressed below both the current blend and reasoning-only Q397 on frozen test.
+Full provenance, prompt hashes, tie counts, and per-unit/source metrics are in
+`results/blackbox/specialist_necessity_ndif_v1/report.json`.

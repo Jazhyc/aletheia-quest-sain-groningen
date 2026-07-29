@@ -160,3 +160,28 @@ Phoenix 4.2 deploys the frozen continuous adapter blend only on non-harm
 trace-bearing rows. HP-KR harm-pressure rows use their existing specialist
 exclusively and never invoke intent. A one-row trace-bearing NDIF notebook test
 passed end to end in `221.82s`.
+
+## Phoenix 6.3 optimized-adapter recheck
+
+The 2026-07-29 specialist-necessity NDIF benchmark repeated the trace-bearing
+comparison with the optimized Qwen-397B soft-distilled Phoenix 6.3 adapter.
+The exact general judge saw either the visible output alone or the visible
+output plus the final 4,000 characters of native source reasoning. All 360
+varied rows in each split had reasoning; 99 validation and 112 test traces
+were character-truncated, and no resulting prompt exceeded the 2,048-token
+deployment cap.
+
+| condition | validation macro AUROC | test macro AUROC |
+| --- | ---: | ---: |
+| Q397 output only | `0.89500` | `0.91111` |
+| Q397 reasoning visible | `0.89639` | `0.92069` |
+| rank-1 intent alone | `0.88347` | `0.88611` |
+| Q397 output + rank-1 log-odds mean | `0.89750` | **`0.92778`** |
+| Q397 reasoning + rank-1 log-odds mean | **`0.90333`** | `0.91833` |
+
+Reasoning exposure transfers positively for the optimized adapter, but does
+not cleanly remove the rank-1 member: the current output-plus-rank1 route is
+`+0.00111` above reasoning-only Q397 on validation and `+0.00708` on test.
+The reasoning-plus-rank1 arm wins validation but regresses on test, so do not
+select it. Retain the frozen current blend pending a
+private-structure-equivalent or cost-sensitive promotion decision.

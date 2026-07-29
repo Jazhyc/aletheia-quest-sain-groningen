@@ -950,3 +950,28 @@ local competition rows fit: D/K/S prompts have median 439, p95 704, maximum
 1,248 tokens, and none exceeds 2,048. Do not rerun or interpret this treatment;
 retain the separate 3,000-character warning only for the Phoenix summary
 formatter where it was originally measured.
+
+## Optimized Q397 specialist-necessity follow-up
+
+The 2026-07-29 NDIF follow-up evaluated the optimized two-epoch Q397
+soft-distilled Phoenix 6.3 adapter on the same 200 balanced public rows for
+Insider Trading, HP-KR, and Harm Pressure Choice. Each category retained
+deterministic 100/100 development/confirmation halves.
+
+For action reports, Q397 with the frozen empty-scaffold action prompt reached
+`0.80725` AUROC (`0.78220/0.82880`), compared with `0.52775` for Q397 ordinary
+direct scoring and `0.55705` for the notebook's current legacy-v2 action
+adapter. It beat the legacy adapter on every source family. P86's earlier
+`0.7974/0.8148` used the historical privileged-distillation adapter rather
+than this legacy remote checkpoint, explaining the apparent discrepancy.
+Retain the action router/prompt but consolidate it onto the Q397 main adapter.
+
+For HP-KR, Q397 plus the epistemic empty scaffold scored `0.93935`
+(`0.91880/0.95880`), beating the current base-Qwen route at `0.92570`
+(`0.89800/0.95220`) and improving all source families. Retain the HP-KR
+semantic route but consolidate it onto Q397 too.
+
+For actual Harm Pressure Choice, Q397 ordinary direct scoring won at `0.77325`
+over Q397 harm-empty at `0.75785` and base-Qwen harm-empty at `0.62690`.
+This rejects adding a harm-choice specialist. Do not confuse this category
+with the notebook's `harm_routes` variable, which identifies HP-KR.
