@@ -161,6 +161,19 @@ def build_exclusive_route_flags(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return mutually exclusive HP-KR, action-report, and intent routes."""
     rows = list(message_rows)
+    harm, action = build_primary_route_flags(rows)
+    intent = np.asarray(
+        [has_final_assistant_reasoning(messages) for messages in rows],
+        dtype=bool,
+    ) & ~harm & ~action
+    return harm, action, intent
+
+
+def build_primary_route_flags(
+    message_rows: Any,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return mutually exclusive HP-KR and action-report routes."""
+    rows = list(message_rows)
     harm = np.asarray(
         [is_harm_pressure_specialist_request(messages) for messages in rows],
         dtype=bool,
@@ -169,11 +182,7 @@ def build_exclusive_route_flags(
         [is_action_report_conversation(messages) for messages in rows],
         dtype=bool,
     ) & ~harm
-    intent = np.asarray(
-        [has_final_assistant_reasoning(messages) for messages in rows],
-        dtype=bool,
-    ) & ~harm & ~action
-    return harm, action, intent
+    return harm, action
 
 
 def _merge_messages(messages: Any) -> list[dict[str, str]]:

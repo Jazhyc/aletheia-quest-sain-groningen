@@ -11,8 +11,11 @@ from experiments.privileged_information_distillation.upload_kimi_k3_tvg_adapter 
 
 
 ROOT = Path(__file__).resolve().parents[2]
-NOTEBOOK = ROOT / "submission/phoenix_wright_v7_0.ipynb"
+NOTEBOOK = ROOT / "submission/phoenix_wright_v8_0.ipynb"
 BUNDLED_ADAPTER = ROOT / "submission/phoenix_wright_adapters/main"
+REMOVED_INTENT_ADAPTER = (
+    ROOT / "submission/phoenix_wright_adapters/resolved_intent"
+)
 
 
 def notebook_source() -> str:
@@ -23,18 +26,15 @@ def notebook_source() -> str:
     )
 
 
-def test_phoenix70_is_the_only_submission_notebook() -> None:
+def test_phoenix80_is_the_only_submission_notebook() -> None:
     notebooks = sorted((ROOT / "submission").glob("*.ipynb"))
     assert notebooks == [NOTEBOOK]
 
 
-def test_phoenix70_uses_kimi_student_for_every_primary_route_and_rank1_intent() -> None:
+def test_phoenix80_uses_one_kimi_student_pass_without_intent_adapter() -> None:
     source = notebook_source()
-    assert "# Phoenix Wright v7.0" in source
-    assert (
-        "method=phoenix_wright_v7.0 "
-        "kimi_k3_distilled_routes_rank1_intent"
-    ) in source
+    assert "# Phoenix Wright v8.0" in source
+    assert "method=phoenix_wright_v8.0 kimi_k3_distilled_routes" in source
     assert f'"{REPOSITORY}"' in source
     assert "aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2" not in source
     assert "aletheias-phoenix-v5-qwen27-tvg-soft-r16" not in source
@@ -42,10 +42,14 @@ def test_phoenix70_uses_kimi_student_for_every_primary_route_and_rank1_intent() 
     assert 'kind == "harm"' not in source
     assert 'kind == "action"' not in source
     assert "score_distilled_routes(messages, harm_flags, action_flags)" in source
+    assert "build_primary_route_flags" in source
     assert "build_epistemic_empty_prompt" in source
     assert "build_action_empty_prompt" in source
-    assert "build_intent_empty_prompt" in source
-    assert "blend_intent_route_scores" in source
+    assert "build_intent_empty_prompt" not in source
+    assert "blend_intent_route_scores" not in source
+    assert "PHOENIX_INTENT_ADAPTER_REPO" not in source
+    assert "aletheias-phoenix-v3-resolved-intent-r1" not in source
+    assert not REMOVED_INTENT_ADAPTER.exists()
     assert (
         'SUBMISSION_THRESHOLD = float('
         'os.environ.get("PHOENIX_THRESHOLD", "0.5"))'
@@ -55,7 +59,7 @@ def test_phoenix70_uses_kimi_student_for_every_primary_route_and_rank1_intent() 
     assert "model.generate" not in source
 
 
-def test_phoenix70_main_adapter_is_canonical_float32_rank16() -> None:
+def test_phoenix80_main_adapter_is_canonical_float32_rank16() -> None:
     validation = validate_adapter(BUNDLED_ADAPTER)
     assert validation["tensor_count"] == 256
     assert validation["dtypes"] == ["torch.float32"]
@@ -65,7 +69,7 @@ def test_phoenix70_main_adapter_is_canonical_float32_rank16() -> None:
     )
 
 
-def test_bundled_main_config_matches_published_phoenix70_adapter() -> None:
+def test_bundled_main_config_matches_published_phoenix80_adapter() -> None:
     digest = hashlib.sha256(
         (BUNDLED_ADAPTER / "adapter_config.json").read_bytes()
     ).hexdigest()

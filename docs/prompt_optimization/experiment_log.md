@@ -4645,6 +4645,22 @@ and exercised both the consolidated primary adapter and rank-1 intent adapter.
 The smoke's labels were one-class, so it supplies execution rather than AUROC
 evidence.
 
+## 2026-07-29: Phoenix Wright 8.0
+
+Phoenix 8.0 removes the optional rank-1 resolved-intent adapter, its separate
+model session, and its mean-log-odds contribution. The bundled 7 MB intent
+checkpoint is also removed. This follows the Kimi K3 trace-visible ceiling
+diagnostic: varied test AUROC moved only `0.96083 -> 0.96236`, with three unit
+wins, four ties, two losses, and a paired-bootstrap interval spanning material
+harm and gain. Public Liars' Bench contains no native reasoning fields in any
+of its 79,417 test rows and therefore supplies no source-trace OOD validation.
+
+The Kimi-distilled rank-16 adapter, model, ordinary renderer, HP-KR and action
+prompts, route precedence, direct label boundaries, `48/32/16` batching,
+2,048-token left truncation, `logits_to_keep=1`, and binary threshold `0.5`
+remain unchanged. Every row now receives exactly its primary-route score from
+one adapter pass, and source reasoning is ignored even when present.
+
 ## 2026-07-29: Q397 auxiliary readout adaptation
 
 A frozen local-vLLM sweep tested inference-cheap readout adaptation on the

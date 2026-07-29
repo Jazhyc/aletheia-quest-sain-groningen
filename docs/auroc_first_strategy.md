@@ -828,3 +828,22 @@ intent pass, packaged 783 files at 130.3 MB, and produced a contract-valid
 submission. The four-row smoke was one-class, so its AUROC and balanced
 accuracy are intentionally undefined; it is execution evidence, not a method
 evaluation.
+
+## Phoenix Wright 8.0 single-adapter deployment
+
+Phoenix 8.0 removes the rank-1 resolved-intent adapter and its mean-log-odds
+contribution. This reverses the earlier provisional retention decision after
+the Kimi K3 source-reasoning ceiling diagnostic found only `+0.00153` varied
+test AUROC, with three unit wins, four ties, two losses, and a paired-bootstrap
+95% delta interval of `[-0.00972, +0.01208]`. Public Liars' Bench provides no
+native assistant reasoning fields across its 79,417 test rows, so it cannot
+validate source-trace transfer; the observed losing varied units leave
+unresolved OOD harm risk.
+
+Everything else is inherited from Phoenix 7.0. The unchanged Kimi-distilled
+rank-16 adapter scores ordinary rows with the Phoenix 4.0 renderer and direct
+`Prediction:` boundary, plus the frozen HP-KR and action prompts at their empty
+summary boundaries. HP-KR still takes precedence over action. All rows are
+length-sorted into the same single adapter pass with `48/32/16` batching,
+2,048-token left truncation, `logits_to_keep=1`, literal `0|1` normalization,
+and secondary threshold `0.5`. No source reasoning is rendered or scored.

@@ -45,16 +45,17 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
-- `submission/phoenix_wright_v7_0.ipynb` is the current Phoenix candidate and
+- `submission/phoenix_wright_v8_0.ipynb` is the current Phoenix candidate and
   must be tagged `black`. Every primary route uses the validation-selected
   two-epoch Kimi K3 binary-soft-distilled rank-16 Qwen3.5-9B adapter
   and normalized direct literal `0|1` margins. Ordinary rows preserve Phoenix
   4.0's structural renderer and the exact original binary-only training prompt.
   HP-KR and action rows retain their independently frozen empty-scaffold
-  prompts but now share the same Q397 adapter/model session, replacing the
-  base-Qwen and legacy-v2 sessions. Remaining eligible trace-bearing rows retain
-  the rank-1 resolved-intent log-odds blend. Routes are mutually exclusive with
-  HP-KR, action, then intent precedence. Length-aware `48/32/16` batching,
+  prompts and share the same adapter/model session, replacing the base-Qwen and
+  legacy-v2 sessions. Phoenix 8.0 removes the rank-1 resolved-intent adapter and
+  its log-odds blend; source reasoning is never consumed. HP-KR takes precedence
+  over action, and those prompt routes remain mutually exclusive.
+  Length-aware `48/32/16` batching,
   `logits_to_keep=1`, and secondary threshold `0.5` remain unchanged. The
   adapter is published at
   `Jazhyc/aletheias-phoenix-v7-kimi-k3-tvg-soft-r16-ep2`. Its frozen ordinary

@@ -8,10 +8,10 @@ tags:
 - deception-detection
 ---
 
-# Phoenix Wright 7.0 primary adapter
+# Phoenix Wright primary adapter
 
 Rank-16/alpha-32 LoRA for `Qwen/Qwen3.5-9B`, trained as the ordinary-row judge
-and reused for all primary routes in Phoenix 7.0. The teacher was
+and reused for all primary routes in Phoenix 7.0 and 8.0. The teacher was
 `moonshotai/kimi-k3`, served by Fireworks through OpenRouter and evaluated at
 the literal `0|1` boundary after
 `Prediction:` with the frozen no-thinking Truth Value Guard prompt. The student
@@ -24,7 +24,7 @@ hard-label loss, completion loss, or pairwise loss. Its 256 tensors use
 canonical Qwen3.5 paths under `model.language_model.layers` and exclude visual
 modules.
 
-Phoenix 7.0 applies the exact Phoenix 4.0 observable-input renderer on ordinary
+Phoenix 8.0 applies the exact Phoenix 4.0 observable-input renderer on ordinary
 rows and the frozen HP-KR/action empty-scaffold prompts on their routed rows.
 It scores the normalized literal `0|1` next-token margin directly, without
 generating judge reasoning. Frozen ordinary local validation macro AUROC was
