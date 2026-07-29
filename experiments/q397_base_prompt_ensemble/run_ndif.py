@@ -16,9 +16,10 @@ from experiments.q397_family_calibration.cache_logits import load_records
 from experiments.q397_readout_adaptation.run import MODEL_ID
 from experiments.phoenix_verbalizer_sweep.run_ndif_base_verbalizers import (
     CONDITIONS,
+    MAX_PROMPT_TOKENS,
     build_direct_prompt,
     load_credentials,
-    query_paired_shard,
+    make_position_batches,
     resolve_condition_token_ids,
     score_from_requested_logits,
 )
@@ -29,6 +30,86 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT = (
     ROOT / "results/blackbox/q397_base_explicit_ensemble_test_base_v1"
 )
+
+
+def query_logits(
+    model: Any,
+    tokenizer: Any,
+    prompts: list[str],
+    union_ids: list[int],
+) -> tuple[np.ndarray, float, list[int], int]:
+    """Score one condition with the frozen optimized NDIF batch tiers."""
+    import torch
+
+    lengths = [
+        len(tokenizer.encode(prompt, add_special_tokens=False))
+        for prompt in prompts
+    ]
+    batches = make_position_batches(
+        lengths,
+        short_batch_size=48,
+        medium_batch_size=32,
+        long_batch_size=16,
+        medium_threshold=600,
+        long_threshold=900,
+    )
+    encoded_groups = []
+    truncated = 0
+    for positions in batches:
+        common_length = min(
+            MAX_PROMPT_TOKENS,
+            max(lengths[position] for position in positions),
+        )
+        truncated += sum(
+            lengths[position] > MAX_PROMPT_TOKENS for position in positions
+        )
+        encoded = tokenizer(
+            [prompts[position] for position in positions],
+            return_tensors="pt",
+            padding="max_length",
+            truncation=True,
+            max_length=common_length,
+        )
+        encoded_groups.append((positions, encoded))
+
+    started = time.perf_counter()
+    saved_pieces: list[Any] = []
+    with model.session(remote=True):
+        for positions, encoded in encoded_groups:
+            print(
+                f"batch rows={len(positions)} "
+                f"tokens={int(encoded['input_ids'].shape[1])}",
+                flush=True,
+            )
+            with model.trace(
+                {
+                    "input_ids": encoded["input_ids"],
+                    "attention_mask": encoded["attention_mask"],
+                    "logits_to_keep": 1,
+                }
+            ):
+                piece = (
+                    model.output.logits[:, -1, union_ids]
+                    .float()
+                    .detach()
+                    .cpu()
+                )
+                saved_pieces.append(piece)
+        saved = torch.cat(saved_pieces, dim=0).save()
+    elapsed = time.perf_counter() - started
+
+    sorted_values = saved.float().numpy()
+    values = np.empty((len(prompts), len(union_ids)), dtype=np.float32)
+    cursor = 0
+    for positions, _ in encoded_groups:
+        count = len(positions)
+        values[positions] = sorted_values[cursor:cursor + count]
+        cursor += count
+    if cursor != len(sorted_values):
+        raise RuntimeError(
+            f"consumed {cursor} saved rows but received {len(sorted_values)}"
+        )
+    return values, elapsed, lengths, truncated
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
@@ -48,20 +129,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         for record in records
     ]
 
-    logits_by_condition, elapsed, lengths, truncated = query_paired_shard(
+    requested_logits, elapsed, lengths, truncated = query_logits(
         model,
         tokenizer,
-        {condition.name: prompts},
+        prompts,
         union_ids,
-        short_batch_size=48,
-        medium_batch_size=32,
-        long_batch_size=16,
-        medium_threshold=600,
-        long_threshold=900,
-        conditions=conditions,
     )
     scores = score_from_requested_logits(
-        logits_by_condition[condition.name],
+        requested_logits,
         condition=condition,
         condition_ids=condition_ids[condition.name],
         union_ids=union_ids,
