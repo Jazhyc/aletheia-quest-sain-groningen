@@ -5,6 +5,7 @@ Submitted timestamps are UTC.
 
 | submitted_at | method | AUROC | bal_acc | recall | FPR | score_time | rows/s |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-29 16:10:07 | qwen9b_kimi_k3_openrouter_tvg_soft_r16_lr5e5_ep2_v1_test_direct_margin | 0.9633 | 0.8857 | 0.8190 | 0.0476 | 8.3s | 98.4/s |
 | 2026-07-29 12:39:23 | kimi_k3_fireworks_nothink_tvg_binary_logit_v1 | 0.9824 | 0.9214 | 0.8595 | 0.0167 | 396.7s | 2.1/s |
 | 2026-07-29 07:53:49 | qwen9b_qwen397_tvg_soft_r16_lr5e5_ep2_v1_vllm_logits_prediction_plain | 0.9587 | 0.8869 | 0.8238 | 0.0500 | 8.5s | 96.1/s |
 | 2026-07-28 23:25:23 | qwen9b_qwen397_openrouter_explicit_tvg_binary_softonly_varied_v1 | 0.9603 | 0.8833 | 0.8286 | 0.0619 | 26.8s | 30.7/s |

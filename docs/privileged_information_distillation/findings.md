@@ -3932,6 +3932,61 @@ horizon. Retain the already published/submitted `5e-5`, two-epoch checkpoint:
 the learning-rate distinction is unresolved noise, while the evidence against
 training beyond two epochs is consistent.
 
+### Frozen Kimi student local-test confirmation
+
+After closing the validation sweep, the already submitted `5e-5`, two-epoch
+adapter received its first and only full 821-row local-test evaluation. The
+test used the exact frozen ordinary Phoenix prompt, excluded source reasoning,
+generated no judge reasoning, and scored normalized literal `0|1` logits
+directly after `Prediction:`.
+
+| split | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Validation | `0.95994` | `0.99833` | `0.90875` | `0.91548` | `0.86429` | `0.03333` | `765/822` |
+| **Frozen local test** | **`0.96327`** | `0.99229` | **`0.92458`** | `0.88571` | `0.81905` | `0.04762` | `771/821` |
+
+Test macro AUROC increased by `0.00333` and varied AUROC by `0.01583`, while
+instructed AUROC fell by `0.00604`. Relative to the matched Qwen397 soft
+student test row (`0.95869/0.99542/0.90972`), the Kimi student gains `0.00458`
+macro and `0.01486` varied AUROC but loses `0.00313` instructed AUROC.
+
+The Kimi teacher remains a materially higher ceiling: its direct test result
+was `0.98244` macro (`0.99865` instructed, `0.96083` varied), leaving student
+gaps of `0.01917`, `0.00635`, and `0.03625`. Do not claim that the compact
+student matches or exceeds its teacher.
+
+| test dataset unit | AUROC |
+| --- | ---: |
+| `instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None` | `0.95000` |
+| `instructed-deception-Qwen3.5-27B-None` | `0.99000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.98250` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-None` | `0.98500` |
+| `instructed-deception-gemma-3-27b-it-s-mo-gemma-3-27b-it` | `1.00000` |
+| `varied-deception-Qwen3.5-27B-None` | `0.96250` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.89750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.87750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `0.88875` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `0.94000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.98125` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.87750` |
+| `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.91125` |
+| `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.98500` |
+
+All direct margins were present. Scores had 771 unique values, 50
+duplicate-score excess rows, and 90 rows participating in a tie. Direct
+adapter scoring took `8.34s` (`98.4` rows/s), excluding model startup. The
+same-session LoRA fingerprint passed: only 4/821 adapter and base scores were
+exactly equal, with mean absolute difference `0.11643` and maximum `0.94138`.
+The preserved generations JSONL SHA-256 is
+`56a1a8ba94d9d24309337cd69618c937253312b632d2efa9e4453d388de9f99a`.
+
 ## Optimized Qwen-397B reasoning-GRPO continuation (2026-07-29)
 
 The validation-selected original-prompt soft student
