@@ -4,8 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from experiments.privileged_information_distillation.upload_qwen397_tvg_adapter import (
-    ADAPTER_DIR,
+from experiments.privileged_information_distillation.upload_kimi_k3_tvg_adapter import (
     REPOSITORY,
     validate_adapter,
 )
@@ -29,14 +28,15 @@ def test_phoenix70_is_the_only_submission_notebook() -> None:
     assert notebooks == [NOTEBOOK]
 
 
-def test_phoenix70_uses_q397_for_every_primary_route_and_rank1_intent() -> None:
+def test_phoenix70_uses_kimi_student_for_every_primary_route_and_rank1_intent() -> None:
     source = notebook_source()
     assert "# Phoenix Wright v7.0" in source
     assert (
         "method=phoenix_wright_v7.0 "
-        "q397_consolidated_routes_rank1_intent"
+        "kimi_k3_distilled_routes_rank1_intent"
     ) in source
     assert f'"{REPOSITORY}"' in source
+    assert "aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2" not in source
     assert "aletheias-phoenix-v5-qwen27-tvg-soft-r16" not in source
     assert "ACTION_ADAPTER_REPO" not in source
     assert 'kind == "harm"' not in source
@@ -56,13 +56,17 @@ def test_phoenix70_uses_q397_for_every_primary_route_and_rank1_intent() -> None:
 
 
 def test_phoenix70_main_adapter_is_canonical_float32_rank16() -> None:
-    validation = validate_adapter(ADAPTER_DIR)
+    validation = validate_adapter(BUNDLED_ADAPTER)
     assert validation["tensor_count"] == 256
     assert validation["dtypes"] == ["torch.float32"]
+    assert (
+        validation["weight_sha256"]
+        == "c5025a39dd05af16405c692a0c1b70657afd4f8e4a4e634bd789b5d67b4a9eb0"
+    )
 
 
-def test_bundled_main_is_the_exact_phoenix70_adapter() -> None:
-    for filename in ("adapter_config.json", "adapter_model.safetensors"):
-        trained = hashlib.sha256((ADAPTER_DIR / filename).read_bytes()).hexdigest()
-        bundled = hashlib.sha256((BUNDLED_ADAPTER / filename).read_bytes()).hexdigest()
-        assert bundled == trained
+def test_bundled_main_config_matches_published_phoenix70_adapter() -> None:
+    digest = hashlib.sha256(
+        (BUNDLED_ADAPTER / "adapter_config.json").read_bytes()
+    ).hexdigest()
+    assert digest == "d9ba5c277d1843409fa8b4162fc219f992feeed80638dc32788927cf6fe178ae"

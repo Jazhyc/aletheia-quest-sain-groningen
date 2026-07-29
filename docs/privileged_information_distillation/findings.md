@@ -3856,6 +3856,44 @@ filtered adapter, or extend this screen to other keep fractions. Dense
 feedback does not rescue this initialization-state, last-block DataRater
 approximation on the already curated Qwen-only varied cache.
 
+## Kimi K3 two-token soft distillation (2026-07-29)
+
+Fireworks exposed literal next-token log probabilities for
+`moonshotai/kimi-k3` through OpenRouter, allowing a compact teacher target
+without generated reasoning. The frozen no-thinking Truth Value Guard prompt
+requested `Prediction:`, and the cache retained the normalized log-odds over
+literal `0|1`. The complete 2,880-row varied-deception train cache had zero
+missing logits, cost `$3.61396`, and scored macro AUROC `0.95072`. Kimi exceeded
+the matched Qwen3.5-397B FP8 teacher by `0.03094` AUROC on these rows; their
+probabilities still correlated strongly (Pearson `0.93642`).
+
+The student retained the matched rank-16/alpha-32, AdamW `5e-5`, effective
+batch-size-32 recipe but used two epochs of binary soft-target BCE. Training on
+one rented H100 SXM5 took 180 optimizer steps. The saved canonical multimodal
+PEFT adapter has 256 FP32 tensors and weight SHA-256
+`c5025a39dd05af16405c692a0c1b70657afd4f8e4a4e634bd789b5d67b4a9eb0`.
+
+Frozen validation used the exact direct `Prediction:` margin and no generated
+judge reasoning:
+
+| adapter | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen397 soft student | `0.95393` | `0.99833` | `0.89472` | `0.90595` | — | — | `665/822` |
+| **Kimi K3 soft student** | **`0.95994`** | **`0.99833`** | **`0.90875`** | **`0.91548`** | `0.86429` | `0.03333` | `765/822` |
+
+The gain is `+0.00601` macro AUROC and clears the frozen `+0.005` promotion
+bar. All 822 rows had label logits. A base-model fingerprint confirmed that
+the LoRA changed 815/822 scores (mean absolute change `0.11062`, maximum
+`0.74526`).
+
+The canonical adapter is published at
+`Jazhyc/aletheias-phoenix-v7-kimi-k3-tvg-soft-r16-ep2`, revision
+`74e5cbdf4d3c93c57f4b304c0d66cb1c46c84e92`. Phoenix 7.0 keeps its filename,
+renderer, prompts, route precedence, batching, and rank-1 intent blend; only
+the shared primary-route adapter changes. Treat this as a frozen private
+transfer candidate: the training cache is still varied-only and therefore
+implicitly Qwen-family-only.
+
 ## Optimized Qwen-397B reasoning-GRPO continuation (2026-07-29)
 
 The validation-selected original-prompt soft student
