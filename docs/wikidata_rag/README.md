@@ -648,3 +648,45 @@ matched consumer is already rank 16. A later rank-4 experiment would be a
 higher-capacity continuation of the rejected rank-1 retriever, not a
 higher-rank version of this consumer; require new independent question groups
 or another frozen confirmation before spending that training run.
+
+### Kimi K3 soft-student evidence crossover
+
+The validation-selected Kimi K3 binary-soft-distilled rank-16 adapter was
+inserted into the same frozen unfiltered bounded-Qwen planner experiment. The
+adapter's cached direct no-evidence margins supplied all 822 baseline scores;
+only the 31 planner-active varied rows were recomputed under explicit empty,
+real, and matched shuffled references. This avoids inactive-row batching drift.
+The 93 one-token prefixes took `3.82s` after startup and had zero missing label
+logits.
+
+| condition | macro AUROC | varied AUROC | macro delta vs baseline | varied delta |
+| --- | ---: | ---: | ---: | ---: |
+| cached Kimi-student baseline | **`0.95994`** | **`0.90875`** | — | — |
+| recomputed empty on active rows | **`0.95994`** | **`0.90875`** | `0.00000` | `0.00000` |
+| real evidence replacement | `0.95804` | `0.90431` | `-0.00190` | `-0.00444` |
+| shuffled replacement | `0.95815` | `0.90458` | `-0.00179` | `-0.00417` |
+| baseline/real mean log-odds | `0.95923` | `0.90708` | `-0.00071` | `-0.00167` |
+| baseline/shuffled mean log-odds | `0.95923` | `0.90708` | `-0.00071` | `-0.00167` |
+
+Real replacement is slightly worse than shuffled replacement (`-0.00012`
+macro and `-0.00028` varied AUROC), while the two blends tie at reported
+precision. On active rows, real evidence lowers the mean deception score by
+`0.02127` for honest rows but by `0.11222` for deceptive rows. Shuffled facts
+produce much more symmetric shifts (`-0.01750` honest, `-0.01287` deceptive).
+At threshold 0.5, real replacement makes zero fixes and one harm against both
+the cached baseline and shuffled replacement; blending changes no binary
+decision.
+
+Real replacement improves two varied dataset units and harms three; its losses
+include `-0.03000` and `-0.01250` AUROC on two Qwen units. This is not better
+evidence use than the original Phoenix reader. Supporting facts again suppress
+deception scores most strongly on deceptive rows, because objective support for
+a headline answer does not resolve belief-based deception or poisoned
+secondary details.
+
+Decision: reject Kimi-student RAG replacement and blending. Do not package the
+databases, run this condition on local test, or alter Phoenix from this result.
+The stronger distilled factual prior does not create a directional
+evidence-aware consumer; that capability requires matched support,
+contradiction, insufficient, and deceptive-intent training rather than another
+inference-only adapter crossover.
