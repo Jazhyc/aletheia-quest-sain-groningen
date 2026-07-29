@@ -1,11 +1,9 @@
 import hashlib
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from phoenix_wright_v3 import (
+from legacy_submissions.phoenix_wright_v3 import (
     MEMBER_NAMES,
     TRUNCATION_MARKER,
     build_member_prompt,
@@ -60,15 +58,17 @@ def test_frozen_v2_renderer_marks_long_field_truncation() -> None:
     assert len(prompt.split("<output>\n", 1)[1].split("\n</output>", 1)[0]) == 3000
 
 
-def test_bundles_exact_ndif_client_wheels() -> None:
-    wheels_dir = Path(__file__).resolve().parent / "wheels"
+def test_submission_bundles_exact_ndif_client_wheels() -> None:
+    submission_dir = Path(__file__).resolve().parents[1] / "submission"
     expected = {
         "transformers-5.15.0.dev0-py3-none-any.whl":
             "0dbdde6331c4562d429467c41c9d2dac641db6a8bd36dab97771a7ebfb6db83b",
         "nnsight-0.7.1.dev41+gd901da3ed-cp312-cp312-linux_x86_64.whl":
             "831bdcd9ad90a8e5ed94348f36e011d8aaa0002d9e570c955169efcd60d0b6ae",
     }
+    requirements = (submission_dir / "requirements.txt").read_text()
 
     for filename, expected_sha256 in expected.items():
-        wheel = wheels_dir / filename
+        wheel = submission_dir / "wheels" / filename
+        assert f"./submission/wheels/{filename}" in requirements
         assert hashlib.sha256(wheel.read_bytes()).hexdigest() == expected_sha256

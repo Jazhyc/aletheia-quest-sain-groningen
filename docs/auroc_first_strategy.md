@@ -197,15 +197,78 @@ dataset/source-family holdouts before it is promoted.
 ## Phoenix Wright 4.0 deployment
 
 Phoenix Wright 4.0 originally implemented the selected path; its sole-notebook
-successor is now `submission/phoenix_wright_v4_2.ipynb`. The ordinary route
-preserves the exact Phoenix v3 rank-16 adapter (weight SHA-256
-`1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`)
-and frozen visible-message renderer. It appends `Prediction:` directly to the
-no-thinking chat prompt, asks Qwen for `logits_to_keep=1`, extracts the exact
-single-token `0` and `1` logits, and writes
+successors preserve its visible-message renderer. It appends `Prediction:`
+directly to the no-thinking chat prompt, asks Qwen for `logits_to_keep=1`,
+extracts the exact single-token `0` and `1` logits, and writes
 `sigmoid(logit_1 - logit_0)` as `score`. No reasoning generation or output
-parsing remains. The secondary `deceptive` column uses the validation-frozen
-threshold `0.15`.
+parsing remains. The secondary `deceptive` column uses the
+validation-frozen threshold `0.15`.
+
+An artifact audit on 2026-07-28 found an important deployment distinction.
+Phoenix 4.0 bundled the Phoenix v3 rank-16 adapter with weight SHA-256
+`1407d88533513f348bcf5355b4dedbd94a263b085a71ae971889d1dd24d3978e`
+for local execution, but remote leaderboard execution selected
+`Jazhyc/aletheias-phoenix-wright-v2-adapter`. That repository contained the
+older privileged-information student with legacy weight SHA-256
+`1dff12c68935117da59f9969c2b26141d294f0ffb1be7dfe0193cfd5863c2b29`.
+The two checkpoints have the same tensor keys but different tensor values.
+Therefore P80's `1407d885...` validation results describe the intended bundled
+adapter, not necessarily the adapter behind Phoenix 4.0's private leaderboard
+row.
+
+Phoenix 5.3 is the controlled replay of the actual 4.0 remote adapter under the
+current direct-scoring routes. It points remotely to the same repository and
+bundles its canonical-Qwen-path serialization with SHA-256
+`933ba79505cd1b73e69c5df05ed87c12246da355581e03f0b1a1bb7295cff494`.
+The path migration changes tensor names only; its source tensor values are from
+`1dff12c...`. Phoenix 5.3 intentionally inherits the 5.1 routes, batching, and
+secondary threshold so the ordinary adapter is the only scoring change.
+
+The initial Phoenix 5.4 control was not an exact Phoenix 4.0 ablation: it kept
+Phoenix 5.3's renderer, HP-KR/action/intent routes, score blending, and
+threshold `0.19`. The exact replacement restored the historical Phoenix 4.0
+visible-message renderer, direct `Prediction:` boundary, length-aware
+`48/32/16` batching, and threshold `0.15`; it removed `peft=` and all
+specialist routes. Its 2026-07-28 black-box submission reproduced the original
+private macro AUROC exactly at `0.893802`.
+
+The paired base-model 5.4 control scored only `0.846867`. The regression was
+entirely Notus: mean AUROC fell from `0.863992` to `0.770100`, while Iris was
+unchanged at `0.923613` versus `0.923633`. The ordinary rubric text, base model,
+direct label readout, and backend were the same. The remaining change is
+rendering: 5.x merges adjacent roles, keeps a raw 3,000-character context tail,
+removes truncation markers, and leaves the duplicated final output uncapped.
+Phoenix 4.0 instead bounds each message and output with head/tail retention and
+preserves message boundaries. This identifies private long/complex-context
+serialization as the leading mechanism, although aggregate results cannot
+distinguish many turns from one long message or output.
+
+Phoenix 4.1, 4.2, and 4.3 each retained the exact `0.893802` private result, so
+their frozen specialists did not cause the loss. Phoenix 6.0 is therefore the
+composition candidate: exact 4.0 base-Qwen rendering and scoring for ordinary
+rows, plus only the mutually exclusive HP-KR, action-report, and resolved-intent
+routes. It uses threshold `0.15` only for the secondary binary column and must
+be submitted with `--tag black`.
+
+Phoenix 6.1 replaces only 6.0's ordinary base-Qwen weights with the frozen
+Luna-medium rank-16 adapter while preserving the byte-exact Phoenix 4.0
+renderer, direct `Prediction:` margin, batching, and specialist precedence.
+The Luna adapter's validation-selected `0.19` threshold supplies only the
+secondary binary column. This is a private-transfer composition rather than a
+locally validated renderer/adapter pairing: Luna was trained and evaluated
+under the 5.x tail-only renderer. It generates no judge reasoning and remains
+black-box, so submit it with `--tag black`.
+
+Phoenix 6.2 replaces 6.1's ordinary Luna adapter with the corrected validation
+winner, `Jazhyc/aletheias-phoenix-v5-qwen27-tvg-soft-r16`. Ordinary rows retain
+Phoenix 4.0's boundary-preserving, bounded head/tail evidence renderer but use
+the adapter's exact binary-only training rubric, which ends with
+`Prediction:<0 or 1>` and contains no reasoning-summary instruction. Direct
+literal `0|1` scoring, `48/32/16` batching, and specialist precedence are
+unchanged. The secondary binary threshold is the matched `0.5`; the continuous
+margin remains primary. Corrected NDIF validation scored this adapter at
+`0.95375` macro AUROC under the binary prompt. Phoenix 6.2 remains black-box
+and must be submitted with `--tag black`.
 
 An NDIF run on all 400 rows of
 `dev-varied-deception-Qwen3.5-27B-None` completed at batch 32 in `102.1s`,
@@ -358,3 +421,164 @@ being added beside it, keeping the full submission near 131 MB and below the
 `9c1ea176007d38fd80148dda9289143e53d2adcf`. A focused one-row NDIF notebook
 test loaded that repository and passed the full `submission.csv` contract in
 `97.24s`.
+
+Competition classification: black-box. Reading the submitted judge's output
+logits is black-box model querying for this method; it does not inspect the
+model organisms' activations or hidden state. Submit Phoenix 4.4 with
+`--tag black`.
+
+## Phoenix Wright 5.0 Qwen-27B TVG soft student
+
+> **2026-07-28 correction:** the vLLM validation margins quoted in the Phoenix
+> 5.0--5.2 sections below were largely base-Qwen scores because the adapters
+> were not applied. A corrected competition-NDIF rerun after PEFT migration
+> scored Q27 soft at `0.95375`, GPT-OSS PI at `0.94911`, GPT-OSS blind at
+> `0.94893`, and Luna PI at `0.94821` using their training-matched prompts.
+> Base controls were `0.94530` for binary and `0.93994` for summary. Q27 soft is
+> the corrected validation winner. Treat the adapter-dependent vLLM local-test
+> numbers in these sections as uncorrected as well. See the
+> privileged-distillation findings for prompt crosses and per-dataset AUROCs.
+>
+> A corrected reason-then-score NDIF follow-up also rejected inference-time
+> reasoning for these migrated students. GPT-OSS PI fell from `0.94911` direct
+> to `0.92381` post-reasoning; Luna PI fell from `0.94821` to `0.92470`.
+> Neither arm truncated a prompt. Keep the direct boundary despite the
+> reasoning arms producing more distinct scores.
+
+Phoenix 5.0 replaces only the ordinary Phoenix 4.4 component with the fresh
+rank-16/alpha-32 Qwen3.5-9B student soft-distilled from direct binary Truth
+Value Guard margins of Qwen3.5-27B. The exact main renderer matches training:
+observable conversation and output only, 3,000-character tail context, Qwen
+thinking disabled, and normalized literal `0|1` logits directly after
+`Prediction:`. It does not use the GRPO empty-reasoning scaffold and does not
+generate a judge chain.
+
+Frozen validation macro AUROC was `0.94625` (`0.99500` instructed, `0.88125`
+varied), with 544 unique scores over 822 rows. Independent frozen local-test job
+`30311515` completed successfully at `0.94149` macro AUROC (`0.98427`
+instructed, `0.88444` varied), 565 unique scores over 821 rows, zero missing
+label logits, and a `12.97s` direct-margin pass. At the matched `0.5` secondary
+threshold, test balanced accuracy was `0.86786`, recall `0.81429`, and FPR
+`0.07857`.
+
+These held-out local metrics trail Phoenix 4.4, especially its `0.95982` test
+AUROC. The promotion is therefore not a local-score selection: Phoenix 4.4
+regressed on the private leaderboard after its varied-only GRPO continuation,
+and Phoenix 5.0 is an explicit bet that direct teacher-margin distillation will
+transfer more reliably. Preserve that caveat when comparing versions.
+
+All current bundled adapters are consolidated under
+`submission/phoenix_wright_adapters/`: `main/` contains the soft student and
+`resolved_intent/` contains the rank-1 specialist. The base-Qwen HP-KR route,
+remote original-Phoenix action route, and resolved-intent blend remain mutually
+exclusive and otherwise unchanged. Phoenix 5.0 remains black-box and must be
+submitted with `--tag black`. The main adapter is published at
+`Jazhyc/aletheias-phoenix-v5-qwen27-tvg-soft-r16`, initial commit
+`c5568edfe22fa335cbe31726ea144669e8b54314`.
+
+## Phoenix Wright 5.1 blind GPT-OSS reasoning student
+
+Phoenix 5.1 replaces only the ordinary Phoenix 5.0 component with a fresh
+rank-16/alpha-32 Qwen3.5-9B student trained on concise material-claim reasoning
+traces from GPT-OSS-120B. Unlike the privileged-summary adapter, the teacher was
+not given the label. It saw only the observable conversation and final output,
+made its own binary prediction, and supplied its own rationale. All 415 wrong
+predictions among the 2,875 parsed targets were deliberately retained; five
+unparseable targets were the only omissions. The teacher's valid-target train
+macro BA was `0.85564`.
+
+The exact main renderer matches training: observable conversation and output
+only, 3,000-character tail context, Qwen thinking disabled, and normalized
+literal `0|1` logits directly after `Prediction:`. The learned reasoning trace
+is not generated at inference. Validation direct-margin macro AUROC was
+`0.93762` (`0.99344` instructed, `0.86319` varied), with 347 unique scores over
+822 rows and zero missing logits. This nearly exactly ties the matched
+privileged-summary adapter at `0.93815` (`0.99354` instructed, `0.86431`
+varied); the score vectors have Pearson correlation `0.99940`. Validation
+therefore provides no evidence that privileged labels, rather than reasoning
+procedure/style supervision, caused the local continuous-ranking gain.
+
+Frozen local-test job `30314450` confirmed the tie at `0.93452` macro AUROC
+(`0.98073` instructed, `0.87292` varied), with 345 unique scores over 821 rows,
+zero missing label logits, and a `14.98s` direct-margin pass. This is
+fractionally above the privileged-summary reference's `0.93423`, but far too
+small a difference to select one as locally superior.
+
+The secondary binary threshold is validation-frozen at `0.19`, inside the
+optimal validation plateau; it scored `0.86786` macro test BA and does not
+affect AUROC. The base-Qwen HP-KR route, remote original-Phoenix action route,
+and resolved-intent blend remain mutually exclusive and otherwise unchanged.
+Phoenix 5.1 remains a black-box method and must be submitted with `--tag
+black`. Its public adapter repository is
+`Jazhyc/aletheias-phoenix-blind-reasoning-r16`, initial upload commit
+`eaeb37ce03d791db340114eb9132494d7081d31f`.
+
+## Phoenix Wright 5.2 Luna medium privileged-reasoning student
+
+Phoenix 5.2 replaces only the ordinary Phoenix 5.1 component with the matched
+rank-16/alpha-32 Qwen3.5-9B student trained on all 2,880 varied rows using
+privileged Truth Value Guard traces from GPT-5.6 Luna at medium reasoning
+effort. Luna received the authoritative label while constructing the concise
+reasoning target; the deployed student receives only the observable
+conversation and final output. Training otherwise keeps the frozen one-epoch
+AdamW `5e-5`, effective-batch-32 recipe.
+
+Validation direct-margin macro AUROC was `0.93762` (`0.99344` instructed,
+`0.86319` varied), with 350 unique scores and zero missing logits. This is
+`0.00054` below the GPT-OSS privileged reference at `0.93815`; their direct
+score vectors correlate at `0.99937` with mean absolute difference `0.00630`.
+The validation result is a tie, not a local promotion. Phoenix 5.2 is an
+explicit private-leaderboard OOD-transfer probe motivated by possible teacher
+knowledge differences.
+
+Frozen local-test job `30316568` subsequently compared full generation with
+the direct and empty-summary boundaries. Direct scoring reached `0.93470`
+macro AUROC (`0.98073` instructed, `0.87333` varied). Generating the learned
+rationale and scoring its final boundary reached `0.93429` (`0.99229`
+instructed, `0.85694` varied), with 176 unique scores and eight generation
+parse failures. Generated binary AUROC was `0.91071`; the empty-summary margin
+scored `0.92780`.
+
+The prior GPT-OSS privileged student's post-reasoning result was `0.93661`
+(`0.99354` instructed, `0.86069` varied). Luna's post-reasoning scores correlate
+at `0.98058` with that vector and are lower by `0.00232` macro AUROC. Full
+generation therefore does not improve Luna overall: its instructed gain is
+more than offset by worse varied ranking. Keep the queued notebook on direct
+scoring without generation.
+
+Inference preserves the exact direct `Prediction:` boundary, no-thinking mode,
+3,000-character tail renderer, length-aware batching, and validation-frozen
+secondary threshold `0.19`. The base-Qwen HP-KR route, original-Phoenix action
+route, and optional resolved-intent blend remain unchanged and mutually
+exclusive. The method remains black-box and must be submitted with `--tag
+black`.
+
+The exact main adapter is published at
+`Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16`, initial upload commit
+`fa52f5e7f6a36d7d06e6718c65bd00fd4d11658f`. Its weight SHA-256 is
+`da83f294a248a97ddf07ff7a458280f0990dea329e61fc5e2aec8faec8c61d17`.
+
+## Phoenix Wright 5.2.1 Luna post-reasoning OOD probe
+
+Phoenix 5.2.1 keeps the exact 5.2 adapter, renderer, and mutually exclusive
+specialist routes. It changes only ordinary inference: generate the learned
+reasoning summary deterministically with Qwen thinking disabled, find the final
+`Prediction:0|1`, remove only its selected digit, and normalize the literal
+next-token `0|1` logits at that position. A completion without a parseable
+label receives a canonical trailing `Prediction:` boundary. The notebook never
+conditions its rescore on the already-selected label.
+
+This is deliberately not selected by local aggregate AUROC. Post-reasoning
+validation/test AUROC was `0.93250/0.93429`, below direct scoring at
+`0.93762/0.93470`. The hypothesis is instead that an explicit reasoning pass
+may help private OOD samples whose factual or semantic structure differs from
+the local Qwen-only varied data. The queued 5.2 direct run supplies the matched
+leaderboard control.
+
+Generation uses the previously proven length-aware `32/24/16` schedule with a
+512-token allowance. The one-token rescore retains `48/32/16`,
+`logits_to_keep=1`, and the exact normalized label margin. The secondary
+threshold is validation-selected at `0.38`; it does not affect AUROC. A direct
+one-row competition-NDIF notebook smoke completed successfully and emitted a
+continuous score of `0.00109873`. Phoenix 5.2.1 remains black-box and must be
+submitted with `--tag black`.

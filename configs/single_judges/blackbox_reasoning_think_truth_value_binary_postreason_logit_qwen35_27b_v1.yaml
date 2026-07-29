@@ -1,0 +1,16 @@
+# @package _global_
+# Native-thinking TVG generation with logits read at the generated final label.
+
+defaults:
+  - blackbox_reasoning_nothink_truth_value_binary_logit_qwen35_27b_v1
+  - _self_
+
+method: qwen35_27b_think_truth_value_binary_postreason_logit_v1
+
+judge:
+  mode: generate
+  enable_thinking: true
+  max_model_len: 8192
+  max_num_seqs: 128
+  max_tokens: 4096
+  score_terminal_logits: true

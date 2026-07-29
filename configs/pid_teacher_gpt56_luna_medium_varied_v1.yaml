@@ -1,0 +1,24 @@
+# @package _global_
+# Matched varied-only privileged Truth Value Guard summaries from GPT-5.6 Luna.
+
+defaults:
+  - privileged_information_distillation
+  - _self_
+
+method: qwen9b_privileged_gpt56_luna_medium_tvg_variedonly_adamw5e5_v1
+output_dir: results/blackbox/${method}
+
+teacher:
+  model: openai/gpt-5.6-luna
+  reasoning_effort: medium
+  dataset_name_contains: varied-deception
+  artifact: results/blackbox/qwen9b_privileged_gpt56_luna_medium_tvg_variedonly_v1/generations.jsonl
+
+student:
+  dataset_name_contains: varied-deception
+  output_dir: ${output_dir}/adapter
+  training:
+    optimizer: adamw
+    optim: adamw_torch
+    num_train_epochs: 1.0
+    learning_rate: 5.0e-5

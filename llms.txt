@@ -131,8 +131,10 @@ don't hardcode unless your method requires a fixed model, like a probe's trainin
 
 All of these are **served on NDIF and available at all times** for remote tracing —
 including the 120B Nemotron (it's just large; it was left out of the default `dry.yaml`
-for speed, not availability). `util.build_model` picks the right nnsight wrapper
-automatically (gemma-3 is multimodal → `VisionLanguageModel`; others → `LanguageModel`).
+for speed, not availability). The competition deploys every organism under the
+text-only nnsight `LanguageModel` key, including Gemma-3 despite the vision tower
+in its Hugging Face configuration; `util.build_model` therefore always constructs
+`LanguageModel`.
 
 ### Scoring (what the leaderboard reports)
 Per dataset, four metrics — **AUROC**, **balanced accuracy**, **recall**, and

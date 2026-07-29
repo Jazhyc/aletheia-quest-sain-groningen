@@ -101,18 +101,14 @@ def response_span(messages: list, tokenizer) -> tuple[list[int], int, int]:
 # ── model ────────────────────────────────────────────────────────────────────
 
 def build_model(model_id: str, lora_id: str | None = None, **model_kwargs):
-    """Construct an nnsight ``LanguageModel`` handle for a repo. ``peft=lora_id``
-    attaches the LoRA adapter when one is given. The config and tokenizer load
-    locally; the weights live on NDIF — the returned object is just a handle you
-    trace against. Extra ``model_kwargs`` are forwarded to the wrapper (e.g.
-    ``device_map="auto", dtype=torch.bfloat16`` to run on a local GPU instead of
-    NDIF).
+    """Construct the competition's text-only nnsight ``LanguageModel`` handle.
 
-    Every competition organism is served on NDIF as a text-only ``LanguageModel``,
-    even ``google/gemma-3-27b-it`` (whose HF config still carries a vision tower).
-    Instantiating ``VisionLanguageModel`` for it makes the remote hotswap fail
-    (the "Hotswapping tier" failure) because NDIF has no VLM version to swap in, so
-    we always build ``LanguageModel``."""
+    ``peft=lora_id`` attaches a LoRA adapter when one is given. Every competition
+    organism is deployed under the ``LanguageModel`` remote key, including
+    ``google/gemma-3-27b-it`` even though its Hugging Face configuration contains
+    a vision tower. Selecting ``VisionLanguageModel`` for Gemma therefore misses
+    the pinned competition deployment.
+    """
     try:
         from nnsight import LanguageModel
     except ImportError:                       # nnsight 0.7.x no longer re-exports at top level

@@ -762,6 +762,9 @@ def main(cfg: DictConfig) -> None:
     direct_loss_weight = float(OmegaConf.select(
         cfg, "student.training.direct_loss_weight", default=0.0
     ))
+    completion_loss_weight = float(OmegaConf.select(
+        cfg, "student.training.completion_loss_weight", default=1.0
+    ))
     pairwise_loss_weight = float(OmegaConf.select(
         cfg, "student.training.pairwise_loss_weight", default=0.0
     ))
@@ -778,12 +781,21 @@ def main(cfg: DictConfig) -> None:
         cfg, "student.training.paired_batching", default=False
     ))
     if any(weight < 0 for weight in (
+        completion_loss_weight,
         direct_loss_weight,
         pairwise_loss_weight,
         soft_loss_weight,
         ordinal_soft_loss_weight,
     )):
         raise ValueError("auxiliary loss weights must be non-negative")
+    if not any((
+        completion_loss_weight,
+        direct_loss_weight,
+        pairwise_loss_weight,
+        soft_loss_weight,
+        ordinal_soft_loss_weight,
+    )):
+        raise ValueError("at least one student loss weight must be positive")
     if ordinal_soft_loss_weight and (
         direct_loss_weight or pairwise_loss_weight or soft_loss_weight
     ):
@@ -825,8 +837,11 @@ def main(cfg: DictConfig) -> None:
             dataset_ids = inputs.pop("dataset_ids", None)
             soft_targets = inputs.pop("soft_targets", None)
             soft_rating_targets = inputs.pop("soft_rating_targets", None)
-            outputs = model(**inputs)
-            loss = outputs.loss
+            outputs = None
+            loss = None
+            if completion_loss_weight:
+                outputs = model(**inputs)
+                loss = completion_loss_weight * outputs.loss
             if uses_direct_forward:
                 if any(value is None for value in (
                     direct_input_ids,
@@ -852,6 +867,8 @@ def main(cfg: DictConfig) -> None:
                     dtype=torch.long,
                 )
                 direct_logits = next_logits.index_select(-1, label_ids)
+                if loss is None:
+                    loss = direct_logits.sum() * 0.0
                 if direct_loss_weight:
                     loss = loss + direct_loss_weight * F.cross_entropy(
                         direct_logits.float(), binary_labels
@@ -888,7 +905,11 @@ def main(cfg: DictConfig) -> None:
                             soft_rating_targets,
                         )
                     )
-            return (loss, outputs) if return_outputs else loss
+            if loss is None:
+                raise AssertionError("configured losses produced no training loss")
+            if return_outputs:
+                return loss, outputs if outputs is not None else direct_outputs
+            return loss
 
     class MuonAuxiliarySFTTrainer(AuxiliarySFTTrainer):
         """Auxiliary SFT trainer using Muon for 2D LoRA matrices."""
@@ -1146,6 +1167,7 @@ def main(cfg: DictConfig) -> None:
         f"reasoning_rows={reasoning_rows} "
         f"reasoning_rows_dropped={reasoning_rows_dropped} "
         f"reasoning_dropout_probability={reasoning_dropout_probability} "
+        f"completion_loss_weight={completion_loss_weight} "
         f"direct_loss_weight={direct_loss_weight} "
         f"pairwise_loss_weight={pairwise_loss_weight} "
         f"soft_loss_weight={soft_loss_weight} "

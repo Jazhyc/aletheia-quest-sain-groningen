@@ -7,12 +7,14 @@ import torch
 
 from experiments.privileged_information_distillation.build_soft_teacher_cache import (
     aggregate_soft_targets,
+    build_binary_soft_targets,
 )
 from experiments.privileged_information_distillation.train_student_sft import (
     attach_soft_teacher_targets,
     soft_binary_distillation_loss,
     soft_rating_distillation_loss,
 )
+from experiments.blackbox.run_judge import target_logprobs_from_logprobs
 
 
 def member(dataset: str, index: int, name: str, score: float, label: int = 1):
@@ -48,6 +50,51 @@ def test_aggregate_soft_targets_selects_max_and_normalizes_without_labels() -> N
 def test_aggregate_soft_targets_rejects_incomplete_members() -> None:
     with pytest.raises(ValueError, match="expected 3 teacher members"):
         aggregate_soft_targets([member("d", 1, "a", 0.5)])
+
+
+def test_build_binary_soft_targets_preserves_teacher_probability() -> None:
+    records = [{
+        "dataset": "d",
+        "index": 1,
+        "label": 0,
+        "score": 0.73,
+        "target_probs": {"honest": 0.27, "deceptive": 0.73},
+        "missing_rating_token_ids": [],
+        "parse_error": False,
+    }]
+
+    targets = build_binary_soft_targets(records)
+
+    assert targets[0]["soft_target"] == 0.73
+    assert targets[0]["normalization"] == {"kind": "binary_identity"}
+
+
+def test_build_binary_soft_targets_rejects_duplicate_rows() -> None:
+    record = {
+        "dataset": "d",
+        "index": 1,
+        "label": 1,
+        "score": 0.5,
+        "target_probs": {"honest": 0.5, "deceptive": 0.5},
+        "missing_rating_token_ids": [],
+        "parse_error": False,
+    }
+    with pytest.raises(ValueError, match="duplicate binary teacher row"):
+        build_binary_soft_targets([record, record])
+
+
+def test_target_logprobs_preserve_binary_teacher_margin() -> None:
+    logprobs = target_logprobs_from_logprobs(
+        {10: -3.0, 11: -1.0},
+        targets=[
+            {"name": "honest", "ids": [10]},
+            {"name": "deceptive", "ids": [11]},
+        ],
+        missing_logprob=-30.0,
+    )
+
+    assert logprobs == pytest.approx({"honest": -3.0, "deceptive": -1.0})
+    assert logprobs["deceptive"] - logprobs["honest"] == pytest.approx(2.0)
 
 
 def test_attach_and_soft_binary_loss(tmp_path) -> None:

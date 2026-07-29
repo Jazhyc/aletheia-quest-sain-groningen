@@ -1,0 +1,30 @@
+# @package _global_
+# Full varied-data, ground-truth-blind GPT-OSS reasoning-SFT ablation.
+
+defaults:
+  - pid_blind_teacher_material_rank1_v1
+  - _self_
+
+method: qwen9b_blind_gptoss120b_material_reasoning_full_r16_v1
+output_dir: results/blackbox/${method}
+
+teacher:
+  selection_manifest: null
+  limit: null
+  limit_per_label: null
+  max_tokens: 4096
+  artifact: ${output_dir}/teacher/${teacher.split}.jsonl
+
+student:
+  selection_manifest: null
+  train_fraction: 1.0
+  require_teacher_label_match: false
+  output_dir: ${output_dir}/adapter
+  lora:
+    r: 16
+    alpha: 32
+  training:
+    optimizer: adamw
+    optim: adamw_torch
+    learning_rate: 5.0e-5
+    num_train_epochs: 1.0

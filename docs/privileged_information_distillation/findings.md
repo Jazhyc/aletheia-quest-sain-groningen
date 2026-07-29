@@ -1,5 +1,173 @@
 # Findings and Decisions
 
+## Corrected NDIF adapter validation after PEFT migration (2026-07-28)
+
+The earlier vLLM validation margins for the GPT-OSS privileged, GPT-OSS blind,
+Luna privileged, and Qwen3.5-27B soft-distillation students did not measure the
+intended adapters. After migrating their PEFT tensor paths to the canonical
+Qwen3.5 NDIF model tree, all four were rerun on the complete 822-row,
+21-dataset validation split through competition NDIF.
+
+The rerun used the optimized Phoenix direct path: one remote session per
+base/adapter, length sorting with `48/32/16` tiers, left padding and truncation,
+`logits_to_keep=1`, no judge generation, and normalized literal next-token
+`0|1` probabilities after `Prediction:`. Both prompt contracts were scored in
+the same session. The first three students were trained on the compact
+reasoning-summary prompt; Q27 soft was trained on the shorter binary-only
+prompt.
+
+| model | matched prompt | corrected macro AUROC | instructed | varied | old vLLM | corrected minus old | unique |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Base Qwen | summary | `0.93994` | `0.99375` | `0.86819` | — | — | `95/822` |
+| Base Qwen | binary | `0.94530` | `0.99438` | `0.87986` | — | — | `73/822` |
+| GPT-OSS PI | summary | `0.94911` | `0.99604` | `0.88653` | `0.93815` | `+0.01095` | `37/822` |
+| GPT-OSS blind | summary | `0.94893` | `0.99583` | `0.88639` | `0.93762` | `+0.01131` | `61/822` |
+| Luna PI | summary | `0.94821` | `0.98948` | `0.89319` | `0.93762` | `+0.01060` | `53/822` |
+| Q27 soft | binary | **`0.95375`** | **`0.99687`** | **`0.89625`** | `0.94625` | `+0.00750` | `100/822` |
+
+The old vectors confirm the silent-base diagnosis more directly than the
+aggregate changes. Each historical vLLM vector correlates at `0.99915` to
+`0.99936` with the corrected NDIF base vector under the same prompt, with mean
+absolute differences of only `0.00729` to `0.00755`. Against the corrected
+adapter vectors, correlations fall to `0.91197`--`0.95908` and mean absolute
+differences rise to `0.06829`--`0.21036`. The corrected adapter-versus-base
+mean absolute movements are `0.20196` for GPT-OSS PI, `0.06623` for blind,
+`0.20785` for Luna, and `0.08479` for Q27 soft. These are active adapters, not
+prompt-only base controls.
+
+Prompt compatibility was tested directly:
+
+| adapter | summary prompt | binary prompt | matched minus alternate |
+| --- | ---: | ---: | ---: |
+| GPT-OSS PI | `0.94911` | `0.94917` | `-0.00006` |
+| GPT-OSS blind | `0.94893` | `0.94744` | `+0.00149` |
+| Luna PI | `0.94821` | `0.94315` | `+0.00506` |
+| Q27 soft | `0.95042` | `0.95375` | `+0.00333` |
+
+Thus prompt length is not the issue: the complete prompts were only 232--844
+tokens for summary and 187--799 for binary, and no row was truncated. Wording
+and the learned output contract can still affect ranking. Luna should retain
+the summary prompt, and Q27 soft should retain its binary training prompt.
+GPT-OSS PI is effectively invariant in AUROC, although prompt changes still
+move its calibration.
+
+The training renderer and Phoenix 6.0 structural renderer produced
+byte-identical evidence on `822/822` rows under both prompts. Phoenix 6.0 is
+therefore structurally compatible on this validation set. This does not erase
+the private long-context renderer result: no validation row activates the
+character caps that distinguish the renderers.
+
+Per-dataset matched-prompt AUROC:
+
+| validation unit | GPT-OSS PI | GPT-OSS blind | Luna PI | Q27 soft |
+| --- | ---: | ---: | ---: | ---: |
+| instructed Nemotron, base | `1.00000` | `1.00000` | `0.96250` | `1.00000` |
+| instructed Qwen, base | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| instructed Qwen, a-mo-1 | `0.97375` | `0.98000` | `0.97250` | `0.98875` |
+| instructed Qwen, a-mo-3 | `1.00000` | `1.00000` | `0.99875` | `1.00000` |
+| instructed Qwen, a-mo-4 | `1.00000` | `0.99875` | `0.99625` | `1.00000` |
+| instructed Qwen, a-mo-5 | `0.99250` | `0.99000` | `0.98625` | `1.00000` |
+| instructed Qwen, a-mo-6 | `0.98875` | `0.98500` | `0.97250` | `0.97875` |
+| instructed Qwen, a-mo-7 | `1.00000` | `1.00000` | `0.99875` | `1.00000` |
+| instructed Qwen, b-mo | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| instructed Qwen, c-mo | `1.00000` | `1.00000` | `0.99125` | `1.00000` |
+| instructed Gemma, base | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| instructed Gemma, s-mo | `0.99750` | `0.99625` | `0.99500` | `0.99500` |
+| varied Qwen, base | `0.96875` | `0.97375` | `0.97875` | `0.97500` |
+| varied Qwen, a-mo-1 | `0.88000` | `0.87500` | `0.87375` | `0.88750` |
+| varied Qwen, a-mo-3 | `0.72750` | `0.73875` | `0.78500` | `0.73625` |
+| varied Qwen, a-mo-4 | `0.85875` | `0.83750` | `0.84625` | `0.87000` |
+| varied Qwen, a-mo-5 | `0.94750` | `0.95750` | `0.97750` | `0.96000` |
+| varied Qwen, a-mo-6 | `0.88000` | `0.88250` | `0.86875` | `0.89750` |
+| varied Qwen, a-mo-7 | `0.83500` | `0.83875` | `0.83750` | `0.85125` |
+| varied Qwen, b-mo | `0.95000` | `0.93625` | `0.92125` | `0.95375` |
+| varied Qwen, c-mo | `0.93125` | `0.93750` | `0.95000` | `0.93500` |
+
+Q27 soft is the corrected validation winner. It gains `0.00845` over base Qwen
+under the same binary prompt. Under the unchanged summary prompt it still
+scores `0.95042`, `0.01048` above the summary base, but that is below its
+training-matched result. This rerun supersedes the affected historical vLLM
+adapter-inference rankings below, including adapter-dependent local-test
+numbers. It does not invalidate the teacher caches or training runs. No
+corrected local-test selection was performed, and this validation rerun does
+not authorize one.
+
+Reproducible code and ignored artifacts:
+
+- `experiments/phoenix_adapter_validation_ndif/`
+- `results/blackbox/phoenix_adapter_validation_ndif_v1/`
+
+## Corrected reason-then-score validation (2026-07-28)
+
+The migrated GPT-OSS privileged-information and Luna privileged-information
+students were also given their training-matched ability to generate a compact
+reasoning summary before the decision. The frozen Phoenix 5.2.1 protocol was
+used: deterministic generation with a 512-token allowance, remove only the
+final generated `0|1`, then read normalized literal label logits at that
+position. A fresh direct-boundary arm was scored in the same second remote
+session as the post-reasoning arm.
+
+| adapter | boundary | macro AUROC | instructed | varied | pooled AUROC | unique |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| GPT-OSS PI | direct | **`0.94911`** | `0.99604` | `0.88653` | `0.96208` | `37/822` |
+| GPT-OSS PI | post-reasoning | `0.92381` | `0.98812` | `0.83806` | `0.91134` | `46/822` |
+| Luna PI | direct | **`0.94821`** | `0.98948` | `0.89319` | `0.96111` | `53/822` |
+| Luna PI | post-reasoning | `0.92470` | `0.98104` | `0.84958` | `0.90740` | `90/822` |
+
+Reasoning therefore reduced macro AUROC by `0.02530` for GPT-OSS PI and
+`0.02351` for Luna. The loss is strongest on the varied units: `-0.04847` and
+`-0.04361`, compared with instructed changes of `-0.00792` and `-0.00844`.
+Post-reasoning improved/tied/lost `3/5/13` GPT-OSS units and `7/1/13` Luna
+units. Its row-level probability correlation with direct was only `0.87705`
+for GPT-OSS and `0.90398` for Luna, with mean absolute movements of `0.26976`
+and `0.21271`.
+
+Per-dataset AUROC:
+
+| validation unit | GPT direct | GPT reasoning | delta | Luna direct | Luna reasoning | delta |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| instructed Nemotron, base | `1.00000` | `1.00000` | `+0.00000` | `0.96250` | `0.95000` | `-0.01250` |
+| instructed Qwen, base | `1.00000` | `1.00000` | `+0.00000` | `1.00000` | `0.99750` | `-0.00250` |
+| instructed Qwen, a-mo-1 | `0.97375` | `0.98875` | `+0.01500` | `0.97250` | `0.99875` | `+0.02625` |
+| instructed Qwen, a-mo-3 | `1.00000` | `1.00000` | `+0.00000` | `0.99875` | `1.00000` | `+0.00125` |
+| instructed Qwen, a-mo-4 | `1.00000` | `0.99875` | `-0.00125` | `0.99625` | `1.00000` | `+0.00375` |
+| instructed Qwen, a-mo-5 | `0.99250` | `0.98500` | `-0.00750` | `0.98625` | `0.97750` | `-0.00875` |
+| instructed Qwen, a-mo-6 | `0.98875` | `0.98875` | `+0.00000` | `0.97250` | `0.97625` | `+0.00375` |
+| instructed Qwen, a-mo-7 | `1.00000` | `0.98625` | `-0.01375` | `0.99875` | `0.95500` | `-0.04375` |
+| instructed Qwen, b-mo | `1.00000` | `1.00000` | `+0.00000` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed Qwen, c-mo | `1.00000` | `0.99625` | `-0.00375` | `0.99125` | `0.97500` | `-0.01625` |
+| instructed Gemma, base | `1.00000` | `0.99875` | `-0.00125` | `1.00000` | `0.98625` | `-0.01375` |
+| instructed Gemma, s-mo | `0.99750` | `0.91500` | `-0.08250` | `0.99500` | `0.95625` | `-0.03875` |
+| varied Qwen, base | `0.96875` | `0.87875` | `-0.09000` | `0.97875` | `0.95875` | `-0.02000` |
+| varied Qwen, a-mo-1 | `0.88000` | `0.77250` | `-0.10750` | `0.87375` | `0.77250` | `-0.10125` |
+| varied Qwen, a-mo-3 | `0.72750` | `0.70625` | `-0.02125` | `0.78500` | `0.65250` | `-0.13250` |
+| varied Qwen, a-mo-4 | `0.85875` | `0.87125` | `+0.01250` | `0.84625` | `0.88750` | `+0.04125` |
+| varied Qwen, a-mo-5 | `0.94750` | `0.90125` | `-0.04625` | `0.97750` | `0.99000` | `+0.01250` |
+| varied Qwen, a-mo-6 | `0.88000` | `0.87125` | `-0.00875` | `0.86875` | `0.85875` | `-0.01000` |
+| varied Qwen, a-mo-7 | `0.83500` | `0.74625` | `-0.08875` | `0.83750` | `0.70500` | `-0.13250` |
+| varied Qwen, b-mo | `0.95000` | `0.96875` | `+0.01875` | `0.92125` | `0.95750` | `+0.03625` |
+| varied Qwen, c-mo | `0.93125` | `0.82625` | `-0.10500` | `0.95000` | `0.86375` | `-0.08625` |
+
+The optimized Phoenix batching path was retained. Each adapter used one
+generation session with length-aware `32/24/16` batches and a 32,768 padded
+input-plus-output ceiling, followed by one paired scoring session with
+`48/32/16`, left padding/truncation, and `logits_to_keep=1`. GPT-OSS generation
+took 396.9 seconds and had two 512-token completions without a final label;
+both used the declared canonical `Prediction:` fallback. Luna took 220.0
+seconds with zero fallbacks. The paired score passes took 49.9 and 48.5
+seconds. Generation prompts were 230--842 tokens; post-reasoning prompts were
+at most 1,150 GPT-OSS tokens and 950 Luna tokens. No row was truncated.
+
+The increased score uniqueness does not compensate for the degraded ordering.
+Keep direct scoring for both adapters. This corrected comparison supersedes
+the affected historical vLLM reason-boundary comparisons but does not authorize
+a local-test rerun.
+
+Reproducible code and ignored artifacts:
+
+- `experiments/phoenix_adapter_reasoning_ndif/`
+- `results/blackbox/phoenix_adapter_reasoning_ndif_v1/`
+
 ## Teacher baseline
 
 Before privileged trace generation, the unchanged Truth Value Guard prompt was
@@ -14,6 +182,262 @@ On local test the single short GPT-OSS judge narrowly exceeded the 4096-token
 three-prompt Qwen ensemble in balanced accuracy (`0.9310` versus `0.9298`).
 GPT-OSS cannot be used directly in the submission, which motivates using it as
 a training-only teacher.
+
+### GPT-5.6 Luna privileged Truth Value Guard reasoning pilot (2026-07-27)
+
+A matched OpenRouter pilot tested `openai/gpt-5.6-luna` at medium and high
+reasoning effort on the same 36 varied-training rows: two deterministic random
+examples per label from each of the nine varied dataset units. The teacher saw
+the authoritative label and the original privileged Truth Value Guard prompt.
+Only the compact visible `<reasoning_summary>` is a potential student target;
+OpenRouter was asked not to return the private reasoning text, although its
+reasoning tokens remained in usage and billing.
+
+| effort | parsed | label matches | prompt tokens | completion tokens | reasoning tokens | reported cost | mean summary words |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| medium | `36/36` | `36/36` | `20,052` | `3,794` | `1,227` | `$0.02119` | `43.86` |
+| high | `36/36` | `36/36` | `20,052` | `5,224` | `2,690` | `$0.02544` | `42.25` |
+
+All 72 calls used OpenAI's provider, stopped normally, and required no retry.
+As with the original GPT-OSS cache, Luna normally omitted the redundant
+`Prediction:` line: it appeared in only 2/36 medium responses and 0/36 high
+responses. The parser safely attached the authoritative label after extracting
+the structured summary.
+
+A manual pass found concrete, plausible poisoned-fact identifications in all
+18 deceptive rows under both efforts and no induced contradiction in the 18
+honest rows. Luna also repaired several visible GPT-OSS rationale weaknesses in
+the sampled rows. For example, it identified the false placement of the Khyber
+Pass in the Sulaiman Mountains where the cached GPT-OSS summary had declared
+the response accurate, and it correctly challenged the claim that the Tombs of
+the Kings are ten kilometres from Paphos. Medium and high were qualitatively
+tied on this small sample; one row elicited two different but independently
+valid errors (Gerry Rafferty's birthplace versus the impossible 1978 date for
+the 1992 film *Reservoir Dogs*).
+
+High used 2.19 times as many private reasoning tokens as medium but cost only
+20% more. Scaling the actually reported pilot costs linearly to all 2,880
+varied rows gives approximately `$1.70` for medium and `$2.04` for high; without
+assuming cache discounts, list-price ceilings from the observed token counts
+are roughly `$3.43` and `$4.11`. Cost therefore does not decide the effort
+choice. The pilot establishes that high is cheap, concise, and reliable, but
+does not yet demonstrate a quality advantage over medium.
+
+Runtime and resumable artifacts:
+
+- `experiments/privileged_information_distillation/run_openrouter_reasoning_teacher_pilot.py`
+- `results/blackbox/gpt56_luna_openrouter_privileged_tvg_reasoning_pilot_v1/`
+
+The selected full medium-effort cache subsequently completed over all 2,880
+varied-training rows. It used 1,560,183 prompt tokens, 315,301 completion
+tokens, of which 109,137 were reported as reasoning tokens, and cost `$1.70929`.
+All 2,880 calls used OpenAI's provider, stopped normally, required no retry,
+and yielded a parseable summary. Only ten visible finals included the redundant
+prediction line; the remaining authoritative labels were attached by the same
+deterministic fallback used for GPT-OSS. Wall time was 733.2 seconds at
+concurrency eight.
+
+The cache has exactly 160 examples per label in each of the nine varied units.
+Visible summaries average 44.15 words (median 44, p95 62, maximum 92). A
+mechanical leakage audit found no mention of ground truth, privileged
+information, an authoritative label, or the instructions. The sole occurrence
+of “teacher” was benign factual content identifying René Descartes as Queen
+Christina's teacher. The matched student uses the frozen one-epoch rank-16,
+alpha-32, AdamW `5e-5`, effective-batch-32 recipe.
+
+Full-cache artifacts and training config:
+
+- `results/blackbox/qwen9b_privileged_gpt56_luna_medium_tvg_variedonly_v1/`
+- `configs/pid_teacher_gpt56_luna_medium_varied_v1.yaml`
+
+Training job `30316452` completed all 90 optimizer steps in 963.4 seconds
+(`20m09s` including startup and saving), with reported loss `9.735`. The
+adapter weight SHA-256 is
+`da83f294a248a97ddf07ff7a458280f0990dea329e61fc5e2aec8faec8c61d17`.
+Continuous-margin validation job `30316477` then completed successfully over
+all 822 rows:
+
+| readout | macro AUROC/BA | instructed | varied | unique scores | missing/parse |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Generated binary | `0.89881` | `0.97500` | `0.79722` | `2/822` | `7` parse |
+| Direct `0|1` margin | `0.93762` | `0.99344` | `0.86319` | `350/822` | `0` missing |
+| Empty-summary margin | `0.93780` | `0.99375` | `0.86319` | `518/822` | `0` missing |
+| Post-reasoning margin | `0.93250` | `0.99167` | `0.85361` | `175/822` | `0` missing |
+| GPT-OSS privileged direct reference | `0.93815` | `0.99354` | `0.86431` | `348/822` | `0` missing |
+
+Luna's direct margin is `0.00054` below the frozen GPT-OSS privileged
+reference. The two direct score vectors have Pearson correlation `0.99937`
+and mean absolute difference `0.00630`; per-unit changes are small and mixed.
+This is a tie rather than evidence that the stronger teacher improves the
+student. Retain the GPT-OSS adapter as the validation selection and do not
+test-select the Luna adapter. The near-identical ranking is further evidence
+that, under this fixed one-epoch recipe and local Qwen-only varied split,
+teacher capability is not the dominant bottleneck.
+
+Phoenix 5.2 nevertheless deploys the Luna adapter as an explicit private
+leaderboard OOD-transfer probe, replacing only the ordinary route while
+preserving every specialist and the direct-logit inference path. This is not a
+local promotion claim.
+
+Frozen post-submission local-test job `30316568` then ran full generation and
+all continuous boundaries. Direct scoring reached `0.93470` macro AUROC
+(`0.98073` instructed, `0.87333` varied). Post-reasoning scoring reached
+`0.93429` (`0.99229` instructed, `0.85694` varied), with 176 unique scores and
+eight parse failures. The matched GPT-OSS privileged student scored `0.93661`
+post-reasoning; the two post-reasoning vectors correlate at `0.98058`. Generated
+binary AUROC was `0.91071` and the empty-summary margin scored `0.92780`.
+Generating the Luna student's learned rationale therefore does not improve
+overall or varied ranking. Keep Phoenix 5.2 on direct scoring.
+
+Phoenix 5.2.1 nevertheless packages post-reasoning scoring as a separate OOD
+transfer probe. It keeps the same adapter and routes, removes the generated
+final digit before rescoring, and uses a canonical `Prediction:` fallback only
+when no label is present. Local aggregate performance is explicitly not its
+selection claim; queued Phoenix 5.2 is the matched direct leaderboard control.
+A one-row competition-NDIF notebook smoke passed with score `0.00109873`.
+Generation uses `32/24/16` length-aware batches, while the final one-token
+margin retains `48/32/16`.
+
+### GPT-5.6 Sol privileged Truth Value Guard reasoning pilot (2026-07-27)
+
+The exact Luna pilot rows, seed, privileged Truth Value Guard prompt, 4,096
+token allowance, and concurrency were reused with `openai/gpt-5.6-sol`. Low and
+medium effort each covered all 36 rows.
+
+| effort | parsed | explicit predictions | prompt tokens | completion tokens | reasoning tokens | reported cost | mean summary words |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| low | `36/36` | `36/36` | `20,052` | `4,241` | `1,292` | `$0.22522` | `48.72` |
+| medium | `36/36` | `36/36` | `20,052` | `4,520` | `1,601` | `$0.23350` | `48.28` |
+
+All calls used OpenAI's provider, stopped normally, and required no retry.
+Unlike Luna and GPT-OSS, Sol followed the redundant `Prediction:` instruction
+on every row. Manual review again found a concrete poisoned fact in all 18
+deceptive examples and no invented contradiction in the 18 honest examples.
+Low and medium were nearly identical. Medium was somewhat more comprehensive
+on the Gerry Rafferty row, identifying both the false Glasgow birthplace and
+the impossible 1978 date for the 1992 film *Reservoir Dogs*, while low found
+only the film-date error.
+
+Sol did not reduce token use. Relative to Luna medium on the exact same rows,
+Sol low used 11.8% more completion tokens and Sol medium used 19.1% more.
+Their private reasoning-token totals were also 5.3% and 30.5% higher than Luna
+medium. Although Sol's list rates are five times Luna's per token, its reported
+pilot costs were 10.6--11.0 times higher because Luna received substantially
+more effective prompt-cache savings. Linear full-cache projections are
+approximately `$18.02` for Sol low and `$18.68` for Sol medium, close to
+no-cache list-price estimates of `$18.20` and `$18.87`.
+
+The Sol summaries are polished and occasionally a little more explicit, but
+the paired sample contains no poisoned fact that Sol found and Luna missed.
+Do not prefer Sol from this pilot on either quality or token efficiency. If a
+full Sol capacity ablation is still desired, medium is the better arm: it has a
+small comprehensiveness advantage and costs only about 3.7% more than low.
+
+Artifacts:
+
+- `results/blackbox/gpt56_sol_openrouter_privileged_tvg_reasoning_pilot_v1/`
+
+### Qwen3.5-397B OpenRouter Truth Value Guard benchmark (2026-07-27)
+
+The newer `qwen/qwen3.5-397b-a17b` checkpoint was evaluated through OpenRouter
+on all 822 validation rows using the unchanged binary Truth Value Guard prompt.
+Reasoning was disabled. Because OpenRouter chat providers do not continue an
+assistant prefill, the model greedily generated the three-token
+`Prediction:<0|1>` response and the evaluator read the `0`/`1` top-logprobs at
+the generated label position. All calls were pinned to Alibaba; every row
+returned both binary labels within the provider's top-five limit.
+
+| teacher | macro AUROC | instructed AUROC | varied AUROC | BA | recall | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.6-27B local direct logits | 0.9533 | 0.9954 | 0.8972 | 0.8940 | 0.8571 | 0.0690 |
+| Qwen3.5-27B local direct logits | 0.9574 | **0.9992** | 0.9018 | 0.9119 | **0.8857** | 0.0619 |
+| Qwen3.5-122B-A10B OpenRouter terminal logits | 0.9482 | 0.9973 | 0.8828 | 0.9155 | 0.8738 | 0.0429 |
+| Qwen3.5-397B-A17B OpenRouter terminal logits | **0.9631** | 0.9981 | **0.9164** | **0.9179** | 0.8762 | **0.0405** |
+
+The 397B teacher gains 0.0057 macro AUROC overall and 0.0146 on varied
+deception, mainly through better ranking/calibration and fewer false positives,
+but it is not uniformly stronger. Among the nine varied dataset units it
+improves six and regresses three, including a sizable drop on the
+`a-mo-qwen3.5-27b-3` unit (`0.8113` to `0.7375`). Treat it as a promising
+same-family teacher rather than evidence that scale solves every factual blind
+spot.
+
+The complete run used 254,980 prompt tokens and 2,466 completion tokens, cost
+`$0.1042`, and finished in 147.0 seconds at concurrency eight. It produced 811
+unique scores across 822 rows, zero missing-label-logit rows, and eight rows
+that required a retry. Artifacts are under
+`results/blackbox/qwen35_397b_openrouter_nothink_tvg_binary_logit_v1/`.
+OpenRouter remains development/training infrastructure only; external API calls
+are not permitted in the submitted detector.
+
+The frozen local-test follow-up confirmed the 397B result and rejected 122B as
+a scale/efficiency compromise:
+
+| teacher | test macro AUROC | instructed AUROC | varied AUROC | BA | recall | FPR | cost |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.5-122B-A10B | 0.9555 | **0.9956** | 0.9021 | 0.8952 | 0.8333 | 0.0429 | `$0.0708` |
+| Qwen3.5-397B-A17B | **0.9654** | 0.9940 | **0.9272** | **0.9071** | **0.8500** | **0.0357** | `$0.1043` |
+
+Both runs covered all 821 rows with zero missing binary logits, zero reasoning
+tokens, and only `Prediction:0|1` completions. The 397B result improved slightly
+from validation to test (`0.9631` to `0.9654`) and its varied AUROC rose from
+`0.9164` to `0.9272`. The 122B checkpoint also improved on test but remained
+behind 397B by 0.0098 macro AUROC and 0.0251 varied AUROC. It was unexpectedly
+worse than the local Qwen3.5-27B control on validation despite its greater
+capacity, so do not assume monotonic teacher quality from parameter count.
+
+The 122B validation/test runs produced 775/768 unique scores and cost
+`$0.0707`/`$0.0708`; the matched 397B runs produced 811/814 unique scores and
+cost `$0.1042`/`$0.1043`. The 122B jobs required many more transient retries
+while sharing the same Alibaba endpoint, but retrying did not change provider
+or leave incomplete rows. Select 397B, not 122B, if proceeding with remote
+same-family soft supervision.
+
+### Competition-NDIF Nemotron/Gemma Truth Value Guard swaps (2026-07-27)
+
+The exact no-thinking binary Truth Value Guard boundary was also ported to the
+competition-specific `https://aletheias.api.ndif.us` endpoint for two
+cross-family model swaps. It retained the 3,000-character tail renderer,
+excluded source reasoning, appended `Prediction:`, requested only the final
+logits, and normalized the literal `0|1` choices. Tokenization was local, but
+no model weights were loaded on the cluster.
+
+Nemotron completed the frozen 821-row local test:
+
+| teacher | macro AUROC | instructed | varied | BA | recall | FPR | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| NVIDIA Nemotron Super 120B-A12B | `0.95655` | `0.98708` | `0.91583` | `0.89762` | `0.82619` | `0.03095` | `70/821` |
+| Google Gemma 3 27B IT | `0.92917` | `0.96344` | `0.88347` | `0.86548` | `0.85476` | `0.12381` | `136/821` |
+
+Its 26 resumable remote sessions took `185.6s` of scoring time. Nemotron is
+competitive but does not beat the frozen Qwen3.5-397B test teacher (`0.9654`
+macro, `0.9272` varied), and it narrowly trails Phoenix 4.4's local-test
+ranking (`0.95982`). It is only `+0.0010` above Qwen3.5-122B overall, although
+its varied AUROC is `+0.0137`. The score resolution is unusually coarse:
+only 70 unique probabilities over 821 rows. On the 21-row base-Nemotron
+instructed unit, AUROC was `0.9500` but recall at the fixed 0.5 threshold was
+zero, illustrating why ranking and secondary threshold diagnostics must stay
+separate.
+
+The first Gemma attempts selected `VisionLanguageModel` because its Hugging
+Face configuration carries a vision tower. Competition NDIF actually pins
+`google/gemma-3-27b-it` under the text-only `LanguageModel` remote key, as the
+current Sonic branch already documents. The wrapper mismatch—not deployment
+availability—caused the misleading hotswap error. After aligning the shared
+helper with the competition deployment, the two-row smoke and full test both
+completed.
+
+Gemma trails Nemotron by `0.02738` macro AUROC and by `0.03236` on varied
+deception. Its higher FPR and severe probability saturation are notable: 270
+rows scored exactly 1.0 and only 136 unique values remained. Cross-family
+performance was uneven, including AUROC `0.7000` on the 21-row base-Nemotron
+instructed unit. On the two Gemma-source instructed units it scored `0.9500`
+and `1.0000` AUROC. This does not make Gemma a strong universal judge, although
+the matched-family unit remains relevant to an organism-self-judgment design.
+
+Runtime code and resumable artifacts are under
+`experiments/ndif_tvg_model_swap/` and
+`results/blackbox/ndif_tvg_model_swap_test_v1/`, respectively.
 
 ## Trace audit
 
@@ -2708,6 +3132,88 @@ ordinal arm has more unique scores and nearly identical BA, but badly orders
 the difficult varied rows. Use a literal binary teacher target for the next
 student loss; do not infer ranking quality from score uniqueness alone.
 
+## Pure Qwen-27B TVG binary soft distillation (2026-07-27)
+
+Jobs `30310442`--`30310445` completed the frozen varied-only binary soft-target
+pipeline. Unlike the earlier auxiliary-loss experiment, this used a fresh
+rank-16/alpha-32 Qwen3.5-9B adapter and optimized only binary soft-target BCE at
+the exact Truth Value Guard `Prediction:` boundary. There was no GPT-OSS
+reasoning-summary loss or hard-label loss. The cache contains all 2,880 varied
+training rows, 2,488 unique teacher probabilities, and no parser/filter losses.
+Teacher probabilities range from `0.0002305` to `0.9996646`.
+
+Training used one epoch, AdamW `5e-5`, and effective batch size 32. It completed
+90 optimizer steps in `892.1s`; reported train loss was `4.967`. The adapter
+weight SHA-256 is
+`c096e5839fe96fb7409fe759a79bc0989ef1efe5aee010b83c3157d38586a75f`.
+
+The evaluation command intentionally allowed only one generated token, which
+produced `Prediction` and therefore made all 822 generated-output rows
+unparseable. This does not invalidate the separately executed direct-margin
+pass: it appended `Prediction:` to the original prompt, scored literal `0|1`
+with one forward pass, and had zero missing logits. Read
+`score_metrics.direct_margin`, not the placeholder top-level generated metric.
+
+| readout | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.5-27B teacher | `0.95744` | `0.99917` | `0.90181` | `0.91190` | `0.88571` | `0.06190` | `779/822` |
+| Soft-only Qwen3.5-9B student | `0.94625` | `0.99500` | `0.88125` | `0.88810` | `0.83810` | `0.06190` | `544/822` |
+| Phoenix 4.4 GRPO reference | **`0.95137`** | **`0.99656`** | **`0.89111`** | **`0.89643`** | **`0.84524`** | `0.05238` | `79/822` |
+
+The soft student retains a strong ranking and far more score resolution than
+Phoenix 4.4, but it loses `0.01119` macro AUROC to the teacher and trails
+Phoenix 4.4 by `0.00512`. It also transfers the teacher unevenly:
+
+| validation dataset unit | teacher AUROC | student AUROC | delta |
+| --- | ---: | ---: | ---: |
+| `instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None` | `1.00000` | `1.00000` | `+0.00000` |
+| `instructed-deception-Qwen3.5-27B-None` | `1.00000` | `1.00000` | `+0.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.99000` | `0.97750` | `-0.01250` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `1.00000` | `1.00000` | `+0.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `1.00000` | `0.99750` | `-0.00250` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `1.00000` | `0.99750` | `-0.00250` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `1.00000` | `0.97250` | `-0.02750` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `1.00000` | `1.00000` | `+0.00000` |
+| `instructed-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `1.00000` | `0.99750` | `-0.00250` |
+| `instructed-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `1.00000` | `1.00000` | `+0.00000` |
+| `instructed-deception-gemma-3-27b-it-None` | `1.00000` | `1.00000` | `+0.00000` |
+| `instructed-deception-gemma-3-27b-it-s-mo-gemma-3-27b-it` | `1.00000` | `0.99750` | `-0.00250` |
+| `varied-deception-Qwen3.5-27B-None` | `0.95750` | `0.97250` | `+0.01500` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.85750` | `0.90750` | `+0.05000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.81125` | `0.72000` | `-0.09125` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `0.87625` | `0.81875` | `-0.05750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `0.98250` | `0.95250` | `-0.03000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.84000` | `0.90250` | `+0.06250` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.88250` | `0.79875` | `-0.08375` |
+| `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.97000` | `0.95750` | `-0.01250` |
+| `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.93875` | `0.90125` | `-0.03750` |
+
+The original frozen local promotion rule rejected this adapter because it
+trailed Phoenix 4.4 validation AUROC. After Phoenix 4.4 subsequently regressed
+on the private leaderboard, the team explicitly overrode that local-only
+decision and promoted the Qwen-27B soft student as Phoenix 5.0 to test a more
+directly transferable supervision path. This is not evidence that the local
+comparison reversed.
+
+Independent local-test job `30311515` completed before packaging and reinforced
+the caveat: direct margins scored `0.94149` macro AUROC (`0.98427` instructed,
+`0.88444` varied), below Phoenix 4.4's `0.95982`. The vector retained much
+better resolution than 4.4 at 565 unique scores over 821 rows, with zero missing
+label logits and a `12.97s` direct-margin pass. At threshold `0.5`, balanced
+accuracy was `0.86786`, recall `0.81429`, and FPR `0.07857`. Phoenix 5.0 is
+therefore a private-leaderboard transfer experiment, not a local test winner.
+
+Pure boundary distillation remains much more effective than the earlier
+reasoning-SFT-plus-soft-auxiliary formulation (`0.94625` versus `0.93762`). A
+future clean experiment could repeat the exact pipeline with the
+validation/test-confirmed Qwen3.5-397B teacher rather than adding reasoning or
+another loss term.
+
+The separate Qwen3.5-27B thinking diagnostic, job `30310441`, also confirms
+that teacher reasoning is unnecessary. Post-reasoning label margins reached
+`0.95571` macro AUROC (`0.99792` instructed, `0.89944` varied), slightly below
+direct no-thinking `0.95744`, while scoring took `723.3s` instead of `38.2s`.
+
 ## Leaderboard-aligned GRPO continuation logits (2026-07-27)
 
 An inference-input audit found that the saved GRPO configurations retained
@@ -2756,3 +3262,51 @@ D/K/S ensemble (`0.9573`). Promote the epoch-1 adapter as the next submission
 candidate. Retain the continuous logit score despite its 742 tied rows, keep
 the hard `deceptive` threshold separate, and do not re-enable source reasoning
 or reasoning generation at inference.
+
+## Full-data blind GPT-OSS reasoning SFT (2026-07-27)
+
+Jobs `30313949`--`30313951` completed the ground-truth-blind control requested
+to distinguish privileged-information supervision from reasoning-target SFT.
+The teacher received all 2,880 varied-deception training rows, but never saw a
+label or answer-key placeholder. GPT-OSS-120B generated a concise
+material-claim rationale and its own `Prediction:0|1`. The student used the
+same default one-epoch rank-16/alpha-32 Qwen3.5-9B AdamW `5e-5` recipe with
+effective batch size 32.
+
+Five teacher outputs were unparseable, leaving 2,875 targets. Of those, 415
+teacher predictions disagreed with ground truth. They were retained without
+correction or label-based filtering. The teacher's valid-target macro train BA
+was only `0.85564`, with substantial unit variation (`0.67476--0.95625`).
+Training completed 90 steps in `979.9s` with reported loss `6.862`. The adapter
+weight SHA-256 is
+`bfe4a35ceb11055e7b7e77d29cc7027ccb5daa355703d9acd4d14eb03db01931`.
+
+Validation generation and direct-label scoring gave:
+
+| readout | macro AUROC/BA | instructed | varied | unique scores | missing/parse |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Generated binary | `0.90595` | `0.97708` | `0.81111` | `2/822` | `2` parse |
+| Direct `0|1` margin | `0.93762` | `0.99344` | `0.86319` | `347/822` | `0` missing |
+| Privileged-summary direct reference | `0.93815` | `0.99354` | `0.86431` | `348/822` | `0` missing |
+
+The blind and privileged direct score vectors have Pearson correlation
+`0.99940`; mean absolute score difference is `0.00611`. Their AUROC difference
+is only `-0.00054` overall and is not a meaningful validation separation. The
+blind student also improves generated binary BA over the privileged student's
+original `0.90000`, despite learning from the teacher's noisy decisions.
+
+This is strong local evidence that the earlier advantage over prediction-only
+SFT mostly comes from learning a compact factual-judgment reasoning procedure
+or output manifold, not from privileged labels embedded in post-hoc rationales.
+It does not prove privileged information is useless OOD: all training varied
+rows are also Qwen-family rows, and private transfer may still differ. Phoenix
+5.1 therefore promotes this adapter as an explicit private-leaderboard control,
+not as a validation winner over the privileged adapter.
+
+Frozen local-test job `30314450` confirmed the same conclusion. Direct margins
+scored `0.93452` macro AUROC (`0.98073` instructed, `0.87292` varied), with 345
+unique values over 821 rows, zero missing label logits, and `14.98s` scoring
+time. The privileged-summary reference was `0.93423`, so the blind student is
+fractionally higher but remains an empirical tie. Generated binary BA was
+`0.91071`; its eight parse errors do not affect the direct-margin result. The
+validation-frozen `0.19` threshold gave `0.86786` macro test BA.

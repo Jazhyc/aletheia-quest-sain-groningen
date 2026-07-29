@@ -64,6 +64,12 @@ Everything below `dev_data_row_ordering.md` in the table is **history**.
 
 | document | subject |
 | --- | --- |
+| `sonic_v7.md` | **Designed 2026-07-29, notebook built.** Organism-detector router replaces the sign gate — per-sample routing between probe (on organisms) and judge (on base models). Detector needs offline training before the router can fire; falls back to v6.1 sign gate otherwise. |
+| `sonic_v6_1.md` | **Built 2026-07-29, unsubmitted.** v6 with retuned gate constants for the v6.2 judge (normalisation mismatch fix: 1-step BASE_CAP, 3-step MAX_CAP). |
+| `sonic_v6.md` | **Submitted 2026-07-29, AUROC `0.9230` / BA `0.8013`.** Dual L40+L46 probe + Phoenix v6.2 judge under v4 sign gate. Probe was given 5–10× too much influence (normalisation mismatch); Notus Nemotron collapsed. |
+| `sonic_v6_mini_long.md` | **Submitted 2026-07-29, AUROC `0.7773` / BA `0.6658`.** Probe-only diagnostic, no token cap. |
+| `sonic_v5b.md` | **Submitted 2026-07-28, AUROC `0.8480` / BA `0.7950`.** Gate with big-judge escalation. Slower than v6.2 judge-only and worse. |
+| `sonic_v5_2.md` | **Planned 2026-07-28, not built.** v4 gate + Phoenix v5 judge (privileged-information distilled). |
 | `sonic_v5.md` | **Planned 2026-07-27, not built.** Escalation to the tested model as a big judge on the gate's disagreement rows, blended under a new `BIG_CAP`. Includes the go/no-go offline measurement and the 1800s-per-dataset budget guards. |
 | `ideas_tested.md` | **2026-07-27.** Token-pair ensemble (rejected — anti-correlated pairs kill signal) and CoT on uncertain rows (deferred — untestable locally on instruct-only data). |
 | `sonic_v4_2.md` | **Submitted 2026-07-27, AUROC `0.9047` / BA `0.8183` — regression vs v4.** Judge-uncertainty exception on sign test. Even judge-uncertain Notus rows had ranking signal the probe damaged. Moved to `legacy_submissions/`. |
@@ -83,13 +89,10 @@ Everything below `dev_data_row_ordering.md` in the table is **history**.
 
 The scored results for every version are in `docs/official_submissions.md`.
 
-The current candidate is `sonic_v4.ipynb` (dual probe, sign gate, single "0"/"1" judge).
-The latest submission is `sonic_v4_2.ipynb` at AUROC `0.9047` / BA `0.8183` (regression).
-The best submission is `sonic_v4.ipynb` at AUROC `0.9060` / BA `0.8204`.
-The peak AUROC is `sonic_v3_6.ipynb` at `0.9068` / BA `0.7975`. The peak BA
-among the v3/v4 series is `sonic_v3_2.ipynb` at `0.8312` / AUROC `0.9031`. The
-highest BA ever recorded is `sonic_v2.3.5.ipynb` at `0.8538` / AUROC `0.8763`
-(2026-07-24), from the BA-first metric regime.
+The current candidate is `sonic_v7.ipynb` (organism-detector router, falls back to v6.1).
+The latest submission is `sonic_v6.ipynb` at AUROC `0.9230` / BA `0.8013`.
+The best submission is `phoenix_wright_v6_2.ipynb` at AUROC `0.9233` / BA `0.8379`.
+The peak AUROC is `phoenix_wright_v6_2.ipynb` at `0.9233` / BA `0.8379`.
 
 For scale: the leaderboard leader on 2026-07-27 is EleutherAI's `Tiresias.ipynb`
 at `0.9451`, and rank 2 is `whitebox_notus_v47.ipynb` at `0.9148`. Our Iris

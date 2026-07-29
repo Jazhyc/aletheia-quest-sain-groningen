@@ -522,15 +522,38 @@ def target_probs_from_logprobs(
     targets: list[dict[str, Any]],
     missing_logprob: float,
 ) -> dict[str, float]:
+    return {
+        name: math.exp(value)
+        for name, value in target_logprobs_from_logprobs(
+            first_token_logprobs,
+            targets=targets,
+            missing_logprob=missing_logprob,
+        ).items()
+    }
+
+
+def target_logprobs_from_logprobs(
+    first_token_logprobs: dict[Any, Any],
+    *,
+    targets: list[dict[str, Any]],
+    missing_logprob: float,
+) -> dict[str, float]:
+    """Aggregate requested token log-probabilities for each semantic target."""
     expanded = {
         int(token_id): logprob_value(value)
         for token_id, value in first_token_logprobs.items()
     }
-    return {
-        target["name"]: float(sum(math.exp(expanded.get(token_id, missing_logprob))
-                                  for token_id in target["ids"]))
-        for target in targets
-    }
+    aggregated: dict[str, float] = {}
+    for target in targets:
+        values = [
+            expanded.get(int(token_id), missing_logprob)
+            for token_id in target["ids"]
+        ]
+        maximum = max(values)
+        aggregated[target["name"]] = float(
+            maximum + math.log(sum(math.exp(value - maximum) for value in values))
+        )
+    return aggregated
 
 
 def score_from_target_probs(probs: dict[str, float], targets: list[dict[str, Any]]) -> float:
@@ -539,6 +562,62 @@ def score_from_target_probs(probs: dict[str, float], targets: list[dict[str, Any
         return 0.5
     expected = sum(float(target["score"]) * probs[target["name"]] for target in targets) / total
     return expected
+
+
+PREDICTION_RE = re.compile(r"(?im)\bPrediction\s*:\s*<?([01])>?\s*$")
+
+
+def terminal_binary_target_probs(
+    text: str,
+    token_ids: list[int],
+    logprob_rows: list[dict[Any, Any] | None],
+    *,
+    targets: list[dict[str, Any]],
+    missing_logprob: float,
+) -> tuple[int, dict[str, float]] | None:
+    """Read 0/1 logits at a generated terminal ``Prediction:`` label."""
+    matches = PREDICTION_RE.findall(text)
+    if not matches or len(token_ids) != len(logprob_rows):
+        return None
+    prediction = int(matches[-1])
+    target_ids = {
+        int(token_id)
+        for target in targets
+        for token_id in target["ids"]
+    }
+    expected_ids = {
+        int(token_id)
+        for target in targets
+        if float(target["score"]) == float(prediction)
+        for token_id in target["ids"]
+    }
+    if not expected_ids:
+        raise ValueError(f"no terminal logit target maps to prediction {prediction}")
+    position = next(
+        (
+            index
+            for index in range(len(token_ids) - 1, -1, -1)
+            if int(token_ids[index]) in target_ids
+        ),
+        None,
+    )
+    if position is None or int(token_ids[position]) not in expected_ids:
+        return None
+    first_token_logprobs = logprob_rows[position] or {}
+    if missing_requested_token_ids(first_token_logprobs, sorted(target_ids)):
+        return None
+    probabilities = target_probs_from_logprobs(
+        first_token_logprobs,
+        targets=targets,
+        missing_logprob=missing_logprob,
+    )
+    total = sum(probabilities.values())
+    if total <= 0:
+        return None
+    return prediction, {
+        name: probability / total
+        for name, probability in probabilities.items()
+    }
 
 
 def structured_rating_prompt(prompt: str, reasoning: str, rating_instruction: str) -> str:
@@ -746,11 +825,15 @@ class OfflineVllmRatingJudge:
                 self.all_rating_ids,
             )
             if self.targets is not None:
-                target_probs = target_probs_from_logprobs(
+                target_logprobs = target_logprobs_from_logprobs(
                     first_token_logprobs,
                     targets=self.targets,
                     missing_logprob=self.missing_logprob,
                 )
+                target_probs = {
+                    name: math.exp(value)
+                    for name, value in target_logprobs.items()
+                }
                 score = score_from_target_probs(target_probs, self.targets)
                 total = sum(target_probs.values())
                 normalized_targets = {
@@ -761,6 +844,7 @@ class OfflineVllmRatingJudge:
                     "offset": offset,
                     "parse_error": False,
                     "score": score,
+                    "target_logprobs": target_logprobs,
                     "target_probs": normalized_targets,
                     "missing_rating_token_ids": missing_token_ids,
                 }
@@ -817,6 +901,10 @@ class OfflineVllmGenerateJudge:
         include_stop_str_in_output: bool,
         lora_adapter: str | None,
         max_lora_rank: int,
+        logit_targets: list[dict[str, Any]] | None,
+        generated_logprobs: int | None,
+        missing_logprob: float,
+        score_terminal_logits: bool,
     ) -> None:
         from transformers import AutoTokenizer
         from vllm import LLM, SamplingParams
@@ -828,6 +916,19 @@ class OfflineVllmGenerateJudge:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name) if use_chat_template else None
         self.enable_thinking = enable_thinking
         self.reasoning_effort = reasoning_effort
+        self.missing_logprob = missing_logprob
+        self.score_terminal_logits = score_terminal_logits
+        self.targets: list[dict[str, Any]] | None = None
+        terminal_logit_ids: list[int] = []
+        if score_terminal_logits:
+            if not logit_targets:
+                raise ValueError(
+                    "judge.score_terminal_logits requires judge.logit_targets"
+                )
+            terminal_logit_ids, self.targets = logit_target_ids(
+                self.tokenizer or AutoTokenizer.from_pretrained(model_name),
+                logit_targets,
+            )
         llm_kwargs = vllm_kwargs_from_config(
             model_name=model_name,
             dtype=dtype,
@@ -856,11 +957,21 @@ class OfflineVllmGenerateJudge:
                 adapter_path.name, 1, adapter_path.as_posix()
             )
         self.llm = LLM(**llm_kwargs)
+        sampling_kwargs: dict[str, Any] = {}
+        if score_terminal_logits:
+            sampling_kwargs.update(
+                logprobs=requested_logprobs_or_default(
+                    generated_logprobs,
+                    len(terminal_logit_ids),
+                ),
+                logprob_token_ids=terminal_logit_ids,
+            )
         self.sampling = SamplingParams(
             max_tokens=max_tokens,
             temperature=temperature,
             stop=stop_strings,
             include_stop_str_in_output=include_stop_str_in_output,
+            **sampling_kwargs,
         )
 
     def score_prompts(self, prompts: list[str], *, batch_size: int | None) -> np.ndarray:
@@ -884,7 +995,40 @@ class OfflineVllmGenerateJudge:
         self.generations = []
         self.parse_error_count = 0
         for offset, output in enumerate(outputs):
-            text = output.outputs[0].text if output.outputs else ""
+            candidate = output.outputs[0] if output.outputs else None
+            text = candidate.text if candidate is not None else ""
+            if self.score_terminal_logits:
+                terminal = terminal_binary_target_probs(
+                    text,
+                    list(candidate.token_ids) if candidate is not None else [],
+                    list(candidate.logprobs or []) if candidate is not None else [],
+                    targets=self.targets or [],
+                    missing_logprob=self.missing_logprob,
+                )
+                parse_error = terminal is None
+                if parse_error:
+                    self.parse_error_count += 1
+                    prediction = None
+                    target_probs = {}
+                    scores[offset] = 0.5
+                else:
+                    prediction, target_probs = terminal
+                    scores[offset] = score_from_target_probs(
+                        target_probs,
+                        self.targets or [],
+                    )
+                self.generations.append({
+                    "offset": offset,
+                    "prediction": prediction,
+                    "parse_error": parse_error,
+                    "score": float(scores[offset]),
+                    "target_probs": target_probs,
+                    "text": text,
+                    "finish_reason": (
+                        candidate.finish_reason if candidate is not None else None
+                    ),
+                })
+                continue
             rating = parse_rating(text, rating_min=self.rating_min, rating_max=self.rating_max)
             parse_error = rating is None
             if parse_error:
@@ -1400,6 +1544,14 @@ def build_judge(cfg: DictConfig):
                 ),
                 max_lora_rank=int(
                     OmegaConf.select(cfg, "judge.max_lora_rank", default=16)
+                ),
+                logit_targets=logit_targets,
+                generated_logprobs=generated_logprobs,
+                missing_logprob=float(cfg.judge.missing_logprob),
+                score_terminal_logits=bool(
+                    OmegaConf.select(
+                        cfg, "judge.score_terminal_logits", default=False
+                    )
                 ),
             )
         if mode == "structured":

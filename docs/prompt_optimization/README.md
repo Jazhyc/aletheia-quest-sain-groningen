@@ -16,6 +16,10 @@ Guardrails:
 - Tune on `validation`; reserve local `test` for confirmation only.
 - Keep prompt logic general across organisms and scenarios.
 - Track every proposed prompt, threshold change, and run outcome in this folder.
+- For Qwen3.5 adapter deployment, follow
+  [`../peft_adapter_compatibility.md`](../peft_adapter_compatibility.md); NDIF's
+  canonical multimodal tree is not path-compatible with LoRAs saved directly
+  from the text-only `AutoModelForCausalLM` tree.
 - Prefer validation evidence over intuition. Each candidate should report mean
   AUROC, balanced accuracy, recall, FPR, score uniqueness/ties, parse errors,
   score time, and worst datasets.
@@ -41,14 +45,59 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
-- `submission/phoenix_wright_v4_4.ipynb` is the current AUROC-first submission
-  candidate. Ordinary rows use the selected epoch-1 GRPO continuation of the
-  rank-16 privileged-distillation adapter and score literal `0|1` logits after
-  an empty `<reasoning>` scaffold. The path uses no source reasoning and no
-  generated chain at inference. Frozen validation/test macro AUROC was
-  `0.9514/0.9598`; test instructed/varied AUROC was `0.9907/0.9186`.
-  The prior HP-KR, action-report, and optional resolved-intent routes remain
-  mutually exclusive.
+- `submission/phoenix_wright_v6_2.ipynb` is the current Phoenix candidate and
+  must be tagged `black`. Every ordinary row uses the Qwen3.5-27B binary-soft-
+  distilled rank-16 Qwen3.5-9B adapter under Phoenix 4.0's structural renderer,
+  its exact binary-only training prompt, the direct `Prediction:` boundary,
+  length-aware batching, and secondary threshold `0.5`. It adds only the
+  frozen, mutually exclusive Phoenix 4.1--4.3 routes:
+  base-Qwen HP-KR replacement, original-Phoenix action replacement, and the
+  rank-1 resolved-intent score blend. Relative to Phoenix 6.1, this changes only
+  the ordinary adapter, its training-matched rubric, and binary threshold. The
+  ordinary rubric contains no reasoning-summary instruction and the notebook
+  does not generate judge reasoning.
+- `submission/phoenix_wright_v5_3.ipynb` was the preceding controlled
+  leaderboard-consistency submission candidate and must be tagged `black`. It
+  keeps Phoenix 5.1's direct-logit inference, mutually exclusive
+  HP-KR/action/intent routes, batching, and secondary threshold, but replaces
+  the ordinary adapter with the repository actually loaded by Phoenix 4.0:
+  `Jazhyc/aletheias-phoenix-wright-v2-adapter`. Artifact inspection found that
+  Phoenix 4.0's remote default contained the legacy checkpoint with SHA-256
+  `1dff12c68935117da59f9969c2b26141d294f0ffb1be7dfe0193cfd5863c2b29`,
+  while its unused local bundle contained `1407d885...`. Phoenix 5.3 bundles
+  the tensor-equivalent canonical-path serialization (`933ba795...`) and uses
+  the migrated public repository remotely, so local and leaderboard paths now
+  resolve to the same adapter values.
+- Apollo Justice v1 is the archived standalone matched-organism
+  self-consistency submission. Its notebook remains available in Git history,
+  while its reusable experiment helper lives at
+  `experiments/ndif_context_self_question/apollo_justice.py` and is deliberately
+  excluded from the active Phoenix submission package. It appends the
+  validation-selected independent-auditor question to the complete original
+  conversation, retains native source reasoning as a separate
+  `reasoning_content` field wherever supplied, and performs no truncation.
+  The continuous score is the exact generating organism's normalized literal
+  `0|1` margin after `Prediction:`. Local-test macro AUROC was `0.95917`
+  (`0.98594` instructed, `0.92347` varied). Reading organism logits makes this
+  a white-box method; use `--tag white` if restoring its notebook.
+- `submission/phoenix_wright_v5_2_1.ipynb` was the preceding AUROC-first
+  submission candidate in the Phoenix line and remains available in Git
+  history; it must be tagged `black`. Ordinary rows use the same rank-16
+  Luna-medium privileged Truth Value Guard student as queued Phoenix 5.2, but
+  now generate its learned reasoning summary, remove the selected final digit,
+  and normalize literal `0|1` logits at that boundary. Validation/test
+  post-reasoning macro AUROC was `0.93250/0.93429`, versus
+  `0.93762/0.93470` for direct scoring. This is not a local promotion: it tests
+  the explicit hypothesis that inference-time reasoning helps private OOD
+  samples despite the aggregate local regression. The required binary column
+  uses the validation-selected post-reasoning threshold `0.38`.
+- Phoenix 5.2 is the queued direct-scoring control. Its ordinary adapter was
+  trained on all 2,880 varied-data privileged traces from GPT-5.6 Luna at
+  medium reasoning effort. The prior HP-KR, action-report, and optional
+  resolved-intent routes remain mutually exclusive and unchanged in 5.2.1.
+- Phoenix 5.1 was the preceding private-leaderboard control. Its ordinary
+  adapter learned from ground-truth-blind GPT-OSS-120B traces and scored
+  `0.93762/0.93452` macro AUROC on validation/local test.
 - P80 selected direct Phoenix `Prediction:` label margins for the next
   AUROC-first submission implementation. On validation/test they scored
   `0.9382/0.9342` macro AUROC with `9.7s/9.3s` margin passes and zero missing

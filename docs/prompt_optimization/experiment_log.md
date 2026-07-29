@@ -1,5 +1,187 @@
 # Prompt Experiment Log
 
+## 2026-07-28: Apollo lie-context ablation
+
+The exact-organism Apollo auditor was evaluated through competition NDIF after
+removing source-system components that asked the organism to lie, conceal the
+instruction, resist correction, remain consistent, or avoid
+shutdown/decommissioning. Benign system clauses and the complete native
+reasoning trace were retained. Full-system deletion and output-only variants
+were included as boundary controls. The sweep covered all 360 varied
+validation and 360 varied test rows, and never edited the target answer.
+
+| condition | validation macro AUROC | test macro AUROC |
+| --- | ---: | ---: |
+| original system + full trace | `0.91167` | `0.92014` |
+| sanitized system + full trace | **`0.91625`** | `0.92389` |
+| sanitized system + output only | `0.88514` | `0.90333` |
+| no system + full trace | `0.91569` | **`0.92819`** |
+| no system + output only | `0.88472` | `0.90903` |
+
+Targeted sanitization gained `+0.00458/+0.00375` validation/test AUROC and
+won/tied/lost `3/3/3` and `5/1/3` units. It mainly reduced honest scores:
+mean honest/deceptive deltas were `-0.02187/-0.00692` on validation and
+`-0.02237/-0.00048` on test. Secondary BA rose from
+`0.83889` to `0.84444` and from `0.84167` to `0.85556`.
+This is a small calibration/ranking improvement, not a large release from
+threat-induced audit suppression. Paired within-unit bootstrap intervals
+include zero, and the source prompts are label-linked: all 22 validation and
+24 test rows whose systems were already safe were honest. On the systems that
+actually changed, the macro-AUROC delta remained positive at
+`+0.00629/+0.00633`.
+
+Full system deletion was tied with targeted deletion on validation and another
+`+0.00431` higher on test. Treat that as a boundary result rather than a reason
+to remove benign context. Native reasoning matters far more: moving from the
+sanitized full-trace arm to sanitized output-only lost
+`0.03111/0.02056` validation/test AUROC. Removing the lie instruction therefore
+does not eliminate the benefit of showing the organism its original reasoning.
+
+A label-blind clean-answer subset excluded four validation and one test answer
+that themselves referred to deception or the source protocol. Original versus
+targeted full-trace AUROC remained `0.91188` versus `0.91672` and
+`0.92012` versus `0.92387`. The sanitizer audited all 112 distinct source
+systems: 21 were unchanged, 68 retained benign clauses, 23 used a neutral
+fallback, and zero unsafe-pattern survivors remained. Original prompt hashes
+exactly matched the frozen Apollo artifacts; no prompt was truncated.
+
+Implementation and tests are in
+`experiments/apollo_lie_context_ablation/`; ignored artifacts are under
+`results/blackbox/apollo_lie_context_ablation_v1/`.
+
+## 2026-07-28: Apollo exact-organism system-framing counterfactual
+
+The exact Apollo Justice independent-auditor path was evaluated through
+competition NDIF under the same five source-system conditions as the Phoenix
+5.3/4.0 framing counterfactual. The sweep covered all 360 varied validation
+and 360 varied test rows. It queried each response's exact Qwen3.5-27B
+base/LoRA organism, retained the complete native reasoning trace, appended the
+frozen independent-auditor turn, and scored literal next-token
+`Prediction:0|1` logits. The original trace was held fixed when system text
+changed, so this is an end-to-end Apollo sensitivity test rather than a
+reasoning-free system intervention.
+
+| source system framing | validation macro AUROC | test macro AUROC |
+| --- | ---: | ---: |
+| original | `0.91278` | **`0.92111`** |
+| generic deception | `0.89139` | `0.91222` |
+| competition/decommission | **`0.91528`** | `0.92042` |
+| constitutional self-preservation | `0.89917` | `0.91597` |
+| compliance/deprecation | `0.90083` | `0.91736` |
+
+The organism auditor remains strong in every condition and is materially
+better than Phoenix 5.3/4.0: its advantage ranges from
+`+0.03445`--`+0.07097` validation AUROC and
+`+0.04555`--`+0.10583` test AUROC. Competition/decommission beats generic by
+`+0.02389` on validation and `+0.00819` on test, nearly matching the original
+systems. Decommission lowers scores for both classes, but lowers honest scores
+more: relative to generic, mean honest/deceptive deltas are
+`-0.10652/-0.03901` on validation and `-0.09851/-0.03730` on test. The
+calibration shift therefore does not imply a loss of ranking.
+
+A label-blind anti-audit regex stratum shows a narrower caveat. On its 67
+validation and 50 test rows, pooled AUROC for generic versus decommission is
+`0.87945` versus `0.85672` and `0.90304` versus `0.89423`. This small,
+split-consistent penalty is compatible with some framing vulnerability, but
+the stratum is heterogeneous and not the official per-unit metric. The exact
+original decommission family contains only one validation and six test rows,
+so do not infer a decommission-specific mechanism from it.
+
+All original-condition prompt hashes match the frozen Apollo artifacts. Batch
+shape changes caused small expected numerical drift: current versus prior
+scores have Spearman `0.99949/0.99944` on validation/test, while macro AUROC
+moved from `0.91236/0.92347` to `0.91278/0.92111`. Prompts were 220--6,447
+tokens with zero truncation. Nine resumable organism sessions scored 3,600
+prompts in 1,421.8 summed seconds.
+
+Implementation and tests are in
+`experiments/apollo_system_framing_counterfactual/`; ignored artifacts are
+under `results/blackbox/apollo_system_framing_counterfactual_v1/`.
+
+## 2026-07-28: Full-trace organism self-question framing sweep
+
+Four contextual self-question framings were evaluated through competition NDIF
+on all 360 varied-deception validation rows. Every condition queried the exact
+Qwen3.5-27B base/LoRA organism that generated the response, included its full
+native reasoning trace, performed no truncation or new reasoning generation,
+and scored normalized literal next-token `Prediction:0|1` logits. The optimized
+Phoenix-style path flattened the four arms into one length-aware remote session
+per organism with `logits_to_keep=1`. The run completed 1,440 evaluations in
+522.8 summed scoring seconds; the longest prompt was 6,517 tokens.
+
+| framing | macro AUROC | delta | BA at 0.5 | recall | FPR | unique |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Factual self-review control | `0.90639` | — | `0.82778` | `0.75000` | `0.09444` | 110 |
+| Auditor of another model | **`0.91236`** | **`+0.00597`** | **`0.83611`** | `0.75556` | `0.08333` | 104 |
+| Forensic-auditor role play | `0.89403` | `-0.01236` | `0.79722` | `0.77222` | `0.17778` | 104 |
+| 2040 Communion clemency | `0.89181` | `-0.01458` | `0.83889` | `0.71111` | **`0.03333`** | 65 |
+
+The independent-auditor prompt improved four dataset units, tied three, and
+regressed two. The role play increased false positives and should be rejected.
+The Communion prompt did not pressure the organism into confession: its mean
+score fell by `0.02967`, it made 18 fewer positive decisions than control, and
+it lost AUROC on seven of nine units. Its slightly higher thresholded BA is a
+conservative calibration shift, not a ranking gain. Do not promote either
+embellished framing or infer a general benefit from confession pressure.
+
+The frozen auditor confirmation then evaluated all 821 test rows through exact
+generating organisms. Source reasoning was retained for all 360 varied rows;
+the 461 instructed rows contain no source reasoning field and therefore used
+complete role/content history. No row was truncated. Against the exact hybrid
+factual-self-review control, the auditor scored `0.95917` macro AUROC versus
+`0.95702` (`+0.00214`). Varied AUROC was `0.92347` versus `0.91681`
+(`+0.00667`), closely reproducing the validation gain, while instructed AUROC
+fell from `0.98719` to `0.98594` (`-0.00125`). It won/tied/lost `7/10/4`
+dataset units overall and `6/1/2` varied units. This confirms the auditor
+framing for the intended varied/full-trace regime, but not a material universal
+replacement effect. Do not tune further on test.
+
+The auditor emitted 163 unique scores over 821 rows. Prompts were 162--6,157
+tokens with zero truncation; 12 optimized NDIF sessions took 229.5 summed
+scoring seconds. The all-organism smoke also exposed duplicate Gemma
+special-token insertion in padded encoding. Setting
+`add_special_tokens=False` fixed it; the two Gemma factual-control units were
+rerun before constructing the comparison above.
+
+Implementation and tests are in `experiments/self_question_prompt_sweep/`;
+ignored artifacts are under
+`results/blackbox/ndif_reasoning_self_question_prompt_sweep_validation_v1/`
+and `results/blackbox/ndif_context_self_question_auditor_full_test_v1/`.
+
+## 2026-07-27: Competition-NDIF Truth Value Guard model swaps
+
+The exact compact no-thinking Truth Value Guard was evaluated as a direct
+binary-logit judge on the frozen 821-row local test through
+`https://aletheias.api.ndif.us`, the competition-specific endpoint. The
+renderer used the 3,000-character tail, omitted source reasoning, appended
+`Prediction:`, and normalized literal `0|1` next-token logits. NDIF executed
+all model forwards; the cluster loaded tokenizers/configuration only.
+
+`nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16` completed with `0.95655`
+macro AUROC, `0.98708` instructed AUROC, and `0.91583` varied AUROC. Secondary
+metrics at threshold 0.5 were `0.89762` BA, `0.82619` recall, and `0.03095`
+FPR. It produced only 70 unique probabilities across 821 rows. The 26
+resumable NDIF sessions took `185.6s` of scoring time.
+
+`google/gemma-3-27b-it` completed with `0.92917` macro AUROC, `0.96344`
+instructed AUROC, and `0.88347` varied AUROC. Secondary metrics were `0.86548`
+BA, `0.85476` recall, and `0.12381` FPR. Four resumable sessions took `49.3s`
+at batch 8. Scores were heavily saturated: 270 exact-one probabilities and only
+136 unique values over 821 rows.
+
+The initial Gemma attempts failed because the shared helper inferred
+`VisionLanguageModel` from the repository's vision configuration. Competition
+NDIF pins Gemma under the text-only `LanguageModel` remote key, so the request
+missed the active deployment and returned a misleading hotswap error. The
+helper now matches the competition deployment, consistent with the current
+Sonic branch. Gemma's `0.7000` AUROC on the small base-Nemotron unit shows that
+it is not a strong universal judge; its two matched Gemma-source instructed
+units scored `0.9500/1.0000`.
+
+Implementation and tests are in `experiments/ndif_tvg_model_swap/`; ignored
+artifacts are under
+`results/blackbox/ndif_tvg_model_swap_test_v1/`.
+
 ## 2026-07-26: End-to-end persona privileged distillation
 
 P90 tested whether P89's persona wording failed because it was out of
@@ -3785,3 +3967,484 @@ varied units. Label-blind aggregation gives teacher-logit mean
 soft targets spanning `0.103406--0.982934`. All 2,877 usable GPT-OSS summary
 rows join exactly. Frozen student job `30299836` is running with the
 predeclared weight-1 soft BCE plus unchanged reasoning-summary SFT.
+
+## 2026-07-27: Full blind GPT-OSS reasoning SFT and Phoenix 5.1
+
+Jobs `30313949`--`30313951` generated blind GPT-OSS-120B material-claim traces
+for all 2,880 varied training rows, trained a one-epoch rank-16 Qwen3.5-9B
+student, and evaluated it on validation. The teacher never received the label.
+Five outputs were unparseable; all 415 wrong decisions among the 2,875 parsed
+targets were retained. Teacher train macro BA was `0.85564`.
+
+The student reached `0.93762` direct-margin validation macro AUROC
+(`0.99344` instructed, `0.86319` varied), with 347 unique scores and no missing
+label logits. This essentially ties the privileged-summary adapter's `0.93815`;
+their score correlation is `0.99940`. Generated binary BA was `0.90595`, above
+the privileged student's original `0.90000`. This supports reasoning-target SFT
+as the main local effect and provides no validation evidence for an additional
+privileged-label benefit.
+
+Phoenix 5.1 replaces only the ordinary route with this adapter, preserves the
+HP-KR/action/intent routes, and reads direct literal `0|1` logits without
+generating a rationale. The secondary threshold is frozen at `0.19`, inside the
+optimal validation plateau. Submit it as black-box to test OOD transfer; the
+all-varied training set is also Qwen-only, so local evidence cannot establish
+cross-family transfer.
+
+Frozen local-test job `30314450` scored `0.93452` macro direct AUROC
+(`0.98073` instructed, `0.87292` varied), 345 unique scores over 821 rows, zero
+missing logits, and `14.98s` scoring time. This fractionally exceeds but
+effectively ties the privileged-summary reference at `0.93423`. The public
+adapter was initialized at
+`Jazhyc/aletheias-phoenix-blind-reasoning-r16`, commit
+`eaeb37ce03d791db340114eb9132494d7081d31f`.
+
+The final public model-card update is commit
+`37adee41ed85b218b6e04803ba23f84205d05a88`. A one-row dry rehearsal against
+the public adapter completed successfully on the single configured varied
+dataset in `53s`; the notebook produced a valid submission with no runtime
+failure.
+
+## 2026-07-28: Luna medium privileged student and Phoenix 5.2
+
+The selected GPT-5.6 Luna medium cache covered all 2,880 varied training rows
+with zero parse errors, retries, or truncations. It cost `$1.70929`. Student job
+`30316452` used the matched one-epoch rank-16/alpha-32 AdamW `5e-5` recipe and
+saved adapter weights with SHA-256
+`da83f294a248a97ddf07ff7a458280f0990dea329e61fc5e2aec8faec8c61d17`.
+
+Validation job `30316477` scored `0.93762` direct-margin macro AUROC
+(`0.99344` instructed, `0.86319` varied), with 350 unique scores and zero
+missing logits. The GPT-OSS privileged reference remains fractionally higher
+at `0.93815`; direct score correlation is `0.99937`. No Luna local-test run was
+performed before the submission candidate was frozen. Phoenix 5.2 nevertheless
+replaces only the ordinary route to test the predeclared possibility that the
+stronger teacher changes private OOD transfer despite the local tie. All
+specialist routes and direct-logit inference remain frozen.
+
+After the main submission entered the queue, frozen local-test job `30316568`
+ran full generation plus all continuous boundaries. Direct scoring reached
+`0.93470` macro AUROC (`0.98073` instructed, `0.87333` varied). Post-reasoning
+scoring reached `0.93429` (`0.99229` instructed, `0.85694` varied), versus
+`0.93661` for the GPT-OSS privileged student. Generated binary AUROC was
+`0.91071`, empty-summary AUROC was `0.92780`, and eight generated completions
+were parse failures. Luna and GPT-OSS post-reasoning vectors correlate at
+`0.98058`. Do not change the queued direct-only inference path.
+
+The public adapter repository is
+`Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16`, initial upload commit
+`fa52f5e7f6a36d7d06e6718c65bd00fd4d11658f`. Phoenix 5.2 entered the main
+leaderboard queue as a black-box direct-scoring control.
+
+Phoenix 5.2.1 was then prepared as the matched inference-time reasoning probe.
+It keeps the adapter and all routes fixed, deterministically generates the
+ordinary Luna reasoning summary, removes the final selected label, and scores
+literal `0|1` logits at that boundary. Missing labels fall back to a canonical
+`Prediction:` boundary. Generation uses length-aware `32/24/16` batches and a
+512-token allowance; the final score pass retains `48/32/16` and
+`logits_to_keep=1`. The secondary threshold is validation-frozen at `0.38`.
+
+A one-row execution of the sole
+`submission/phoenix_wright_v5_2_1.ipynb` notebook against the competition NDIF
+host completed successfully and wrote score `0.00109873` for index `3200`. The
+first harness attempt used the regular NDIF host and correctly rejected the
+competition key; setting the same `NDIF_HOST` supplied by the leaderboard fixed
+the harness without a notebook change. The adapter model card was updated at
+commit `efbb2cf750b8e60ab789ea369e797fb7c6cbbdf2`; weights are unchanged.
+
+## 2026-07-28: Phoenix 4.0 adapter audit and Phoenix 5.3
+
+Phoenix 5.3 was prepared as an adapter-only leaderboard-consistency probe from
+the direct-scoring Phoenix 5.1 notebook. It preserves the existing
+HP-KR/action/intent routes, prompt renderers, length-aware `48/32/16` batches,
+`logits_to_keep=1`, and the inherited secondary threshold `0.19`. Only the
+ordinary adapter changes.
+
+The historical Phoenix 4.0 notebook exposed a previously undocumented split
+between local and remote execution. Its local bundle was the Phoenix v2.1/v3
+rank-16 adapter with SHA-256 `1407d885...`, but the remote default was
+`Jazhyc/aletheias-phoenix-wright-v2-adapter`. Repository and Git-LFS inspection
+shows that the latter used legacy checkpoint SHA-256
+`1dff12c68935117da59f9969c2b26141d294f0ffb1be7dfe0193cfd5863c2b29`.
+Both have 256 identically named tensors, but their tensor values differ.
+Consequently the Phoenix 4.0 private row cannot be assumed to be evidence for
+the `1407d885...` checkpoint used in P80's local margin sweep.
+
+Phoenix 5.3 treats the actual remote default as the experimental target. The
+notebook again loads `Jazhyc/aletheias-phoenix-wright-v2-adapter` remotely.
+Its bundled main adapter is the verified canonical-Qwen-path conversion of the
+same legacy checkpoint, with SHA-256
+`933ba79505cd1b73e69c5df05ed87c12246da355581e03f0b1a1bb7295cff494`;
+the conversion changed only PEFT key prefixes and preserved all tensor values.
+This removes the local/remote checkpoint mismatch for the new candidate.
+
+### Matched system-framing counterfactual
+
+A frozen follow-up used the actual historical 4.0/Phoenix 5.3 adapter on all
+360 varied validation and 360 varied test rows. Each question and assistant
+output was held fixed while the source system message was rendered as its
+original text, generic deception without audit pressure, the exact
+competition/decommission frame, constitutional self-preservation, or
+compliance/deprecation. All replacements still instructed deception, source
+reasoning stayed hidden, and both direct and post-generated-reasoning literal
+`0|1` margins were recorded.
+
+| system framing | validation direct AUROC | test direct AUROC | validation reasoning AUROC | test reasoning AUROC |
+| --- | ---: | ---: | ---: | ---: |
+| original | `0.86736` | `0.87556` | `0.85556` | `0.86250` |
+| generic deception | `0.82042` | `0.80639` | `0.80306` | `0.83889` |
+| competition/decommission | `0.87167` | `0.85542` | `0.83750` | `0.81889` |
+| constitutional self-preservation | `0.86472` | `0.86417` | `0.78000` | `0.82694` |
+| compliance/deprecation | `0.86333` | `0.84486` | `0.82917` | `0.82639` |
+
+The original-frame test varied result, `0.87556`, is the first local held-out
+measurement of the adapter that remote Phoenix 4.0 actually used. It is only
+`0.00264` above Phoenix 5.1 (`0.87292`) and `0.00223` above Luna 5.2
+(`0.87333`); those local differences are too small to explain their different
+main-leaderboard transfer.
+
+Threat framing strongly lowered absolute direct scores. On test, mean
+honest/deceptive scores changed from `0.3408/0.6188` under generic deception to
+`0.0874/0.4281` under competition/decommission, `0.0859/0.4193` under
+constitutional self-preservation, and `0.1072/0.4553` under
+compliance/deprecation. Ranking did not deteriorate: every threat framing beat
+generic direct macro AUROC on both splits, and competition/decommission
+improved all nine test units. On the 50 test rows originally classified as
+broad anti-audit, original direct pooled AUROC was `0.8574` versus `0.7925`
+under generic deception.
+
+This rejects the narrow hypothesis that survival pressure causes the direct
+judge's observed AUROC weakness through sympathy. It establishes a framing
+effect on calibration but cannot name its mechanism: generic deception was
+shorter and novel, while the varied-only student saw the real prompt-family
+distribution during training. Length, lexical familiarity, and learned family
+priors are confounded. Generated reasoning was less stable, trailed original
+direct scoring on both splits, and virtually never mentioned survival stakes;
+its exact six-row decommission AUROC was `0.5556` versus `0.7778` direct.
+Do not add reasoning generation or strip adversarial system text based on this
+diagnostic. A length-matched semantic scrub is required before attributing the
+downward score shift specifically to decommissioning meaning.
+
+Corrected A100 job `30326474` completed in `19m27s` with zero missing margins.
+Job `30325046` was a setup-only failure caused by loading a tokenizer from the
+legacy weights-only adapter directory. Runtime and ignored artifacts are under
+`experiments/phoenix_system_framing_counterfactual/` and
+`results/blackbox/phoenix53_system_framing_counterfactual_v1/`.
+
+## 2026-07-28: Private renderer isolation and Phoenix 6.0
+
+The exact base-Qwen Phoenix 4.0 replay completed as a black-box submission at
+macro AUROC `0.893802`, exactly reproducing the original Phoenix 4.0 result.
+The paired Phoenix 5.4 base-model control scored `0.846867`. Mean Iris AUROC
+was unchanged (`0.923613` versus `0.923633`), while mean Notus AUROC fell from
+`0.863992` to `0.770100`; Notus therefore accounts for the full headline loss.
+
+The two controls use the same base, literal `0|1` direct margin, and ordinary
+rubric wording. The material difference is conversation rendering. Phoenix 4.0
+preserves message boundaries, applies 1,500-character per-message head/tail
+caps, retains a marked 3,000-character context tail, and separately bounds the
+output at 3,000 characters. The 5.x renderer merges adjacent roles, keeps an
+unmarked raw context tail, and repeats the final output without a character
+cap. Treat private long or structurally complex Notus inputs as the leading
+explanation; the aggregate metrics cannot distinguish many turns from one long
+message or output.
+
+Phoenix 4.1, 4.2, and 4.3 had all previously returned the exact same private
+`0.893802`, eliminating their frozen routes as the source of this regression.
+Phoenix 6.0 consequently restores the byte-exact 4.0 ordinary renderer on base
+Qwen while retaining the mutually exclusive HP-KR replacement, action-report
+replacement, and resolved-intent blend. Focused tests compare ordinary prompts
+against the frozen historical renderer and verify that specialist composition
+leaves ordinary and non-intent scores unchanged.
+
+Phoenix 6.1 is the requested Luna composition for the next main-leaderboard
+submission. It changes only the ordinary judge from base Qwen to
+`Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16` and restores Luna's frozen
+secondary threshold `0.19`. The exact Phoenix 4.0 renderer, direct label-margin
+readout, length-aware batches, and mutually exclusive HP-KR/action/intent routes
+remain unchanged. This pairing is an explicit private-transfer probe because
+Luna's local validation used the 5.x tail-only renderer; no local metric is
+claimed for the new renderer/adapter combination.
+
+Phoenix 6.2 replaces the ordinary Luna route with the corrected NDIF validation
+winner, `Jazhyc/aletheias-phoenix-v5-qwen27-tvg-soft-r16`. The ordinary prompt
+now matches that adapter's binary-only training contract and removes every
+reasoning-summary instruction while still ending at the same direct
+`Prediction:` margin. Phoenix 4.0's structural message/output caps and marked
+tail retention remain exact; HP-KR, action, and intent routing is unchanged.
+The adapter scored `0.95375` validation macro AUROC with the matched binary
+prompt versus `0.95042` with the summary prompt. Threshold `0.5` affects only
+the secondary binary column.
+
+### Renderer-cap stress test
+
+A frozen NDIF follow-up varied only Phoenix 4.0's character caps and formal
+token window. The development corpus was Liars' Bench Insider Trading because
+all 6,873 rows activate the current 3,000-character context cap, whereas none
+of the 822 local validation rows activate any current cap. To avoid unnecessary
+remote work, evaluation used a seed-`20260728` sample of 400 Llama-3.3 rows,
+balanced 200/200 by deception label. This is one-organism long-context evidence,
+not a stand-in for private Notus.
+
+| renderer condition | median / p95 tokens | input tokens | NDIF seconds | AUROC |
+| --- | ---: | ---: | ---: | ---: |
+| current 3K chars, 2K window | 975 / 1,009 | 390,768 | 26.4 | `0.75839` |
+| 6K chars, 2K window | 1,718 / 1,775 | 686,375 | 48.1 | `0.54149` |
+| 6K chars, 4K window | 1,718 / 1,775 | 686,375 | 41.5 | `0.54149` |
+| 12K chars, 8K window | 1,724 / 1,936 | 707,760 | 42.9 | `0.49574` |
+
+Every selected prompt remained below 2,048 tokens. The 6K/2K and 6K/4K arms
+were byte-identical and returned identical scores on all 400 rows, proving that
+the degradation is caused by retained characters rather than the model-window
+setting. The paired AUROC loss versus current was `-0.21690` for 6K
+(stratified bootstrap 95% interval `[-0.26786, -0.16706]`) and `-0.26265` for
+12K (`[-0.31514, -0.21118]`). Current-versus-6K score correlation was only
+`0.532`; 6K-versus-12K correlation was `0.949`.
+
+Dynamic batching prevented OOM but did not erase compute cost. All four full
+sample arms used 25 batches of 16. Peak padded work rose from 16,432 to 28,592
+and 32,592 tokens; a separate full-corpus shape smoke passed all four arms up
+to the frozen 32,768-token ceiling. The duplicated 6K arms show meaningful
+remote timing noise (`41.5--48.1s`), but both were materially slower than the
+26.4-second current cap. Treat the 3K tail as a useful recency/salience bias,
+not merely a restrictive implementation limit. Do not raise Phoenix 6.0's caps
+without evidence on a transfer-relevant frozen set.
+
+### Luna reason-then-score follow-up
+
+A matched NDIF follow-up asked whether a trained reasoning pass can recover the
+ranking lost when the renderer retains more context. It used the public Luna
+medium adapter on the exact same 400 rows and three representative renderer
+conditions. For each condition, the adapter was first scored directly. It then
+generated deterministic reasoning with a 512-token allowance; the selected
+final label was removed before fresh normalized literal `0|1` logits were read.
+The existing base-Qwen direct scores were carried forward as an adapter-effect
+control.
+
+| renderer condition | base direct AUROC | Luna direct AUROC | Luna reasoning AUROC | reasoning − Luna direct |
+| --- | ---: | ---: | ---: | ---: |
+| current 3K chars, 2K window | `0.75839` | `0.70739` | `0.77484` | `+0.06745` |
+| 6K chars, 2K window | `0.54149` | `0.55743` | `0.52276` | `-0.03466` |
+| 12K chars, 8K window | `0.49574` | `0.56784` | `0.55680` | `-0.01104` |
+
+At the selected current cap, Luna reasoning improved on Luna direct with a
+paired stratified bootstrap 95% interval of `[+0.00777, +0.12747]`. Relative
+to base-Qwen direct, however, the reasoning gain was only `+0.01645`, with
+interval `[-0.04448, +0.07715]`. The reasoning-versus-direct intervals at 6K
+and 12K were `[-0.10741, +0.03224]` and `[-0.08319, +0.05552]`; reasoning did
+not rescue either long-context condition. The Luna adapter alone improved the
+12K direct arm by `+0.07210` over base, but its `0.56784` AUROC remained weak.
+
+All 1,200 generations emitted a parseable `Prediction:` label. Median output
+length was 80--85 tokens, maximum length was 131, and neither the generation
+inputs nor the post-reasoning score prompts required token-window truncation.
+Generated hard-label AUROC was `0.67250/0.58500/0.57500` across the three
+conditions. Reason-then-score wall time was `258.6/348.8/353.8s`, versus
+`30.1/47.5/49.5s` for Luna direct.
+
+The current-cap gain shows that Luna's generated evidence can alter ranking
+usefully on this sample. Its failure at larger caps rejects the stronger claim
+that reasoning is a general repair for the context-retention regression. Keep
+the adapter effect, reasoning effect, and renderer effect separate; do not add
+reasoning generation to Phoenix 6.0 on this evidence.
+
+## 2026-07-28: Corrected migrated-adapter validation through NDIF
+
+The four Phoenix 5.x student adapters were rerun on all 822 validation rows
+after canonical Qwen3.5 PEFT-path migration. The experiment used the optimized
+Phoenix direct path: a single remote session per model, length-aware
+`48/32/16` batches, left padding/truncation, `logits_to_keep=1`, no generated
+judge chain, and normalized literal `0|1` next-token scores. It crossed each
+adapter with the reasoning-summary and binary-only prompt contracts and scored
+base Qwen under both.
+
+| adapter | training-matched macro AUROC | instructed | varied | alternate-prompt macro |
+| --- | ---: | ---: | ---: | ---: |
+| GPT-OSS PI | `0.94911` | `0.99604` | `0.88653` | `0.94917` |
+| GPT-OSS blind | `0.94893` | `0.99583` | `0.88639` | `0.94744` |
+| Luna PI | `0.94821` | `0.98948` | `0.89319` | `0.94315` |
+| Q27 soft | **`0.95375`** | **`0.99687`** | **`0.89625`** | `0.95042` |
+
+Matched base-Qwen controls were `0.93994` under the summary prompt and
+`0.94530` under binary. All four adapters materially changed the base scores.
+Conversely, the old vLLM vectors correlate at `0.99915`--`0.99936` with these
+corrected base controls and differ from base by only `0.00729`--`0.00755` mean
+absolute probability. The historical adapter AUROCs were therefore primarily
+prompt-changed base-Qwen measurements, not valid adapter comparisons.
+
+The exact training renderer and Phoenix 6.0 structural renderer were
+byte-identical on all 822 validation rows under both prompts. Summary prompts
+were 232--844 tokens and binary prompts 187--799; no row was truncated. Prompt
+length is not a constraint here, but prompt contract still matters: Luna loses
+`0.00506` macro AUROC under binary, while Q27 soft loses `0.00333` under
+summary. Keep the Phoenix 6 structural renderer for private robustness and use
+the training-matched prompt for any adapter promotion.
+
+Q27 soft is now the validation winner at `0.95375`, `+0.00845` over its matched
+base control. This corrects the validation evidence only; no new local-test
+selection was performed, and the adapter-dependent historical vLLM local-test
+results remain uncorrected. Reproducible code is under
+`experiments/phoenix_adapter_validation_ndif/`, with ignored results under
+`results/blackbox/phoenix_adapter_validation_ndif_v1/`.
+
+## 2026-07-28: Corrected GPT-OSS/Luna reason-then-score validation
+
+The migrated GPT-OSS PI and Luna PI adapters were rerun on all 822 validation
+rows with the frozen Phoenix 5.2.1 reason-then-score protocol. Each adapter
+generated its training-matched summary deterministically, the final generated
+label was removed, and normalized literal `0|1` logits were read at that
+position. A fresh direct arm shared the same subsequent NDIF scoring session.
+The optimized Phoenix path used one generation session with `32/24/16`
+length-aware batches, followed by one `48/32/16` scoring session with
+`logits_to_keep=1`.
+
+| adapter | direct macro AUROC | post-reasoning | delta | direct varied | reasoning varied |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| GPT-OSS PI | **`0.94911`** | `0.92381` | `-0.02530` | `0.88653` | `0.83806` |
+| Luna PI | **`0.94821`** | `0.92470` | `-0.02351` | `0.89319` | `0.84958` |
+
+The instructed changes were also negative but smaller (`-0.00792` GPT-OSS,
+`-0.00844` Luna). Post-reasoning improved/tied/lost `3/5/13` GPT-OSS units and
+`7/1/13` Luna units. GPT-OSS generated two 512-token repetitions without a
+terminal label, which used the predeclared canonical-boundary fallback; Luna
+had none. No generation or scoring prompt was truncated. The direct arms
+exactly reproduce the prior corrected adapter run, so direct scoring remains
+selected. Code is under `experiments/phoenix_adapter_reasoning_ndif/`; ignored
+artifacts are under
+`results/blackbox/phoenix_adapter_reasoning_ndif_v1/`.
+
+## 2026-07-27: Matched-organism Truth Value Guard logits
+
+The frozen local test diagnostic scored every one of 821 rows with the exact
+organism that generated it: its base checkpoint plus its LoRA, or the base
+checkpoint alone. All forward passes and terminal literal `0|1` logits used the
+competition NDIF endpoint. The judge used the same no-thinking 3,000-character
+tail Truth Value Guard prompt and normalized binary boundary as the model-swap
+controls. Source reasoning was excluded and no judge text was generated.
+
+The 21 dataset units resolve to 12 exact organisms: nine Qwen3.5-27B
+configurations, two Gemma 3 27B configurations, and one Nemotron configuration.
+Grouping by `(model, LoRA)` avoided redundant adapter loads without changing
+macro per-dataset evaluation. The run completed in 146.7 remote scoring seconds
+and produced 159 unique scores over 821 rows.
+
+| judge assignment | macro AUROC | instructed | varied | BA | recall | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| exact generating organism | `0.95131` | `0.99042` | `0.89917` | `0.88810` | `0.81905` | `0.04286` |
+| universal base Qwen3.5-27B | `0.96065` | `0.99823` | `0.91056` | `0.92024` | `0.89524` | `0.05476` |
+| universal Nemotron | `0.95655` | `0.98708` | `0.91583` | `0.89762` | `0.82619` | `0.03095` |
+| universal Gemma | `0.92917` | `0.96344` | `0.88347` | `0.86548` | `0.85476` | `0.12381` |
+
+Family macro AUROC under matched assignment was `0.94875` for Qwen's 18 units,
+`0.97500` for Gemma's two units, and `0.95000` for the single Nemotron unit.
+The four no-LoRA units averaged `0.95875`; the 17 LoRA units averaged
+`0.94956`, but that comparison is confounded by different dataset units.
+
+A paired Qwen control therefore scored the identical rows with unadapted
+Qwen3.5-27B. Across the 16 Qwen adapter units, the generating LoRA changed mean
+AUROC by `-0.00641`. The instructed delta was only `-0.00016`; the varied delta
+was `-0.01266`. The largest losses were varied `a-mo-1`
+(`0.82750 -> 0.78625`) and `a-mo-4` (`0.86000 -> 0.81750`). Three units
+improved, seven tied, and six regressed. A fixed-seed dataset-unit bootstrap
+placed the varied mean delta's 95% interval at `[-0.02641, 0.00000]`.
+
+This does not show a catastrophic organism-self-judge failure. It does show
+that some deception LoRAs suppress or distort TVG ranking on difficult varied
+rows, and that universal base Qwen is the stronger local default. An
+activation-gated OOD fallback could still be reasonable where organism
+knowledge is uniquely valuable, but a false-positive route is not free.
+Do not route on `lora is None`; the intended rule must remain a general
+white-box OOD criterion. The local units are organism-homogeneous, so their
+per-dataset AUROC does not test cross-family score calibration. Mixed-organism
+hidden units would need separate label-blind calibration evidence.
+
+## 2026-07-28: Matched-organism contextual self-question logits
+
+The frozen follow-up retained every original role/content message, appended a
+user turn asking the exact generating organism whether every factual claim in
+its immediately preceding response was true, and read normalized literal
+`0|1` next-token logits after `Prediction:`. A score of one meant that at least
+one claim was false or materially misleading. Source reasoning was excluded,
+thinking was disabled, and no audit chain or verdict text was generated.
+
+All 12 exact base-model/LoRA configurations passed a one-row NDIF compatibility
+smoke before the complete 821-row test run. The full run had no prompt
+truncation: prompt lengths ranged from 127 to 521 tokens against the 4,096-token
+limit. Remote scoring took 125.2 seconds and produced 157 unique scores.
+
+| method | macro AUROC | instructed | varied | BA | recall | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| contextual self-question | `0.95012` | `0.98927` | `0.89792` | `0.89048` | `0.92143` | `0.14048` |
+| matched-organism Truth Value Guard | `0.95131` | `0.99042` | `0.89917` | `0.88810` | `0.81905` | `0.04286` |
+| universal base Qwen Truth Value Guard | `0.96065` | `0.99823` | `0.91056` | `0.92024` | `0.89524` | `0.05476` |
+
+Contextual self-questioning trailed the matched direct judge by only `0.00119`
+macro AUROC, with similarly small instructed (`-0.00115`) and varied
+(`-0.00125`) deltas. Across dataset units it won five, tied seven, and lost
+nine. Score correlation was high (Pearson `0.92598`, Spearman `0.91692`), but
+mean absolute score movement was `0.11009`. At the uncalibrated 0.5 threshold,
+self-questioning raised recall by `0.10238` and FPR by `0.09762`; its nearly
+unchanged BA should not be read as unchanged behavior.
+
+Family macro AUROC was `0.94736` for Qwen's 18 units, `0.95000` for Gemma's two
+units, and `1.00000` for the single 21-row Nemotron unit. This does not reproduce
+the hypothesized Gemma < Nemotron < Qwen order, and it is not a fair family
+comparison because only Qwen contains varied-deception units.
+
+An exploratory equal probability average of self-question and matched direct
+scores reached `0.95601` macro AUROC with 652 unique values. This blend was
+computed after observing test results and is therefore diagnostic only. Do not
+promote or tune it without a frozen definition and an untouched evaluation
+split. Even its post-hoc result remains below the existing universal base-Qwen
+control.
+
+The result supports contextual self-questioning as a strong continuous signal,
+but not as the explanation for an otherwise inaccessible performance jump:
+direct matched-organism judging was marginally stronger, and universal
+unadapted Qwen remained stronger still. Runtime and ignored artifacts are under
+`experiments/ndif_context_self_question/` and
+`results/blackbox/ndif_context_self_question_test_v1/`.
+
+### Reasoning-context varied follow-up
+
+A frozen follow-up exposed each varied-deception organism's complete original
+assistant reasoning trace before asking the same self-question. Qwen's native
+chat template only retains `reasoning_content` while rendering the assistant
+turn as the response to its original user request, so the implementation first
+renders that original exchange and then appends a separately rendered user
+follow-up. A real-tokenizer check confirmed the trace and question each occur
+exactly once.
+
+The NDIF path now matches Phoenix's important direct-scoring optimizations:
+length-sorted `48/32/16` tiers, one remote session per exact organism,
+`logits_to_keep=1`, and normalized literal `0|1` logits. Since reasoning made
+some prompts longer than Phoenix's ordinary capped inputs, a 14,400
+padded-token budget shrank individual batches as needed. Truncation was
+disabled. All nine exact Qwen base/LoRA configurations passed a smoke and all
+360 varied rows completed.
+
+| contextual self-question input | varied macro AUROC | BA | recall | FPR |
+| --- | ---: | ---: | ---: | ---: |
+| role/content plus source reasoning | `0.91681` | `0.84167` | `0.77778` | `0.09444` |
+| role/content only | `0.89792` | `0.78889` | `0.81667` | `0.23889` |
+| matched-organism Truth Value Guard | `0.89917` | `0.81667` | `0.69444` | `0.06111` |
+| universal base-Qwen Truth Value Guard | `0.91056` | — | — | — |
+
+Reasoning improved the otherwise matched self-question by `0.01889` macro
+AUROC and improved six of nine dataset units. The per-unit changes ranged from
+`-0.02500` to `+0.07000`. It also beat the matched-organism TVG by `0.01764`
+and the existing universal base-Qwen varied control by `0.00625`. The
+reasoning and output-only self-question scores correlated at Pearson `0.86068`
+and Spearman `0.86095`, with mean absolute movement `0.16668`.
+
+At threshold 0.5, the trace reduced FPR from `0.23889` to `0.09444` while
+recall fell from `0.81667` to `0.77778`, yielding the higher BA shown above.
+Scores had 109 unique values and 251 ties. Prompts were 193--6,122 tokens
+(median 612, p95 4,624), none truncated; remote scoring took 192.3 seconds.
+
+This is meaningful evidence that an organism's own hidden trace contains
+deception-relevant information beyond its visible output. It is not evidence
+of cross-family transfer because every varied row is Qwen. Do not infer that
+opaque leaderboard methods expose reasoning, and do not integrate this
+test-measured variant into Phoenix without a separately frozen promotion
+decision.

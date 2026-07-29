@@ -651,6 +651,30 @@ immediately before its final prediction token. The latter requires one extra
 scoring pass but measures the margin after the distilled reasoning rather than
 asking the model to classify out of format.
 
+### Qwen3.5-397B FP8 teacher cache on Lambda
+
+Use one Lambda `gpu_8x_a100_80gb_sxm4` instance for the official
+`Qwen/Qwen3.5-397B-A17B-FP8` checkpoint. After syncing and bootstrapping the
+committed repository, run:
+
+```bash
+bash experiments/privileged_information_distillation/run_qwen397_tvg_soft_teacher_lambda.sh
+```
+
+The job uses the exact frozen no-thinking Truth Value Guard renderer, tensor
+parallelism eight, a 4,096-token context cap, and 32 maximum concurrent
+sequences. It scores only the literal `0` and `1` tokens at the
+`Prediction:` boundary over all 2,880 varied training rows. The transferred
+result directory contains the requested label log-probabilities, normalized
+soft targets, rendered student prompts, configuration, hashes, and metrics:
+
+```text
+results/blackbox/qwen35_397b_fp8_nothink_truth_value_binary_logit_v1/
+```
+
+Pull that directory before terminating the instance. The model checkpoint is
+not part of the result bundle.
+
 The matched AUROC-loss ablation keeps reasoning-summary supervision while
 optionally adding direct binary CE and within-dataset pairwise logistic loss:
 
@@ -706,3 +730,24 @@ but are automatically excluded from student SFT. All usable records currently
 use `prediction_source=privileged_label_fallback`: GPT-OSS supplied the parsed
 final-channel summary, and the authoritative conditioned label supplies the
 deterministic final `Prediction:N` field.
+
+## Full ground-truth-blind reasoning-SFT ablation
+
+The matched blind arm sends all 2,880 varied training rows to GPT-OSS without
+placing the authoritative label anywhere in its prompt. GPT-OSS must produce
+both the example-specific material-claim rationale and its own binary
+prediction. Parsed predictions that disagree with the stored competition
+label remain training targets; labels are used only for the post-generation
+audit. The rank-16 student uses the selected one-epoch varied-only AdamW
+`5e-5`, effective-batch-32 recipe.
+
+Launch the teacher, dependent student, and validation jobs with:
+
+```bash
+bash experiments/privileged_information_distillation/submit_blind_reasoning_full.sh
+```
+
+This is the full-data successor to the earlier 10% rank-1 blind-specialist
+pilot. The 4,096-token teacher completion cap is intended to minimize
+format-only exclusions; record and report the final parsed coverage rather
+than silently filling missing predictions from the labels.

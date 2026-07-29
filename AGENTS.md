@@ -99,6 +99,47 @@ strong. The adapter is hosted at
 under `submission/phoenix_wright_v3_adapters/deception/`. Preserve the
 base-Qwen HP-KR route, original-Phoenix action route, and optional rank-1 intent
 route; do not expose source reasoning or generate reasoning at inference.
+Phoenix 4.4 is a black-box competition method: output-logit queries to the
+judge do not make it white-box. Always submit this notebook with `--tag black`.
+
+Phoenix renderer transfer finding from 2026-07-28: an exact base-Qwen replay of
+the Phoenix 4.0 renderer reproduced the original private macro AUROC exactly at
+`0.893802`, while the Phoenix 5.4 base-model control using the 5.x renderer
+scored only `0.846867`. The loss was entirely concentrated in counted Notus:
+mean Notus AUROC fell from `0.863992` to `0.770100`, while mean Iris AUROC was
+unchanged (`0.923613` versus `0.923633`). This rules out the base model,
+adapter application, threshold, generic NDIF logits path, and ordinary rubric
+wording as explanations. The leading cause is private long/structurally complex
+context sensitivity: 5.x merges adjacent roles, keeps only a raw 3,000-character
+context tail, removes truncation markers, and leaves the repeated final output
+uncapped, whereas 4.0 preserves message boundaries and bounded head/tail slices.
+The aggregates cannot distinguish many turns from a single long message or
+output. Phoenix 4.1--4.3 all retained the exact `0.893802` private result, so
+their frozen HP-KR, intent, and action specialists were not the regression.
+Phoenix 6.0 therefore uses the exact 4.0 renderer and base-Qwen direct margin on
+ordinary rows, adding only those mutually exclusive specialists. Do not replace
+the 4.0 ordinary renderer with the 4.4/5.x tail-only renderer without a
+private-structure-equivalent test.
+
+Phoenix 6.1 applies `Jazhyc/aletheias-phoenix-luna-medium-reasoning-r16` only
+to the ordinary Phoenix 6.0 route. It preserves the byte-exact 4.0 renderer,
+direct `Prediction:` label margin, `48/32/16` batching, and mutually exclusive
+base-Qwen HP-KR, original-Phoenix action, and rank-1 intent routes. The
+secondary binary threshold is Luna's frozen `0.19`; the continuous margin
+remains the primary score. This renderer/adapter pairing is a private-transfer
+probe rather than a locally validated promotion because Luna's local evidence
+used the 5.x tail-only renderer. Do not generate Luna reasoning, alter the
+specialist precedence, or submit without `--tag black`.
+
+Phoenix 6.2 applies `Jazhyc/aletheias-phoenix-v5-qwen27-tvg-soft-r16` only to
+the ordinary route. Preserve Phoenix 4.0's structural rendering—message
+boundaries, bounded head/tail slices, marked context tail, and separately
+bounded output—but use the adapter's exact binary-only training rubric with no
+reasoning-summary language. Continue to score normalized literal `0|1` logits
+directly after `Prediction:` and use `0.5` only for the secondary binary
+column. Keep the HP-KR, action, and intent routes unchanged and mutually
+exclusive. Corrected NDIF validation selected this adapter/prompt pair at
+`0.95375` macro AUROC. It remains black-box and must use `--tag black`.
 
 For development and training experiments, do not use NDIF; reserve NDIF for leaderboard evaluation/submission execution. Use local GPU Slurm jobs with vLLM for black-box judge experiments. Keep experiment code organized under `experiments/<method>/`, keep Slurm shell templates as `.sh` files, and write runtime logs under `logs/`; black-box Slurm jobs should redirect their main output to `logs/slurm/<method>/<split>-<job_id>.out` and automatically delete the temporary bootstrap file at `logs/slurm/%x-%j.bootstrap.out` after successful redirection. Store black-box experiment artifacts under `results/blackbox/`; per-run result directories are ignored, but `results/blackbox/leaderboard.md` is tracked and should show test-set results only. Default Slurm resources for these jobs are one `gpushort` GPU node with `--gpus-per-node=rtx_pro_6000:1`, `--cpus-per-task=1`, and 32 GB memory unless the user says otherwise. The cluster's 40 GB A100s are also sufficient for inference-only `Qwen/Qwen3.5-9B` BF16 evaluations with one rank-16 LoRA and a 4,096-token model context; when the RTX Pro 6000 queue is saturated, request `--gpus-per-node=a100:1` for this workload. A cold A100 vLLM 0.24 load/compile/CUDA-graph capture can be much slower than RTX: job `30159704` needed 29m40s for one startup plus nine 822-row conditions, so request at least 45 minutes for that shape unless the compile cache is known warm or fewer conditions are run. Do not generalize that memory result to training, larger models, or materially longer contexts without a separate memory check. For interactive black-box method development, prefer reserving a GPU node with `srun`, running one persistent vLLM server process, and pointing experiment clients at it over HTTP so model loading/compilation is paid once per session. Prefer direct `sbatch` templates first for unattended runs; add `submitit` only if Python-managed Slurm arrays become necessary. Slurm controller commands such as `sbatch`, `squeue`, `scancel`, and `sacct` should be run outside the sandbox automatically because sandboxed attempts cannot contact the controller.
 For prompt/logits judge sweeps, batch multiple prompt conditions inside a single
@@ -149,6 +190,16 @@ false-negative recoveries were Qwen. Gemma and Nemotron used documented
 single-token TRUE/FALSE forced-choice fallbacks because hosted generation was
 incompatible/OOM-prone; consult the method docs before comparing runtimes or
 treating this as an identical generation backend.
+A later continuous contextual self-question follow-up used the exact generating
+Qwen base/LoRA on all 360 varied test rows. Including the complete native source
+reasoning trace raised macro AUROC from `0.89792` output-only to `0.91681`,
+improving six of nine units; BA rose from `0.78889` to `0.84167` as FPR fell
+from `0.23889` to `0.09444`. Prompts were 193--6,122 tokens with no truncation.
+The NDIF implementation uses Phoenix-style length sorting, `48/32/16` tiers
+with a padded-token budget, one session per organism, and
+`logits_to_keep=1`. This is Qwen-only test evidence: do not infer cross-family
+transfer, opaque leaderboard reasoning access, or integrate the trace into
+Phoenix solely from this follow-up.
 The learned whole-output correction gate failed: text features improved OOF
 ranking but reduced binary BA under both stratified and leave-one-organism-out
 evaluation. A later claim-level pilot appeared promising, but its frozen
@@ -433,6 +484,25 @@ phrasing sensitivity. Do not use `any(False)` without calibration or controls;
 artifacts are under `results/blackbox/qwen27b_organism_atomic_true_false_v1/`
 and runtime code is
 `experiments/blackbox/audit_qwen_organism_claim_consistency.py`.
+
+Full-trace organism self-question prompt sweep finding from 2026-07-28:
+competition NDIF evaluated four framings on all 360 varied-deception validation
+rows using each exact Qwen3.5-27B base/LoRA organism, complete native reasoning,
+no truncation, and direct `Prediction:0|1` logits. The plain independent-auditor
+framing led macro AUROC at `0.91236`, versus `0.90639` for factual self-review,
+`0.89403` for forensic role play, and `0.89181` for 2040 Communion clemency.
+The `+0.00597` auditor gain was four dataset-unit wins, three ties, and two
+losses. Frozen test confirmation covered all 821 rows: all 360 varied rows
+retained native reasoning, while the 461 instructed rows have no source trace
+and used complete role/content history. Auditor macro AUROC was `0.95917`
+versus `0.95702` for the exact hybrid factual control; varied AUROC was
+`0.92347` versus `0.91681` (`+0.00667`), but instructed AUROC fell by
+`0.00125`. Treat this as confirmation for the varied/full-trace regime, not a
+material universal gain, and do not tune further on test. The clemency prompt
+reduced rather than induced positive verdicts and regressed seven of nine
+validation units; reject both embellished framings. Runtime code is under
+`experiments/self_question_prompt_sweep/` and
+`experiments/ndif_context_self_question/`.
 
 Deferred hybrid proposal from 2026-07-11: P27 in
 `docs/prompt_optimization/proposals.md` combines a tuned judge that emits

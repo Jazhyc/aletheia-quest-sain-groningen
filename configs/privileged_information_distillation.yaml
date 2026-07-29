@@ -93,6 +93,7 @@ student:
     per_device_train_batch_size: 2
     gradient_accumulation_steps: 16
     logging_steps: 5
+    completion_loss_weight: 1.0
     # AUROC-oriented auxiliary objectives. The default preserves ordinary
     # completion-only SFT; enable paired_batching for within-dataset ranking.
     direct_loss_weight: 0.0
