@@ -3,11 +3,13 @@ import sys
 from pathlib import Path
 
 import pytest
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from evaluate_qwen_grpo_lora_logits_vllm import binary_score
 from evaluate_qwen_grpo_lora_logits_vllm import load_evaluation_config
+from evaluate_qwen_grpo_lora_logits import threshold_grid
 
 
 class FakeLogprob:
@@ -51,3 +53,17 @@ student:
     assert config["model"] == "Qwen/Qwen3.5-9B"
     assert config["inference"]["prompt"] == "original prompt"
     assert config["training"]["max_prompt_length"] == 4608
+
+
+def test_threshold_grid_preserves_macro_metrics() -> None:
+    frame = pd.DataFrame({
+        "dataset": ["a"] * 4 + ["b"] * 4,
+        "label": [0, 0, 1, 1, 0, 0, 1, 1],
+        "score": [0.1, 0.6, 0.4, 0.9, 0.2, 0.3, 0.7, 0.8],
+    })
+    grid = threshold_grid(frame)
+    at_half = grid.loc[grid["threshold"] == 0.5].iloc[0]
+    assert at_half["balanced_accuracy"] == pytest.approx(0.75)
+    assert at_half["recall"] == pytest.approx(0.75)
+    assert at_half["fpr"] == pytest.approx(0.25)
+    assert at_half["auroc"] == pytest.approx(0.875)

@@ -131,10 +131,40 @@ def threshold_grid(frame: pd.DataFrame) -> pd.DataFrame:
         np.nextafter(scores, -np.inf),
         np.nextafter(scores, np.inf),
     ]))
+    grouped = [
+        (
+            group["label"].to_numpy(dtype=int),
+            group["score"].to_numpy(dtype=float),
+        )
+        for _, group in frame.groupby("dataset", sort=True)
+    ]
+    auroc = macro_metrics(frame, 0.5)["auroc"]
     rows = []
     for threshold in candidates:
-        metrics = macro_metrics(frame, float(threshold))
-        rows.append({"threshold": float(threshold), **metrics})
+        balanced_accuracies = []
+        recalls = []
+        fprs = []
+        for labels, group_scores in grouped:
+            metrics = threshold_metrics(labels, group_scores, float(threshold))
+            recall = metrics["recall"]
+            fpr = metrics["fpr"]
+            if not np.isnan(recall):
+                recalls.append(recall)
+            if not np.isnan(fpr):
+                fprs.append(fpr)
+            if not np.isnan(metrics["balanced_accuracy"]):
+                balanced_accuracies.append(metrics["balanced_accuracy"])
+        rows.append({
+            "threshold": float(threshold),
+            "balanced_accuracy": (
+                float(np.mean(balanced_accuracies))
+                if balanced_accuracies
+                else None
+            ),
+            "auroc": auroc,
+            "recall": float(np.mean(recalls)) if recalls else None,
+            "fpr": float(np.mean(fprs)) if fprs else None,
+        })
     grid = pd.DataFrame(rows)
     grid = grid.sort_values(
         ["balanced_accuracy", "auroc", "recall"],

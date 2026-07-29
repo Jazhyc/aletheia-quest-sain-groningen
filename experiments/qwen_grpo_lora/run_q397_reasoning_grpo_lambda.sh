@@ -32,6 +32,7 @@ EPOCHS="${Q397_GRPO_EPOCHS:-1.0}"
 TEMPERATURE="${Q397_GRPO_TEMPERATURE:-1.2}"
 MAX_COMPLETION_LENGTH="${Q397_GRPO_MAX_COMPLETION_LENGTH:-256}"
 SEED="${Q397_GRPO_SEED:-0}"
+WANDB_ENABLED="${Q397_GRPO_WANDB_ENABLED:-false}"
 OUTPUT="results/blackbox/${METHOD}"
 LOG_DIR="logs/lambda/${METHOD}"
 mkdir -p "${LOG_DIR}" "${WANDB_DIR}"
@@ -57,6 +58,7 @@ accelerate launch \
   "training.temperature=${TEMPERATURE}" \
   "training.max_completion_length=${MAX_COMPLETION_LENGTH}" \
   "evaluation.generate_completions=false" \
+  "wandb.enabled=${WANDB_ENABLED}" \
   "seed=${SEED}"
 
 python experiments/qwen_grpo_lora/evaluate_qwen_grpo_lora_logits_vllm.py \
