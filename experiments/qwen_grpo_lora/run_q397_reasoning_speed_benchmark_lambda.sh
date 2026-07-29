@@ -60,8 +60,15 @@ run_condition() {
     2>&1 | tee "${log}"
 }
 
-run_condition gbs32_mem25 32 0.25
-run_condition gbs64_mem35 64 0.35
+if ! run_condition gbs32_mem35 32 0.35; then
+  echo "condition failed: gbs32_mem35" >&2
+fi
+if ! run_condition gbs64_mem50 64 0.50; then
+  echo "condition failed: gbs64_mem50" >&2
+fi
+if ! run_condition gbs32_mem35_warm 32 0.35; then
+  echo "condition failed: gbs32_mem35_warm" >&2
+fi
 
 python - "${LOG_DIR}" <<'PY'
 import json

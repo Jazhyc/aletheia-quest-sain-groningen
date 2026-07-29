@@ -97,6 +97,7 @@ vllm:
 
 evaluation:
   batch_size: 4
+  generate_completions: true
 
 scoring:
   baseline_threshold: 0.5

@@ -42,9 +42,12 @@ def test_q397_optimized_reasoning_config() -> None:
     assert cfg.judge.include_reasoning is False
     assert "<reasoning>" in cfg.judge.prompt
     assert "Reason carefully" in cfg.judge.prompt
+    assert "<reasoning>" not in cfg.inference.prompt
+    assert cfg.inference.prompt.endswith("Output exactly one line: Prediction:<0 or 1>")
     assert cfg.lora.r == 16
     assert cfg.lora.alpha == 32
     assert cfg.training.per_device_train_batch_size == 4
     assert cfg.training.num_generations == 4
     assert cfg.training.generation_batch_size == 32
     assert cfg.training.max_completion_length == 256
+    assert cfg.evaluation.generate_completions is False

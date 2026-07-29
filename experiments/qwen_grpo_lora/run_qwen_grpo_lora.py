@@ -1164,6 +1164,29 @@ def main(cfg: DictConfig) -> None:
     trainer.save_model(str(output_dir / "adapter"))
     tokenizer.save_pretrained(output_dir / "adapter")
 
+    if not bool(
+        OmegaConf.select(
+            cfg,
+            "evaluation.generate_completions",
+            default=True,
+        )
+    ):
+        result = {
+            **metadata,
+            "train_metrics": train_result.metrics,
+            "validation": {
+                "skipped": True,
+                "reason": (
+                    "generated-completion validation disabled; run the "
+                    "vLLM constrained-logit evaluator"
+                ),
+            },
+            "adapter_path": (output_dir / "adapter").as_posix(),
+        }
+        (output_dir / "result.json").write_text(json.dumps(result, indent=2))
+        print(json.dumps(result["validation"], indent=2))
+        return
+
     print("evaluating validation split")
     predictions, eval_meta = evaluate_model(
         model=trainer.model,

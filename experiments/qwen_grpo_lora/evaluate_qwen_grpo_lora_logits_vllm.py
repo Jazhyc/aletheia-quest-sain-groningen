@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "experiments" / "qwen_grpo_lora"))
 from evaluate_qwen_grpo_lora import (  # noqa: E402
     SplitRecords,
     cfg_get,
+    cfg_get_default,
     load_split,
     load_training_config,
     macro_metrics,
@@ -143,10 +144,17 @@ def main() -> None:
     label0_id = single_token_id(tokenizer, label0)
     label1_id = single_token_id(tokenizer, label1)
     include_reasoning = bool(cfg_get(training_config, "judge.include_reasoning"))
+    inference_prompt = str(
+        cfg_get_default(
+            training_config,
+            "inference.prompt",
+            cfg_get(training_config, "judge.prompt"),
+        )
+    )
     records = load_split(
         args.split,
         args.splits_dir.resolve(),
-        prompt_template=str(cfg_get(training_config, "judge.prompt")),
+        prompt_template=inference_prompt,
         tokenizer=tokenizer,
         max_prompt_chars=int(cfg_get(training_config, "judge.max_prompt_chars")),
         context_truncation=str(cfg_get(training_config, "judge.context_truncation")),
@@ -231,6 +239,7 @@ def main() -> None:
                 "label_style": args.label_style,
                 "label_ids": [label0_id, label1_id],
                 "include_source_reasoning": include_reasoning,
+                "inference_prompt": inference_prompt,
                 "max_model_len": max_model_len,
                 "gpu_memory_utilization": args.gpu_memory_utilization,
                 "training_config": training_config,
