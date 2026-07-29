@@ -16,9 +16,17 @@ Cached paired validation improves macro AUROC from `0.95393` to `0.95554`
 and a dataset-unit bootstrap interval crosses zero, so this receives exactly
 one frozen local-test confirmation:
 
+The delayed local-GPU confirmation was superseded by the user-authorized
+optimized NDIF path:
+
 ```bash
-sbatch experiments/q397_base_prompt_ensemble/run_test.sh
+python -m experiments.q397_base_prompt_ensemble.run_ndif
+python -m experiments.q397_base_prompt_ensemble.analyze
 ```
+
+This queries only the missing base-Qwen stream, using one remote session,
+`logits_to_keep=1`, and Phoenix's frozen length-sorted `48/32/16` tiers. The
+already-cached Q397 test vector is not rerun.
 
 Deployment would require one additional direct base-Qwen pass, but no
 generation and no source reasoning.
