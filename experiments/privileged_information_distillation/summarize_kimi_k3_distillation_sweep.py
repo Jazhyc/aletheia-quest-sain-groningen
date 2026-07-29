@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RESULTS_ROOT = ROOT / "results" / "blackbox"
 METHOD_RE = re.compile(
     r"^qwen9b_kimi_k3_openrouter_tvg_soft_r(?P<rank>\d+)_"
-    r"lr(?P<lr_name>[^_]+)_(?P<epoch_name>ep(?:05|1|2))_v1$"
+    r"lr(?P<lr_name>[^_]+)_(?P<epoch_name>ep(?:05|1|2|3|4))_v1$"
 )
 
 

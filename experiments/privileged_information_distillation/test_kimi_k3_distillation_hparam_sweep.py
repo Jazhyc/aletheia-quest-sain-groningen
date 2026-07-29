@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 METHOD_DIR = ROOT / "experiments/privileged_information_distillation"
 LAUNCHER = METHOD_DIR / "run_kimi_k3_distillation_hparam_sweep_lambda.sh"
+EXTENSION = METHOD_DIR / "run_kimi_k3_epoch_extension_lambda.sh"
 SUMMARY_PATH = METHOD_DIR / "summarize_kimi_k3_distillation_sweep.py"
 
 
@@ -44,3 +45,20 @@ def test_summary_method_pattern_captures_sweep_coordinates() -> None:
     assert match.group("rank") == "16"
     assert match.group("lr_name") == "5e5"
     assert match.group("epoch_name") == "ep05"
+
+    extended = module.METHOD_RE.fullmatch(
+        "qwen9b_kimi_k3_openrouter_tvg_soft_r16_lr2e5_ep4_v1"
+    )
+    assert extended is not None
+    assert extended.group("epoch_name") == "ep4"
+
+
+def test_epoch_extension_waits_for_winner_and_scores_matched_session() -> None:
+    source = EXTENSION.read_text()
+
+    assert 'while kill -0 "${upstream_pid}"' in source
+    assert 'if [[ ! -f "${UPSTREAM_SUMMARY}" ]]' in source
+    assert "for epoch in 3.0 4.0" in source
+    assert 'methods=("${winner}")' in source
+    assert "--continuous-margin-condition direct" in source
+    assert "--verify-lora-effect" in source
