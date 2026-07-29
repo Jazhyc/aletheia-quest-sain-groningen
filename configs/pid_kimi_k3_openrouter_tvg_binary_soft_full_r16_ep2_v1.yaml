@@ -1,0 +1,16 @@
+defaults:
+  - pid_kimi_k3_openrouter_tvg_binary_soft_distillation_v1
+  - _self_
+
+method: qwen9b_kimi_k3_openrouter_tvg_soft_full_r16_lr5e5_ep2_v1
+output_dir: results/blackbox/${method}
+
+teacher:
+  artifact: results/blackbox/kimi_k3_fireworks_nothink_tvg_binary_logit_full_v1/train/student_rows.jsonl
+
+student:
+  dataset_name_contains: null
+  soft_teacher_artifact: results/blackbox/kimi_k3_fireworks_nothink_tvg_binary_logit_full_v1/train/soft_targets.jsonl
+  output_dir: ${output_dir}/adapter
+  training:
+    num_train_epochs: 2.0

@@ -135,6 +135,13 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("input", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument(
+        "--additional-input",
+        action="append",
+        default=[],
+        type=Path,
+        help="Additional disjoint teacher JSONL cache to merge before validation.",
+    )
     parser.add_argument("--expected-rows", type=int, default=2880)
     parser.add_argument(
         "--kind",
@@ -143,11 +150,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    records = [
-        json.loads(line)
-        for line in args.input.read_text().splitlines()
-        if line.strip()
-    ]
+    records = []
+    for path in [args.input, *args.additional_input]:
+        records.extend(
+            json.loads(line)
+            for line in path.read_text().splitlines()
+            if line.strip()
+        )
     aggregated = (
         build_binary_soft_targets(records)
         if args.kind == "binary_identity"
