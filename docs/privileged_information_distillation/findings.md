@@ -3894,6 +3894,44 @@ the shared primary-route adapter changes. Treat this as a frozen private
 transfer candidate: the training cache is still varied-only and therefore
 implicitly Qwen-family-only.
 
+### Kimi student learning-rate and epoch sweep
+
+A matched H100 sweep tested whether the Qwen397-selected `5e-5`, two-epoch
+recipe transferred to Kimi's materially softer target distribution. Kimi's
+mean binary-target entropy was `0.1074` nats versus `0.0769` for Qwen397, and
+`64.65%` versus `76.67%` of probabilities lay outside `[0.01, 0.99]`.
+Rank 16, alpha 32, effective batch size 32, all 2,880 cached rows, and the
+direct-margin evaluator remained fixed.
+
+| learning rate | 0.5 epoch | 1 epoch | 2 epochs |
+| ---: | ---: | ---: | ---: |
+| `1e-5` | `0.94708` | `0.94827` | `0.95185` |
+| `2e-5` | `0.94816` | `0.95143` | `0.95405` |
+| `5e-5` | `0.95042` | `0.95274` | `0.96042` |
+| `1e-4` | `0.95054` | `0.95702` | **`0.96071`** |
+
+The nominal grid winner was `1e-4` for two epochs, but its matched-session
+advantage over the submitted `5e-5`, two-epoch adapter was only `0.00030`
+macro AUROC. This is far below the frozen `+0.005` promotion bar and below
+previously observed session/position sensitivity. Do not replace the submitted
+adapter from this difference.
+
+Because both top learning rates still peaked at the two-epoch boundary, fresh
+three- and four-epoch runs were trained at `1e-4` and rescored together with
+the two-epoch winner:
+
+| epochs | macro AUROC | instructed | varied | BA at 0.5 | unique |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| **2** | **`0.96179`** | **`0.99667`** | `0.91528` | `0.90714` | `752/822` |
+| 3 | `0.96101` | `0.99521` | **`0.91542`** | **`0.92024`** | `746/822` |
+| 4 | `0.95887` | `0.99479` | `0.91097` | `0.90476` | `763/822` |
+
+Three epochs gained only `0.00014` varied AUROC while losing `0.00077` macro
+AUROC; four epochs regressed materially. Two epochs is therefore the validated
+horizon. Retain the already published/submitted `5e-5`, two-epoch checkpoint:
+the learning-rate distinction is unresolved noise, while the evidence against
+training beyond two epochs is consistent.
+
 ## Optimized Qwen-397B reasoning-GRPO continuation (2026-07-29)
 
 The validation-selected original-prompt soft student
