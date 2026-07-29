@@ -4714,3 +4714,36 @@ wins/ties/losses were `3/9/9`.
 Reject the ensemble and retain Q397 alone. Do not search prompt members or
 blend weights post hoc on test; the extra base-model inference pass is not
 supported by the frozen result.
+
+## 2026-07-29: Optimized Q397 generated-reasoning ensemble
+
+A matched NDIF experiment tested generated judge reasoning on the exact
+two-epoch optimized Q397 adapter. It used the ordinary binary Phoenix boundary
+for the direct arm. The second arm generated a deterministic
+`<reasoning_summary>`, removed the final generated digit, and read normalized
+literal `0|1` logits at that position. Source reasoning was never used.
+
+Post-reasoning validation macro AUROC was `0.94536`, below direct at
+`0.95345`. Nevertheless, a validation-selected fixed blend of 60% direct and
+40% reasoning log odds reached `0.95714` (`+0.00369`), with
+instructed/varied AUROC `0.99771/0.90306` and `5/12/4` unit
+wins/ties/losses. Nested leave-one-dataset-unit-out weight selection chose 60%
+direct in 20 folds and 70% in one. A nested hard router selected direct in
+every fold, while a regularized soft router scored `0.95333`; simple blending
+was the only promotion candidate.
+
+One frozen local-test confirmation rejected the aggregate promotion. Direct
+scored `0.95929`, post-reasoning `0.93101`, and the 60/40 blend `0.95911`
+(`-0.00018`). The blend improved varied AUROC `0.91056 -> 0.91472` but reduced
+instructed `0.99583 -> 0.99240`; unit wins/ties/losses were `5/9/7`, with a
+worst unit loss of `0.050`. Do not retune the weight on test or deploy the
+borrowed summary prompt.
+
+The borrowed prompt is unlikely to be inference-optimal for a binary-only
+student. Generation took `534.3s` on validation and `682.3s` on test, with
+five and seven 512-token fallbacks, versus `45--47s` for paired scoring.
+A validation-only local-vLLM follow-up therefore freezes the 60/40 weight,
+caps reasoning at 192 tokens, and compares the baseline summary with compact
+claim-check and balanced-audit prompts in one persistent model load. Slurm job
+`30361556` was submitted to the RTX Pro 6000 queue; no prompt from that sweep
+will be evaluated on local test.
