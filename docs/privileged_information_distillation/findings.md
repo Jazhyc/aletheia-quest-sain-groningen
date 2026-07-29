@@ -3469,6 +3469,89 @@ The canonical adapter was promoted as Phoenix 6.3 and published at
 matches the local validated file:
 `fac7b031bf52bc5597ee02a6dec20f355b3c3297bf110d3bb0233f629a69004d`.
 
+## Qwen-397B soft-distillation hyperparameter sweep (2026-07-29)
+
+A Lambda `gpu_1x_h100_sxm5` campaign optimized the frozen Qwen-397B
+identity-probability BCE recipe while keeping the submitted model fixed at
+`Qwen/Qwen3.5-9B`. The rank-16 stage crossed learning rates `1e-5`, `2e-5`,
+`5e-5`, and `1e-4` with `0.5`, `1`, and `2` epochs. After selecting the
+rank-16 response surface, rank 24 tested all epoch lengths at `5e-5` and all
+four learning rates at two epochs. Every arm retained alpha 32, the varied-only
+2,880-row cache, effective batch size 32, and direct normalized literal `0|1`
+validation margins. Selection used only the 822-row validation split; no local
+test evaluation was spent.
+
+| rank | learning rate | 0.5 epoch | 1 epoch | 2 epochs |
+| ---: | ---: | ---: | ---: | ---: |
+| 16 | `1e-5` | `0.94768` | `0.94786` | `0.95107` |
+| 16 | `2e-5` | `0.94798` | `0.94935` | `0.95179` |
+| 16 | `5e-5` | `0.95071` | `0.95006` | **`0.95393`** |
+| 16 | `1e-4` | `0.94673` | `0.94887` | `0.95083` |
+| 24 | `1e-5` | — | — | `0.95131` |
+| 24 | `2e-5` | — | — | **`0.95369`** |
+| 24 | `5e-5` | `0.94887` | `0.94923` | `0.95339` |
+| 24 | `1e-4` | — | — | `0.95256` |
+
+The winner is
+`qwen9b_qwen397_tvg_soft_r16_lr5e5_ep2_v1`: rank 16, alpha 32, AdamW
+`5e-5`, and two epochs. It scored `0.95393` validation macro AUROC,
+`0.99833` instructed AUROC, and `0.89472` varied AUROC. Its secondary
+threshold-0.5 balanced accuracy was `0.90595`, with `0.85238` recall and
+`0.04048` FPR. This is `+0.00345` over the historical one-epoch Qwen-397B
+student (`0.95048`) and `+0.00018` over the corrected Qwen-27B/Phoenix 6.2
+adapter-prompt reference (`0.95375`). The best rank-24 arm, `2e-5` for two
+epochs, reached `0.95369`, losing to rank 16 by `0.00024`; do not promote rank
+24 from this sweep.
+
+The winner retained 665 unique float scores over 822 rows. There were 157
+duplicate-score excess rows and 281 rows participating in a tie, so the output
+is meaningfully continuous but not tie-free. All direct label margins were
+present. The deliberately one-token generation probe did not emit complete
+binary strings and is not an alternate score path. The same-session activation
+fingerprint passed: only 4/822 adapter and base margins were exactly equal and
+their mean absolute difference was `0.10250`.
+
+| validation dataset unit | AUROC |
+| --- | ---: |
+| `instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-None` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.98750` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.99500` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-None` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-s-mo-gemma-3-27b-it` | `0.99750` |
+| `varied-deception-Qwen3.5-27B-None` | `0.98750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.83000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.72250` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `0.86750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `0.98750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.90000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.85500` |
+| `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.96000` |
+| `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.94250` |
+
+The SXM5 throughput study also changed the execution recipe. With effective
+batch size 32, the fallback attention path improved from 1.798 samples/s at
+microbatch 2 to 4.279 samples/s at microbatch 16; microbatch 32 was slower and
+used roughly 80.98 GB. Trainer-level `torch.compile` spent 5m22s without
+finishing its first step and was rejected. Isolated pinned FLA 0.5.2 packages
+instead reached 8.811 samples/s at microbatch 8 and 8.791 at microbatch 16.
+The sweep therefore used microbatch 8 with four-step accumulation, FLA, and no
+Trainer compilation. Full runs stabilized around 9.84--10.44 samples/s while
+leaving materially more HBM headroom than microbatch 32.
+
+The selected canonical adapter file has SHA-256
+`da32c67a2ea0d9834fb90b93dac84a9ee68f05b2a2023b8ea272704fdb58c40d`.
+All 256 tensors use canonical Qwen3.5 PEFT paths and no legacy tensor path
+remains. Retain this rank-16/two-epoch arm as the validation-selected
+Qwen-397B distillation result. Any test or private-leaderboard promotion should
+be a frozen follow-up, not another validation retune.
+
 ## Qwen-397B soft-objective ablation (2026-07-28)
 
 Jobs `30342642`--`30342645` tested whether the pure Qwen-397B soft student lost

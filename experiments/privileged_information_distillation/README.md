@@ -752,6 +752,16 @@ adapter is migrated to canonical Qwen3.5 PEFT paths and must pass a matched
 base-versus-LoRA effect fingerprint. Summaries are written under
 `results/blackbox/qwen397_soft_distillation_hparam_sweep_v1/`.
 
+The completed Lambda sweep selected the rank-16, alpha-32, `5e-5`, two-epoch
+arm at `0.95393` validation macro AUROC (`0.99833` instructed, `0.89472`
+varied). The best rank-24 arm used `2e-5` for two epochs and scored `0.95369`,
+so rank 24 is not promoted. The winner has 665 unique scores over 822 rows,
+zero missing direct margins, and a passing base-versus-LoRA fingerprint. Its
+canonical adapter and validation artifacts are under
+`results/blackbox/qwen9b_qwen397_tvg_soft_r16_lr5e5_ep2_v1/`; see the findings
+document for the full response surface and per-dataset AUROC table. This was a
+validation-only selection and does not authorize test-set retuning.
+
 The matched AUROC-loss ablation keeps reasoning-summary supervision while
 optionally adding direct binary CE and within-dataset pairwise logistic loss:
 
