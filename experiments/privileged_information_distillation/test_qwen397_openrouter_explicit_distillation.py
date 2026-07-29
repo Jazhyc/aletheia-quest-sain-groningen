@@ -25,6 +25,11 @@ POST_REASONING_CONFIG = (
     ROOT
     / "configs/pid_qwen397_openrouter_explicit_post_reasoning_eval_v1.yaml"
 )
+OPTIMIZED_LAMBDA_LAUNCHER = (
+    ROOT
+    / "experiments/privileged_information_distillation"
+    / "run_qwen397_openrouter_optimized_distillation_lambda.sh"
+)
 
 
 def compose_config():
@@ -72,6 +77,26 @@ def test_openrouter_explicit_launcher_validates_cache_and_chains_eval() -> None:
     assert '--dependency="afterok:${STUDENT}"' in source
     assert "--verify-lora-effect" in source
     assert "--continuous-margin-condition direct" in source
+
+
+def test_openrouter_optimized_lambda_launcher_freezes_selected_recipe() -> None:
+    source = OPTIMIZED_LAMBDA_LAUNCHER.read_text()
+
+    assert 'sha256sum -c "${CACHE_ROOT}/SHA256SUMS"' in source
+    assert 'if [[ "${rows}" -ne 2880 ]]' in source
+    assert "pid_qwen397_openrouter_explicit_tvg_binary_soft_distillation_v1" in source
+    assert "qwen9b_qwen397_openrouter_explicit_tvg_soft_r16_lr5e5_ep2_v1" in source
+    assert '"student.lora.r=16"' in source
+    assert '"student.lora.alpha=32"' in source
+    assert '"student.training.learning_rate=5e-5"' in source
+    assert '"student.training.num_train_epochs=2.0"' in source
+    assert 'MICRO_BATCH="${Q397_MICRO_BATCH:-8}"' in source
+    assert 'GRADIENT_ACCUMULATION="${Q397_GRADIENT_ACCUMULATION:-4}"' in source
+    assert '"student.training.torch_compile=false"' in source
+    assert "flash-linear-attention==0.5.2" in source
+    assert "--continuous-margin-condition direct" in source
+    assert "--verify-lora-effect" in source
+    assert "migrate_qwen35_peft_paths.py" in source
 
 
 def test_openrouter_teacher_runner_freezes_selected_provenance() -> None:
