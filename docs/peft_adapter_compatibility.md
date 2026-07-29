@@ -99,6 +99,13 @@ Every hosted LFS weight digest matched the locally verified converted file
 after upload. The submission-bundled Luna rank-16 and resolved-intent rank-1
 adapters were migrated to the same canonical layout.
 
+Phoenix 6.3's Qwen397 soft-distillation adapter was born through the guarded
+text-only-training-plus-canonical-migration path and published directly with
+canonical keys. Repository
+`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16`, revision
+`59a9c57982c8430ff9e8bb64c3e53b8fb775dbc2`, has LFS weight SHA-256
+`fac7b031bf52bc5597ee02a6dec20f355b3c3297bf110d3bb0233f629a69004d`.
+
 ## Luna 5.2 confirmation
 
 The first 32-row competition-NDIF canary used identical prompts for base Qwen

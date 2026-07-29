@@ -283,6 +283,26 @@ sbatch experiments/privileged_information_distillation/run_student_sft.sh \
   student.output_dir=results/blackbox/qwen9b_privileged_gptoss120b_summary_smoke/adapter
 ```
 
+The Qwen397 run uses the documented text-only training fallback because the
+canonical multimodal class requires an optimized Gated DeltaNet runtime that
+is not available in the locked training environment. Canonicalize the saved
+checkpoint in the same job:
+
+```bash
+QWEN35_CANONICALIZE_ADAPTER="${PWD}/results/blackbox/qwen9b_qwen397_tvg_binary_softonly_varied_smoke_v1/adapter" \
+QWEN35_CANONICALIZATION_WORK_DIR="${PWD}/results/blackbox/qwen9b_qwen397_tvg_binary_softonly_varied_smoke_v1/peft_path_migration" \
+  sbatch --export=ALL,QWEN35_CANONICALIZE_ADAPTER,QWEN35_CANONICALIZATION_WORK_DIR \
+  experiments/privileged_information_distillation/run_student_sft.sh \
+  --config-name pid_qwen397_tvg_binary_soft_distillation_v1 \
+  method=qwen9b_qwen397_tvg_binary_softonly_varied_smoke_v1 \
+  student.train_limit=32 student.training.max_steps=1
+```
+
+The migration verifies tensor equality after inserting `language_model` into
+every saved decoder key and records the source and converted hashes. The
+evaluator independently rejects legacy text-only keys before starting vLLM.
+A base-versus-adapter score fingerprint remains mandatory before deployment.
+
 Restrict an ablation to cached varied-deception targets without regenerating
 teacher traces:
 
@@ -674,6 +694,73 @@ results/blackbox/qwen35_397b_fp8_nothink_truth_value_binary_logit_v1/
 
 Pull that directory before terminating the instance. The model checkpoint is
 not part of the result bundle.
+
+After the verified cache is local, submit the matched pure-boundary student and
+its dependent direct-margin validation run with:
+
+```bash
+bash experiments/privileged_information_distillation/submit_qwen397_tvg_soft_distillation.sh
+```
+
+The launcher checks the transferred hashes and requires exactly 2,880 rows in
+each JSONL artifact before scheduling the frozen one-epoch Qwen3.5-9B student.
+The locked training runtime uses the documented text-only
+`AutoModelForCausalLM` fallback, then tensor-exactly migrates all saved PEFT
+keys under `model.language_model.layers.*` before the job can succeed.
+Training logs the resolved model class, LoRA dtype, and first trainable key;
+evaluation rejects legacy keys and requires a matched base-versus-adapter
+vLLM fingerprint.
+
+Publish the completed canonical adapter for Phoenix 6.3 with:
+
+```bash
+.venv/bin/python \
+  experiments/privileged_information_distillation/upload_qwen397_tvg_adapter.py
+```
+
+The uploader verifies the rank, alpha, base model, visual exclusion, all 256
+canonical tensor paths, float32 tensor dtype, authenticated account, and remote
+LFS SHA-256.
+
+To optimize the pure Qwen-397B binary-soft student on a persistent single-GPU
+Lambda H100, push the frozen teacher cache and `dev_splits/`, then run:
+
+```bash
+bash experiments/privileged_information_distillation/run_qwen397_distillation_speed_benchmark_lambda.sh
+bash experiments/privileged_information_distillation/run_qwen397_distillation_hparam_sweep_lambda.sh
+```
+
+The speed benchmark holds effective batch size 32 fixed while comparing
+microbatches `2/4/8/16/32`, then tests `torch.compile` on the fastest eager
+microbatch. On the Lambda SXM5 H100, eager batch 16 was the fallback-kernel
+winner at 4.279 samples/s; batch 32 was slower and reached roughly 80.98 GB.
+Trainer-level compilation spent 5m22s without completing its first step, so it
+is disabled for the short sweep runs. The larger gain came from Qwen's FLA
+path: isolated pinned FLA 0.5.2 packages reached 8.811 samples/s at warm-cache
+batch 8 and 8.791 at batch 16. The sweep therefore uses batch 8 with
+accumulation 4 for equivalent effective batch 32, more HBM headroom, and no
+measurable throughput loss. Its Lambda launcher installs the two pinned
+pure-Python/Triton packages under `/tmp/q397-fla` without mutating `.venv`;
+`causal-conv1d` remains unavailable, but Qwen resolves the gated-delta rule to
+FLA rather than the slow Torch fallback.
+
+The first stage crosses rank-16 learning rates `1e-5`, `2e-5`, `5e-5`, and
+`1e-4` with `0.5`, `1`, and `2` epochs. Shared-session direct-margin validation
+selects the rank-16 winner. Rank 24 then evaluates all three epoch lengths at
+the winning learning rate and every learning rate at the winning epoch. Every
+adapter is migrated to canonical Qwen3.5 PEFT paths and must pass a matched
+base-versus-LoRA effect fingerprint. Summaries are written under
+`results/blackbox/qwen397_soft_distillation_hparam_sweep_v1/`.
+
+The completed Lambda sweep selected the rank-16, alpha-32, `5e-5`, two-epoch
+arm at `0.95393` validation macro AUROC (`0.99833` instructed, `0.89472`
+varied). The best rank-24 arm used `2e-5` for two epochs and scored `0.95369`,
+so rank 24 is not promoted. The winner has 665 unique scores over 822 rows,
+zero missing direct margins, and a passing base-versus-LoRA fingerprint. Its
+canonical adapter and validation artifacts are under
+`results/blackbox/qwen9b_qwen397_tvg_soft_r16_lr5e5_ep2_v1/`; see the findings
+document for the full response surface and per-dataset AUROC table. This was a
+validation-only selection and does not authorize test-set retuning.
 
 The matched AUROC-loss ablation keeps reasoning-summary supervision while
 optionally adding direct binary CE and within-dataset pairwise logistic loss:

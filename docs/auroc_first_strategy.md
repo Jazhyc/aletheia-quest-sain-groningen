@@ -194,6 +194,73 @@ dataset/source-family holdouts before it is promoted.
 5. Only after the direct path works through NDIF, evaluate continuous
    multi-prompt or specialist blends.
 
+### Verbalizer check
+
+A later matched base-`Qwen/Qwen3.5-9B` NDIF sweep held the Phoenix 4.0
+renderer and optimized direct-logit path fixed while comparing output
+contracts. Frozen `0/1` scored `0.94518` validation macro AUROC. Explicitly
+stating `0 = not deceptive, 1 = deceptive` raised this to `0.94732`, but its
+paired within-dataset bootstrap interval for the `+0.00214` delta crossed zero.
+`No/Yes` reached `0.94601`; `False/True`, `honest/deceptive`, neutral `A/B`,
+and expected `1--7` ratings all lost. The rating arm produced 820 unique scores
+without improving AUROC.
+
+Thus `0/1` remains the selected verbalizer pair. For a future teacher-cache
+regeneration, test the explicit digit semantics as a matched teacher/student
+prompt ablation; do not substitute semantic words or ratings merely to obtain
+more unique scores.
+
+An inference-only transfer check on the already-trained Phoenix v6.3 adapter
+rejected even that small wording change. Under a paired NDIF run, the exact
+trained prompt scored `0.94970` validation macro AUROC and the explicit digit
+clause scored `0.94637`, a `-0.00333` delta with unit wins/ties/losses
+`2/10/9`. The paired bootstrap interval was `[-0.00762, +0.00030]`. Preserve
+v6.3's exact prompt; if the clause is revisited, regenerate the teacher cache
+and train a matched student instead of changing inference alone.
+
+A subsequent OpenRouter teacher check supplied that missing precondition. On
+the same 822 validation rows, the explicit clause changed Qwen3.5-27B macro
+AUROC only from `0.95875` to `0.95917` (`+0.00042`, paired interval
+`[-0.00321, +0.00417]`). Qwen3.5-397B improved from `0.96310` to `0.96679`
+(`+0.00369`), concentrated on varied units (`0.91639` to `0.92444`), although
+its paired interval also narrowly crossed zero (`[-0.00060, +0.00833]`).
+Both comparisons used Alibaba-only OpenRouter terminal-label logits and had
+zero missing labels.
+
+This did not warrant another 27B cache. The matched 397B experiment regenerated
+all 2,880 varied training logits through regular Qwen3.5-397B on
+OpenRouter/Alibaba and trained a fresh one-epoch student with the explicit
+contract. It scored `0.94970` validation macro AUROC (`0.99500` instructed,
+`0.88931` varied), versus `0.95048` for the FP8-cache frozen-prompt student.
+The `-0.00077` paired delta had a 20,000-draw interval of
+`[-0.00685, +0.00506]`.
+
+Thus matched retraining recovered the inference-only prompt regression but did
+not improve validation ranking. The user explicitly authorized a frozen
+local-test transfer probe because instructed deception is nearly saturated and
+private data may place more weight on varied/OOD behavior. Job `30344308`
+scored `0.96030` macro AUROC (`0.99563` instructed, `0.91319` varied), narrowly
+above Phoenix 4.4's `0.95982` (`0.99073`, `0.91861`).
+
+That `+0.00048` macro gain is instructed-driven: the new student loses
+`0.00542` on varied deception, and its dataset-unit wins/ties/losses are
+`5/6/10`. A 20,000-draw paired within-dataset label-stratified bootstrap
+interval is `[-0.00935, +0.01083]`. Treat the adapter as a credible
+private-transfer probe with much higher score resolution (`636` versus `79`
+unique test scores), not as an established Phoenix 4.4 replacement or evidence
+for the varied/OOD hypothesis. Phoenix 4.4 wins any scenario-weighted average
+where varied units receive more than `47.47%` effective weight.
+
+A matched validation reason-then-score follow-up rejected spending generation
+on this direct-only student. Under the explicit summary prompt, two greedy vLLM
+runs scored `0.93881` and `0.94131` post-reasoning macro AUROC, versus
+same-session direct scores of `0.94964` and `0.94774`. The loss was concentrated
+in varied deception: the precision rerun fell `0.88458 -> 0.86972`, while
+instructed was effectively flat (`0.99510 -> 0.99500`). Post-reasoning produced
+814 unique persisted scores but still ranked worse. Keep the direct
+`Prediction:` boundary; do not promote reasoning from its better secondary BA
+or run a local-test confirmation.
+
 ## Phoenix Wright 4.0 deployment
 
 Phoenix Wright 4.0 originally implemented the selected path; its sole-notebook
@@ -269,6 +336,31 @@ unchanged. The secondary binary threshold is the matched `0.5`; the continuous
 margin remains primary. Corrected NDIF validation scored this adapter at
 `0.95375` macro AUROC under the binary prompt. Phoenix 6.2 remains black-box
 and must be submitted with `--tag black`.
+
+Phoenix 6.3 replaces only 6.2's ordinary Qwen3.5-27B soft student with
+`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2`, trained from the
+matched Qwen3.5-397B-A17B-FP8 boundary cache with the validation-selected
+rank-16/alpha-32, AdamW `5e-5`, two-epoch recipe. The exact original
+binary-only rubric, Phoenix 4.0 structural renderer, direct literal `0|1`
+scoring, `48/32/16` batching, threshold `0.5`, and all specialist routes are
+unchanged. Local vLLM validation scored `0.95393` macro AUROC (`0.99833`
+instructed, `0.89472` varied), with 665 unique scores over 822 rows. A
+same-session base/adapter fingerprint found only 4 exact score matches and mean
+absolute difference `0.10250`, confirming that the canonical adapter was
+active. Phoenix 6.3 remains black-box; submit it with `--tag black`.
+The public adapter revision is
+`11cd26e44b77cf86064ed2246504952681d25695`; its remote LFS SHA-256 matches
+the locally validated canonical weights,
+`da32c67a2ea0d9834fb90b93dac84a9ee68f05b2a2023b8ea272704fdb58c40d`.
+
+Its first frozen local-test evaluation used the matched vLLM original-prompt
+`Prediction:` readout and scored `0.95869` macro AUROC (`0.99542` instructed,
+`0.90972` varied), with `774/821` unique scores. Threshold-0.5 balanced
+accuracy was `0.88690`, recall `0.82381`, and FPR `0.05000`. This is `0.00113`
+below Phoenix 4.4's `0.95982` test macro AUROC, so the test result confirms
+strong transfer but not a clear local superiority claim. Retain the
+validation-selected adapter and do not tune the prompt, readout, or threshold
+on this test vector.
 
 An NDIF run on all 400 rows of
 `dev-varied-deception-Qwen3.5-27B-None` completed at batch 32 in `102.1s`,
@@ -558,6 +650,29 @@ The exact main adapter is published at
 `fa52f5e7f6a36d7d06e6718c65bd00fd4d11658f`. Its weight SHA-256 is
 `da83f294a248a97ddf07ff7a458280f0990dea329e61fc5e2aec8faec8c61d17`.
 
+## Optimized Qwen-397B GRPO continuation rejection
+
+Phoenix 6.3's optimized two-epoch Qwen-397B soft-distilled adapter was used as
+the exact initialization for a one-epoch varied-only reasoning-GRPO
+continuation. Training received no source `assistant_reasoning`; the model was
+explicitly instructed to produce its own concise `<reasoning>` analysis before
+the binary prediction. Promotion evaluation returned to the exact original
+Phoenix binary-only prompt and scored direct literal `0|1` logits, so no
+reasoning generation was required at inference.
+
+On the matched vLLM backend, the frozen SFT reference scored `0.95369` validation
+macro AUROC (`0.99792` instructed, `0.89472` varied). The one-epoch GRPO adapter
+fell to `0.94500` (`0.99385` instructed, `0.87986` varied), with balanced
+accuracy `0.88452`, recall `0.83333`, FPR `0.06429`, and only `582/822` unique
+scores. The SFT reference had `768/822` unique scores. The regression is present
+on both scenarios and is largest on the varied units used for GRPO.
+
+Training completed cleanly in `2863.9s` on the Lambda H100 and learned shorter,
+well-formatted reasoning, but that does not compensate for the ranking loss.
+Per the conditional tuning plan, do not launch the learning-rate/epoch sweep,
+spend a local-test evaluation, upload this checkpoint, or replace the Phoenix
+6.3 adapter. The optimized SFT adapter and original prompt remain selected.
+
 ## Phoenix Wright 5.2.1 Luna post-reasoning OOD probe
 
 Phoenix 5.2.1 keeps the exact 5.2 adapter, renderer, and mutually exclusive
@@ -582,3 +697,134 @@ threshold is validation-selected at `0.38`; it does not affect AUROC. A direct
 one-row competition-NDIF notebook smoke completed successfully and emitted a
 continuous score of `0.00109873`. Phoenix 5.2.1 remains black-box and must be
 submitted with `--tag black`.
+
+## NDIF padding-free packing rejection
+
+A 2026-07-28 deployment experiment tested padding-free inference for the
+Phoenix 6.2 direct margin. Qwen3.5 packing was constructed with the documented
+complete hybrid boundary contract: reset `position_ids`, FlashAttention
+`cu_seq_lens_q/k`, causal-convolution `seq_idx`, no `attention_mask`, and a
+tensor `logits_to_keep` selecting only each prompt's final position.
+
+On a 96-row competition-NDIF smoke, packing reduced two padded traces
+(`48x260`, `48x351`) to one 25,079-token trace and moved wall time from `8.37s`
+to `7.72s`. It failed the required parity gate: only 2/96 scores agreed within
+`1e-5`, mean absolute drift was `0.12111`, maximum drift was `0.52512`, and
+macro AUROC moved from `0.99524` to `0.97619`. This is not ordinary
+batch-shape noise; it is consistent with incomplete packed-boundary isolation
+in the hosted hybrid Qwen3.5 path.
+
+Do not deploy packing on the current NDIF backend or interpret the small
+runtime gain as usable. Preserve length-sorted, left-padded `48/32/16`
+inference. Revisit only after the hosted deployment explicitly supports packed
+Qwen3.5 Gated DeltaNet and causal-convolution boundaries, then repeat the
+score-parity gate before benchmarking speed.
+
+## NDIF batch-scheduling follow-up
+
+A full 822-row validation sweep on 2026-07-28 tested whether the Phoenix 6.2
+direct-margin path benefits from wider short batches or from replacing the
+`48/32/16` tiers with dynamic padded-token batching. The dynamic scheduler
+greedily selected the largest length-sorted batch under both a row cap and a
+28,800 padded-token budget. The row cap remains necessary even though this is
+prefill-only inference: Qwen3.5's Gated DeltaNet has batch-shaped recurrent
+state, and the earlier batch-64 OOM shows that padded tokens alone are not a
+safe memory proxy.
+
+The frozen `48/32/16` reference took `22.163s` in 18 traces. Fixed short widths
+52 and 56 took `20.747s` and `20.952s`, gains of only `6.8%` and `5.8%`.
+Dynamic row caps 48 and 56 took `22.440s` and `21.266s` in 18 and 16 traces.
+The dynamic-56 arm therefore gained only `4.2%` over the reference and was
+slightly slower than fixed 56. Macro AUROC ranged from `0.95238` to `0.95387`
+across arms versus `0.95375` for the reference, consistent with the known
+batch-shape sensitivity rather than exact score invariance.
+
+Dynamic dual-cap batching works, but the current tiers already approximate it
+well on the observed length distribution. Keep `48/32/16` in the submission:
+the one-off 4--7% timing differences are not a compelling promotion. If future
+private-structure-equivalent testing revisits the scheduler, constrain both
+rows and padded tokens rather than dynamically sizing on token count alone.
+
+## Phoenix 6.3 specialist-necessity benchmark
+
+A frozen NDIF benchmark tested whether Phoenix 6.3's optimized Qwen-397B
+soft-distilled adapter still needs separate action, HP-KR, harm-choice, and
+intent models. It used direct normalized literal `0|1` logits,
+`logits_to_keep=1`, length-aware `48/32/16` batches, and the deployment
+2,048-token left-truncation rule. Action, HP-KR, and Harm Pressure Choice each
+used 200 balanced public Liars' Bench rows with deterministic 100/100
+development/confirmation halves.
+
+The optimized adapter with the action prompt and empty reasoning-summary
+scaffold scored `0.80725` AUROC (`0.78220/0.82880` by half), versus `0.55705`
+(`0.48020/0.64460`) for the notebook's current legacy-v2 action adapter and
+`0.52775` for optimized ordinary direct scoring. It improved every source
+family over the legacy adapter. This is consistent with P86's earlier
+`0.7974/0.8148` action result: P86 used the historical privileged-distillation
+checkpoint, not the legacy remote-v2 checkpoint now configured as the action
+adapter. Keep the action router and empty-scaffold action prompt, but use the
+optimized main adapter; the separate action checkpoint/session is unnecessary.
+
+On HP-KR, optimized ordinary direct scoring reached `0.88075`. The frozen
+base-Qwen epistemic route reached `0.92570` (`0.89800/0.95220`), while the same
+epistemic empty-scaffold prompt on the optimized adapter reached **`0.93935`**
+(`0.91880/0.95880`) and improved all three source families. Keep the semantic
+HP-KR router and prompt, but it no longer requires the no-PEFT base session.
+The notebook variable `harm_routes` refers to this HP-KR route; it is not Harm
+Pressure Choice.
+
+On actual Harm Pressure Choice, optimized ordinary direct scoring won at
+`0.77325` (`0.79620/0.75080`). The matched Q397 harm prompt reached `0.75785`
+and base Qwen reached `0.62690`, both using the empty scaffold. Do not add a
+harm-choice specialist from this evidence.
+
+The intent study covered all 360 reasoning-bearing varied rows on both
+validation and test. It retained the final 4,000 reasoning characters; this
+character cap affected 99 validation and 112 test rows, while no complete
+prompt exceeded 2,048 tokens. Macro AUROC was:
+
+| intent condition | validation | test |
+| --- | ---: | ---: |
+| optimized Q397, output only | `0.89500` | `0.91111` |
+| optimized Q397, reasoning visible | `0.89639` | `0.92069` |
+| current rank-1 member alone | `0.88347` | `0.88611` |
+| output-only Q397 + rank-1 log-odds blend | `0.89750` | **`0.92778`** |
+| reasoning-visible Q397 + rank-1 blend | **`0.90333`** | `0.91833` |
+
+Reasoning visibility therefore helps the optimized judge (`+0.00139`
+validation, `+0.00958` test). The rank-1 adapter remains useful but not
+decisive: the frozen current blend narrowly beats reasoning-only Q397 on
+validation and by `0.00708` on test. Retain the current intent blend for now.
+Do not promote the validation-leading reasoning-plus-rank1 arm because it
+regressed below both the current blend and reasoning-only Q397 on frozen test.
+Full provenance, prompt hashes, tie counts, and per-unit/source metrics are in
+`results/blackbox/specialist_necessity_ndif_v1/report.json`.
+
+## Phoenix Wright 7.0 deployment
+
+Phoenix 7.0 implements the specialist-necessity result without changing any
+selected prompt or blend. Ordinary, HP-KR, and action-report rows all use
+`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2`. Ordinary rows retain
+the byte-exact Phoenix 4.0 structural renderer and direct `Prediction:`
+boundary; HP-KR and action rows retain their frozen prompts and empty
+`<reasoning_summary>` scaffolds.
+
+All three primary prompt types are length-sorted together and scored in one
+Q397 model/session pass. This removes the separate base-Qwen HP-KR load and
+legacy-v2 action-adapter load. Eligible trace-bearing ordinary rows still use
+the frozen rank-1 resolved-intent adapter in a second pass, combined with their
+unblended Q397 ordinary score by the established mean log-odds rule. HP-KR,
+action, and intent precedence remains mutually exclusive. The required binary
+column continues to threshold the unblended primary score at `0.5`.
+
+Preserve `48/32/16` batching, the 2,048-token left-truncation rule,
+`logits_to_keep=1`, literal `0|1` normalization, and black-box submission tag.
+Do not add the rejected Harm Pressure Choice prompt or expose source reasoning
+to the Q397 primary judge in this version.
+
+A four-row trace-bearing end-to-end dry rehearsal passed on 2026-07-29 in
+`1m27s`. It exercised the consolidated Q397 pass and the retained rank-1
+intent pass, packaged 783 files at 130.3 MB, and produced a contract-valid
+submission. The four-row smoke was one-class, so its AUROC and balanced
+accuracy are intentionally undefined; it is execution evidence, not a method
+evaluation.

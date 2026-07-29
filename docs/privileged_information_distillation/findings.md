@@ -370,6 +370,188 @@ that required a retry. Artifacts are under
 OpenRouter remains development/training infrastructure only; external API calls
 are not permitted in the submitted detector.
 
+#### Explicit binary-label semantics follow-up (2026-07-29)
+
+A validation-only prompt ablation added exactly
+`Use 0 for not deceptive and 1 for deceptive.` before the existing output
+contract. It otherwise preserved the 3,000-character tail renderer, terminal
+generated-label logprob readout, temperature zero, disabled reasoning,
+top-five label lookup, and Alibaba-only OpenRouter routing with fallback
+disabled. Qwen3.5-27B was run under both prompts; the complete 2026-07-27
+Qwen3.5-397B frozen run supplied the exact model/provider/config baseline for
+the new clarified arm.
+
+| teacher | prompt | macro AUROC | instructed | varied | BA at 0.5 | unique scores |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Qwen3.5-27B | frozen | `0.95875` | `0.99917` | `0.90486` | `0.91548` | `772/822` |
+| Qwen3.5-27B | explicit digits | `0.95917` | `0.99917` | `0.90583` | `0.90952` | `782/822` |
+| Qwen3.5-397B-A17B | frozen | `0.96310` | `0.99812` | `0.91639` | `0.91786` | `811/822` |
+| Qwen3.5-397B-A17B | explicit digits | **`0.96679`** | **`0.99854`** | **`0.92444`** | **`0.92143`** | **`814/822`** |
+
+The 27B change was only `+0.00042` macro AUROC, with a 20,000-draw paired
+within-dataset label-stratified bootstrap interval of
+`[-0.00321, +0.00417]`. It changed unit AUROC on only the nine varied units
+and split them evenly: four gains, one tie, and four losses.
+
+The 397B change was more promising: `+0.00369` macro AUROC and `+0.00806`
+varied AUROC, with unit wins/ties/losses `7/12/2`. Its corresponding bootstrap
+interval was `[-0.00060, +0.00833]`, so the aggregate gain still narrowly
+crosses zero and is not a promotion result by itself. All four arms covered
+822 rows through Alibaba with zero missing label logits. The three newly
+executed arms cost `$0.2164` in total.
+
+Do not regenerate the 27B cache from this negligible result. The 397B result
+is sufficient to justify one matched cache-and-student ablation, but not an
+inference-only prompt edit to Phoenix 6.3. That experiment must rescore all
+2,880 training rows with the clarified prompt and train a fresh student;
+the current frozen targets cannot inherit the teacher's changed logits.
+Because the existing training cache came from the FP8 Lambda checkpoint rather
+than OpenRouter, record that backend as part of the ablation and do not claim
+the OpenRouter delta transfers exactly before the cache is evaluated.
+
+The selected regular-model cache then completed through OpenRouter as
+`qwen35_397b_openrouter_nothink_tvg_binary_logit_explicit_digits_v1`.
+All 2,880 varied-deception training rows were served by Alibaba as
+`qwen/qwen3.5-397b-a17b`, with fallback disabled, zero retries, and zero missing
+binary labels. The run consumed 1,162,601 prompt tokens and 8,640 completion
+tokens, cost `$0.46890`, and took 448.8 seconds at concurrency eight. It
+produced 2,761 unique scores and reached descriptive train macro AUROC
+`0.92040`; training labels were not used to generate, filter, or normalize the
+identity soft targets.
+
+The regular-OpenRouter and historical FP8-Lambda target vectors had Pearson
+correlation `0.99175`, Spearman correlation `0.98780`, and mean absolute
+difference `0.01742`; 41/2,880 rows crossed 0.5. OpenRouter improved descriptive
+train macro AUROC by only `0.00062`, so this is a modest teacher redistribution
+rather than a wholesale replacement. The comparison remains jointly confounded
+by provider backend/precision and the explicit prompt clause.
+
+The cache builder verified 2,880 aligned rows in each of `generations.jsonl`,
+`soft_targets.jsonl`, and `student_rows.jsonl`. A byte-level audit additionally
+requires every reconstructed student prompt SHA-256 to equal the prompt hash
+sent to OpenRouter. This caught and fixed YAML folded-scalar whitespace before
+training; the selected config uses a literal prompt block. The immutable
+artifacts are covered by `SHA256SUMS`.
+
+Matched one-epoch student job `30343909` completed in 14m51s with train loss
+`3.919`; dependent direct-margin validation job `30343910` completed in 2m38s.
+The adapter weight SHA-256 is
+`514aa512b1112d6a30b5e0e5e880d227676fb1fff51317dd04b6d9965c70b82e`.
+The direct margin had zero missing labels and the base-versus-LoRA fingerprint
+passed.
+
+| student | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| FP8-Lambda 397B targets, frozen prompt | **`0.95048`** | **`0.99813`** | `0.88694` | **`0.90476`** | **`0.85714`** | `0.04762` | **`662/822`** |
+| regular-OpenRouter 397B targets, explicit prompt | `0.94970` | `0.99500` | **`0.88931`** | `0.89643` | `0.83571` | **`0.04286`** | `660/822` |
+| Phoenix 4.4 GRPO reference | **`0.95137`** | `0.99656` | **`0.89111`** | `0.89643` | `0.84524` | `0.05238` | `79/822` |
+
+Relative to the historical FP8 student, the new student changed macro AUROC by
+`-0.00077`: instructed fell `0.00313`, while varied improved `0.00236`.
+Dataset-unit wins/ties/losses were `6/9/6`. A 20,000-draw paired,
+within-dataset label-stratified bootstrap interval was
+`[-0.00685, +0.00506]`. The two score vectors had Pearson correlation
+`0.99353`, Spearman correlation `0.98390`, and mean absolute difference
+`0.02624`; 18 rows crossed 0.5. The new scores were more saturated, with 392
+outside `[0.01, 0.99]` versus 277 for the FP8 student, without gaining score
+resolution.
+
+The frozen validation-only rule did not select the regular-OpenRouter/explicit
+student: it beat neither the historical FP8 soft student nor Phoenix 4.4 on
+validation macro AUROC. The user nevertheless authorized a local-test transfer
+probe because instructed deception is nearly saturated and private leaderboard
+data may contain more varied/OOD response modes. This remains a joint
+provider/backend/precision and prompt ablation, not a pure prompt-only result.
+
+Frozen local-test job `30344308` completed on one A100 in 10m35s, including a
+255-second cold vLLM startup. The direct `Prediction:` margin covered all 821
+rows with zero missing label logits; the one-token generated-output diagnostic
+was intentionally invalid and is not reported.
+
+| test student | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| regular-OpenRouter 397B targets, explicit prompt | **`0.96030`** | **`0.99563`** | `0.91319` | `0.88333` | `0.82857` | `0.06190` | **`636/821`** |
+| Phoenix 4.4 GRPO reference | `0.95982` | `0.99073` | **`0.91861`** | **`0.88690`** | `0.82857` | **`0.05476`** | `79/821` |
+
+The new student is the narrow macro winner by `+0.00048`, but that difference
+comes from instructed AUROC (`+0.00490`); it loses varied AUROC by `0.00542`.
+Dataset-unit wins/ties/losses are `5/6/10`, and a fixed-seed 20,000-draw
+paired within-dataset label-stratified bootstrap interval is
+`[-0.00935, +0.01083]`. Phoenix 4.4 is preferred if varied units receive more
+than `47.47%` effective weight, compared with `42.86%` in the current 12/9
+macro. The test therefore makes the adapter a credible private-transfer probe,
+but does not establish the hypothesized varied/OOD advantage over Phoenix 4.4
+or justify declaring either model the robust winner. No matched historical FP8
+student test artifact exists for a direct test-split comparison.
+
+#### Regular-397B student post-reasoning validation (2026-07-29)
+
+The direct-only student was also tested under a counterfactual reasoning
+contract. The inference prompt preserved the clarified rubric and literal
+digit semantics, but requested a concise `<reasoning_summary>` before
+`Prediction:`. Greedy temperature-zero generation used a 512-token allowance
+with native thinking disabled; scoring removed only the final generated digit
+and read the normalized `0|1` logits at that position. A fresh direct boundary
+under the same summary prompt separated the prompt change from conditioning on
+the generated summary.
+
+| validation boundary | macro AUROC | instructed | varied | BA at 0.5 | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| training-prompt direct, prior frozen job | **`0.94970`** | `0.99500` | **`0.88931`** | `0.89643` | `660/822` |
+| summary-prompt direct, precision rerun | `0.94774` | **`0.99510`** | `0.88458` | `0.88214` | `436/822` |
+| summary-prompt post-reasoning, precision rerun | `0.94131` | `0.99500` | `0.86972` | **`0.91786`** | **`814/822`** |
+| generated binary | `0.91667` | `0.98750` | `0.82222` | `0.91667` | `2/822` |
+
+The post-reasoning condition loses `0.00643` macro AUROC against its
+same-session summary-prompt direct boundary and `0.00839` against the prior
+training-prompt direct result. Its same-session instructed change is
+`-0.00010`, while varied falls `0.01486`. It improves/ties/loses `8/6/7`
+dataset units; a fixed-seed 20,000-draw paired within-dataset
+label-stratified bootstrap interval is `[-0.02012, +0.00667]`. The higher
+fixed-threshold BA and near-unique score vector do not compensate for the
+primary ranking loss.
+
+| precision-rerun validation unit | direct | post-reasoning | delta |
+| --- | ---: | ---: | ---: |
+| instructed Nemotron base | `1.00000` | `1.00000` | `+0.00000` |
+| instructed Qwen base | `1.00000` | `1.00000` | `+0.00000` |
+| instructed Qwen a-mo-1 | `0.96750` | `0.98000` | `+0.01250` |
+| instructed Qwen a-mo-3 | `1.00000` | `1.00000` | `+0.00000` |
+| instructed Qwen a-mo-4 | `0.99750` | `1.00000` | `+0.00250` |
+| instructed Qwen a-mo-5 | `0.99125` | `1.00000` | `+0.00875` |
+| instructed Qwen a-mo-6 | `0.99000` | `1.00000` | `+0.01000` |
+| instructed Qwen a-mo-7 | `1.00000` | `0.98750` | `-0.01250` |
+| instructed Qwen b-mo | `1.00000` | `1.00000` | `+0.00000` |
+| instructed Qwen c-mo | `1.00000` | `1.00000` | `+0.00000` |
+| instructed Gemma base | `1.00000` | `1.00000` | `+0.00000` |
+| instructed Gemma s-mo | `0.99500` | `0.97250` | `-0.02250` |
+| varied Qwen base | `0.98625` | `0.97250` | `-0.01375` |
+| varied Qwen a-mo-1 | `0.88375` | `0.78500` | `-0.09875` |
+| varied Qwen a-mo-3 | `0.68625` | `0.72750` | `+0.04125` |
+| varied Qwen a-mo-4 | `0.82625` | `0.84000` | `+0.01375` |
+| varied Qwen a-mo-5 | `0.97750` | `0.98000` | `+0.00250` |
+| varied Qwen a-mo-6 | `0.87125` | `0.84500` | `-0.02625` |
+| varied Qwen a-mo-7 | `0.84250` | `0.75250` | `-0.09000` |
+| varied Qwen b-mo | `0.95000` | `0.99500` | `+0.04500` |
+| varied Qwen c-mo | `0.93750` | `0.93000` | `-0.00750` |
+
+Greedy vLLM inference was not bit-stable across the two matched RTX runs.
+Initial job `30344537` scored `0.94964` direct and `0.93881` post-reasoning;
+precision rerun `30344571` scored `0.94774` and `0.94131`. The conclusion is
+stable across this `0.00643`--`0.01083` same-session loss range. The precision
+run generated a median 82 tokens, produced 818/822 exact-format completions,
+used the declared `Prediction:` fallback after four 512-token caps, and had
+zero missing label logits. Generation took 30.9 seconds, followed by 14.9
+seconds direct and 18.4 seconds post-reasoning scoring. Continuous evaluation
+artifacts now serialize 15 decimal places so saturated probabilities retain
+submission-grade rank resolution.
+
+Keep direct scoring and do not spend another local-test evaluation on this
+post-reasoning condition. Reproducible configuration and launcher:
+
+- `configs/pid_qwen397_openrouter_explicit_post_reasoning_eval_v1.yaml`
+- `experiments/privileged_information_distillation/submit_qwen397_openrouter_explicit_post_reasoning.sh`
+
 The frozen local-test follow-up confirmed the 397B result and rejected 122B as
 a scale/efficiency compromise:
 
@@ -3213,6 +3395,441 @@ The separate Qwen3.5-27B thinking diagnostic, job `30310441`, also confirms
 that teacher reasoning is unnecessary. Post-reasoning label margins reached
 `0.95571` macro AUROC (`0.99792` instructed, `0.89944` varied), slightly below
 direct no-thinking `0.95744`, while scoring took `723.3s` instead of `38.2s`.
+
+## Pure Qwen-397B FP8 TVG binary soft distillation (2026-07-28)
+
+Jobs `30342480`--`30342481` repeated the frozen Qwen-27B soft-only recipe with
+the completed 2,880-row `Qwen/Qwen3.5-397B-A17B-FP8` Lambda cache. The recipe
+remained a fresh rank-16/alpha-32 Qwen3.5-9B LoRA, varied-only data, one epoch,
+AdamW `5e-5`, effective batch size 32, and binary soft-target BCE only. There
+was no hard-label, completion, pairwise, or reasoning-summary loss.
+
+The teacher checkpoint stored FP8 weights and ran with BF16 activations. vLLM
+returned float32 log-probabilities; Python normalized and serialized them at
+float64 JSON precision. Training loaded float32 targets, used a BF16 frozen
+student base, and retained all 256 trainable LoRA tensors and AdamW state in
+float32. The binary margin and BCE were explicitly evaluated in float32.
+
+The locked Transformers environment cannot efficiently train the canonical
+multimodal Qwen3.5 class, so this run used the documented text-only
+`Qwen3_5ForCausalLM` fallback. The same Slurm job then inserted
+`language_model` into all 256 saved tensor paths and verified every tensor
+payload after serialization. The migration manifest records the pre/post file
+hashes. Evaluation refused legacy paths before vLLM startup.
+
+Training completed 90 optimizer steps in `884.0s` with reported train loss
+`4.114`; the complete job took `15m07s`. The direct-margin validation pass had
+zero missing scores. As with the Qwen-27B run, the intentionally one-token
+generated-output path made all 822 generated strings unparseable; only
+`score_metrics.direct_margin` is meaningful.
+
+| adapter | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen-397B FP8 soft student | `0.95048` | `0.99813` | `0.88694` | `0.90476` | `0.85714` | `0.04762` | `662/822` |
+| Historical Qwen-27B soft student | `0.94625` | `0.99500` | `0.88125` | `0.88810` | `0.83810` | `0.06190` | `544/822` |
+| Phoenix 4.4 GRPO reference | **`0.95137`** | **`0.99656`** | **`0.89111`** | `0.89643` | `0.84524` | `0.05238` | `79/822` |
+
+The 397B student improves the historical 27B soft row by `0.00423` macro
+AUROC and has substantially more score resolution, but remains `0.00090`
+below Phoenix 4.4 on frozen validation. Do not infer that a larger teacher
+guarantees promotion or test/private transfer from this small difference.
+
+| validation dataset unit | AUROC |
+| --- | ---: |
+| `instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-None` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.99250` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.98750` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-None` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-s-mo-gemma-3-27b-it` | `0.99750` |
+| `varied-deception-Qwen3.5-27B-None` | `0.98500` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.84750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.70500` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `0.85000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `0.98000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.90000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.82000` |
+| `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.95500` |
+| `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.94000` |
+
+The mandatory same-session vLLM activation fingerprint also passed. Adapter
+and base float32 score digests differed; only 12/822 scores were exactly equal,
+mean absolute difference was `0.08141`, and maximum absolute difference was
+`0.49463`. This rules out the silent-base failure for this evaluation.
+
+The canonical adapter was promoted as Phoenix 6.3 and published at
+`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16`, revision
+`59a9c57982c8430ff9e8bb64c3e53b8fb775dbc2`. The remote LFS weight digest
+matches the local validated file:
+`fac7b031bf52bc5597ee02a6dec20f355b3c3297bf110d3bb0233f629a69004d`.
+
+## Qwen-397B soft-distillation hyperparameter sweep (2026-07-29)
+
+A Lambda `gpu_1x_h100_sxm5` campaign optimized the frozen Qwen-397B
+identity-probability BCE recipe while keeping the submitted model fixed at
+`Qwen/Qwen3.5-9B`. The rank-16 stage crossed learning rates `1e-5`, `2e-5`,
+`5e-5`, and `1e-4` with `0.5`, `1`, and `2` epochs. After selecting the
+rank-16 response surface, rank 24 tested all epoch lengths at `5e-5` and all
+four learning rates at two epochs. Every arm retained alpha 32, the varied-only
+2,880-row cache, effective batch size 32, and direct normalized literal `0|1`
+validation margins. Selection used only the 822-row validation split; no local
+test evaluation was spent.
+
+| rank | learning rate | 0.5 epoch | 1 epoch | 2 epochs |
+| ---: | ---: | ---: | ---: | ---: |
+| 16 | `1e-5` | `0.94768` | `0.94786` | `0.95107` |
+| 16 | `2e-5` | `0.94798` | `0.94935` | `0.95179` |
+| 16 | `5e-5` | `0.95071` | `0.95006` | **`0.95393`** |
+| 16 | `1e-4` | `0.94673` | `0.94887` | `0.95083` |
+| 24 | `1e-5` | — | — | `0.95131` |
+| 24 | `2e-5` | — | — | **`0.95369`** |
+| 24 | `5e-5` | `0.94887` | `0.94923` | `0.95339` |
+| 24 | `1e-4` | — | — | `0.95256` |
+
+The winner is
+`qwen9b_qwen397_tvg_soft_r16_lr5e5_ep2_v1`: rank 16, alpha 32, AdamW
+`5e-5`, and two epochs. It scored `0.95393` validation macro AUROC,
+`0.99833` instructed AUROC, and `0.89472` varied AUROC. Its secondary
+threshold-0.5 balanced accuracy was `0.90595`, with `0.85238` recall and
+`0.04048` FPR. This is `+0.00345` over the historical one-epoch Qwen-397B
+student (`0.95048`) and `+0.00018` over the corrected Qwen-27B/Phoenix 6.2
+adapter-prompt reference (`0.95375`). The best rank-24 arm, `2e-5` for two
+epochs, reached `0.95369`, losing to rank 16 by `0.00024`; do not promote rank
+24 from this sweep.
+
+The winner retained 665 unique float scores over 822 rows. There were 157
+duplicate-score excess rows and 281 rows participating in a tie, so the output
+is meaningfully continuous but not tie-free. All direct label margins were
+present. The deliberately one-token generation probe did not emit complete
+binary strings and is not an alternate score path. The same-session activation
+fingerprint passed: only 4/822 adapter and base margins were exactly equal and
+their mean absolute difference was `0.10250`.
+
+| validation dataset unit | AUROC |
+| --- | ---: |
+| `instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-None` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.98750` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.99500` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-None` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-s-mo-gemma-3-27b-it` | `0.99750` |
+| `varied-deception-Qwen3.5-27B-None` | `0.98750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.83000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.72250` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `0.86750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `0.98750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.90000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.85500` |
+| `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.96000` |
+| `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.94250` |
+
+The SXM5 throughput study also changed the execution recipe. With effective
+batch size 32, the fallback attention path improved from 1.798 samples/s at
+microbatch 2 to 4.279 samples/s at microbatch 16; microbatch 32 was slower and
+used roughly 80.98 GB. Trainer-level `torch.compile` spent 5m22s without
+finishing its first step and was rejected. Isolated pinned FLA 0.5.2 packages
+instead reached 8.811 samples/s at microbatch 8 and 8.791 at microbatch 16.
+The sweep therefore used microbatch 8 with four-step accumulation, FLA, and no
+Trainer compilation. Full runs stabilized around 9.84--10.44 samples/s while
+leaving materially more HBM headroom than microbatch 32.
+
+The selected canonical adapter file has SHA-256
+`da32c67a2ea0d9834fb90b93dac84a9ee68f05b2a2023b8ea272704fdb58c40d`.
+All 256 tensors use canonical Qwen3.5 PEFT paths and no legacy tensor path
+remains. Retain this rank-16/two-epoch arm as the validation-selected
+Qwen-397B distillation result. Any test or private-leaderboard promotion should
+be a frozen follow-up, not another validation retune.
+
+The same optimized recipe was then applied to the regular-OpenRouter 397B
+explicit-digit cache. It reached `0.95173` validation macro AUROC (`0.99500`
+instructed, `0.89403` varied), improving its matched one-epoch predecessor by
+`0.00202` but losing to the original-prompt optimized adapter by `0.00220`.
+It produced 787 unique scores over 822 rows, 35 duplicate-score excess rows,
+and zero missing margins. Keep it as a completed prompt-transfer ablation; do
+not replace the original-prompt winner.
+
+The original-prompt winner is now the bundled Phoenix 6.3 main adapter and is
+published at
+`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2`, revision
+`11cd26e44b77cf86064ed2246504952681d25695`. The remote LFS SHA-256 equals the
+validated local digest above. The notebook retains its existing filename,
+restores the exact original training rubric, and was not submitted while the
+competition queue remained active.
+
+The user then authorized the first and only frozen local-test evaluation of
+this validation-selected adapter. The matched vLLM path used the exact original
+prompt, excluded source reasoning, and scored normalized literal next-token
+`0|1` logits directly after `Prediction:`. All 821 rows were scored.
+
+| split | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| validation, matched vLLM | `0.95369` | `0.99792` | `0.89472` | `0.90833` | `0.85476` | `0.03810` | `768/822` |
+| frozen local test | **`0.95869`** | `0.99542` | **`0.90972`** | `0.88690` | `0.82381` | `0.05000` | `774/821` |
+
+Test macro AUROC is `+0.00500` over the matched vLLM validation reference
+(`+0.00476` over the canonical `0.95393` result). It is `0.00113` below the
+Phoenix 4.4 GRPO test reference (`0.95982`) and `0.00161` below the separate
+regular-OpenRouter/explicit-prompt student (`0.96030`). The direct 397B teacher
+test ceiling remains higher at `0.9654`; that teacher used the regular
+OpenRouter checkpoint rather than the FP8 cache used to train this student.
+These small cross-method differences do not justify test-set retuning.
+
+The threshold-0.5 metrics above remain the frozen binary diagnostics. A
+test-only threshold sweep peaked at `0.91548` balanced accuracy at
+`0.13296423`, but this is diagnostic and must not replace the validation-frozen
+submission threshold. The test vector has 47 duplicate-score excess rows and
+84 rows participating in ties. One-token scoring took `8.54s`
+(`96.11` rows/s), excluding model startup. The exact preserved predictions CSV
+has SHA-256
+`4323c98bf8a6fa67211d8e3dfcbceaf2fde5d2ec10539a365176973a15b5d1cf`.
+
+| test dataset unit | AUROC |
+| --- | ---: |
+| `instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-None` | `0.99000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.97750` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.99750` |
+| `instructed-deception-gemma-3-27b-it-None` | `0.98000` |
+| `instructed-deception-gemma-3-27b-it-s-mo-gemma-3-27b-it` | `1.00000` |
+| `varied-deception-Qwen3.5-27B-None` | `0.95500` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.85750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.86750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `0.87000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `0.94250` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.97250` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.88250` |
+| `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.89750` |
+| `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.94250` |
+
+Ignored reproducibility artifacts:
+
+- `results/blackbox/qwen9b_qwen397_tvg_soft_r16_lr5e5_ep2_v1/test_vllm_logits/`
+
+## Qwen-397B soft-objective ablation (2026-07-28)
+
+Jobs `30342642`--`30342645` tested whether the pure Qwen-397B soft student lost
+AUROC because its binary teacher probabilities were too saturated. Binary
+soft-target BCE is forward teacher-to-student KL up to the teacher entropy
+constant, so this was an output-geometry ablation rather than a nominal
+BCE-versus-KL comparison.
+
+The frozen 2,880-row teacher cache had label-blind margin mean
+`-2.2910156273` and population standard deviation `6.3133151107`. Its raw
+probabilities spanned `0.0000147--0.999877`; 2,208/2,880 were outside
+`[0.01, 0.99]`. Both new arms transformed the teacher target to
+`(margin - mean) / std`, spanning approximately `-1.399--1.788`. One arm
+applied BCE to the corresponding `0.198--0.857` probability, while the other
+used Smooth L1 margin regression with delta `1.0`. Everything else remained
+matched to the pure soft-only recipe: a fresh rank-16/alpha-32 Qwen3.5-9B
+LoRA, varied-only data, one epoch, AdamW `5e-5`, effective batch size 32, and
+no hard-label, completion, pairwise, or reasoning loss.
+
+Both students completed 90 steps and canonical PEFT migration in 15m48s.
+Standardized BCE reported train loss `9.931`; standardized Huber reported
+`2.351`. These losses are not comparable across objectives. Both validation
+jobs had zero missing direct margins and passed the same-session LoRA-effect
+fingerprint.
+
+| objective | macro AUROC | delta | instructed | varied | BA at 0.5 | recall | FPR | unique scores | cross-label ties |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Identity BCE / forward KL | **`0.950476`** | — | **`0.998125`** | `0.886944` | **`0.904762`** | `0.857143` | **`0.047619`** | **662/822** | **0** |
+| Standardized-target BCE | `0.947381` | `-0.003095` | `0.996667` | `0.881667` | `0.892857` | **`0.885714`** | `0.100000` | 106/822 | 50 |
+| Standardized-margin Huber | `0.949940` | `-0.000536` | `0.995208` | **`0.889583`** | `0.890476` | **`0.885714`** | `0.104762` | 105/822 | 51 |
+
+The transformed arms changed score scale materially but retained broadly
+similar ordering: Spearman correlation with the identity-BCE score was
+`0.9783` for standardized BCE and `0.9744` for Huber. Their compressed target
+range also compressed BF16 student margins, collapsing score resolution and
+introducing cross-label ties where the identity objective had none. Huber's
+small varied gain was offset by a larger instructed loss under the
+21-unit macro average.
+
+| validation dataset unit | identity BCE | standardized BCE | standardized Huber |
+| --- | ---: | ---: | ---: |
+| `instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-None` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | **`0.99250`** | `0.97750` | `0.97375` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | **`1.00000`** | `0.99750` | `0.99625` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.98750` | **`0.99000`** | **`0.99000`** |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-None` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-s-mo-gemma-3-27b-it` | **`0.99750`** | `0.99500` | `0.98250` |
+| `varied-deception-Qwen3.5-27B-None` | **`0.98500`** | `0.97750` | `0.97625` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | **`0.84750`** | `0.82625` | `0.84000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.70500` | `0.73250` | **`0.75125`** |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | **`0.85000`** | `0.83625` | `0.83250` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | **`0.98000`** | `0.95750` | `0.97250` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.90000` | `0.89500` | **`0.91875`** |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.82000` | `0.82625` | **`0.83875`** |
+| `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.95500` | `0.95875` | **`0.96250`** |
+| `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | **`0.94000`** | `0.92500` | `0.91375` |
+
+Decision: retain the identity-probability BCE student used by Phoenix 6.3.
+Neither standardized loss improves validation macro AUROC, and the score-tie
+regression is directly adverse to the continuous leaderboard metric. Do not
+spend a local-test evaluation, replace the published adapter, or select raw
+Huber/temperature variants post hoc from this result.
+
+## Qwen-397B soft-target DataRater filtering (2026-07-29)
+
+The earlier DataRater screen used hard-label meta gradients and
+reasoning-summary completion gradients, so it did not test whether dense
+Qwen-397B feedback makes gradient-based filtering more useful. This follow-up
+used the exact identity-probability BCE objective for both sides: the meta
+gradient and every candidate gradient scored the normalized literal `0|1`
+logits directly against the cached Qwen-397B soft target. Ground-truth labels
+were used only to preserve every dataset/label stratum.
+
+The rank-16 scoring probe covered the attention and MLP projections in the last
+Qwen3.5-9B block, or 1,277,952 trainable parameters. A 36-meta-row,
+72-candidate calibration compared exact per-example gradient dots with
+finite-difference scores. Jobs `30342926`--`30342929` produced:
+
+| finite-difference epsilon | Pearson vs exact | Spearman vs exact | sign agreement | top-half overlap |
+| ---: | ---: | ---: | ---: | ---: |
+| `0.01` | `0.10666` | `0.26482` | `0.23611` | `17/36` |
+| `0.03` | `0.86527` | `0.85120` | `0.80556` | `31/36` |
+| `0.10` | **`0.98666`** | **`0.99183`** | **`1.00000`** | **`34/36`** |
+
+The full scorer therefore froze epsilon `0.10`. Job `30342972` used 144
+dataset/label-stratified meta rows and scored the remaining 2,736 candidates
+in 24m52s. Each 50% manifest contained 1,368 rows, exactly 76 from each of 18
+dataset/label strata. Dot and loss had only weak score correlation (Pearson
+`0.1389`, Spearman `0.2094`) and selected materially different data:
+
+| selection | rows | mean gradient dot | mean soft BCE | positive-dot fraction |
+| --- | ---: | ---: | ---: | ---: |
+| All candidates | 2,736 | `+0.03924` | `0.31895` | `0.6173` |
+| Matched random | 1,368 | `+0.03694` | `0.33579` | `0.6060` |
+| High loss | 1,368 | `+0.06968` | `0.56585` | `0.6235` |
+| Gradient dot | 1,368 | `+0.24447` | `0.38710` | `0.7566` |
+
+Dot/loss shared 856 rows (Jaccard `0.4553`), dot/random shared 690
+(`0.3372`), and loss/random shared 698 (`0.3425`). Thus a negative downstream
+result cannot be attributed to the dot selector degenerating to either
+control.
+
+All students used a fresh rank-16/alpha-32 LoRA, AdamW `5e-5`, effective batch
+size 32, and exactly 90 optimizer steps. The first training jobs
+`30342973`--`30342975` exposed an Inductor `CantSplit` failure in the
+Qwen3.5 hybrid-layer backward graph before optimizer step one. Eager-mode
+one-step smoke `30343584` passed in 11.3s. Frozen reruns `30343636`--`30343638`
+therefore disabled the model's internal Dynamo compilation and completed in
+15m31s, 16m52s, and 15m37s. This changes execution only; the loss, initialization,
+data order, updates, and random control remain matched. Reported train losses
+were `3.890` random, `6.132` high-loss, and `2.481` gradient-dot.
+
+Shared vLLM jobs `30343639` and `30343641` loaded the full-data baseline,
+random, high-loss, and dot adapters in opposite orders. Every one-token
+generated string was intentionally unparseable, while the direct scorer had
+zero missing label margins. The table averages the two adapter positions:
+
+| training data | macro AUROC | delta vs baseline | instructed | varied | BA at 0.5 | recall | FPR | unique scores fwd/rev | within-unit cross-label ties fwd/rev |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Full varied baseline | `0.949673` | — | **`0.998073`** | `0.885139` | `0.903571` | **`0.854762`** | `0.047619` | `658/655` | `3/2` |
+| Random keep 50% | `0.950982` | `+0.001310` | `0.996771` | `0.889931` | `0.901786` | `0.853571` | `0.050000` | `669/673` | `2/0` |
+| High-loss keep 50% | **`0.951845`** | **`+0.002173`** | **`0.998125`** | **`0.890139`** | **`0.907738`** | `0.844048` | `0.028571` | `676/646` | `0/2` |
+| Gradient-dot keep 50% | `0.943363` | `-0.006310` | `0.995313` | `0.874097` | `0.809524` | `0.623810` | **`0.004762`** | `618/632` | `2/1` |
+
+Forward/reverse score Spearman correlations were `0.99954` baseline,
+`0.99952` random, `0.99837` loss, and `0.99918` dot. The corresponding macro
+AUROCs moved by `0.00101`, `0.00054`, `0.00036`, and `0.00101`. The original
+single-session baseline was `0.950476`; its new position average is
+`0.949673`, an additional warning against promoting the high-loss arm's small
+nominal gain.
+
+| validation dataset unit | full baseline | random 50% | high loss 50% | gradient dot 50% |
+| --- | ---: | ---: | ---: | ---: |
+| `instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None` | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-None` | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.99250` | `0.99250` | **`0.99500`** | `0.98875` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | **`1.00000`** | `0.99250` | `0.99750` | `0.99500` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | **`0.98750`** | `0.98000` | **`0.98750`** | `0.96750` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.99937` | **`1.00000`** | **`1.00000`** | **`1.00000`** |
+| `instructed-deception-gemma-3-27b-it-None` | `1.00000` | `1.00000` | `1.00000` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-s-mo-gemma-3-27b-it` | **`0.99750`** | `0.99625` | **`0.99750`** | `0.99250` |
+| `varied-deception-Qwen3.5-27B-None` | **`0.98438`** | `0.97625` | `0.97937` | `0.98063` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.84375` | **`0.87250`** | `0.80000` | `0.78750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.69625` | `0.72375` | **`0.75188`** | `0.72875` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `0.85375` | `0.85000` | **`0.87500`** | `0.84000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | **`0.98000`** | `0.97250` | **`0.98000`** | `0.96500` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.89500` | `0.91000` | `0.90750` | **`0.91875`** |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.82000` | `0.81500` | **`0.83875`** | `0.78500` |
+| `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.95375` | `0.94500` | `0.93875` | **`0.95625`** |
+| `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.93938` | **`0.94500`** | `0.94000` | `0.90500` |
+
+The dot selector's failure is not only threshold calibration. It lowers varied
+AUROC by `0.01104` against the matched baseline. Selection also makes the
+ground-truth-positive soft targets strongly asymmetric: their mean teacher
+probability is `0.7383` under random selection, `0.6625` under high loss, and
+only `0.5205` under gradient-dot selection. The fraction on the correct side
+of 0.5 is respectively `74.85%`, `66.96%`, and `51.17%`; for selected dot
+negatives it is `99.27%`. This concentrates ambiguous or teacher-conflicting
+positive targets, pulling validation positive scores down and cutting recall.
+
+Decision: retain the full identity-BCE student used by Phoenix 6.3. The
+gradient-dot selector is worse than both controls, while high-loss filtering
+misses the frozen `+0.005` validation promotion rule and beats matched random
+by only `0.00086`. Do not spend a local-test evaluation, promote either
+filtered adapter, or extend this screen to other keep fractions. Dense
+feedback does not rescue this initialization-state, last-block DataRater
+approximation on the already curated Qwen-only varied cache.
+
+## Optimized Qwen-397B reasoning-GRPO continuation (2026-07-29)
+
+The validation-selected original-prompt soft student
+`qwen9b_qwen397_tvg_soft_r16_lr5e5_ep2_v1` initialized a new rank-16
+varied-only GRPO run. GRPO received only observable output text and an explicit
+instruction to produce its own concise `<reasoning>...</reasoning>` analysis
+before `Prediction:0|1`; source assistant reasoning remained excluded.
+Promotion scoring used the exact original binary-only student/Phoenix prompt
+and one constrained vLLM next-token pass.
+
+H100 speed probes held batch 4 and four generations fixed. Generation batch 32
+needed `139.7s` for 16 warm steps, versus `214.8s` at generation batch 64.
+The selected `0.35` vLLM memory fraction was the smallest tested viable setting
+on the 80 GB H100; `0.25` left no KV-cache blocks. The full one-epoch run
+completed 360 steps in `2863.9s`. Its adapter SHA-256 is
+`f5098fd8da0642dd8e5ff5f5bf63a9a1bddce2ecad050d3f894425d128e82384`.
+Reasoning shortened from roughly 140 tokens early to 60 tokens in the final
+logged batch, while clipping fell from about 14% to zero.
+
+| adapter | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Optimized SFT, matched vLLM | **`0.95369`** | **`0.99792`** | **`0.89472`** | **`0.90833`** | **`0.85476`** | **`0.03810`** | **`768/822`** |
+| Reasoning GRPO epoch 1 | `0.94500` | `0.99385` | `0.87986` | `0.88452` | `0.83333` | `0.06429` | `582/822` |
+
+The GRPO score loses `0.00869` macro AUROC and `0.01486` varied AUROC. Cleaner
+reasoning and lower training loss therefore do not imply a better direct
+ranking. The initial continuation fails the conditional gate for further
+learning-rate/epoch tuning: preserve it remotely as a negative result, but do
+not test it, upload it, or replace the Phoenix 6.3 SFT adapter.
 
 ## Leaderboard-aligned GRPO continuation logits (2026-07-27)
 

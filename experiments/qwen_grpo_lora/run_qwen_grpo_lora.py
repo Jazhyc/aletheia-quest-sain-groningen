@@ -1066,6 +1066,16 @@ def main(cfg: DictConfig) -> None:
         per_device_train_batch_size=int(cfg.training.per_device_train_batch_size),
         gradient_accumulation_steps=int(cfg.training.gradient_accumulation_steps),
         num_generations=int(cfg.training.num_generations),
+        generation_batch_size=(
+            None
+            if OmegaConf.select(
+                cfg,
+                "training.generation_batch_size",
+                default=None,
+            )
+            is None
+            else int(cfg.training.generation_batch_size)
+        ),
         max_prompt_length=int(cfg.training.max_prompt_length),
         max_completion_length=int(cfg.training.max_completion_length),
         bf16=bool(cfg.training.bf16),
@@ -1153,6 +1163,29 @@ def main(cfg: DictConfig) -> None:
     train_result = trainer.train()
     trainer.save_model(str(output_dir / "adapter"))
     tokenizer.save_pretrained(output_dir / "adapter")
+
+    if not bool(
+        OmegaConf.select(
+            cfg,
+            "evaluation.generate_completions",
+            default=True,
+        )
+    ):
+        result = {
+            **metadata,
+            "train_metrics": train_result.metrics,
+            "validation": {
+                "skipped": True,
+                "reason": (
+                    "generated-completion validation disabled; run the "
+                    "vLLM constrained-logit evaluator"
+                ),
+            },
+            "adapter_path": (output_dir / "adapter").as_posix(),
+        }
+        (output_dir / "result.json").write_text(json.dumps(result, indent=2))
+        print(json.dumps(result["validation"], indent=2))
+        return
 
     print("evaluating validation split")
     predictions, eval_meta = evaluate_model(

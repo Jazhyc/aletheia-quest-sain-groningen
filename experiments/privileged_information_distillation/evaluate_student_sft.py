@@ -14,6 +14,7 @@ import sys
 import time
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -79,6 +80,41 @@ EMPTY_REASONING_PREFIX = (
 DIRECT_PREDICTION_PREFIX = "Prediction:"
 DIRECT_RATING_PREFIX = "Rating:"
 CONTINUOUS_MARGIN_CONDITIONS = ("direct", "empty", "reasoning")
+QWEN35_MODEL_IDS = {"Qwen/Qwen3.5-9B", "Qwen/Qwen3.5-27B"}
+QWEN35_CANONICAL_PREFIX = "base_model.model.model.language_model.layers."
+QWEN35_VISION_EXCLUDE_PATTERN = r".*(visual|vision_tower|merger|patch_embed).*"
+
+
+def validate_qwen35_adapter_layout(adapter_dir: Path, model_name: str) -> None:
+    """Fail before vLLM startup when a Qwen3.5 adapter uses legacy PEFT keys."""
+    if model_name not in QWEN35_MODEL_IDS:
+        return
+    from safetensors import safe_open
+
+    config_path = adapter_dir / "adapter_config.json"
+    weights_path = adapter_dir / "adapter_model.safetensors"
+    if not config_path.is_file() or not weights_path.is_file():
+        raise FileNotFoundError(
+            f"{adapter_dir} must contain adapter_config.json and "
+            "adapter_model.safetensors"
+        )
+    adapter_config = json.loads(config_path.read_text())
+    if adapter_config.get("exclude_modules") != QWEN35_VISION_EXCLUDE_PATTERN:
+        raise ValueError(
+            f"{adapter_dir} does not exclude Qwen3.5 visual modules"
+        )
+    with safe_open(weights_path, framework="pt", device="cpu") as handle:
+        keys = list(handle.keys())
+    if not keys:
+        raise ValueError(f"{weights_path} contains no adapter tensors")
+    noncanonical = [
+        key for key in keys if not key.startswith(QWEN35_CANONICAL_PREFIX)
+    ]
+    if noncanonical:
+        raise ValueError(
+            f"{adapter_dir} has NDIF-incompatible Qwen3.5 LoRA keys; "
+            f"first={noncanonical[:3]}"
+        )
 
 
 def parse_prediction(text: str) -> int | None:
@@ -594,6 +630,36 @@ def lora_request_or_none(
     return LoRARequest(adapter_dir.parent.name, lora_id, adapter_dir.as_posix())
 
 
+def summarize_lora_effect(
+    adapter: pd.DataFrame,
+    base: pd.DataFrame,
+    score_column: str,
+) -> dict[str, float | int | str]:
+    """Fingerprint matched scores and reject a silently ignored LoRA."""
+    keys = ["dataset", "index"]
+    if not adapter[keys].equals(base[keys]):
+        raise ValueError("base and adapter fingerprint rows are not aligned")
+    adapter_scores = adapter[score_column].to_numpy(dtype=np.float32)
+    base_scores = base[score_column].to_numpy(dtype=np.float32)
+    differences = np.abs(adapter_scores - base_scores)
+    if np.all(differences <= 1.0e-7):
+        raise RuntimeError(
+            "LoRA effect fingerprint failed: adapter and base scores are "
+            f"identical within 1e-7 for {len(differences)} rows"
+        )
+    return {
+        "score_column": score_column,
+        "rows": len(differences),
+        "exact_equal": int(np.equal(adapter_scores, base_scores).sum()),
+        "mean_absolute_difference": float(differences.mean()),
+        "max_absolute_difference": float(differences.max()),
+        "adapter_sha256_float32": hashlib.sha256(
+            adapter_scores.tobytes()
+        ).hexdigest(),
+        "base_sha256_float32": hashlib.sha256(base_scores.tobytes()).hexdigest(),
+    }
+
+
 def evaluate_adapter(
     llm: Any,
     sampling: Any,
@@ -897,6 +963,14 @@ def main() -> None:
         help="use the saved adapter prompt/tokenizer without applying its LoRA weights",
     )
     parser.add_argument(
+        "--verify-lora-effect",
+        action="store_true",
+        help=(
+            "also score the matched base model in the same vLLM session and "
+            "fail if its float32 score fingerprint matches the adapter"
+        ),
+    )
+    parser.add_argument(
         "--prompt-without-reasoning-config",
         type=Path,
         help="use student.prompt from this config only when a row has no trace",
@@ -919,6 +993,8 @@ def main() -> None:
         parser.error(
             "--continuous-margin-condition requires a continuous-margin mode"
         )
+    if args.verify_lora_effect and args.base_model_control:
+        parser.error("--verify-lora-effect cannot be combined with --base-model-control")
     margin_conditions = tuple(
         dict.fromkeys(
             args.continuous_margin_condition or CONTINUOUS_MARGIN_CONDITIONS
@@ -949,6 +1025,12 @@ def main() -> None:
 
     adapter_dirs = [path.resolve() for path in args.adapter_dir]
     configs = [yaml.safe_load((path.parent / "config.yaml").read_text()) for path in adapter_dirs]
+    if not args.base_model_control:
+        for adapter_dir, config in zip(adapter_dirs, configs, strict=True):
+            validate_qwen35_adapter_layout(
+                adapter_dir,
+                str(config["student"]["model"]),
+            )
     if args.prompt_config is not None:
         for config in configs:
             apply_student_prompt_config(config, args.prompt_config.resolve())
@@ -1131,6 +1213,39 @@ def main() -> None:
                 require_closed_thinking=bool(enable_thinking),
                 use_lora=not args.base_model_control,
             )
+            lora_effect = None
+            if args.verify_lora_effect:
+                base_evaluated, base_timing = evaluate_adapter(
+                    llm,
+                    sampling_by_condition[condition_name],
+                    records,
+                    adapter_dir,
+                    lora_id,
+                    strict_re=strict_re_by_condition[condition_name],
+                    output_mode=output_mode_by_condition[condition_name],
+                    margin_sampling=margin_sampling,
+                    binary_ids=binary_ids,
+                    rating_ids=rating_ids,
+                    margin_conditions=margin_conditions,
+                    require_closed_thinking=bool(enable_thinking),
+                    use_lora=False,
+                )
+                effect_score_column = (
+                    "direct_margin_score"
+                    if "direct_margin_score" in evaluated
+                    else "score"
+                )
+                lora_effect = summarize_lora_effect(
+                    evaluated,
+                    base_evaluated,
+                    effect_score_column,
+                )
+                lora_effect["base_score_seconds"] = float(sum(
+                    value
+                    for key, value in base_timing.items()
+                    if key.endswith("_seconds")
+                ))
+                print(f"lora_effect={lora_effect}", flush=True)
             evaluated_by_condition[condition_name] = evaluated
             timing_by_condition[condition_name] = timing
             method = config["method"]
@@ -1138,7 +1253,12 @@ def main() -> None:
             if multi_condition:
                 output_dir = output_dir / condition_name
             output_dir.mkdir(parents=True, exist_ok=True)
-            evaluated.to_json(output_dir / "generations.jsonl", orient="records", lines=True)
+            evaluated.to_json(
+                output_dir / "generations.jsonl",
+                orient="records",
+                lines=True,
+                double_precision=15,
+            )
             per_dataset = {}
             for dataset, group in evaluated.groupby("dataset", sort=True):
                 per_dataset[dataset] = binary_metrics(
@@ -1226,6 +1346,7 @@ def main() -> None:
                 "retrieval_cache": retrieval_path.as_posix() if retrieval_path else None,
                 "reasoning_visibility": args.reasoning_visibility,
                 "base_model_control": args.base_model_control,
+                "lora_effect": lora_effect,
                 "prompt_without_reasoning_config": (
                     args.prompt_without_reasoning_config.resolve().as_posix()
                     if args.prompt_without_reasoning_config is not None
@@ -1253,7 +1374,10 @@ def main() -> None:
             output_dir = adapter_dir.parent / (args.run_name or args.split) / "max_aggregate"
             output_dir.mkdir(parents=True, exist_ok=True)
             aggregated.to_json(
-                output_dir / "generations.jsonl", orient="records", lines=True
+                output_dir / "generations.jsonl",
+                orient="records",
+                lines=True,
+                double_precision=15,
             )
             per_dataset = {
                 dataset: binary_metrics(

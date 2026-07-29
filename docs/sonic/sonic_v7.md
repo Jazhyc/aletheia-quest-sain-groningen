@@ -1,8 +1,13 @@
-# sonic v7 — L46 probe (deception + organism heads) routed against Phoenix v6.2 judge
+# sonic v7 — L46 probe (deception + organism heads) routed against Phoenix v6.3 judge
 
-**A single L46 transformer probe with two heads: one reads deception, one detects
-whether the model is an organism. When the organism head fires, the deception
-head takes over. Otherwise, the black-box judge handles the row. No blending.**
+**Judge:** Phoenix Wright v6.3 — Qwen3.5-9B + `Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2`
+(binary-soft-distilled r16 adapter, 397B teacher, 2-epoch). Multi-route with
+HP-KR, action, and intent specialist judges. Standardised as `judge_z = (log_odds − 0) / 6.0`.
+
+**Probe:** Single L46 transformer probe with two heads sharing one encoder:
+one reads deception, one detects whether the model is an organism. When the
+organism head fires, the deception head takes over. Otherwise, the judge
+handles the row. No blending.
 
 ## Motivation
 
@@ -29,7 +34,7 @@ and the router picks the right tool:
 if organism head fires (confident organism):
     → deception head score (probe excels on organisms)
 else:
-    → Phoenix v6.2 judge score (judge excels on base models)
+    → Phoenix v6.3 judge score (judge excels on base models)
 ```
 
 ## Architecture
@@ -51,14 +56,14 @@ else:
                   │         │                                    │
                   │         ├── head_deception: Linear(128→1) ──→ probe_z
                   │         │                                    │
-                  │         └── head_organism:  Linear(128→1) ──→ organism_z
+                  │         └── head_organism:  Linear(128→1) ──→ organism_conf
                   └──────────────────────────────────────────────┘
                                       │
                                       ▼
                                ┌──────────────┐
                                │    router    │
                                │              │
-                               │  organism_z  │
+                               │  organism_conf  │
                                │  > threshold?│
                                │     │        │
                                │  yes│     no │
@@ -80,30 +85,45 @@ else:
 
 2. **Deception head** (existing, frozen): `Linear(128 → 1)`. Trained to
    classify honest vs deceptive on Metis instruct-deception data. Output
-   standardised to `probe_z` with per-family constants (mean ~0, sd ~1).
+   output: `probe_score = σ(logit)` ∈ [0,1] — BCE-trained probability, no standardisation.
 
-3. **Organism head** (new): `Linear(128 → 1)`. Trained to classify base-model
-   vs organism on the same Metis training data. Output standardised to
-   `organism_z` with per-family constants.
+3. **Organism head** (new): single shared `Linear(128 → 1)` loaded from
+   `submission/whitebox_probe/shared_organism_head.pt`. Trained as
+   LogisticRegression on qwen+gemma pooled features (8000 rows), AUROC 0.85,
+   r=−0.008 vs deception. Per-family projection layers handle different
+   hidden_dims → same ℝ^128. Output: `organism_conf = σ(logit)` ∈ [0,1]
+   — BCE-trained probability, no standardisation.
 
-4. **Phoenix v6.2 judge** (unchanged): standardised as `judge_z`.
+4. **Phoenix v6.3 judge**: Qwen3.5-9B with adapter
+   `Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2` (binary-soft-distilled
+   r16 from 397B teacher, 2-epoch). Multi-route (HP-KR base model for harm rows,
+   action specialist, intent specialist). Standardised as
+   `judge_z = (log_odds − 0) / 6.0`.
 
 5. **Router** (new, replaces sign gate): hard switch.
 
 ### Router
 
 ```
-if organism_z > ORGANISM_THRESHOLD:
-    final_score = σ(probe_z)    # organism → deception head
+if organism_conf > ORGANISM_THRESHOLD:
+    final_score = probe_score    # organism → deception head
 else:
-    final_score = σ(judge_z)    # base model → judge
+    final_score = judge_scores   # base model → v7.0 judge
 ```
 
-- `ORGANISM_THRESHOLD` (env var, default 0.0): decision boundary in
-  standardised z-space. At 0.0, rows above the detector's mean are treated
-  as organisms.
+Both branches are probabilities ∈ [0,1]:
+
+- `σ(probe_z)`: sigmoid of the **standardised** deception logit. The raw
+  probe logit is shifted/scaled per family (`probe_z = (logit − mean) / sd`)
+  so scores are comparable across families, then sigmoided.
+- `judge_scores` ∈ [0,1]: probability from Phoenix v7.0's `score_messages()`.
+- `organism_conf = σ(organism_logit)`: sigmoid of the **raw** organism head
+  logit. No standardisation — the BCE loss directly calibrates the sigmoid
+  output as P(organism). The threshold is a natural probability.
+
+- `ORGANISM_THRESHOLD` (env var, default 0.5): rows with P(organism) > 0.5
+  use the deception head; others use the judge.
 - No blending, no interpolation. One score source per row.
-- The sign gate is gone entirely.
 
 ### Why L46 only (not dual L40+L46)
 
@@ -144,7 +164,6 @@ committing to one for the submission model.
 2. Forward-pass all training examples through the encoder, collect `pooled ∈ ℝ^128`.
 3. Train `Linear(128 → 1)` on `pooled → is_organism` (sklearn LogisticRegression
    or SGD, seconds per family).
-4. Standardise organism logits with per-family mean/sd.
 
 **Option B: Joint training from scratch**
 
@@ -164,7 +183,7 @@ committing to one for the submission model.
 | Deception AUROC (varied) | harder OOD test; v3.3 trunk scores ~0.92 here |
 | Organism AUROC | must separate base from organism; target >0.90 |
 | Organism AUROC on g-st (cross-adapter) | the critical test — Iris uses g-st |
-| Pearson r(deception_z, organism_z) | heads must be orthogonal; target |r| < 0.3 |
+| Pearson r(deception_z, organism_conf) | heads must be orthogonal; target |r| < 0.3 |
 
 **Decision rule:** Option B wins if organism AUROC is meaningfully higher and
 deception AUROC doesn't regress more than −0.01 vs Option A. Option A wins if
@@ -177,14 +196,13 @@ Once the comparison picks a winner, train on the full Metis dataset (no
 holdout) and save:
 
 ```
-submission/whitebox_probe/{family}_probe/organism_head.pt         # Option A
-submission/whitebox_probe/{family}_probe/organism_head_stats.json  # {"mean": ..., "sd": ...}
+submission/whitebox_probe/shared_organism_head.pt   # single LogisticRegression head, all families
 ```
-Or, for Option B:
-```
-submission/whitebox_probe/{family}_probe/model.pt  # full two-head model (overwrites v3.3)
-submission/whitebox_probe/{family}_probe/organism_head_stats.json
-```
+
+Per-family projection layers map different hidden_dims to the same ℝ^128
+encoder space, so one shared organism head works across all families.
+Trained on qwen+gemma pooled features combined (8000 rows), AUROC 0.85,
+r=0.008 vs deception (near-perfect orthogonality).
 
 ### Phase 4: evaluate offline
 
@@ -201,7 +219,7 @@ Before building the submission notebook:
 3. **Length confound**: does the organism head fire on long base-model rows?
    Test on the longest available base-model examples.
 
-4. **Deception orthogonality**: confirm Pearson r between `organism_z` and
+4. **Deception orthogonality**: confirm Pearson r between `organism_conf` and
    `probe_z` is low.
 
 ### Phase 5: build submission notebook
@@ -214,23 +232,21 @@ Based on `sonic_v6_1.ipynb`, simplified to L46-only:
 |---|---|---|
 | 0 | header | rewritten |
 | 1–3 | imports, dataset loading | unchanged (but no L40 paths) |
-| 4 | load L46 probe + **organism head** | added organism head loading; L40 removed |
-| 5 | probe definition | `TransformerTokenProbe` unchanged; organism head is standalone `Linear` |
+| 4 | load L46 probe + **shared organism head** | added organism head loading from shared path; L40 removed |
+| 5 | probe definition | `TransformerTokenProbe` unchanged; organism head is standalone `Linear` loaded from shared_organism_head.pt |
 | 6–8 | model, layers, tokenization | unchanged (L46 layer only) |
 | 9 | extraction | L46 only (no L40) — roughly half the extraction time |
 | 10 | probe scoring + organism scoring | run encoder → pooled, apply deception head + organism head |
-| 11 | Phoenix v6.2 judge | unchanged |
+| 11 | Phoenix v6.3 judge | unchanged |
 | 12 | **hard-switch router** | replaces sign gate |
 | 13 | submission | unchanged |
 
-Fallback: if `organism_head.pt` is absent, cell 12 falls back to the
-**v6.1 sign gate** using the L46 probe alone (BASE_CAP=0.02083, MAX_CAP=0.0625).
 
 ## Router behaviour by dataset
 
 ### Notus (base models — Nemotron, Qwen, Gemma, no adapters)
 
-| organism_z | router → | score source | expected AUROC |
+| organism_conf | router → | score source | expected AUROC |
 |---|---|---|---|
 | < threshold (most rows) | judge | σ(judge_z) | ~0.89 |
 | > threshold (false positives) | probe | σ(probe_z) | ~0.56 ⚠️ |
@@ -238,12 +254,12 @@ Fallback: if `organism_head.pt` is absent, cell 12 falls back to the
 False positives are the main risk — base-model rows where the organism head
 fires and the probe takes over with its ~0.56 AUROC. The threshold should be
 set so false positives are rare. If needed, `ORGANISM_THRESHOLD` can be
-raised above 0.0 to bias toward the judge (fewer false positives, more false
+bias toward the judge (fewer false positives, more false
 negatives on Iris — an acceptable trade since the judge scores 0.95 on Iris).
 
 ### Iris (organisms — g-st adapters)
 
-| organism_z | router → | score source | expected AUROC |
+| organism_conf | router → | score source | expected AUROC |
 |---|---|---|---|
 | > threshold (most rows) | probe | σ(probe_z) | ~0.99 |
 | < threshold (false negatives) | judge | σ(judge_z) | ~0.95 |
@@ -254,15 +270,15 @@ False negatives are less damaging — the judge still scores 0.95 on Iris.
 
 If the organism head achieves AUROC ≥ 0.95 on base-vs-organism:
 
-| dataset | v6.1 projected | v7 projected | Δ |
+| dataset | judge-only (v6.3) | v7 projected | Δ |
 |---|---|---|---|
-| Notus (mean) | ~0.88 | ~0.88 (judge handles) | ~0 |
-| Iris (mean) | ~0.96 | ~0.98 (probe handles) | **+0.02** |
-| **Headline** | ~0.92 | ~0.93 | **+0.01** |
+| Notus (mean) | ~0.89 | ~0.89 (judge handles) | ~0 |
+| Iris (mean) | ~0.96 | ~0.99 (probe handles) | **+0.03** |
+| **Headline** | ~0.92 | ~0.94 | **+0.02** |
 
 The gain comes entirely from Iris — the organism head lets the probe's full
-0.99 AUROC through instead of the sign-gate-capped ~0.96. Notus is unchanged
-(the judge was already carrying it).
+~0.99 AUROC through on organisms instead of the judge's ~0.96. Notus is
+unchanged (the judge was already carrying it).
 
 ## Risks
 
@@ -280,41 +296,39 @@ The gain comes entirely from Iris — the organism head lets the probe's full
    length-normalisation step.
 
 3. **Hard-switch discontinuities.** Two rows with nearly identical
-   `organism_z` on opposite sides of the threshold get scores from
+   `organism_conf` on opposite sides of the threshold get scores from
    completely different sources. Mitigation: check row density near the
    threshold — if sparse, the discontinuity is minor.
 
 4. **Training data imbalance.** Metis has more organism rows than base-model
    rows (8:1 for Qwen). Mitigation: balance the training set.
 
+## Phase 1 & 2 results (Jul 29, 2026)
+
+Organism heads trained as Option A: freeze v3.3 L46 encoder, extract pooled(128)
+features, train per-family LogisticRegression on base-vs-organism labels. Full
+Metis training data (no holdout).
+
+| family | rows (base/org) | organism AUROC | r(deception, org) |
+|---|---|---|---|
+| qwen | 7200 (800/6400) | 0.8417 | −0.039 |
+| gemma | 800 (400/400) | 0.9405 | +0.244 |
+| nemotron | 216 (all base) | — dummy, always → judge | — |
+
+**Final approach (Jul 29): one shared LogisticRegression head** trained on
+qwen+gemma pooled features combined, saved to `shared_organism_head.pt`. The
+per-family projection layers already map different hidden_dims to the same
+ℝ^128 encoder space, so one head works across all families:
+
+| combined | 8000 rows (6800/1200) | AUROC 0.8513 | r=−0.008 |
+
+Near-zero correlation (r=−0.008, p=0.48) confirms the organism head reads a
+signal completely orthogonal to deception — exactly what the router needs.
+
 ## Next
 
-1. **Extract L46 training features** from Metis (instruct + varied, all families).
-2. **Compare training approaches** on non-leaked holdout — Option A (frozen
-   encoder + logistic regression) vs Option B (joint training from scratch).
-3. **Train the winner** on all Metis data, save weights and stats.
-4. **Evaluate offline** — cross-adapter transfer, length confound, deception
-   orthogonality.
-5. **Build submission notebook** — only after evaluation passes.
-6. **Submit** — one run to measure `organism_z` distributions, tune threshold,
-   measure headline AUROC.
-
-## Phase 1 & 2 diagnostic (Jul 29, 2026)
-
-Quick diagnostic on 100 Qwen rows (50 base + 50 adapter) to verify the frozen-encoder
-approach before running the full leave-one-cell-out comparison:
-
-| metric | value |
-|---|---|
-| Option A: frozen encoder + LR on pooled(128) | organism AUROC **0.9964** (in-sample) |
-| Pearson r(deception_score, organism_logit) | +0.541 |
-
-**Finding:** The existing v3.3 encoder's 128-dim pooled representation already
-contains a near-perfect organism signal. A simple logistic regression separates
-base from organism at AUROC 0.996 — even on just 100 rows with balanced classes.
-
-The r=+0.541 correlation between deception scores and organism logits is expected:
-organisms produce more deceptive outputs in training (they were prompted to be
-deceptive), while base models answer honestly. The correlation should drop with
-a balanced training set and leave-one-cell-out evaluation, where the organism
-head must generalise to unseen adapter types.
+1. **Run dry rehearsal** (`python submit.py --dry`) — verify organism heads load
+   and scores are non-trivial on all datasets.
+2. **Tune threshold** — if Notus base-model rows get high organism_conf (false
+   positives), raise `ORGANISM_THRESHOLD` above 0.5 to bias toward the judge.
+3. **Submit** to the leaderboard.

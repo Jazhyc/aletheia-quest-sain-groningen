@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from hydra import compose, initialize_config_dir
+
+
+ROOT = Path(__file__).resolve().parents[2]
+LAUNCHER = (
+    ROOT
+    / "experiments/privileged_information_distillation"
+    / "submit_qwen397_openrouter_explicit_tvg_soft_distillation.sh"
+)
+TEACHER_RUNNER = (
+    ROOT
+    / "experiments/privileged_information_distillation"
+    / "run_qwen397_openrouter_explicit_soft_teacher.sh"
+)
+POST_REASONING_LAUNCHER = (
+    ROOT
+    / "experiments/privileged_information_distillation"
+    / "submit_qwen397_openrouter_explicit_post_reasoning.sh"
+)
+POST_REASONING_CONFIG = (
+    ROOT
+    / "configs/pid_qwen397_openrouter_explicit_post_reasoning_eval_v1.yaml"
+)
+OPTIMIZED_LAMBDA_LAUNCHER = (
+    ROOT
+    / "experiments/privileged_information_distillation"
+    / "run_qwen397_openrouter_optimized_distillation_lambda.sh"
+)
+
+
+def compose_config():
+    with initialize_config_dir(
+        version_base=None,
+        config_dir=str((ROOT / "configs").resolve()),
+    ):
+        return compose(
+            config_name=(
+                "pid_qwen397_openrouter_explicit_tvg_binary_soft_distillation_v1"
+            )
+        )
+
+
+def test_openrouter_explicit_student_is_matched_to_new_cache_and_prompt() -> None:
+    cfg = compose_config()
+
+    assert (
+        cfg.method
+        == "qwen9b_qwen397_openrouter_explicit_tvg_binary_softonly_varied_v1"
+    )
+    assert cfg.teacher.artifact.endswith(
+        "qwen35_397b_openrouter_nothink_tvg_binary_logit_explicit_digits_v1/"
+        "train/student_rows.jsonl"
+    )
+    assert cfg.student.soft_teacher_artifact.endswith(
+        "qwen35_397b_openrouter_nothink_tvg_binary_logit_explicit_digits_v1/"
+        "train/soft_targets.jsonl"
+    )
+    assert "Use 0 for not deceptive and 1 for deceptive." in cfg.student.prompt
+    assert cfg.student.model == "Qwen/Qwen3.5-9B"
+    assert cfg.student.dataset_name_contains == "varied-deception"
+    assert cfg.student.target_mode == "prediction_only"
+    assert cfg.student.override_cached_prompt is True
+    assert cfg.student.training.soft_loss_weight == 1.0
+    assert cfg.student.training.completion_loss_weight == 0.0
+
+
+def test_openrouter_explicit_launcher_validates_cache_and_chains_eval() -> None:
+    source = LAUNCHER.read_text()
+
+    assert 'sha256sum -c "${CACHE_ROOT}/SHA256SUMS"' in source
+    assert 'if [[ "${rows}" -ne 2880 ]]' in source
+    assert "--config-name \"${CONFIG}\"" in source
+    assert '--dependency="afterok:${STUDENT}"' in source
+    assert "--verify-lora-effect" in source
+    assert "--continuous-margin-condition direct" in source
+
+
+def test_openrouter_optimized_lambda_launcher_freezes_selected_recipe() -> None:
+    source = OPTIMIZED_LAMBDA_LAUNCHER.read_text()
+
+    assert 'sha256sum -c "${CACHE_ROOT}/SHA256SUMS"' in source
+    assert 'if [[ "${rows}" -ne 2880 ]]' in source
+    assert "pid_qwen397_openrouter_explicit_tvg_binary_soft_distillation_v1" in source
+    assert "qwen9b_qwen397_openrouter_explicit_tvg_soft_r16_lr5e5_ep2_v1" in source
+    assert '"student.lora.r=16"' in source
+    assert '"student.lora.alpha=32"' in source
+    assert '"student.training.learning_rate=5e-5"' in source
+    assert '"student.training.num_train_epochs=2.0"' in source
+    assert 'MICRO_BATCH="${Q397_MICRO_BATCH:-8}"' in source
+    assert 'GRADIENT_ACCUMULATION="${Q397_GRADIENT_ACCUMULATION:-4}"' in source
+    assert '"student.training.torch_compile=false"' in source
+    assert "flash-linear-attention==0.5.2" in source
+    assert "--continuous-margin-condition direct" in source
+    assert "--verify-lora-effect" in source
+    assert "migrate_qwen35_peft_paths.py" in source
+
+
+def test_openrouter_teacher_runner_freezes_selected_provenance() -> None:
+    source = TEACHER_RUNNER.read_text()
+
+    assert "--model qwen/qwen3.5-397b-a17b" in source
+    assert "--prompt-variant explicit_digits" in source
+    assert "--dataset-name-contains varied-deception" in source
+    assert "--provider-only Alibaba" in source
+    assert "--no-allow-fallbacks" in source
+    assert "--expected-rows 2880" in source
+    assert "sha256sum -c" in source
+
+
+def test_openrouter_explicit_post_reasoning_uses_matched_summary_boundary() -> None:
+    config = POST_REASONING_CONFIG.read_text()
+    source = POST_REASONING_LAUNCHER.read_text()
+
+    assert "Use 0 for not deceptive and 1 for deceptive." in config
+    assert "<reasoning_summary>" in config
+    assert "Prediction:<0 or 1>" in config
+    assert "qwen9b_qwen397_openrouter_explicit_tvg_binary_softonly_varied_v1" in source
+    assert "--prompt-config \"${PROMPT_CONFIG}\"" in source
+    assert "--max-new-tokens 512" in source
+    assert "--continuous-margin-condition direct" in source
+    assert "--continuous-margin-condition reasoning" in source
+
+
+def test_continuous_margin_artifacts_retain_submission_grade_precision() -> None:
+    evaluator = (
+        ROOT
+        / "experiments/privileged_information_distillation/evaluate_student_sft.py"
+    ).read_text()
+
+    assert evaluator.count("double_precision=15") == 2

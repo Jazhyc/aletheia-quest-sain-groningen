@@ -1,0 +1,11 @@
+# @package _global_
+defaults:
+  - pid_qwen397_soft_datarater_fixed90_v1
+  - _self_
+
+method: qwen9b_qwen397_soft_datarater_dot50_fixed90_v1
+output_dir: results/blackbox/${method}
+
+student:
+  selection_manifest: results/blackbox/qwen397_soft_datarater_rank16_last1_v1/manifests/dot_keep50.jsonl
+  output_dir: ${output_dir}/adapter

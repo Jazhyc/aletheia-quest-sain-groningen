@@ -111,7 +111,7 @@ def build_model(model_id: str, lora_id: str | None = None, **model_kwargs):
     """
     try:
         from nnsight import LanguageModel
-    except ImportError:                       # nnsight 0.7.x no longer re-exports at top level
+    except (ImportError, TypeError):          # nnsight 0.7.x no longer re-exports at top level
         from nnsight.modeling.language import LanguageModel
 
     kwargs = {"peft": lora_id} if lora_id else {}

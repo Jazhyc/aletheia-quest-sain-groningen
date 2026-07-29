@@ -72,6 +72,9 @@ training:
   per_device_train_batch_size: 4
   gradient_accumulation_steps: 8
   num_generations: 4
+  # Keep null for TRL's default: per-device batch times gradient accumulation.
+  # Set explicitly when benchmarking less-frequent generation/weight-sync cycles.
+  generation_batch_size: null
   max_prompt_length: 4096
   max_completion_length: 512
   bf16: true
@@ -94,6 +97,7 @@ vllm:
 
 evaluation:
   batch_size: 4
+  generate_completions: true
 
 scoring:
   baseline_threshold: 0.5

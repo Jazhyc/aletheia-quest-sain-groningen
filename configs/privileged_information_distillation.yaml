@@ -42,6 +42,7 @@ teacher:
 
 student:
   model: Qwen/Qwen3.5-9B
+  model_loader: causal_lm
   init_adapter: null
   target_mode: teacher
   teacher_sources: null
@@ -78,6 +79,7 @@ student:
     alpha: 32
     dropout: 0.0
     target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+    exclude_modules: null
   training:
     optimizer: adamw
     optim: adamw_torch
@@ -92,6 +94,9 @@ student:
     weight_decay: 0.0
     per_device_train_batch_size: 2
     gradient_accumulation_steps: 16
+    torch_compile: false
+    torch_compile_backend: inductor
+    torch_compile_mode: default
     logging_steps: 5
     completion_loss_weight: 1.0
     # AUROC-oriented auxiliary objectives. The default preserves ordinary
@@ -100,6 +105,10 @@ student:
     pairwise_loss_weight: 0.0
     pairwise_temperature: 1.0
     soft_loss_weight: 0.0
+    soft_loss_type: bce
+    soft_target_logit_center: 0.0
+    soft_target_logit_scale: 1.0
+    soft_huber_delta: 1.0
     ordinal_soft_loss_weight: 0.0
     paired_batching: false
 

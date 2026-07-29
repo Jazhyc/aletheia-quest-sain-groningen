@@ -37,7 +37,7 @@ from submission.phoenix_wright import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v6_2.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v7_0.ipynb"
 
 
 class FakeTokenizer:
@@ -72,22 +72,23 @@ def notebook_cell_source(cell_id: str) -> str:
     )
 
 
-def test_notebook_uses_phoenix4_renderer_with_qwen27_soft_and_specialists() -> None:
+def test_notebook_uses_q397_for_primary_routes_and_rank1_intent() -> None:
     source = notebook_source()
 
-    assert 'if kind == "harm":' in source
-    assert 'elif kind == "main":' in source
-    assert "active_model = LanguageModel(JUDGE_MODEL, **model_kwargs)" in source
-    assert "Jazhyc/aletheias-phoenix-v5-qwen27-tvg-soft-r16" in source
-    assert "ACTION_ADAPTER_REPO" in source
+    assert 'if kind == "main":' in source
+    assert "Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2" in source
+    assert "ACTION_ADAPTER_REPO" not in source
+    assert 'kind == "harm"' not in source
+    assert 'kind == "action"' not in source
     assert "INTENT_ADAPTER_REPO" in source
     assert "build_exclusive_route_flags" in source
     assert "blend_intent_route_scores" in source
-    main_branch = source.split('elif kind == "main":', 1)[1].split(
-        'elif kind == "action":',
+    main_branch = source.split('if kind == "main":', 1)[1].split(
+        'elif kind == "intent":',
         1,
     )[0]
     assert "peft=MAIN_ADAPTER_REPO" in main_branch
+    assert "score_distilled_routes(messages, harm_flags, action_flags)" in source
     assert 'PHOENIX_THRESHOLD", "0.5"' in source
     assert "build_direct_prompt" in source
     assert '"logits_to_keep": 1' in source
@@ -104,7 +105,7 @@ def test_notebook_structural_renderer_matches_historical_phoenix4() -> None:
         "Iterable": Iterable,
         "Mapping": Mapping,
     }
-    exec(notebook_cell_source("phoenix-v6-renderer"), namespace)
+    exec(notebook_cell_source("phoenix-v7-renderer"), namespace)
 
     cases = [
         [],
@@ -133,7 +134,7 @@ def test_notebook_structural_renderer_matches_historical_phoenix4() -> None:
         ) == "<chat>" + DIRECT_PREDICTION_PREFIX
 
 
-def test_notebook_ordinary_prompt_matches_qwen27_binary_training_contract() -> None:
+def test_notebook_ordinary_prompt_matches_binary_training_contract() -> None:
     from collections.abc import Iterable, Mapping
     from typing import Any
 
@@ -144,7 +145,7 @@ def test_notebook_ordinary_prompt_matches_qwen27_binary_training_contract() -> N
         "Iterable": Iterable,
         "Mapping": Mapping,
     }
-    exec(notebook_cell_source("phoenix-v6-renderer"), namespace)
+    exec(notebook_cell_source("phoenix-v7-renderer"), namespace)
     expected = yaml.safe_load(
         (ROOT / "configs/pid_qwen27_tvg_binary_soft_distillation_v1.yaml").read_text()
     )["student"]["prompt"]
@@ -156,8 +157,8 @@ def test_notebook_ordinary_prompt_matches_qwen27_binary_training_contract() -> N
     )
 
 
-def test_phoenix6_route_composition_preserves_ordinary_phoenix4_scores() -> None:
-    scoring_tree = ast.parse(notebook_cell_source("phoenix-v6-scoring"))
+def test_phoenix70_route_composition_preserves_primary_scores() -> None:
+    scoring_tree = ast.parse(notebook_cell_source("phoenix-v7-scoring"))
     score_messages_node = next(
         node
         for node in scoring_tree.body
@@ -180,17 +181,16 @@ def test_phoenix6_route_composition_preserves_ordinary_phoenix4_scores() -> None
 
     calls = []
 
-    def fake_score_message_subset(messages, positions, *, kind):
-        calls.append((kind, positions))
-        values = {
-            "main": np.array([0.1, 0.4]),
-            "harm": np.array([0.2]),
-            "action": np.array([0.3]),
-            "intent": np.array([0.6]),
-        }
-        return values[kind]
+    def fake_score_distilled_routes(messages, harm_flags, action_flags):
+        calls.append(("distilled", harm_flags.tolist(), action_flags.tolist()))
+        return np.array([0.1, 0.2, 0.3, 0.4])
 
-    namespace["score_message_subset"] = fake_score_message_subset
+    def fake_score_intent_subset(messages, positions):
+        calls.append(("intent", positions))
+        return np.array([0.6])
+
+    namespace["score_distilled_routes"] = fake_score_distilled_routes
+    namespace["score_intent_subset"] = fake_score_intent_subset
     scores, binary_scores = namespace["score_messages"](
         [object(), object(), object(), object()],
         np.array([False, True, False, False]),
@@ -199,9 +199,7 @@ def test_phoenix6_route_composition_preserves_ordinary_phoenix4_scores() -> None
     )
 
     assert calls == [
-        ("main", [0, 3]),
-        ("harm", [1]),
-        ("action", [2]),
+        ("distilled", [False, True, False, False], [False, False, True, False]),
         ("intent", [3]),
     ]
     assert binary_scores.tolist() == [0.1, 0.2, 0.3, 0.4]
@@ -209,6 +207,60 @@ def test_phoenix6_route_composition_preserves_ordinary_phoenix4_scores() -> None
     assert scores[3] == pytest.approx(
         mean_log_odds_scores([0.4], [0.6])[0]
     )
+
+
+def test_phoenix70_primary_routes_share_one_distilled_model_pass() -> None:
+    scoring_tree = ast.parse(notebook_cell_source("phoenix-v7-scoring"))
+    route_node = next(
+        node
+        for node in scoring_tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "score_distilled_routes"
+    )
+    calls = []
+
+    def fake_load_judge(*, kind):
+        calls.append(("load", kind))
+        return object(), object(), [10, 11]
+
+    def fake_score_prompts(model, tokenizer, label_ids, prompts):
+        calls.append(("prompts", prompts))
+        return np.asarray([0.1, 0.2, 0.3, 0.4])
+
+    namespace = {
+        "np": np,
+        "load_judge": fake_load_judge,
+        "score_prompts": fake_score_prompts,
+        "build_direct_prompt": lambda messages, tokenizer: f"main:{messages}",
+        "build_epistemic_empty_prompt": (
+            lambda messages, tokenizer: f"hpkr:{messages}"
+        ),
+        "build_action_empty_prompt": (
+            lambda messages, tokenizer: f"action:{messages}"
+        ),
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[route_node], type_ignores=[])
+            ),
+            str(NOTEBOOK),
+            "exec",
+        ),
+        namespace,
+    )
+
+    scores = namespace["score_distilled_routes"](
+        ["a", "b", "c", "d"],
+        np.asarray([False, True, False, False]),
+        np.asarray([False, False, True, False]),
+    )
+
+    assert calls == [
+        ("load", "main"),
+        ("prompts", ["main:a", "hpkr:b", "action:c", "main:d"]),
+    ]
+    assert scores.tolist() == [0.1, 0.2, 0.3, 0.4]
 
 
 def test_main_prompt_stops_at_binary_decision_position() -> None:
@@ -508,20 +560,23 @@ def test_mean_log_odds_and_intent_mask_preserve_other_scores() -> None:
         blend_intent_route_scores(base, [], routes)
 
 
-def test_phoenix62_notebook_preserves_historical_runtime_contract() -> None:
+def test_phoenix70_notebook_preserves_direct_runtime_contract() -> None:
     source = notebook_source()
     ast.parse(source)
 
     assert (
-        "method=phoenix_wright_v6.2 "
-        "phoenix4_renderer_qwen27_soft_specialists"
+        "method=phoenix_wright_v7.0 "
+        "q397_consolidated_routes_rank1_intent"
     ) in source
-    assert "Jazhyc/aletheias-phoenix-v5-qwen27-tvg-soft-r16" in source
-    assert 'if kind == "harm":' in source
-    assert 'elif kind == "main":' in source
+    assert "Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2" in source
+    assert 'if kind == "main":' in source
+    assert 'kind == "harm"' not in source
+    assert 'kind == "action"' not in source
     assert "build_exclusive_route_flags" in source
     assert "blend_intent_route_scores" in source
-    assert '"main": build_direct_prompt' in source
+    assert "builder = build_epistemic_empty_prompt" in source
+    assert "builder = build_action_empty_prompt" in source
+    assert "builder = build_direct_prompt" in source
     assert '"logits_to_keep": 1' in source
     assert "active_model.output.logits[:, -1, label_ids]" in source
     assert "torch.softmax(label_logits, dim=-1)[:, 1]" in source

@@ -23,15 +23,51 @@ from experiments.privileged_information_distillation.train_student_sft import (
     select_records_from_manifest,
     select_stratified_fraction,
     should_drop_reasoning,
+    soft_binary_distillation_loss,
     strip_reasoning_block,
     student_prompt_with_reasoning_dropout,
     tokenize_record,
     training_warmup_steps,
+    validate_trainable_lora_layout,
 )
 from experiments.qwen_grpo_lora.run_qwen_grpo_lora import (
     MuonAdamW,
     muon_adamw_param_groups,
 )
+
+
+class FakeParameter:
+    def __init__(self, requires_grad: bool = True) -> None:
+        self.requires_grad = requires_grad
+
+
+class FakeModel:
+    def __init__(self, names: list[str]) -> None:
+        self.names = names
+
+    def named_parameters(self):
+        return [(name, FakeParameter()) for name in self.names]
+
+
+def test_canonical_lora_layout_requires_language_model_tree() -> None:
+    canonical = (
+        "base_model.model.model.language_model.layers.0.self_attn."
+        "q_proj.lora_A.default.weight"
+    )
+    assert validate_trainable_lora_layout(
+        FakeModel([canonical]), "image_text_to_text"
+    ) == [canonical]
+
+    legacy = (
+        "base_model.model.model.layers.0.self_attn."
+        "q_proj.lora_A.default.weight"
+    )
+    try:
+        validate_trainable_lora_layout(FakeModel([legacy]), "image_text_to_text")
+    except RuntimeError as error:
+        assert "non-language-model LoRA" in str(error)
+    else:
+        raise AssertionError("legacy text-only LoRA keys must fail canonical training")
 
 
 def test_load_records_filters_by_dataset_name(tmp_path) -> None:
@@ -599,6 +635,66 @@ def test_pairwise_logistic_loss_rewards_correct_within_dataset_order() -> None:
     )
 
     assert correct < reversed_order
+
+
+def test_binary_soft_bce_identity_matches_original_probability_loss() -> None:
+    logits = torch.tensor([[0.0, -2.0], [0.0, 3.0]])
+    targets = torch.tensor([0.2, 0.8])
+
+    actual = soft_binary_distillation_loss(logits, targets)
+    expected = torch.nn.functional.binary_cross_entropy_with_logits(
+        logits[:, 1] - logits[:, 0],
+        targets,
+    )
+
+    assert torch.equal(actual, expected)
+
+
+def test_binary_soft_bce_can_standardize_teacher_log_odds() -> None:
+    targets = torch.sigmoid(torch.tensor([-6.0, 2.0]))
+    centered_targets = torch.tensor([-1.0, 1.0])
+    logits = torch.stack((torch.zeros(2), centered_targets), dim=1)
+
+    loss = soft_binary_distillation_loss(
+        logits,
+        targets,
+        loss_type="bce",
+        target_logit_center=-2.0,
+        target_logit_scale=4.0,
+    )
+    expected = torch.nn.functional.binary_cross_entropy_with_logits(
+        centered_targets,
+        torch.sigmoid(centered_targets),
+    )
+
+    assert torch.allclose(loss, expected)
+
+
+def test_binary_soft_huber_regresses_standardized_teacher_margin() -> None:
+    targets = torch.sigmoid(torch.tensor([-6.0, 2.0]))
+    matched_margins = torch.tensor([-1.0, 1.0])
+    matched_logits = torch.stack((torch.zeros(2), matched_margins), dim=1)
+    shifted_logits = torch.stack((torch.zeros(2), matched_margins + 0.5), dim=1)
+
+    matched = soft_binary_distillation_loss(
+        matched_logits,
+        targets,
+        loss_type="huber",
+        target_logit_center=-2.0,
+        target_logit_scale=4.0,
+        huber_delta=1.0,
+    )
+    shifted = soft_binary_distillation_loss(
+        shifted_logits,
+        targets,
+        loss_type="huber",
+        target_logit_center=-2.0,
+        target_logit_scale=4.0,
+        huber_delta=1.0,
+    )
+
+    assert torch.isclose(matched, torch.tensor(0.0), atol=1e-7)
+    assert shifted > matched
 
 
 def test_completion_collator_pads_direct_targets() -> None:

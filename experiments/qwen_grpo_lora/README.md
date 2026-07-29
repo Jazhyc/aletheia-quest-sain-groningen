@@ -206,6 +206,62 @@ used privileged reasoning during training, but inference uses only the
 observable output and does not generate a chain. Treat epoch 1 as the promotion
 candidate and do not test epoch 2.
 
+### Optimized Qwen-397B checkpoint continuation
+
+The Qwen-397B soft-distillation winner
+`qwen9b_qwen397_tvg_soft_r16_lr5e5_ep2_v1` is the initialization for the
+reasoning-GRPO campaign. GRPO sees output-only varied-deception rows and is
+explicitly instructed to emit a concise `<reasoning>...</reasoning>` analysis
+before `Prediction:0|1`; it never receives source `assistant_reasoning`.
+Promotion scoring returns to the exact original binary-only Phoenix prompt and
+normalizes constrained literal next-token `0`/`1` logits without generating the
+learned reasoning.
+
+The frozen pre-GRPO vLLM reference scored validation macro AUROC `0.95369`
+(`0.90833` balanced accuracy, `0.85476` recall, `0.03810` FPR at threshold
+`0.5`) with `768/822` unique scores. The one-token pass took `10.23s`
+(`80.36` rows/s). Its small difference from the earlier Transformers-path
+`0.95393` AUROC is backend-level numeric variation; compare all GRPO candidates
+against the vLLM `0.95369` reference.
+
+After GRPO had already been rejected on validation, the user authorized a
+single frozen test evaluation of the pre-GRPO soft-distilled reference. It
+scored `0.95869` macro AUROC (`0.99542` instructed, `0.90972` varied), with
+threshold-0.5 balanced accuracy `0.88690`, recall `0.82381`, FPR `0.05000`,
+and `774/821` unique scores. Scoring took `8.54s` (`96.11` rows/s). This does
+not authorize a GRPO test run or test-set tuning; Phoenix 4.4 remains narrowly
+higher at `0.95982` macro AUROC.
+
+Matched 16-step H100 SXM5 speed probes selected generation batch 32. A cold
+batch-32 run took `230.5s` because it paid one-time Triton/TileLang autotuning;
+the warm repeat took `139.7s` (`8.73s/step`). Generation batch 64 with a larger
+vLLM allocation took `214.8s` (`13.43s/step`) after the caches were warm, making
+batch 32 about 35% faster. On the 80 GB H100, vLLM memory utilization `0.25`
+failed before training because its 20 GB allowance left no KV-cache blocks;
+`0.35` initialized successfully and kept total process memory near 50--52 GiB.
+The official `causal_conv1d` extension could not be safely enabled: the Lambda
+image exposes CUDA 12.8's compiler while the installed PyTorch build targets
+CUDA 13.0. Do not force-build an ABI-mismatched extension.
+
+The full one-epoch `3e-5` Muon continuation completed 360 steps in `2863.9s`;
+its preserved remote adapter SHA-256 is
+`f5098fd8da0642dd8e5ff5f5bf63a9a1bddce2ecad050d3f894425d128e82384`.
+Reasoning began near 140 tokens with about 14% clipping, then converged to
+roughly 60 tokens with zero clipping in the final logged batch. This operational
+improvement did not improve ranking:
+
+| adapter | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique scores |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Optimized SFT reference | **`0.95369`** | **`0.99792`** | **`0.89472`** | **`0.90833`** | **`0.85476`** | **`0.03810`** | **`768/822`** |
+| Reasoning GRPO epoch 1 | `0.94500` | `0.99385` | `0.87986` | `0.88452` | `0.83333` | `0.06429` | `582/822` |
+
+GRPO lost `0.00869` macro AUROC, including `0.01486` on the varied units it
+trained on. The score vector also became substantially less diverse. This
+fails the predeclared requirement that the initial continuation be promising
+before spending on a learning-rate/epoch sweep. Keep the optimized SFT adapter,
+do not test-select the GRPO checkpoint, and do not infer better detection from
+its cleaner reasoning format or lower training loss.
+
 ## Optimization Notes
 
 Keep these measurements in mind before changing throughput-related defaults:

@@ -1,10 +1,12 @@
-# Phoenix Wright adapters
+# Phoenix Wright 7.0 adapters
 
 All adapters bundled by the current submission live in this directory:
 
-- `main/` is the rank-16 Qwen3.5-9B GPT-OSS privileged-information student
-  actually loaded remotely by Phoenix 4.0 and restored for the Phoenix 5.3
-  leaderboard-consistency probe.
+- `main/` is the Phoenix 7.0 rank-16 Qwen3.5-9B judge, trained by binary soft
+  distillation from `Qwen/Qwen3.5-397B-A17B-FP8`. Phoenix 7.0 uses it for
+  ordinary, HP-KR, and action-report rows with their respective frozen prompts.
+  It matches
+  `Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2`.
 - `resolved_intent/` is the optional rank-1 intent specialist used only for
   eligible rows with an exposed final-assistant reasoning field.
 
@@ -14,7 +16,5 @@ client stack pinned on 2026-07-23. Do not replace them with text-only
 `AutoModelForCausalLM` checkpoints whose keys omit `language_model`; see
 `docs/peft_adapter_compatibility.md`.
 
-The frozen action-report route uses the same
-`Jazhyc/aletheias-phoenix-wright-v2-adapter` as the 5.3 main route. The public
-repository and bundled checkpoint both use the canonical Qwen3.5 PEFT tensor
-path; their tensor values are equivalent to the legacy Phoenix 4.0 checkpoint.
+The HP-KR and action-report routes no longer load separate model sessions.
+Only the rank-1 intent route uses an additional adapter.
