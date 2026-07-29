@@ -4086,6 +4086,94 @@ only 21 units. This rule applies to the newly internal-holdout-selected grouped
 candidate; do not use it retroactively to select the already observed
 pairwise-0.3 checkpoint.
 
+### Grouped pairwise-scale sweep and locked confirmation
+
+The prospectively defined follow-up used an exact dataset-and-label-stratified
+80/20 split of all 6,573 Kimi rows: 5,258 rows trained each candidate and 1,315
+rows formed the internal holdout. Batches were ordered within dataset and were
+usually four honest plus four deceptive rows. This separates the effect of
+same-dataset batching (`0.0`) from the RankNet loss itself. Every arm retained
+rank 16/alpha 32, AdamW `5e-5`, two epochs, soft Kimi BCE, batch 8, and effective
+batch size 32. Forward and reverse shared-vLLM adapter orders were averaged,
+with a predeclared `0.001` tolerance favoring the smaller weight near a tie.
+
+| pairwise weight | holdout forward | holdout reverse | mean macro AUROC | order range |
+| ---: | ---: | ---: | ---: | ---: |
+| `0.0` | `0.95647` | `0.95586` | `0.95616` | `0.00060` |
+| `0.1` | `0.95812` | `0.95878` | `0.95845` | `0.00065` |
+| `0.3` | `0.95954` | `0.96015` | `0.95984` | `0.00060` |
+| **`1.0`** | **`0.96347`** | **`0.96387`** | **`0.96367`** | `0.00040` |
+
+The result is monotonic over the tested range and selects `1.0` outside the
+tie tolerance. Same-dataset ordering alone is not the gain: weight `1.0` beats
+the grouped zero-weight control by `0.00751` holdout macro AUROC.
+
+The selected scale was then retrained from the same starting point on all 6,573
+rows. Training took `930.6s`. Matched validation loaded the BCE anchor, earlier
+interleaved weight-`0.3` adapter, and selected grouped weight-`1.0` adapter in
+forward and reverse orders:
+
+| full-data adapter | macro AUROC | instructed | varied | BA at 0.5 |
+| --- | ---: | ---: | ---: | ---: |
+| Kimi soft BCE anchor | `0.96336` | `0.99885` | `0.91604` | `0.92143` |
+| interleaved pairwise `0.3` | `0.96738` | `0.99917` | `0.92500` | `0.92321` |
+| **grouped pairwise `1.0`** | **`0.96854`** | **`0.99958`** | **`0.92715`** | `0.92321` |
+
+Against BCE, grouped weight `1.0` gains `0.00518` macro, `0.00073`
+instructed, and `0.01111` varied AUROC. It reduces the anchor's remaining
+AUROC error by `14.13%`. Across the 21 dataset units, 9 improve, 3 worsen, and
+9 tie; the paired dataset-unit bootstrap 95% interval is
+`[+0.00095, +0.00982]`. Forward/reverse selected scores have `764/822` and
+`766/822` unique values, with maximum tie multiplicities 6 and 5. The candidate
+therefore passes every prospectively frozen saturation-aware gate component.
+
+It received the single permitted locked local-test confirmation in one shared
+session with the BCE anchor first. The first launch failed before scoring any
+row because the detached shell did not expose `ninja`; the identical frozen
+command was rerun after activating the environment.
+
+| test adapter | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **matched Kimi soft BCE** | **`0.96625`** | `0.99479` | **`0.92819`** | `0.89405` | `0.82381` | `0.03571` | `772/821` |
+| grouped pairwise `1.0` | `0.96488` | **`0.99583`** | `0.92361` | **`0.89524`** | `0.82143` | **`0.03095`** | `765/821` |
+
+The selected adapter loses `0.00137` macro and `0.00458` varied test AUROC,
+despite gaining `0.00104` instructed AUROC and slightly improving thresholded
+BA. Five test units improve, seven worsen, and nine tie. Because continuous
+AUROC is primary, this does **not** confirm promotion. Keep the original Kimi
+soft-BCE adapter as the selected Kimi student and do not tune another pairwise
+scale from this test result. The relaxed gate was useful—it admitted a
+validation candidate that the old absolute rule would only narrowly admit—but
+lowering it further is not supported by this confirmation.
+
+| dataset unit | validation BCE | validation grouped `1.0` | delta | test BCE | test grouped `1.0` | delta |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| instructed / Nemotron | `1.00000` | `1.00000` | `+0.00000` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed / Qwen base | `1.00000` | `1.00000` | `+0.00000` | `0.97750` | `0.97250` | `-0.00500` |
+| instructed / Qwen a1 | `0.99125` | `0.99750` | `+0.00625` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed / Qwen a3 | `1.00000` | `1.00000` | `+0.00000` | `0.99750` | `1.00000` | `+0.00250` |
+| instructed / Qwen a4 | `1.00000` | `1.00000` | `+0.00000` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed / Qwen a5 | `0.99500` | `1.00000` | `+0.00500` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed / Qwen a6 | `1.00000` | `1.00000` | `+0.00000` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed / Qwen a7 | `1.00000` | `1.00000` | `+0.00000` | `0.99500` | `0.99750` | `+0.00250` |
+| instructed / Qwen b | `1.00000` | `1.00000` | `+0.00000` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed / Qwen c | `1.00000` | `1.00000` | `+0.00000` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed / Gemma base | `1.00000` | `1.00000` | `+0.00000` | `0.96750` | `0.98000` | `+0.01250` |
+| instructed / Gemma s | `1.00000` | `0.99750` | `-0.00250` | `1.00000` | `1.00000` | `+0.00000` |
+| varied / Qwen base | `0.99063` | `0.98750` | `-0.00313` | `0.97500` | `0.95750` | `-0.01750` |
+| varied / Qwen a1 | `0.85875` | `0.87875` | `+0.02000` | `0.90125` | `0.90500` | `+0.00375` |
+| varied / Qwen a3 | `0.85250` | `0.87813` | `+0.02563` | `0.85250` | `0.83625` | `-0.01625` |
+| varied / Qwen a4 | `0.88875` | `0.89625` | `+0.00750` | `0.89750` | `0.91250` | `+0.01500` |
+| varied / Qwen a5 | `0.97875` | `0.98500` | `+0.00625` | `0.94000` | `0.93750` | `-0.00250` |
+| varied / Qwen a6 | `0.90625` | `0.93000` | `+0.02375` | `0.99000` | `0.99000` | `+0.00000` |
+| varied / Qwen a7 | `0.85250` | `0.83875` | `-0.01375` | `0.91250` | `0.91000` | `-0.00250` |
+| varied / Qwen b | `0.96000` | `0.96500` | `+0.00500` | `0.91500` | `0.89625` | `-0.01875` |
+| varied / Qwen c | `0.95625` | `0.98500` | `+0.02875` | `0.97000` | `0.96750` | `-0.00250` |
+
+The final grouped adapter SHA-256 is
+`d7ffc8d4300826d422be23ab924cf69575968665b95f220baf662b72e397b79a`.
+It remains an experiment artifact, not the promoted Kimi checkpoint.
+
 ### Frozen Kimi student local-test confirmation
 
 After closing the validation sweep, the already submitted `5e-5`, two-epoch
