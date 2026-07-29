@@ -30,6 +30,8 @@ PYTHONPATH=. .venv/bin/python \
   experiments/q397_reasoning_ood/run_structural_reasoning_ndif.py
 PYTHONPATH=. .venv/bin/python \
   -m experiments.q397_reasoning_ood.analyze
+PYTHONPATH=. .venv/bin/python \
+  experiments/q397_reasoning_ood/analyze_token_length.py
 ```
 
 Ignored artifacts are written to
@@ -82,3 +84,26 @@ deception and modestly to some other OOD modes, but it is not safe as a
 uniform replacement. It especially fails epistemic knowledge reports. Keep
 the current direct and specialist paths; this sample supports reasoning only
 as a future label-free routed auxiliary, not a global submission change.
+
+## Token-length follow-up
+
+Exact reasoning-generation inputs ranged from 220 to 1,385 tokens (median
+458, p95 1,050). Token count is not a stable routing feature. Across the 700
+rows in two-class categories, input length had almost no relationship with
+label-directed blend-margin improvement (Pearson `-0.020`, Spearman `0.082`);
+after removing category means both correlations were essentially zero
+(`0.020/-0.012`). A direct attribution of each row's change in AUROC pair
+ordering showed a weak aggregate positive correlation (`0.245/0.179`), but
+this reversed slightly within category (`-0.084/-0.087`). The aggregate
+positive association is therefore another expression of long Insider Trading
+rows being the dominant winning category, not evidence that longer rows
+benefit more.
+
+Within-category input-length terciles gave blend macro deltas of `+0.0455`
+short, `+0.0055` medium, and `-0.0096` long. The row-bootstrap interval for
+the short tercile was positive (`[0.0145, 0.0785]`), but resampling the seven
+category effects widened it across zero (`[-0.0072, 0.1229]`). Generated
+summary length was mildly negatively related to label-directed margin gain
+after category centering (Pearson `-0.131`, Spearman `-0.140`), while its
+relationship with actual AUROC-pair gain was negligible. Do not use either
+input length or generated length alone as the reasoning router.

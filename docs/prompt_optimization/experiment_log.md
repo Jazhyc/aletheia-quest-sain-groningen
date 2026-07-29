@@ -4804,3 +4804,17 @@ deployment. HP-KR remains a clear counterexample, and the current action
 specialist already covers the dominant positive category more cheaply. Keep
 Phoenix's direct and specialist paths; treat generated reasoning as a future
 label-free routed auxiliary rather than a global leaderboard change.
+
+The token-length follow-up found no robust scalar routing signal. Exact
+reasoning inputs were 220--1,385 tokens (median 458). Input length versus
+label-directed blend-margin gain had Pearson/Spearman correlations
+`-0.020/0.082` across the 700 AUROC rows and `0.020/-0.012` after category
+centering. AUROC-pair attribution appeared weakly positive in aggregate
+(`0.245/0.179`) only because Insider Trading was both longest and most
+improved; within category it was slightly negative (`-0.084/-0.087`).
+Short/medium/long within-category terciles had macro deltas
+`+0.0455/+0.0055/-0.0096`, but category resampling put even the short-tercile
+interval across zero (`[-0.0072, 0.1229]`). Generated-summary length was
+mildly negatively correlated with label-directed margin gain after category
+centering (`-0.131/-0.140`) and uncorrelated with AUROC-pair gain. Reject a
+token-count-only reasoning router.
