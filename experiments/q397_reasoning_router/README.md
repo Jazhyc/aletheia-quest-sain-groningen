@@ -61,3 +61,33 @@ inside one local-vLLM model load:
 sbatch experiments/q397_reasoning_router/run_prompt_sweep.sh
 python -m experiments.q397_reasoning_router.analyze_prompt_sweep
 ```
+
+When Slurm cannot start promptly, run the equivalent frozen sweep through
+optimized NDIF sessions:
+
+```bash
+python experiments/q397_reasoning_router/run_prompt_sweep_ndif.py
+```
+
+## Validation-only prompt sweep
+
+Slurm job `30361556` had an estimated start roughly three hours after
+submission, so it was cancelled before starting and the frozen sweep was run
+through NDIF. The 2,466 deterministic generations were packed into 79 batches
+across three sessions; generation took `974.0s`. One combined scoring session
+took `98.7s`.
+
+The compact `summary_baseline` remained the winner. Its post-reasoning margin
+scored `0.94863` macro AUROC, and the fixed 60% direct / 40% reasoning
+log-odds blend scored `0.95827`, versus `0.95345` direct (`+0.00482`).
+Instructed AUROC moved `0.99792 -> 0.99771`, while varied improved
+`0.89417 -> 0.90569`; unit wins/ties/losses were `6/12/3`. The blend produced
+706 unique scores over 822 rows.
+
+The more prescriptive prompts failed. `claim_check` reasoning/blend scored
+`0.93506/0.95071`, and `balanced_audit` scored `0.93810/0.95327`. Detailed
+analysis appears to suppress useful learned behavior rather than improve the
+readout. This sweep used validation only and does not overturn the earlier
+frozen-test rejection of the 512-token borrowed-summary blend. Treat the
+192-token baseline as an unconfirmed leaderboard probe, not a validated
+replacement for direct scoring.

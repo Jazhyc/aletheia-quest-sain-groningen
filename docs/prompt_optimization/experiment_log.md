@@ -4742,8 +4742,23 @@ borrowed summary prompt.
 The borrowed prompt is unlikely to be inference-optimal for a binary-only
 student. Generation took `534.3s` on validation and `682.3s` on test, with
 five and seven 512-token fallbacks, versus `45--47s` for paired scoring.
-A validation-only local-vLLM follow-up therefore freezes the 60/40 weight,
-caps reasoning at 192 tokens, and compares the baseline summary with compact
-claim-check and balanced-audit prompts in one persistent model load. Slurm job
-`30361556` was submitted to the RTX Pro 6000 queue; no prompt from that sweep
-will be evaluated on local test.
+A validation-only follow-up therefore froze the 60/40 weight, capped reasoning
+at 192 tokens, and compared the baseline summary with compact claim-check and
+balanced-audit prompts. Slurm job `30361556` had an estimated start around
+three hours away, so it was cancelled before starting and the sweep moved to
+optimized NDIF.
+
+The NDIF run generated 2,466 replies in 79 length-aware batches split across
+three sessions (`974.0s`), then scored direct and all three post-reasoning
+boundaries in one session (`98.7s`). The compact summary baseline remained the
+winner: its reasoning margin scored `0.94863`, and its fixed blend scored
+`0.95827`, versus `0.95345` direct (`+0.00482`). Instructed AUROC changed
+`0.99792 -> 0.99771`, varied improved `0.89417 -> 0.90569`, and unit
+wins/ties/losses were `6/12/3`. The blend had 706 unique scores over 822 rows.
+
+More explicit analysis hurt. Claim-check reasoning/blend scored
+`0.93506/0.95071`; balanced-audit scored `0.93810/0.95327`. No prompt from
+this sweep was evaluated on local test. The selected 192-token baseline is
+therefore only a possible leaderboard probe: the earlier frozen test already
+rejected its 512-token predecessor, and the prompt sweep supplies no new
+held-out confirmation.
