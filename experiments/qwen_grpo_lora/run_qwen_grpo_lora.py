@@ -1066,6 +1066,16 @@ def main(cfg: DictConfig) -> None:
         per_device_train_batch_size=int(cfg.training.per_device_train_batch_size),
         gradient_accumulation_steps=int(cfg.training.gradient_accumulation_steps),
         num_generations=int(cfg.training.num_generations),
+        generation_batch_size=(
+            None
+            if OmegaConf.select(
+                cfg,
+                "training.generation_batch_size",
+                default=None,
+            )
+            is None
+            else int(cfg.training.generation_batch_size)
+        ),
         max_prompt_length=int(cfg.training.max_prompt_length),
         max_completion_length=int(cfg.training.max_completion_length),
         bf16=bool(cfg.training.bf16),

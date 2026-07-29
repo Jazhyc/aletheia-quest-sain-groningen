@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from hydra import compose, initialize_config_dir
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -25,3 +26,25 @@ def test_filter_datasets_uses_literal_substring() -> None:
 def test_filter_datasets_rejects_empty_selection() -> None:
     with pytest.raises(RuntimeError, match="no datasets"):
         filter_datasets(records(), "missing")
+
+
+def test_q397_optimized_reasoning_config() -> None:
+    config_dir = Path(__file__).resolve().parents[2] / "configs"
+    with initialize_config_dir(version_base=None, config_dir=str(config_dir)):
+        cfg = compose(config_name="qwen_grpo_lora_q397_optimized_reasoning")
+
+    assert cfg.model == "Qwen/Qwen3.5-9B"
+    assert str(cfg.init_adapter).endswith(
+        "qwen9b_qwen397_tvg_soft_r16_lr5e5_ep2_v1/"
+        "peft_path_migration/local_backups/adapter"
+    )
+    assert cfg.train_dataset_name_contains == "varied-deception"
+    assert cfg.judge.include_reasoning is False
+    assert "<reasoning>" in cfg.judge.prompt
+    assert "Reason carefully" in cfg.judge.prompt
+    assert cfg.lora.r == 16
+    assert cfg.lora.alpha == 32
+    assert cfg.training.per_device_train_batch_size == 4
+    assert cfg.training.num_generations == 4
+    assert cfg.training.generation_batch_size == 32
+    assert cfg.training.max_completion_length == 256
