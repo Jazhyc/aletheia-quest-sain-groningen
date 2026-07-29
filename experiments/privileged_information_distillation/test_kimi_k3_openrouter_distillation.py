@@ -32,6 +32,12 @@ INSTRUCTED_TEACHER = (
     / "privileged_information_distillation"
     / "run_kimi_k3_openrouter_instructed_soft_teacher.sh"
 )
+REASONING_CEILING = (
+    ROOT
+    / "experiments"
+    / "privileged_information_distillation"
+    / "run_kimi_k3_reasoning_ceiling.sh"
+)
 SUBMIT = (
     ROOT
     / "experiments"
@@ -101,6 +107,19 @@ def test_kimi_instructed_teacher_is_pinned_and_builds_identity_targets() -> None
     assert "--dataset-name-contains instructed-deception" in source
     assert "--kind binary_identity" in source
     assert "--expected-rows 3693" in source
+
+
+def test_kimi_reasoning_ceiling_is_pinned_and_test_only() -> None:
+    source = REASONING_CEILING.read_text()
+
+    assert "--model moonshotai/kimi-k3" in source
+    assert "--provider-only Fireworks" in source
+    assert "--no-allow-fallbacks" in source
+    assert "--split test" in source
+    assert "--dataset-name-contains varied-deception" in source
+    assert "--include-reasoning" in source
+    assert "--reasoning-max-chars 4000" in source
+    assert "--reasoning-truncation tail" in source
 
 
 def test_kimi_student_only_schedules_validation() -> None:

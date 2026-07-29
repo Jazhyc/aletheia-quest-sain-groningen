@@ -4141,6 +4141,51 @@ exactly equal, with mean absolute difference `0.11643` and maximum `0.94138`.
 The preserved generations JSONL SHA-256 is
 `56a1a8ba94d9d24309337cd69618c937253312b632d2efa9e4453d388de9f99a`.
 
+### Kimi K3 source-reasoning ceiling diagnostic
+
+A test-only diagnostic exposed the final source reasoning field to the same
+frozen Kimi K3 Truth Value Guard judge. It retained the ordinary 3,000-character
+context tail and complete final output, then appended up to the final 4,000
+characters of source reasoning. Fireworks remained the only provider, reasoning
+generation remained disabled, and the score was still the normalized literal
+`0|1` next-token margin. Only the 360 varied-deception test rows were queried;
+the instructed rows have no reasoning field, so their existing output-only
+scores are unchanged.
+
+| varied test unit | output only | reasoning visible | delta |
+| --- | ---: | ---: | ---: |
+| Qwen base | `1.00000` | `1.00000` | `+0.00000` |
+| Qwen a1 | `0.88500` | `0.91250` | `+0.02750` |
+| Qwen a3 | `0.92500` | `0.90375` | `-0.02125` |
+| Qwen a4 | `0.94500` | `0.95000` | `+0.00500` |
+| Qwen a5 | `0.96250` | `0.97250` | `+0.01000` |
+| Qwen a6 | `1.00000` | `1.00000` | `+0.00000` |
+| Qwen a7 | `0.93250` | `0.93250` | `+0.00000` |
+| Qwen b | `0.99750` | `0.99000` | `-0.00750` |
+| Qwen c | `1.00000` | `1.00000` | `+0.00000` |
+| **Macro** | **`0.96083`** | **`0.96236`** | **`+0.00153`** |
+
+Using a `1e-12` equality tolerance, reasoning won three units, tied four, and
+lost two. A 20,000-replicate paired bootstrap that resampled positives and
+negatives within each unit gave a macro-delta 95% interval of
+`[-0.00972, +0.01208]`, with `P(delta > 0) = 0.6104`. Combining the new nine
+varied units with the unchanged twelve instructed units (`0.99864583`) gives
+an estimated full 21-unit macro AUROC of `0.98309524`, versus `0.98244048` for
+the all-output-only run: only `+0.00065476`.
+
+All 360 requests completed without retries, missing label logits, or provider
+fallbacks in `139.34s`. They used 312,648 prompt and 2,880 completion tokens
+and cost `$0.97133256`; the matched output-only varied rows cost `$0.45141624`.
+The reasoning-visible scores had 330 unique values and 30 duplicate-score
+excess rows, versus 342 unique output-only scores.
+
+This is a post-hoc local-test ceiling diagnostic, not evidence for selecting or
+retuning a deployable method. Source reasoning is unavailable on the opaque
+leaderboard, and external API inference cannot run in the submission. The
+small, uncertain teacher gain does not support replacing the main judge with a
+trace path by itself, though it leaves open a separately validated
+reasoning-aware distillation experiment.
+
 ## Optimized Qwen-397B reasoning-GRPO continuation (2026-07-29)
 
 The validation-selected original-prompt soft student
