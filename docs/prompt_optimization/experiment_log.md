@@ -4690,3 +4690,27 @@ source reasoning. The held-out contract does not guarantee that field; without
 it the intent route cannot activate. Test job `30361126` was therefore
 cancelled pending with zero runtime. Reject the family calibration and do not
 promote a reasoning-dependent interaction as an output-only leaderboard gain.
+
+## 2026-07-29: Q397 plus explicit-prompt base-Qwen ensemble
+
+A frozen output-only ensemble combined 60% optimized Q397 log odds under its
+trained Phoenix 4.0 prompt with 40% base-Qwen log odds under the previously
+selected explicit-digit prompt. The weight was uniform across rows and did not
+use organism identity, source reasoning, or a router. Validation macro AUROC
+improved from `0.95393` to `0.95560` (`+0.00167`), entirely through varied
+deception (`0.89500 -> 0.89889`); instructed remained `0.99813`. Unit
+wins/ties/losses were `4/12/5`, the worst unit lost `0.020`, and the
+dataset-unit bootstrap interval crossed zero.
+
+The one frozen local-test confirmation used the optimized NDIF path for only
+the missing base-Qwen stream: one session, direct normalized literal `0|1`
+logits, `logits_to_keep=1`, and length-sorted `48/32/16` batches. It scored all
+821 rows in `23.93s` (`34.30` rows/s) with zero truncation. Despite raising
+score uniqueness from `774` to `810`, the ensemble reduced test macro AUROC
+from `0.95869` to `0.95714` (`-0.00155`). Instructed fell
+`0.99542 -> 0.99375`, varied fell `0.90972 -> 0.90833`, and unit
+wins/ties/losses were `3/9/9`.
+
+Reject the ensemble and retain Q397 alone. Do not search prompt members or
+blend weights post hoc on test; the extra base-model inference pass is not
+supported by the frozen result.
