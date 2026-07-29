@@ -4074,6 +4074,18 @@ run local test, promote this checkpoint, or tune the pairwise weight from these
 validation labels. This result supports ranking loss as a useful signal, not
 yet as a selected replacement.
 
+For the subsequent internally selected grouped-pair scale sweep, the team
+replaced the fixed absolute gate prospectively because AUROC headroom is now
+small. A candidate may receive one locked local-test confirmation only if the
+mean of forward/reverse shared-session comparisons has positive macro delta,
+reduces the anchor's remaining `1 - AUROC` error by at least 5%, has nonnegative
+varied delta, loses no more than `0.001` instructed AUROC, and improves at least
+as many dataset units as it worsens. Report a paired dataset-unit bootstrap
+interval as uncertainty, but do not require its lower bound to exceed zero with
+only 21 units. This rule applies to the newly internal-holdout-selected grouped
+candidate; do not use it retroactively to select the already observed
+pairwise-0.3 checkpoint.
+
 ### Frozen Kimi student local-test confirmation
 
 After closing the validation sweep, the already submitted `5e-5`, two-epoch
