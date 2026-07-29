@@ -5,6 +5,7 @@ import math
 from experiments.q397_family_calibration.cache_logits import family_from_text
 from experiments.q397_family_calibration.calibrate import (
     blended_margin,
+    empirical_parameters,
     macro_auroc,
     overlay_intent,
     select_family_parameter,
@@ -95,3 +96,31 @@ def test_intent_overlay_is_mean_log_odds() -> None:
     rows = [row("unit-a", 0, 0.0, 0.0, 7)]
     result = overlay_intent(rows, [0.2], {("unit-a", "7"): 0.8})
     assert math.isclose(result[0], 0.5, abs_tol=1.0e-12)
+
+
+def test_empirical_parameters_do_not_fit_one_unit_family() -> None:
+    robust = {
+        "Qwen": {"auxiliary": None, "digit_weight": 1.0},
+        "Nemotron": {"auxiliary": None, "digit_weight": 1.0},
+    }
+    searches = {
+        "Qwen": [
+            {
+                "auxiliary": "no_yes",
+                "digit_weight": 0.8,
+                "macro_auroc": 0.9,
+                "unit_count": 2,
+            }
+        ],
+        "Nemotron": [
+            {
+                "auxiliary": "a_b",
+                "digit_weight": 0.5,
+                "macro_auroc": 1.0,
+                "unit_count": 1,
+            }
+        ],
+    }
+    selected = empirical_parameters(robust, searches)
+    assert selected["Qwen"]["auxiliary"] == "no_yes"
+    assert selected["Nemotron"]["auxiliary"] is None

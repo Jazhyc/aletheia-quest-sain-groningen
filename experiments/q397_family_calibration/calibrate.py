@@ -231,6 +231,27 @@ def select_parameters(
     return parameters, searches
 
 
+def empirical_parameters(
+    robust_parameters: dict[str, dict[str, Any]],
+    searches: dict[str, list[dict[str, Any]]],
+) -> dict[str, dict[str, Any]]:
+    """Choose pure train-ERM parameters, retaining one-unit families unchanged."""
+    parameters = {}
+    for family, candidates in searches.items():
+        if not candidates or int(candidates[0]["unit_count"]) < 2:
+            parameters[family] = robust_parameters[family]
+            continue
+        parameters[family] = max(
+            candidates,
+            key=lambda candidate: (
+                candidate["macro_auroc"],
+                candidate["digit_weight"],
+                candidate["auxiliary"],
+            ),
+        )
+    return parameters
+
+
 def apply_parameters(
     rows: list[dict[str, Any]],
     parameters: dict[str, dict[str, Any]],
@@ -337,10 +358,17 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     train_rows = load_jsonl(args.train_scores)
     validation_rows = load_jsonl(args.validation_scores)
     parameters, searches = select_parameters(train_rows)
+    train_argmax_parameters = empirical_parameters(parameters, searches)
     baseline, calibrated = apply_parameters(validation_rows, parameters)
+    _, train_argmax_calibrated = apply_parameters(
+        validation_rows, train_argmax_parameters
+    )
     intent = load_intent_scores(args.intent_scores)
     phoenix_baseline = overlay_intent(validation_rows, baseline, intent)
     phoenix_candidate = overlay_intent(validation_rows, calibrated, intent)
+    phoenix_train_argmax = overlay_intent(
+        validation_rows, train_argmax_calibrated, intent
+    )
     report = {
         "method": "q397_family_calibration_v1",
         "principle": (
@@ -367,12 +395,19 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "minimum_scenario_delta": VALIDATION_SCENARIO_FLOOR,
         },
         "selected_parameters": parameters,
+        "exploratory_train_argmax_parameters": train_argmax_parameters,
         "train_searches": searches,
         "validation_q397_only": summarize(
             validation_rows, baseline, calibrated
         ),
         "validation_current_phoenix": summarize(
             validation_rows, phoenix_baseline, phoenix_candidate
+        ),
+        "validation_train_argmax_q397_only": summarize(
+            validation_rows, baseline, train_argmax_calibrated
+        ),
+        "validation_train_argmax_current_phoenix": summarize(
+            validation_rows, phoenix_baseline, phoenix_train_argmax
         ),
         "intent_rows": len(intent),
     }
@@ -381,8 +416,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         json.dumps(report, indent=2) + "\n"
     )
     with (args.output_dir / "validation_scores.jsonl").open("w") as handle:
-        for row, base, candidate in zip(
-            validation_rows, phoenix_baseline, phoenix_candidate, strict=True
+        for row, base, candidate, train_argmax in zip(
+            validation_rows,
+            phoenix_baseline,
+            phoenix_candidate,
+            phoenix_train_argmax,
+            strict=True,
         ):
             handle.write(
                 json.dumps(
@@ -393,6 +432,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                         "label": row["label"],
                         "baseline": base,
                         "candidate": candidate,
+                        "train_argmax_candidate": train_argmax,
                     },
                     sort_keys=True,
                 )

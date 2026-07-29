@@ -28,3 +28,18 @@ scenario loss beyond `0.001`.
 ```bash
 sbatch experiments/q397_family_calibration/run_train.sh
 ```
+
+The primary robustness-gated selector retained literal digits for every family.
+As a separately reported empirical-risk-minimization diagnostic, the pure
+train-macro winner was also frozen for each family with at least two units.
+That rule selected 50% digit plus 50% `truthful/misleading` for Qwen, 60%
+digit plus 40% `honest/deceptive` for Gemma, and unchanged digits for
+single-unit Nemotron. Although Q397 alone regressed, composing these train-only
+parameters with Phoenix's already-frozen rank-1 intent member raised validation
+macro AUROC from `0.95512` to `0.95702` (`+0.00190`), with instructed
+`-0.00042`, varied `+0.00500`, Qwen `+0.00222`, and no Gemma or Nemotron
+change. It therefore receives one frozen local-test confirmation:
+
+```bash
+sbatch experiments/q397_family_calibration/run_test.sh
+```
