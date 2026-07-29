@@ -34,6 +34,7 @@ export PYTHONPATH="${KERNEL_PATH}${PYTHONPATH:+:${PYTHONPATH}}"
 BENCHMARK="q397soft_ep2_grpo_reason_speed_v1"
 LOG_DIR="logs/lambda/${BENCHMARK}"
 MAX_STEPS="${Q397_GRPO_BENCHMARK_STEPS:-16}"
+ONLY_CONDITION="${Q397_GRPO_BENCHMARK_ONLY:-all}"
 mkdir -p "${LOG_DIR}" "${WANDB_DIR}"
 
 run_condition() {
@@ -60,14 +61,20 @@ run_condition() {
     2>&1 | tee "${log}"
 }
 
-if ! run_condition gbs32_mem35 32 0.35; then
-  echo "condition failed: gbs32_mem35" >&2
+if [[ "${ONLY_CONDITION}" == "all" || "${ONLY_CONDITION}" == "gbs32_mem35" ]]; then
+  if ! run_condition gbs32_mem35 32 0.35; then
+    echo "condition failed: gbs32_mem35" >&2
+  fi
 fi
-if ! run_condition gbs64_mem50 64 0.50; then
-  echo "condition failed: gbs64_mem50" >&2
+if [[ "${ONLY_CONDITION}" == "all" || "${ONLY_CONDITION}" == "gbs64_mem50" ]]; then
+  if ! run_condition gbs64_mem50 64 0.50; then
+    echo "condition failed: gbs64_mem50" >&2
+  fi
 fi
-if ! run_condition gbs32_mem35_warm 32 0.35; then
-  echo "condition failed: gbs32_mem35_warm" >&2
+if [[ "${ONLY_CONDITION}" == "all" || "${ONLY_CONDITION}" == "gbs32_mem35_warm" ]]; then
+  if ! run_condition gbs32_mem35_warm 32 0.35; then
+    echo "condition failed: gbs32_mem35_warm" >&2
+  fi
 fi
 
 python - "${LOG_DIR}" <<'PY'
@@ -78,7 +85,7 @@ import sys
 
 log_dir = pathlib.Path(sys.argv[1])
 rows = []
-for log_path in sorted(log_dir.glob("*.out")):
+for log_path in sorted(log_dir.glob("gbs*.out")):
     text = log_path.read_text()
     runtime = re.findall(r"'train_runtime': ['\"]?([0-9.]+)", text)
     steps_per_second = re.findall(r"'train_steps_per_second': ['\"]?([0-9.]+)", text)
