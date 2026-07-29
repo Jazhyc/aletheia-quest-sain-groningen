@@ -4644,3 +4644,25 @@ four-row trace-bearing dry rehearsal passed in `1m27s`, packaged at 130.3 MB,
 and exercised both the consolidated primary adapter and rank-1 intent adapter.
 The smoke's labels were one-class, so it supplies execution rather than AUROC
 evidence.
+
+## 2026-07-29: Q397 auxiliary readout adaptation
+
+A frozen local-vLLM sweep tested inference-cheap readout adaptation on the
+optimized two-epoch Q397 adapter. It held the exact Phoenix 4.0 Truth Value
+Guard prompt and final `Prediction:` position fixed, requested the union of 12
+label-token logits in one adapter pass, and compared six raw binary
+verbalizers plus six fixed probability blends. Thus every candidate retained
+the same one-pass deployment shape.
+
+The trained literal `0/1` margin won validation at `0.95393` macro AUROC
+(`0.99813` instructed, `0.89500` varied; 771 unique scores). The closest
+candidate, the mean of digit and `No/Yes` probabilities, scored `0.95119`
+(`0.99792` instructed, `0.88889` varied; 818 unique), a `-0.00274` macro
+delta. Raw `No/Yes` scored `0.94899`; raw `False/True` scored `0.93815`.
+`A/B`, `honest/deceptive`, and `truthful/misleading` were substantially worse.
+
+The closest candidate failed the predeclared `+0.0020` macro promotion gate,
+and no candidate beat the digit control, so no test run was performed. A
+matched base pass confirmed a material LoRA effect on digit probabilities
+(mean absolute delta `0.10215`, maximum `0.64434`). Retain the trained `0/1`
+readout; extra score uniqueness from semantic blends did not improve ranking.
