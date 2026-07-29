@@ -4666,3 +4666,27 @@ and no candidate beat the digit control, so no test run was performed. A
 matched base pass confirmed a material LoRA effect on digit probabilities
 (mean absolute delta `0.10215`, maximum `0.64434`). Retain the trained `0/1`
 readout; extra score uniqueness from semantic blends did not improve ranking.
+
+## 2026-07-29: Q397 family-level calibration
+
+A local-vLLM train cache tested a non-organism-specific calibration that could
+actually change per-dataset AUROC: family-wide log-odds blends between the
+trained Q397 `0|1` margin and auxiliary label pairs from the same final
+position. Unlike temperature or offset calibration, these blends can reorder
+rows while retaining one model call. Selection used all 6,573 train rows;
+Nemotron was forced to retain digits because it has only one train unit.
+
+The robustness-gated selector retained digits for Qwen, Gemma, and Nemotron,
+so its frozen validation vector was unchanged. A pure train-macro diagnostic
+selected 50% digits plus 50% `truthful/misleading` for Qwen and 60% digits
+plus 40% `honest/deceptive` for Gemma. On deployable output-only validation,
+that rule regressed Q397 macro AUROC from `0.95393` to `0.95286`
+(`-0.00107`), with both instructed (`-0.00042`) and varied (`-0.00194`)
+losses.
+
+An apparent current-Phoenix gain to `0.95702` depended on subsequently blending
+the calibrated Q397 score with the rank-1 intent adapter on 360 rows carrying
+source reasoning. The held-out contract does not guarantee that field; without
+it the intent route cannot activate. Test job `30361126` was therefore
+cancelled pending with zero runtime. Reject the family calibration and do not
+promote a reasoning-dependent interaction as an output-only leaderboard gain.

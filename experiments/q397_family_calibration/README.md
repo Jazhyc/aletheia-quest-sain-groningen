@@ -34,12 +34,15 @@ As a separately reported empirical-risk-minimization diagnostic, the pure
 train-macro winner was also frozen for each family with at least two units.
 That rule selected 50% digit plus 50% `truthful/misleading` for Qwen, 60%
 digit plus 40% `honest/deceptive` for Gemma, and unchanged digits for
-single-unit Nemotron. Although Q397 alone regressed, composing these train-only
-parameters with Phoenix's already-frozen rank-1 intent member raised validation
-macro AUROC from `0.95512` to `0.95702` (`+0.00190`), with instructed
-`-0.00042`, varied `+0.00500`, Qwen `+0.00222`, and no Gemma or Nemotron
-change. It therefore receives one frozen local-test confirmation:
+single-unit Nemotron. Q397 alone regressed from `0.95393` to `0.95286`
+(`-0.00107`). Composing these train-only parameters with Phoenix's rank-1
+intent member appeared to raise validation macro AUROC from `0.95512` to
+`0.95702` (`+0.00190`), but that interaction exists only on the 360
+development rows exposing source reasoning. The held-out input contract does
+not guarantee a reasoning field, and the rank-1 route cannot run without one.
+Therefore the deployable, output-only calibration result is the Q397
+regression, not the apparent composite gain.
 
-```bash
-sbatch experiments/q397_family_calibration/run_test.sh
-```
+Test job `30361126` was cancelled while still pending and consumed no GPU
+time. Do not run a test confirmation or add these family weights to Phoenix.
+Retain the literal `0|1` Q397 readout for output-only held-out rows.
