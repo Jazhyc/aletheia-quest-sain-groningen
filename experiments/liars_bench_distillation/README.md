@@ -975,3 +975,27 @@ For actual Harm Pressure Choice, Q397 ordinary direct scoring won at `0.77325`
 over Q397 harm-empty at `0.75785` and base-Qwen harm-empty at `0.62690`.
 This rejects adding a harm-choice specialist. Do not confuse this category
 with the notebook's `harm_routes` variable, which identifies HP-KR.
+
+## Framing-robust specialist routers
+
+The 2026-07-29 router expansion keeps the HP-KR and action-report semantics
+fixed while recognizing more ways to express their observable contracts.
+HP-KR now requires three aligned signals in the final exchange: a knowledge or
+capability inquiry, an explicit constrained-report instruction, and an
+assistant response shaped as a knowledge, capability, or refusal report. Only
+the final user turn supplies the first two signals, preventing an earlier
+multiple-choice format constraint from being borrowed by a later unrelated
+question. Action routing now separates execution evidence before the final
+assistant turn from the report itself and recognizes natural-language and
+structured-tool variants for purchases, transfers, orders, positions, and
+their decision basis.
+
+The expanded rules retain `7,068/7,068` public HP-KR rows and `6,873/6,873`
+public Insider Trading rows. They route zero rows in all six other Liars'
+Bench categories: 8,000 Alpaca, 888 Convincing Game, 762 Gender Secret, 5,400
+Harm Pressure Choice, 26,426 Instructed Deception, and 24,000 Soft Trigger
+rows. The full 8,216-row local competition audit also remains at zero HP-KR
+and action hits. On the frozen 200-row-per-category artifact, deterministic
+lexical substitutions that previously reduced coverage to `0/200` HP-KR and
+`10/200` action now retain `200/200` for both routes. This perturbation check
+is a framing-sensitivity test, not an estimate of private-data recall.
