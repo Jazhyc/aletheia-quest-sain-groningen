@@ -4656,10 +4656,17 @@ harm and gain. Public Liars' Bench contains no native reasoning fields in any
 of its 79,417 test rows and therefore supplies no source-trace OOD validation.
 
 The Kimi-distilled rank-16 adapter, model, ordinary renderer, HP-KR and action
-prompts, route precedence, direct label boundaries, `48/32/16` batching,
+semantics, route precedence, `48/32/16` batching,
 2,048-token left truncation, `logits_to_keep=1`, and binary threshold `0.5`
 remain unchanged. Every row now receives exactly its primary-route score from
 one adapter pass, and source reasoning is ignored even when present.
+All three active prompt types terminate directly at `Prediction:`; the
+inherited reasoning-summary instructions and empty scaffolds were removed from
+HP-KR and action.
+The specialist routers match zero known competition rows, so known local scores
+are unchanged. This deliberately gives up exact replay of the historical
+Liars' Bench empty-scaffold selection; the new direct specialist boundaries
+have not been re-evaluated on Liars' Bench.
 
 ## 2026-07-29: Q397 auxiliary readout adaptation
 

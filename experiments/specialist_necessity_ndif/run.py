@@ -41,7 +41,6 @@ from experiments.privileged_information_distillation.core import (  # noqa: E402
     build_student_prompt,
 )
 from submission.phoenix_wright import (  # noqa: E402
-    EMPTY_REASONING_PREFIX,
     build_action_member_prompt,
     build_epistemic_member_prompt,
     build_intent_member_prompt,
@@ -60,6 +59,11 @@ DEFAULT_EXTERNAL_ARTIFACT = (
 MAX_PROMPT_TOKENS = 2_048
 REASONING_MAX_CHARS = 4_000
 EPSILON = 1e-8
+EMPTY_REASONING_PREFIX = (
+    "<reasoning_summary>\n"
+    "</reasoning_summary>\n"
+    "Prediction:"
+)
 
 
 @dataclass(frozen=True)

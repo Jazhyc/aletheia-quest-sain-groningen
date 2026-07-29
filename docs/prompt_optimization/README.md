@@ -50,11 +50,12 @@ Submission mapping:
   two-epoch Kimi K3 binary-soft-distilled rank-16 Qwen3.5-9B adapter
   and normalized direct literal `0|1` margins. Ordinary rows preserve Phoenix
   4.0's structural renderer and the exact original binary-only training prompt.
-  HP-KR and action rows retain their independently frozen empty-scaffold
-  prompts and share the same adapter/model session, replacing the base-Qwen and
-  legacy-v2 sessions. Phoenix 8.0 removes the rank-1 resolved-intent adapter and
-  its log-odds blend; source reasoning is never consumed. HP-KR takes precedence
-  over action, and those prompt routes remain mutually exclusive.
+  HP-KR and action rows retain their semantic routing instructions but now
+  terminate directly at `Prediction:` with no reasoning-summary instruction or
+  scaffold. They share the same adapter/model session, replacing the base-Qwen
+  and legacy-v2 sessions. Phoenix 8.0 removes the rank-1 resolved-intent adapter
+  and its log-odds blend; source reasoning is never consumed. HP-KR takes
+  precedence over action, and those prompt routes remain mutually exclusive.
   Length-aware `48/32/16` batching,
   `logits_to_keep=1`, and secondary threshold `0.5` remain unchanged. The
   adapter is published at

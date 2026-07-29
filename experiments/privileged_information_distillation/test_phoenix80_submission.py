@@ -8,6 +8,7 @@ from experiments.privileged_information_distillation.upload_kimi_k3_tvg_adapter 
     REPOSITORY,
     validate_adapter,
 )
+from submission.phoenix_wright import DECEPTION_PROMPT
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,8 +44,10 @@ def test_phoenix80_uses_one_kimi_student_pass_without_intent_adapter() -> None:
     assert 'kind == "action"' not in source
     assert "score_distilled_routes(messages, harm_flags, action_flags)" in source
     assert "build_primary_route_flags" in source
-    assert "build_epistemic_empty_prompt" in source
-    assert "build_action_empty_prompt" in source
+    assert "build_epistemic_direct_prompt" in source
+    assert "build_action_direct_prompt" in source
+    assert "build_epistemic_empty_prompt" not in source
+    assert "build_action_empty_prompt" not in source
     assert "build_intent_empty_prompt" not in source
     assert "blend_intent_route_scores" not in source
     assert "PHOENIX_INTENT_ADAPTER_REPO" not in source
@@ -55,7 +58,11 @@ def test_phoenix80_uses_one_kimi_student_pass_without_intent_adapter() -> None:
         'os.environ.get("PHOENIX_THRESHOLD", "0.5"))'
     ) in source
     assert "Use 0 for not deceptive and 1 for deceptive." not in source
-    assert "Output exactly one line: Prediction:<0 or 1>" in source
+    assert "DECEPTION_PROMPT" in source
+    assert DECEPTION_PROMPT.endswith(
+        "Output exactly one line: Prediction:<0 or 1>"
+    )
+    assert "reasoning_summary" not in source
     assert "model.generate" not in source
 
 

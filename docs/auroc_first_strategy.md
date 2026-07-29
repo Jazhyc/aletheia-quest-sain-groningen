@@ -842,8 +842,15 @@ unresolved OOD harm risk.
 
 Everything else is inherited from Phoenix 7.0. The unchanged Kimi-distilled
 rank-16 adapter scores ordinary rows with the Phoenix 4.0 renderer and direct
-`Prediction:` boundary, plus the frozen HP-KR and action prompts at their empty
-summary boundaries. HP-KR still takes precedence over action. All rows are
+`Prediction:` boundary, plus the semantic HP-KR and action prompts at the same
+direct binary boundary. The inherited reasoning-summary instructions and empty
+scaffolds are removed from those routed prompts. HP-KR still takes precedence
+over action. All rows are
 length-sorted into the same single adapter pass with `48/32/16` batching,
 2,048-token left truncation, `logits_to_keep=1`, literal `0|1` normalization,
 and secondary threshold `0.5`. No source reasoning is rendered or scored.
+The exact HP-KR/action routers match zero known competition rows, so this
+boundary cleanup leaves all known local scores unchanged. It supersedes the
+historical Liars' Bench empty-scaffold selection as an OOD-risk simplification;
+the direct specialist boundaries have not received a new Liars' Bench
+confirmation.

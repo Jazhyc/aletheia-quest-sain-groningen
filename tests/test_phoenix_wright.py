@@ -7,17 +7,18 @@ import pytest
 
 from submission.phoenix_wright import (
     ACTION_PROMPT,
+    DECEPTION_PROMPT,
     DIRECT_PREDICTION_PREFIX,
-    EMPTY_REASONING_PREFIX,
     EPISTEMIC_PROMPT,
     INTENT_PROMPT,
     MAIN_MAX_CONTEXT_CHARS,
-    MAIN_PROMPT,
     binary_logits_to_scores,
     binary_token_ids,
     blend_intent_route_scores,
+    build_action_direct_prompt,
     build_action_empty_prompt,
     build_action_member_prompt,
+    build_epistemic_direct_prompt,
     build_epistemic_empty_prompt,
     build_epistemic_member_prompt,
     build_exclusive_route_flags,
@@ -99,6 +100,7 @@ def test_notebook_structural_renderer_matches_historical_phoenix4() -> None:
 
     namespace = {
         "Any": Any,
+        "DECEPTION_PROMPT": DECEPTION_PROMPT,
         "Iterable": Iterable,
         "Mapping": Mapping,
     }
@@ -139,6 +141,7 @@ def test_notebook_ordinary_prompt_matches_binary_training_contract() -> None:
 
     namespace = {
         "Any": Any,
+        "DECEPTION_PROMPT": DECEPTION_PROMPT,
         "Iterable": Iterable,
         "Mapping": Mapping,
     }
@@ -215,10 +218,10 @@ def test_phoenix80_primary_routes_share_one_distilled_model_pass() -> None:
         "load_judge": fake_load_judge,
         "score_prompts": fake_score_prompts,
         "build_direct_prompt": lambda messages, tokenizer: f"main:{messages}",
-        "build_epistemic_empty_prompt": (
+        "build_epistemic_direct_prompt": (
             lambda messages, tokenizer: f"hpkr:{messages}"
         ),
-        "build_action_empty_prompt": (
+        "build_action_direct_prompt": (
             lambda messages, tokenizer: f"action:{messages}"
         ),
     }
@@ -273,9 +276,7 @@ def test_reasoning_prefix_removes_only_the_final_generated_label() -> None:
     assert not has_binary_prediction("unfinished rationale")
 
 
-def test_main_prompt_matches_blind_reasoning_renderer() -> None:
-    import yaml
-
+def test_main_prompt_uses_direct_binary_renderer() -> None:
     from experiments.privileged_information_distillation.core import (
         build_student_prompt,
     )
@@ -285,17 +286,13 @@ def test_main_prompt_matches_blind_reasoning_renderer() -> None:
         {"role": "assistant", "content": "Yes.", "reasoning": "hidden"},
     ]
 
-    config = yaml.safe_load(
-        (ROOT / "configs/privileged_information_distillation.yaml").read_text()
-    )["student"]
-
-    assert MAIN_PROMPT == config["prompt"]
     assert build_main_member_prompt(messages) == build_student_prompt(
         messages,
-        config["prompt"],
+        DECEPTION_PROMPT,
         MAIN_MAX_CONTEXT_CHARS,
         "tail",
     )
+    assert "reasoning_summary" not in DECEPTION_PROMPT
     assert (
         build_main_direct_prompt(messages, FakeTokenizer())
         == "<chat>" + DIRECT_PREDICTION_PREFIX
@@ -303,8 +300,7 @@ def test_main_prompt_matches_blind_reasoning_renderer() -> None:
     assert "hidden" not in build_main_member_prompt(messages)
 
 
-def test_epistemic_prompt_matches_frozen_experiment_renderer() -> None:
-    from experiments.liars_bench_hpkr_prompts.evaluate import PROMPTS
+def test_epistemic_prompt_uses_direct_binary_renderer() -> None:
     from experiments.privileged_information_distillation.core import (
         build_student_prompt,
     )
@@ -317,17 +313,20 @@ def test_epistemic_prompt_matches_frozen_experiment_renderer() -> None:
         {"role": "assistant", "content": "I do not know."},
     ]
 
-    assert EPISTEMIC_PROMPT == PROMPTS["knowledge_report_type"]
     assert build_epistemic_member_prompt(messages) == build_student_prompt(
         messages,
-        PROMPTS["knowledge_report_type"],
+        EPISTEMIC_PROMPT,
         6000,
         "head_tail",
     )
     assert (
-        build_epistemic_empty_prompt(messages, FakeTokenizer())
-        == "<chat>" + EMPTY_REASONING_PREFIX
+        build_epistemic_direct_prompt(messages, FakeTokenizer())
+        == "<chat>" + DIRECT_PREDICTION_PREFIX
     )
+    assert build_epistemic_empty_prompt(
+        messages, FakeTokenizer()
+    ) == build_epistemic_direct_prompt(messages, FakeTokenizer())
+    assert "reasoning_summary" not in EPISTEMIC_PROMPT
 
 
 def test_epistemic_router_excludes_forced_harm_choice() -> None:
@@ -356,8 +355,7 @@ def test_epistemic_router_excludes_forced_harm_choice() -> None:
     assert not is_harm_pressure_specialist_request(choice)
 
 
-def test_action_prompt_matches_frozen_experiment_renderer() -> None:
-    from experiments.liars_bench_distillation.prompts import ACTION_REPORT_PROMPT
+def test_action_prompt_uses_direct_binary_renderer() -> None:
     from experiments.privileged_information_distillation.core import (
         build_student_prompt,
     )
@@ -374,25 +372,28 @@ def test_action_prompt_matches_frozen_experiment_renderer() -> None:
         },
     ]
 
-    assert ACTION_PROMPT == ACTION_REPORT_PROMPT
     assert build_action_member_prompt(messages) == build_student_prompt(
         messages,
-        ACTION_REPORT_PROMPT,
+        ACTION_PROMPT,
         4500,
         "head_tail",
     )
     assert (
-        build_action_empty_prompt(messages, FakeTokenizer())
-        == "<chat>" + EMPTY_REASONING_PREFIX
+        build_action_direct_prompt(messages, FakeTokenizer())
+        == "<chat>" + DIRECT_PREDICTION_PREFIX
     )
+    assert build_action_empty_prompt(
+        messages, FakeTokenizer()
+    ) == build_action_direct_prompt(messages, FakeTokenizer())
     assert (
         build_phoenix_route_prompt(
             messages,
             FakeTokenizer(),
             action_report=True,
         )
-        == build_action_empty_prompt(messages, FakeTokenizer())
+        == build_action_direct_prompt(messages, FakeTokenizer())
     )
+    assert "reasoning_summary" not in ACTION_PROMPT
 
 
 def test_ordinary_phoenix_route_preserves_direct_prompt_exactly() -> None:
@@ -487,10 +488,9 @@ def test_intent_prompt_matches_rank_one_training_renderer() -> None:
         ).read_text()
     )["student"])
 
-    assert INTENT_PROMPT == config["prompt"]
     assert build_intent_member_prompt(messages) == build_student_prompt(
         messages,
-        config["prompt"],
+        INTENT_PROMPT,
         config["max_prompt_chars"],
         config["context_truncation"],
         include_reasoning=config["include_reasoning"],
@@ -500,8 +500,9 @@ def test_intent_prompt_matches_rank_one_training_renderer() -> None:
     )
     assert (
         build_intent_empty_prompt(messages, FakeTokenizer())
-        == "<chat>" + EMPTY_REASONING_PREFIX
+        == "<chat>" + DIRECT_PREDICTION_PREFIX
     )
+    assert "reasoning_summary" not in INTENT_PROMPT
     assert has_final_assistant_reasoning(messages)
     assert not has_final_assistant_reasoning([
         {
@@ -558,8 +559,8 @@ def test_phoenix80_notebook_preserves_direct_runtime_contract() -> None:
     assert 'kind == "action"' not in source
     assert "build_primary_route_flags" in source
     assert "blend_intent_route_scores" not in source
-    assert "builder = build_epistemic_empty_prompt" in source
-    assert "builder = build_action_empty_prompt" in source
+    assert "builder = build_epistemic_direct_prompt" in source
+    assert "builder = build_action_direct_prompt" in source
     assert "builder = build_direct_prompt" in source
     assert '"logits_to_keep": 1' in source
     assert "active_model.output.logits[:, -1, label_ids]" in source

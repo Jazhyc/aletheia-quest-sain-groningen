@@ -25,7 +25,9 @@ canonical Qwen3.5 paths under `model.language_model.layers` and exclude visual
 modules.
 
 Phoenix 8.0 applies the exact Phoenix 4.0 observable-input renderer on ordinary
-rows and the frozen HP-KR/action empty-scaffold prompts on their routed rows.
+rows and the semantic HP-KR/action prompts on their routed rows. Every prompt
+terminates directly at `Prediction:` without a reasoning-summary instruction
+or scaffold.
 It scores the normalized literal `0|1` next-token margin directly, without
 generating judge reasoning. Frozen ordinary local validation macro AUROC was
 `0.95994` (`0.99833` instructed, `0.90875` varied).
