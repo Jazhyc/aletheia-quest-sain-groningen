@@ -575,6 +575,61 @@ while sharing the same Alibaba endpoint, but retrying did not change provider
 or leave incomplete rows. Select 397B, not 122B, if proceeding with remote
 same-family soft supervision.
 
+### Kimi K3 OpenRouter binary-soft cache (2026-07-29)
+
+The frozen no-thinking Truth Value Guard prompt was evaluated on the 821-row
+local test through `moonshotai/kimi-k3`. OpenRouter's first-party Moonshot
+endpoint did not expose token log-probabilities, so the run was pinned to the
+standard Fireworks endpoint with fallback disabled. Fireworks returned both
+literal terminal labels on every row. Kimi scored `0.98244` test macro AUROC
+(`0.99865` instructed, `0.96083` varied), with 735 unique scores, 86
+duplicate-score excess rows, and zero missing label logits. The run cost
+`$0.84434` and took 396.7 seconds. This is training/development evidence only;
+external API inference remains prohibited in the competition submission.
+
+The user then explicitly authorized a training-only soft-target cache. The
+matched Fireworks run covered all 2,880 varied training rows, retained the
+identity-normalized `P(1)/(P(0)+P(1))` target, and did not use local-test
+outputs as training data. It completed in 615.6 seconds for `$3.61396`,
+processing 1,101,623 prompt tokens and 23,040 completion tokens. All responses
+resolved to `moonshotai/kimi-k3` through Fireworks; 313 rows required at least
+one transient retry, but no row failed or changed provider. The cache has 2,034
+unique scores and 846 duplicate-score excess rows.
+
+| varied training dataset unit | AUROC |
+| --- | ---: |
+| `Qwen3.5-27B-None` | `0.98617` |
+| `Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.90664` |
+| `Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.89051` |
+| `Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `0.93389` |
+| `Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `0.97297` |
+| `Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.93855` |
+| `Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.94246` |
+| `Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.99299` |
+| `Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.99227` |
+
+Training macro AUROC was `0.95072`, versus `0.91978` for the historical
+Qwen3.5-397B FP8 cache and `0.92040` for the regular-OpenRouter explicit-digit
+cache on the same rows. Kimi and the FP8 teacher targets remain strongly
+correlated (`r=0.93642`) but differ by mean absolute probability `0.05999` and
+cross the 0.5 boundary on 142 rows. This supplies meaningfully different,
+higher-ranking supervision rather than a duplicate cache.
+
+The cache and student rows are under
+`results/blackbox/kimi_k3_fireworks_nothink_tvg_binary_logit_v1/train/`.
+Their SHA-256 digests are:
+
+- generations: `c9915c5fe1589f7abce03d1f524f84db9fef6bd06f5fef77409c6dddddfe53cc`
+- soft targets: `744296859003ecad37d61ca9e37f4ee374105cf97a17933b7b1d0a66cafefa4a`
+- student rows: `0580aae3d6aa127687f46011589f652c101d08c59b5d9a95a800f238cf7011fe`
+
+The prepared student keeps Qwen3.5-9B, rank 16/alpha 32, AdamW `5e-5`,
+effective batch size 32, and the validation-selected two-epoch binary-soft
+recipe. GPU training is intentionally deferred until an H100 is rented. When
+run, select only on direct-margin validation macro AUROC against the current
+`0.95393` Qwen-397B student reference; do not schedule local-test evaluation
+unless that frozen validation rule passes.
+
 ### Competition-NDIF Nemotron/Gemma Truth Value Guard swaps (2026-07-27)
 
 The exact no-thinking binary Truth Value Guard boundary was also ported to the
