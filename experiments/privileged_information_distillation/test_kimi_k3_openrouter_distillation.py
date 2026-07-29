@@ -11,6 +11,12 @@ TEACHER = (
     / "privileged_information_distillation"
     / "run_kimi_k3_openrouter_soft_teacher.sh"
 )
+INSTRUCTED_TEACHER = (
+    ROOT
+    / "experiments"
+    / "privileged_information_distillation"
+    / "run_kimi_k3_openrouter_instructed_soft_teacher.sh"
+)
 SUBMIT = (
     ROOT
     / "experiments"
@@ -44,6 +50,18 @@ def test_kimi_teacher_is_pinned_and_builds_identity_targets() -> None:
     assert "--dataset-name-contains varied-deception" in source
     assert "--kind binary_identity" in source
     assert "--expected-rows 2880" in source
+
+
+def test_kimi_instructed_teacher_is_pinned_and_builds_identity_targets() -> None:
+    source = INSTRUCTED_TEACHER.read_text()
+
+    assert 'CONCURRENCY="${KIMI_CONCURRENCY:-64}"' in source
+    assert "--model moonshotai/kimi-k3" in source
+    assert "--provider-only Fireworks" in source
+    assert "--no-allow-fallbacks" in source
+    assert "--dataset-name-contains instructed-deception" in source
+    assert "--kind binary_identity" in source
+    assert "--expected-rows 3693" in source
 
 
 def test_kimi_student_only_schedules_validation() -> None:

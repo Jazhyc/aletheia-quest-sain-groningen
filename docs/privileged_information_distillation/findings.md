@@ -630,6 +630,51 @@ run, select only on direct-margin validation macro AUROC against the current
 `0.95393` Qwen-397B student reference; do not schedule local-test evaluation
 unless that frozen validation rule passes.
 
+#### Kimi K3 instructed-training extension (2026-07-29)
+
+A later explicitly authorized run extended the same frozen prompt and literal
+`0|1` margin to all 3,693 instructed-deception training rows. It used
+concurrency 64, remained pinned to Fireworks with provider fallback disabled,
+and ultimately returned `moonshotai/kimi-k3` for every row. One row exhausted
+the initial nine attempts on a malformed upstream response, then succeeded
+when the resumable launcher retried only that row. The final artifacts have
+zero missing binary logits, zero parse errors, and exact 3,693-row coverage.
+
+The successful cache reports 917,424 prompt tokens, 29,544 completion tokens,
+and `$3.16348` cost. The active request passes took about 477 seconds in total;
+the malformed responses that were not cached may make the account-level charge
+slightly higher than the successful-response total. Among saved rows, 548
+needed at least one transient retry. The scores contain 2,215 unique values
+and 1,478 duplicate-score excess rows, spanning `0.0008041` to `0.9998416`.
+
+| organism family | dataset units | train macro AUROC |
+| --- | ---: | ---: |
+| Gemma | 2 | `0.99928` |
+| Nemotron | 1 | `0.98894` |
+| Qwen | 9 | `0.99718` |
+| **All instructed** | **12** | **`0.99685`** |
+
+The instructed targets are easier and sharper than the varied cache: mean
+binary entropy is `0.07346` versus `0.10737` nats, and only `21.74%` versus
+`35.35%` lie strictly inside `[0.01, 0.99]`. Combining the two independently
+cached split macros gives a 21-unit Kimi teacher train AUROC of `0.97708`
+across all 6,573 rows. This is a teacher diagnostic, not a held-out student
+result.
+
+The instructed cache is under
+`results/blackbox/kimi_k3_fireworks_nothink_tvg_binary_logit_instructed_v1/train/`.
+Its SHA-256 digests are:
+
+- generations: `baf1eb0f22adad9ac132418ff4c89ad3751608a638b6addb290a625996619319`
+- soft targets: `dbf473512cbe05b3de65c38498f81390d2ea07388c77b225f99fb0f3e07eb4d2`
+- student rows: `045c9953e06f4e61dc43abc43befa16b6e13dfb5da7e6105b52ab790df1de105`
+
+This removes missing instructed supervision as a confound for the next
+distillation experiment and adds the Gemma/Nemotron controls absent from the
+varied-only cache. It does not by itself show that full-data training or a
+higher LoRA rank improves validation. Run the matched full-data rank-16 control
+before attributing any residual teacher gap to rank capacity.
+
 ### Competition-NDIF Nemotron/Gemma Truth Value Guard swaps (2026-07-27)
 
 The exact no-thinking binary Truth Value Guard boundary was also ported to the
