@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from safetensors.torch import load_file, save_file
@@ -7,13 +8,19 @@ from experiments.kimi_liars_enrichment.export_bf16_adapter import (
     CANONICAL_PREFIX,
     export_bf16,
 )
+from experiments.kimi_liars_enrichment.upload_bf16_adapter import validate_adapter
 
 
 def test_export_bf16_preserves_keys_and_rounds_payloads(tmp_path: Path) -> None:
     source = tmp_path / "source"
     destination = tmp_path / "destination"
     source.mkdir()
-    (source / "adapter_config.json").write_text("{}\n")
+    (source / "adapter_config.json").write_text(json.dumps({
+        "base_model_name_or_path": "Qwen/Qwen3.5-9B",
+        "r": 16,
+        "lora_alpha": 32,
+        "exclude_modules": r".*(visual|vision_tower|merger|patch_embed).*",
+    }) + "\n")
     (source / "README.md").write_text("adapter\n")
     state = {
         f"{CANONICAL_PREFIX}{index}.x": torch.tensor(
@@ -31,3 +38,7 @@ def test_export_bf16_preserves_keys_and_rounds_payloads(tmp_path: Path) -> None:
     assert (destination / "README.md").read_text() == "adapter\n"
     assert report["tensor_count"] == 256
     assert report["destination_weight_bytes"] < report["source_weight_bytes"]
+    validation = validate_adapter(
+        destination, report["destination_weight_sha256"]
+    )
+    assert validation["dtypes"] == ["torch.bfloat16"]
