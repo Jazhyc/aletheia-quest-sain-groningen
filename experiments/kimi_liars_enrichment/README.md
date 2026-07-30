@@ -81,3 +81,19 @@ Both arms retain the Phoenix 8 rank-16, two-epoch AdamW `5e-5` recipe. The
 probe changes only the Liars replay dose: it uses a stable label- and
 dataset-stratified 50% sample while retaining every original competition row.
 Validation compares both arms with the Phoenix 8 adapter in one vLLM session.
+
+Promotion is frozen before those adapter scores are inspected. Relative to the
+Phoenix 8 anchor, an eligible arm must:
+
+- improve the disjoint 800-row Liars pilot macro-category AUROC by at least
+  `0.02`;
+- retain competition validation macro AUROC within `0.001`;
+- retain instructed AUROC within `0.0005`; and
+- retain varied AUROC within `0.002`.
+
+Among eligible arms, select the highest competition validation macro AUROC. If
+they are within `0.0005`, use Liars pilot macro AUROC as the tie-breaker; if
+that is within `0.002`, prefer the half-dose arm as the lower-OOD-exposure
+choice. Only the frozen winner receives a local test evaluation. If neither
+arm passes, retain Phoenix 8 rather than promoting an OOD gain that damages the
+known competition distribution.
