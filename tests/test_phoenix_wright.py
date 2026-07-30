@@ -39,7 +39,7 @@ from submission.phoenix_wright import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v8_0.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v8_1.ipynb"
 
 
 class FakeTokenizer:
@@ -78,7 +78,7 @@ def test_notebook_uses_one_kimi_student_pass_without_intent_adapter() -> None:
     source = notebook_source()
 
     assert (
-        "Jazhyc/aletheias-phoenix-v8-kimi-k3-tvg-soft-full-r16-ep2"
+        "Jazhyc/aletheias-phoenix-v8-1-kimi-k3-liars-full-r16-ep2"
         in source
     )
     assert "ACTION_ADAPTER_REPO" not in source
@@ -552,13 +552,13 @@ def test_mean_log_odds_and_intent_mask_preserve_other_scores() -> None:
         blend_intent_route_scores(base, [], routes)
 
 
-def test_phoenix80_notebook_preserves_direct_runtime_contract() -> None:
+def test_phoenix81_notebook_preserves_direct_runtime_contract() -> None:
     source = notebook_source()
     ast.parse(source)
 
-    assert "method=phoenix_wright_v8.0 kimi_k3_distilled_routes" in source
+    assert "method=phoenix_wright_v8.1 kimi_k3_liars_distilled_routes" in source
     assert (
-        "Jazhyc/aletheias-phoenix-v8-kimi-k3-tvg-soft-full-r16-ep2"
+        "Jazhyc/aletheias-phoenix-v8-1-kimi-k3-liars-full-r16-ep2"
         in source
     )
     assert 'kind == "harm"' not in source

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and publish the selected Phoenix 8.1 BF16 LoRA package."""
+"""Validate and publish the selected Phoenix 8.1 LoRA package."""
 
 from __future__ import annotations
 
@@ -28,15 +28,18 @@ VISION_EXCLUDE_PATTERN = r".*(visual|vision_tower|merger|patch_embed).*"
 
 
 def validate_adapter(
-    adapter_dir: Path, expected_sha256: str | None = None
+    adapter_dir: Path,
+    expected_sha256: str | None = None,
+    expected_dtype: str = "torch.bfloat16",
 ) -> dict[str, Any]:
     """Validate the exact deployment package before any external write."""
     required = {
         "README.md",
         "adapter_config.json",
         "adapter_model.safetensors",
-        "bf16_export.json",
     }
+    if expected_dtype == "torch.bfloat16":
+        required.add("bf16_export.json")
     missing = sorted(name for name in required if not (adapter_dir / name).is_file())
     if missing:
         raise FileNotFoundError(f"incomplete adapter directory; missing {missing}")
@@ -64,8 +67,10 @@ def validate_adapter(
     noncanonical = [key for key in keys if not key.startswith(CANONICAL_PREFIX)]
     if noncanonical:
         raise ValueError(f"noncanonical LoRA keys: {noncanonical[:3]}")
-    if dtypes != ["torch.bfloat16"]:
-        raise ValueError(f"expected BF16 LoRA tensors, found {dtypes}")
+    if dtypes != [expected_dtype]:
+        raise ValueError(
+            f"expected {expected_dtype} LoRA tensors, found {dtypes}"
+        )
     weight_sha256 = sha256_file(weights_path)
     if expected_sha256 is not None and weight_sha256 != expected_sha256:
         raise ValueError(
@@ -86,6 +91,11 @@ def main() -> None:
     parser.add_argument("--repository", required=True)
     parser.add_argument("--expected-sha256")
     parser.add_argument(
+        "--expected-dtype",
+        choices=("bfloat16", "float32"),
+        default="bfloat16",
+    )
+    parser.add_argument(
         "--commit-message",
         default="Publish Phoenix 8.1 Kimi Liars adapter",
     )
@@ -96,7 +106,9 @@ def main() -> None:
     if not token:
         raise SystemExit("HF_TOKEN is missing from .env")
     validation = validate_adapter(
-        args.adapter_dir.resolve(), args.expected_sha256
+        args.adapter_dir.resolve(),
+        args.expected_sha256,
+        expected_dtype=f"torch.{args.expected_dtype}",
     )
     api = HfApi(token=token)
     account = str(api.whoami()["name"])

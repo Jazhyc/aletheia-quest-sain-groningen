@@ -42,3 +42,9 @@ def test_export_bf16_preserves_keys_and_rounds_payloads(tmp_path: Path) -> None:
         destination, report["destination_weight_sha256"]
     )
     assert validation["dtypes"] == ["torch.bfloat16"]
+    fp32_validation = validate_adapter(
+        source,
+        report["source_weight_sha256"],
+        expected_dtype="torch.float32",
+    )
+    assert fp32_validation["dtypes"] == ["torch.float32"]

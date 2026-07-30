@@ -45,24 +45,25 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
-- `submission/phoenix_wright_v8_0.ipynb` is the current Phoenix candidate and
-  must be tagged `black`. Every primary route uses the validation-selected
-  two-epoch Kimi K3 binary-soft-distilled rank-16 Qwen3.5-9B adapter
+- `submission/phoenix_wright_v8_1.ipynb` is the current Phoenix candidate and
+  must be tagged `black`. Every primary route uses the two-epoch Kimi K3
+  competition-plus-Liars binary-soft-distilled rank-16 Qwen3.5-9B adapter
   and normalized direct literal `0|1` margins. Ordinary rows preserve Phoenix
   4.0's structural renderer and the exact original binary-only training prompt.
   HP-KR and action rows retain their semantic routing instructions but now
   terminate directly at `Prediction:` with no reasoning-summary instruction or
   scaffold. They share the same adapter/model session, replacing the base-Qwen
-  and legacy-v2 sessions. Phoenix 8.0 removes the rank-1 resolved-intent adapter
+  and legacy-v2 sessions. Phoenix 8.1 retains removal of the rank-1 resolved-intent adapter
   and its log-odds blend; source reasoning is never consumed. HP-KR takes
   precedence over action, and those prompt routes remain mutually exclusive.
   Length-aware `48/32/16` batching,
   `logits_to_keep=1`, and secondary threshold `0.5` remain unchanged. The
   adapter is published at
-  `Jazhyc/aletheias-phoenix-v8-kimi-k3-tvg-soft-full-r16-ep2`. It uses all
-  3,693 instructed and 2,880 varied training rows. Its frozen ordinary
-  validation macro AUROC was `0.96411` (`0.99854` instructed, `0.91819`
-  varied), improving on the varied-only Kimi adapter's `0.95994`. The
+  `Jazhyc/aletheias-phoenix-v8-1-kimi-k3-liars-full-r16-ep2`. It uses all
+  6,573 Phoenix 8 rows plus 6,576 label-balanced Liars' Bench rows. Its
+  disjoint 800-row Liars macro-category AUROC was `0.93915`, versus `0.86255`
+  for Phoenix 8. Matched validation was `0.96214`, versus `0.96417`; the team
+  deliberately accepted that local tradeoff as an OOD leaderboard probe. The
   ordinary rubric contains no reasoning-summary instruction and the notebook
   does not generate judge reasoning. A matched one-epoch reasoning-GRPO
   prior Q397 reasoning-GRPO continuation regressed from `0.95369` to `0.94500`

@@ -1,5 +1,29 @@
 # Prompt Experiment Log
 
+## 2026-07-30: Phoenix 8.1 Kimi K3 Liars enrichment
+
+The full-dose scale probe combined all 6,573 Phoenix 8 training rows with
+6,576 label-balanced Liars' Bench rows and retained the same two-epoch
+rank-16/alpha-32 AdamW `5e-5` binary-soft recipe. Kimi K3 supplied the
+training-only literal `0|1` logits.
+
+On the disjoint 800-row Liars holdout, macro-category AUROC improved
+`0.86255 -> 0.93915`. Per-category deltas were `+0.07410` harm-pressure
+choice, `-0.02845` HP-KR, `+0.24975` Insider Trading, and `+0.01100` soft
+trigger. Matched competition validation regressed `0.96417 -> 0.96214`;
+instructed improved `0.00063`, while varied fell `0.00556`.
+
+The frozen retention gate therefore failed. Near the deadline, the team
+explicitly selected the much larger held-out OOD gain as a private-transfer
+probe and promoted the adapter as Phoenix 8.1. This should not be described as
+an in-distribution validation promotion.
+
+The canonical FP32 weight digest is
+`7159a413cf7bf569b1e7819f17b54248d48b8e18b8d56be950b872445195e136`.
+A BF16 canary was not exact (`0.938875 -> 0.938287` Liars macro AUROC), so the
+submission and public Hugging Face repository retain FP32. The public adapter
+is `Jazhyc/aletheias-phoenix-v8-1-kimi-k3-liars-full-r16-ep2`.
+
 ## 2026-07-28: Explicit digit semantics on the trained Phoenix v6.3 adapter
 
 The base-model verbalizer sweep's only directional winner was tested as an

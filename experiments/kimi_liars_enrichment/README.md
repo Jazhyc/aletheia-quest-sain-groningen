@@ -97,3 +97,26 @@ that is within `0.002`, prefer the half-dose arm as the lower-OOD-exposure
 choice. Only the frozen winner receives a local test evaluation. If neither
 arm passes, retain Phoenix 8 rather than promoting an OOD gain that damages the
 known competition distribution.
+
+## Full-dose outcome and Phoenix 8.1 decision
+
+The full-dose adapter completed first. Relative to Phoenix 8, its disjoint
+800-row Liars macro-category AUROC improved from `0.86255` to `0.93915`
+(`+0.07660`). The largest gain was Insider Trading (`+0.24975`), followed by
+harm-pressure choice (`+0.07410`) and soft trigger (`+0.01100`); HP-KR
+regressed by `0.02845`.
+
+Matched competition validation moved from `0.96417` to `0.96214`
+(`-0.00202`): instructed changed `+0.00063`, while varied changed `-0.00556`.
+This fails the original in-distribution retention gate. With the deadline near,
+the team explicitly chose the much larger held-out OOD gain as the private
+transfer hypothesis and promoted the full-dose adapter as Phoenix 8.1. This is
+a deliberate leaderboard probe, not a claim that the frozen gate passed.
+
+The canonical FP32 weights have SHA-256
+`7159a413cf7bf569b1e7819f17b54248d48b8e18b8d56be950b872445195e136`.
+The BF16 export SHA-256 was
+`6e429dd414365b853cda7468107cb3cabf887138d221aa8fdfafc9d962c9ad73`,
+but it was not exact on the matched 800-row vLLM canary
+(`0.938875 -> 0.938287` macro AUROC). Phoenix 8.1 therefore deploys the FP32
+master.

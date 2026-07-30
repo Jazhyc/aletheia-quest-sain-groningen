@@ -4,16 +4,14 @@ import hashlib
 import json
 from pathlib import Path
 
-from experiments.privileged_information_distillation.upload_kimi_k3_full_tvg_adapter import (
-    REPOSITORY,
-    validate_adapter,
-)
+from experiments.kimi_liars_enrichment.upload_bf16_adapter import validate_adapter
 from submission.phoenix_wright import DECEPTION_PROMPT
 
 
 ROOT = Path(__file__).resolve().parents[2]
-NOTEBOOK = ROOT / "submission/phoenix_wright_v8_0.ipynb"
+NOTEBOOK = ROOT / "submission/phoenix_wright_v8_1.ipynb"
 BUNDLED_ADAPTER = ROOT / "submission/phoenix_wright_adapters/main"
+REPOSITORY = "Jazhyc/aletheias-phoenix-v8-1-kimi-k3-liars-full-r16-ep2"
 REMOVED_INTENT_ADAPTER = (
     ROOT / "submission/phoenix_wright_adapters/resolved_intent"
 )
@@ -27,15 +25,15 @@ def notebook_source() -> str:
     )
 
 
-def test_phoenix80_is_the_only_submission_notebook() -> None:
+def test_phoenix81_is_the_only_submission_notebook() -> None:
     notebooks = sorted((ROOT / "submission").glob("*.ipynb"))
     assert notebooks == [NOTEBOOK]
 
 
-def test_phoenix80_uses_one_kimi_student_pass_without_intent_adapter() -> None:
+def test_phoenix81_uses_one_kimi_student_pass_without_intent_adapter() -> None:
     source = notebook_source()
-    assert "# Phoenix Wright v8.0" in source
-    assert "method=phoenix_wright_v8.0 kimi_k3_distilled_routes" in source
+    assert "# Phoenix Wright v8.1" in source
+    assert "method=phoenix_wright_v8.1 kimi_k3_liars_distilled_routes" in source
     assert f'"{REPOSITORY}"' in source
     assert "aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2" not in source
     assert "aletheias-phoenix-v5-qwen27-tvg-soft-r16" not in source
@@ -66,18 +64,21 @@ def test_phoenix80_uses_one_kimi_student_pass_without_intent_adapter() -> None:
     assert "model.generate" not in source
 
 
-def test_phoenix80_main_adapter_is_canonical_float32_rank16() -> None:
-    validation = validate_adapter(BUNDLED_ADAPTER)
+def test_phoenix81_main_adapter_is_canonical_float32_rank16() -> None:
+    validation = validate_adapter(
+        BUNDLED_ADAPTER,
+        expected_dtype="torch.float32",
+    )
     assert validation["tensor_count"] == 256
     assert validation["dtypes"] == ["torch.float32"]
     assert (
         validation["weight_sha256"]
-        == "c3be0b58b5caf5750b3dea06b5a1490cb735483adaba51f6f09568054531edc0"
+        == "7159a413cf7bf569b1e7819f17b54248d48b8e18b8d56be950b872445195e136"
     )
 
 
-def test_bundled_main_config_matches_published_phoenix80_adapter() -> None:
+def test_bundled_main_config_matches_published_phoenix81_adapter() -> None:
     digest = hashlib.sha256(
         (BUNDLED_ADAPTER / "adapter_config.json").read_bytes()
     ).hexdigest()
-    assert digest == "c563ef249c1de0160e4e488253342da6ef42c64ea6dc2f5bc07c02f51c22f193"
+    assert digest == "f91744c9406491575fce2599d4a06bed84d707468c8b0287da81fde89df428e3"
