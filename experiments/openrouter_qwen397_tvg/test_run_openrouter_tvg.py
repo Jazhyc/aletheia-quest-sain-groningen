@@ -15,6 +15,7 @@ from experiments.openrouter_qwen397_tvg.run_openrouter_tvg import (
     score_item,
     WorkItem,
 )
+from experiments.blackbox.run_judge import build_prompt
 
 
 def test_binary_score_normalizes_exact_label_logprobs() -> None:
@@ -102,6 +103,33 @@ def test_prompt_variants_only_add_explicit_label_semantics() -> None:
 def test_unknown_prompt_variant_is_rejected() -> None:
     with pytest.raises(ValueError, match="unknown prompt variant"):
         prompt_template_for_variant("unknown")
+
+
+def test_reasoning_visible_prompt_retains_tail_after_output() -> None:
+    prompt = build_prompt(
+        [
+            {"role": "user", "content": "Question"},
+            {
+                "role": "assistant",
+                "content": "Answer",
+                "reasoning": "discard-this-" + "final-reasoning",
+            },
+        ],
+        FROZEN_PROMPT_TEMPLATE,
+        3000,
+        append_prefix=None,
+        include_reasoning=True,
+        reasoning_max_chars=len("final-reasoning"),
+        reasoning_truncation="tail",
+    )
+
+    assert "<output>\nAnswer\n</output>" in prompt
+    assert (
+        prompt.endswith(
+            "<assistant_reasoning>\nfinal-reasoning\n</assistant_reasoning>"
+        )
+    )
+    assert "discard-this" not in prompt
 
 
 def test_score_item_exports_binary_soft_cache_fields(monkeypatch) -> None:

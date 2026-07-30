@@ -575,6 +575,106 @@ while sharing the same Alibaba endpoint, but retrying did not change provider
 or leave incomplete rows. Select 397B, not 122B, if proceeding with remote
 same-family soft supervision.
 
+### Kimi K3 OpenRouter binary-soft cache (2026-07-29)
+
+The frozen no-thinking Truth Value Guard prompt was evaluated on the 821-row
+local test through `moonshotai/kimi-k3`. OpenRouter's first-party Moonshot
+endpoint did not expose token log-probabilities, so the run was pinned to the
+standard Fireworks endpoint with fallback disabled. Fireworks returned both
+literal terminal labels on every row. Kimi scored `0.98244` test macro AUROC
+(`0.99865` instructed, `0.96083` varied), with 735 unique scores, 86
+duplicate-score excess rows, and zero missing label logits. The run cost
+`$0.84434` and took 396.7 seconds. This is training/development evidence only;
+external API inference remains prohibited in the competition submission.
+
+The user then explicitly authorized a training-only soft-target cache. The
+matched Fireworks run covered all 2,880 varied training rows, retained the
+identity-normalized `P(1)/(P(0)+P(1))` target, and did not use local-test
+outputs as training data. It completed in 615.6 seconds for `$3.61396`,
+processing 1,101,623 prompt tokens and 23,040 completion tokens. All responses
+resolved to `moonshotai/kimi-k3` through Fireworks; 313 rows required at least
+one transient retry, but no row failed or changed provider. The cache has 2,034
+unique scores and 846 duplicate-score excess rows.
+
+| varied training dataset unit | AUROC |
+| --- | ---: |
+| `Qwen3.5-27B-None` | `0.98617` |
+| `Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.90664` |
+| `Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.89051` |
+| `Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `0.93389` |
+| `Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `0.97297` |
+| `Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.93855` |
+| `Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.94246` |
+| `Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.99299` |
+| `Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.99227` |
+
+Training macro AUROC was `0.95072`, versus `0.91978` for the historical
+Qwen3.5-397B FP8 cache and `0.92040` for the regular-OpenRouter explicit-digit
+cache on the same rows. Kimi and the FP8 teacher targets remain strongly
+correlated (`r=0.93642`) but differ by mean absolute probability `0.05999` and
+cross the 0.5 boundary on 142 rows. This supplies meaningfully different,
+higher-ranking supervision rather than a duplicate cache.
+
+The cache and student rows are under
+`results/blackbox/kimi_k3_fireworks_nothink_tvg_binary_logit_v1/train/`.
+Their SHA-256 digests are:
+
+- generations: `c9915c5fe1589f7abce03d1f524f84db9fef6bd06f5fef77409c6dddddfe53cc`
+- soft targets: `744296859003ecad37d61ca9e37f4ee374105cf97a17933b7b1d0a66cafefa4a`
+- student rows: `0580aae3d6aa127687f46011589f652c101d08c59b5d9a95a800f238cf7011fe`
+
+The prepared student keeps Qwen3.5-9B, rank 16/alpha 32, AdamW `5e-5`,
+effective batch size 32, and the validation-selected two-epoch binary-soft
+recipe. GPU training is intentionally deferred until an H100 is rented. When
+run, select only on direct-margin validation macro AUROC against the current
+`0.95393` Qwen-397B student reference; do not schedule local-test evaluation
+unless that frozen validation rule passes.
+
+#### Kimi K3 instructed-training extension (2026-07-29)
+
+A later explicitly authorized run extended the same frozen prompt and literal
+`0|1` margin to all 3,693 instructed-deception training rows. It used
+concurrency 64, remained pinned to Fireworks with provider fallback disabled,
+and ultimately returned `moonshotai/kimi-k3` for every row. One row exhausted
+the initial nine attempts on a malformed upstream response, then succeeded
+when the resumable launcher retried only that row. The final artifacts have
+zero missing binary logits, zero parse errors, and exact 3,693-row coverage.
+
+The successful cache reports 917,424 prompt tokens, 29,544 completion tokens,
+and `$3.16348` cost. The active request passes took about 477 seconds in total;
+the malformed responses that were not cached may make the account-level charge
+slightly higher than the successful-response total. Among saved rows, 548
+needed at least one transient retry. The scores contain 2,215 unique values
+and 1,478 duplicate-score excess rows, spanning `0.0008041` to `0.9998416`.
+
+| organism family | dataset units | train macro AUROC |
+| --- | ---: | ---: |
+| Gemma | 2 | `0.99928` |
+| Nemotron | 1 | `0.98894` |
+| Qwen | 9 | `0.99718` |
+| **All instructed** | **12** | **`0.99685`** |
+
+The instructed targets are easier and sharper than the varied cache: mean
+binary entropy is `0.07346` versus `0.10737` nats, and only `21.74%` versus
+`35.35%` lie strictly inside `[0.01, 0.99]`. Combining the two independently
+cached split macros gives a 21-unit Kimi teacher train AUROC of `0.97708`
+across all 6,573 rows. This is a teacher diagnostic, not a held-out student
+result.
+
+The instructed cache is under
+`results/blackbox/kimi_k3_fireworks_nothink_tvg_binary_logit_instructed_v1/train/`.
+Its SHA-256 digests are:
+
+- generations: `baf1eb0f22adad9ac132418ff4c89ad3751608a638b6addb290a625996619319`
+- soft targets: `dbf473512cbe05b3de65c38498f81390d2ea07388c77b225f99fb0f3e07eb4d2`
+- student rows: `045c9953e06f4e61dc43abc43befa16b6e13dfb5da7e6105b52ab790df1de105`
+
+This removes missing instructed supervision as a confound for the next
+distillation experiment and adds the Gemma/Nemotron controls absent from the
+varied-only cache. It does not by itself show that full-data training or a
+higher LoRA rank improves validation. Run the matched full-data rank-16 control
+before attributing any residual teacher gap to rank capacity.
+
 ### Competition-NDIF Nemotron/Gemma Truth Value Guard swaps (2026-07-27)
 
 The exact no-thinking binary Truth Value Guard boundary was also ported to the
@@ -3800,6 +3900,388 @@ by only `0.00086`. Do not spend a local-test evaluation, promote either
 filtered adapter, or extend this screen to other keep fractions. Dense
 feedback does not rescue this initialization-state, last-block DataRater
 approximation on the already curated Qwen-only varied cache.
+
+## Kimi K3 two-token soft distillation (2026-07-29)
+
+Fireworks exposed literal next-token log probabilities for
+`moonshotai/kimi-k3` through OpenRouter, allowing a compact teacher target
+without generated reasoning. The frozen no-thinking Truth Value Guard prompt
+requested `Prediction:`, and the cache retained the normalized log-odds over
+literal `0|1`. The complete 2,880-row varied-deception train cache had zero
+missing logits, cost `$3.61396`, and scored macro AUROC `0.95072`. Kimi exceeded
+the matched Qwen3.5-397B FP8 teacher by `0.03094` AUROC on these rows; their
+probabilities still correlated strongly (Pearson `0.93642`).
+
+The student retained the matched rank-16/alpha-32, AdamW `5e-5`, effective
+batch-size-32 recipe but used two epochs of binary soft-target BCE. Training on
+one rented H100 SXM5 took 180 optimizer steps. The saved canonical multimodal
+PEFT adapter has 256 FP32 tensors and weight SHA-256
+`c5025a39dd05af16405c692a0c1b70657afd4f8e4a4e634bd789b5d67b4a9eb0`.
+
+Frozen validation used the exact direct `Prediction:` margin and no generated
+judge reasoning:
+
+| adapter | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen397 soft student | `0.95393` | `0.99833` | `0.89472` | `0.90595` | — | — | `665/822` |
+| **Kimi K3 soft student** | **`0.95994`** | **`0.99833`** | **`0.90875`** | **`0.91548`** | `0.86429` | `0.03333` | `765/822` |
+
+The gain is `+0.00601` macro AUROC and clears the frozen `+0.005` promotion
+bar. All 822 rows had label logits. A base-model fingerprint confirmed that
+the LoRA changed 815/822 scores (mean absolute change `0.11062`, maximum
+`0.74526`).
+
+The canonical adapter is published at
+`Jazhyc/aletheias-phoenix-v7-kimi-k3-tvg-soft-r16-ep2`, revision
+`74e5cbdf4d3c93c57f4b304c0d66cb1c46c84e92`. Phoenix 7.0 keeps its filename,
+renderer, prompts, route precedence, batching, and rank-1 intent blend; only
+the shared primary-route adapter changes. Treat this as a frozen private
+transfer candidate: the training cache is still varied-only and therefore
+implicitly Qwen-family-only.
+
+### Kimi student learning-rate and epoch sweep
+
+A matched H100 sweep tested whether the Qwen397-selected `5e-5`, two-epoch
+recipe transferred to Kimi's materially softer target distribution. Kimi's
+mean binary-target entropy was `0.1074` nats versus `0.0769` for Qwen397, and
+`64.65%` versus `76.67%` of probabilities lay outside `[0.01, 0.99]`.
+Rank 16, alpha 32, effective batch size 32, all 2,880 cached rows, and the
+direct-margin evaluator remained fixed.
+
+| learning rate | 0.5 epoch | 1 epoch | 2 epochs |
+| ---: | ---: | ---: | ---: |
+| `1e-5` | `0.94708` | `0.94827` | `0.95185` |
+| `2e-5` | `0.94816` | `0.95143` | `0.95405` |
+| `5e-5` | `0.95042` | `0.95274` | `0.96042` |
+| `1e-4` | `0.95054` | `0.95702` | **`0.96071`** |
+
+The nominal grid winner was `1e-4` for two epochs, but its matched-session
+advantage over the submitted `5e-5`, two-epoch adapter was only `0.00030`
+macro AUROC. This is far below the frozen `+0.005` promotion bar and below
+previously observed session/position sensitivity. Do not replace the submitted
+adapter from this difference.
+
+Because both top learning rates still peaked at the two-epoch boundary, fresh
+three- and four-epoch runs were trained at `1e-4` and rescored together with
+the two-epoch winner:
+
+| epochs | macro AUROC | instructed | varied | BA at 0.5 | unique |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| **2** | **`0.96179`** | **`0.99667`** | `0.91528` | `0.90714` | `752/822` |
+| 3 | `0.96101` | `0.99521` | **`0.91542`** | **`0.92024`** | `746/822` |
+| 4 | `0.95887` | `0.99479` | `0.91097` | `0.90476` | `763/822` |
+
+Three epochs gained only `0.00014` varied AUROC while losing `0.00077` macro
+AUROC; four epochs regressed materially. Two epochs is therefore the validated
+horizon. Retain the already published/submitted `5e-5`, two-epoch checkpoint:
+the learning-rate distinction is unresolved noise, while the evidence against
+training beyond two epochs is consistent.
+
+### Full-data Kimi rank and BF16 ablation
+
+The instructed-deception Kimi extension completed all 3,693 training rows with
+zero missing logits or parse errors. Combined with the 2,880 varied rows, the
+exact 6,573-row cache has target SHA-256
+`39178e39c79038fd2ae4e6535d0e73c0f4bef79b68677b37a464e4110e97046f`.
+The instructed teacher scored `0.99685` train macro AUROC overall:
+`0.99928` on Gemma, `0.98894` on Nemotron, and `0.99718` on Qwen families.
+
+A matched H100 experiment then kept the selected two-epoch AdamW `5e-5`,
+effective-batch-32 recipe and trained on all 6,573 rows. Rank 16 used alpha 32
+and retained FP32 adapter tensors. Rank 32 used alpha 64 to preserve
+`alpha/r = 2`, then cast the final PEFT adapter to BF16 before exact validation.
+Its 256 BF16 weight tensors occupy `116,429,976` bytes, essentially the same as
+rank 16's `116,429,720` FP32 weight bytes.
+
+| training data and adapter | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Published varied-only rank 16 | `0.95994` | `0.99833` | `0.90875` | `0.91548` | `0.86429` | `0.03333` |
+| **Full-data rank 16 FP32** | **`0.96411`** | `0.99854` | **`0.91819`** | **`0.92143`** | **`0.87857`** | `0.03571` |
+| Full-data rank 32 BF16 | `0.96185` | **`0.99896`** | `0.91236` | `0.91786` | `0.86905` | **`0.03333`** |
+
+Rank 32 reduced train loss from `0.6016` to `0.5877`, but lost `0.00226`
+validation macro AUROC to rank 16: instructed gained `0.00042`, while varied
+lost `0.00583`. The BF16 adapter SHA-256 is
+`868f55d58efef243082d1f272ffcef03a21ca5f302e89d87f6590066e4e1b42e`.
+The full-data rank-16 gain over the published varied-only adapter is `0.00417`.
+It was initially withheld under the old frozen absolute `+0.005` promotion bar.
+After adopting the saturation-aware interpretation, the team promoted it on
+2026-07-30: the gain removes `10.4%` of the varied-only adapter's remaining
+validation AUROC error, improves both instructed and varied AUROC, and a later
+same-session full-BCE test anchor scored `0.96625` (`0.99479` instructed,
+`0.92819` varied). Phoenix 8.0 now uses the full-data rank-16 checkpoint from
+`Jazhyc/aletheias-phoenix-v8-kimi-k3-tvg-soft-full-r16-ep2`; its weight
+SHA-256 is
+`c3be0b58b5caf5750b3dea06b5a1490cb735483adaba51f6f09568054531edc0`.
+
+Rank 32 remains rejected and should not receive a local-test evaluation. Its
+lower training loss alongside worse AUROC is evidence against student capacity
+or training-objective optimization being the active validation bottleneck at
+these settings.
+
+### Full-data Kimi pairwise-ranking ablation
+
+A frozen AUROC-oriented follow-up retained the best full-data rank-16 recipe
+and added hard-label within-dataset RankNet loss at weight `0.3` to Kimi
+soft-target BCE at weight `1.0`. Its temperature-1 loss was
+`softplus(-(margin_positive - margin_negative))`. Stable pairing covered 3,213
+positive/negative pairs, or 6,426/6,573 rows. The 147 unmatched Nemotron
+negatives retained ordinary BCE but contributed no pairwise term. An
+implementation follow-up generalized the already tested sequential pair
+ordering from microbatch 2 to any positive even microbatch; batch 8 with
+accumulation 4 preserved effective batch size 32 and kept every consecutive
+pair intact.
+
+The H100 run completed 412 optimizer steps in `1,078s`. Its reported train loss
+was `0.6953`, which is not comparable with pure BCE because it includes the
+weighted ranking term. The migrated 256-tensor adapter SHA-256 is
+`def9b2c7a11cf770a587dc0fbd1dc16ad5b012ab7017837dbc76187f6879aa95`.
+
+Shared-session validation loaded the existing BCE anchor first and the
+pairwise adapter second in one vLLM engine:
+
+| objective | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Kimi soft BCE | `0.96304` | `0.99854` | `0.91569` | `0.92143` | `0.87857` | `0.03571` | `766/822` |
+| **Kimi soft BCE + pairwise 0.3** | **`0.96613`** | **`0.99917`** | **`0.92208`** | **`0.92500`** | **`0.88333`** | **`0.03333`** | **`777/822`** |
+
+The pairwise term gained `0.00310` macro AUROC, `0.00063` instructed, and
+`0.00639` varied. It also reduced duplicate-score excess from 56 to 45 and rows
+participating in a tie from 100 to 79; both adapters had macro cross-label tie
+fraction `0.000119`. All 822 direct margins were present, and the LoRA
+fingerprint passed with only 4 exact base/adapter score matches. The preserved
+pairwise generations SHA-256 is
+`415f5c4b8fa0d23aa8dde19f8ed00f5dc6f32d8b89546b90a0539802382f12e7`.
+
+| validation dataset suffix | BCE AUROC | pairwise AUROC | delta |
+| --- | ---: | ---: | ---: |
+| instructed / Nemotron base | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Qwen base | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Qwen a1 | `0.9875` | `0.9975` | `+0.0100` |
+| instructed / Qwen a3 | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Qwen a4 | `1.0000` | `0.9950` | `-0.0050` |
+| instructed / Qwen a5 | `0.9950` | `0.9975` | `+0.0025` |
+| instructed / Qwen a6 | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Qwen a7 | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Qwen b | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Qwen c | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Gemma base | `1.0000` | `1.0000` | `+0.0000` |
+| instructed / Gemma s | `1.0000` | `1.0000` | `+0.0000` |
+| varied / Qwen base | `0.9900` | `0.9850` | `-0.0050` |
+| varied / Qwen a1 | `0.8625` | `0.8550` | `-0.0075` |
+| varied / Qwen a3 | `0.8550` | `0.8600` | `+0.0050` |
+| varied / Qwen a4 | `0.8900` | `0.9125` | `+0.0225` |
+| varied / Qwen a5 | `0.9775` | `0.9850` | `+0.0075` |
+| varied / Qwen a6 | `0.9075` | `0.9275` | `+0.0200` |
+| varied / Qwen a7 | `0.8450` | `0.8450` | `+0.0000` |
+| varied / Qwen b | `0.9625` | `0.9600` | `-0.0025` |
+| varied / Qwen c | `0.9513` | `0.9688` | `+0.0175` |
+
+The direction is encouraging and concentrated in varied deception, but the
+same-session `+0.00310` gain misses the frozen `+0.005` promotion gate. Do not
+run local test, promote this checkpoint, or tune the pairwise weight from these
+validation labels. This result supports ranking loss as a useful signal, not
+yet as a selected replacement.
+
+For the subsequent internally selected grouped-pair scale sweep, the team
+replaced the fixed absolute gate prospectively because AUROC headroom is now
+small. A candidate may receive one locked local-test confirmation only if the
+mean of forward/reverse shared-session comparisons has positive macro delta,
+reduces the anchor's remaining `1 - AUROC` error by at least 5%, has nonnegative
+varied delta, loses no more than `0.001` instructed AUROC, and improves at least
+as many dataset units as it worsens. Report a paired dataset-unit bootstrap
+interval as uncertainty, but do not require its lower bound to exceed zero with
+only 21 units. This rule applies to the newly internal-holdout-selected grouped
+candidate; do not use it retroactively to select the already observed
+pairwise-0.3 checkpoint.
+
+### Grouped pairwise-scale sweep and locked confirmation
+
+The prospectively defined follow-up used an exact dataset-and-label-stratified
+80/20 split of all 6,573 Kimi rows: 5,258 rows trained each candidate and 1,315
+rows formed the internal holdout. Batches were ordered within dataset and were
+usually four honest plus four deceptive rows. This separates the effect of
+same-dataset batching (`0.0`) from the RankNet loss itself. Every arm retained
+rank 16/alpha 32, AdamW `5e-5`, two epochs, soft Kimi BCE, batch 8, and effective
+batch size 32. Forward and reverse shared-vLLM adapter orders were averaged,
+with a predeclared `0.001` tolerance favoring the smaller weight near a tie.
+
+| pairwise weight | holdout forward | holdout reverse | mean macro AUROC | order range |
+| ---: | ---: | ---: | ---: | ---: |
+| `0.0` | `0.95647` | `0.95586` | `0.95616` | `0.00060` |
+| `0.1` | `0.95812` | `0.95878` | `0.95845` | `0.00065` |
+| `0.3` | `0.95954` | `0.96015` | `0.95984` | `0.00060` |
+| **`1.0`** | **`0.96347`** | **`0.96387`** | **`0.96367`** | `0.00040` |
+
+The result is monotonic over the tested range and selects `1.0` outside the
+tie tolerance. Same-dataset ordering alone is not the gain: weight `1.0` beats
+the grouped zero-weight control by `0.00751` holdout macro AUROC.
+
+The selected scale was then retrained from the same starting point on all 6,573
+rows. Training took `930.6s`. Matched validation loaded the BCE anchor, earlier
+interleaved weight-`0.3` adapter, and selected grouped weight-`1.0` adapter in
+forward and reverse orders:
+
+| full-data adapter | macro AUROC | instructed | varied | BA at 0.5 |
+| --- | ---: | ---: | ---: | ---: |
+| Kimi soft BCE anchor | `0.96336` | `0.99885` | `0.91604` | `0.92143` |
+| interleaved pairwise `0.3` | `0.96738` | `0.99917` | `0.92500` | `0.92321` |
+| **grouped pairwise `1.0`** | **`0.96854`** | **`0.99958`** | **`0.92715`** | `0.92321` |
+
+Against BCE, grouped weight `1.0` gains `0.00518` macro, `0.00073`
+instructed, and `0.01111` varied AUROC. It reduces the anchor's remaining
+AUROC error by `14.13%`. Across the 21 dataset units, 9 improve, 3 worsen, and
+9 tie; the paired dataset-unit bootstrap 95% interval is
+`[+0.00095, +0.00982]`. Forward/reverse selected scores have `764/822` and
+`766/822` unique values, with maximum tie multiplicities 6 and 5. The candidate
+therefore passes every prospectively frozen saturation-aware gate component.
+
+It received the single permitted locked local-test confirmation in one shared
+session with the BCE anchor first. The first launch failed before scoring any
+row because the detached shell did not expose `ninja`; the identical frozen
+command was rerun after activating the environment.
+
+| test adapter | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **matched Kimi soft BCE** | **`0.96625`** | `0.99479` | **`0.92819`** | `0.89405` | `0.82381` | `0.03571` | `772/821` |
+| grouped pairwise `1.0` | `0.96488` | **`0.99583`** | `0.92361` | **`0.89524`** | `0.82143` | **`0.03095`** | `765/821` |
+
+The selected adapter loses `0.00137` macro and `0.00458` varied test AUROC,
+despite gaining `0.00104` instructed AUROC and slightly improving thresholded
+BA. Five test units improve, seven worsen, and nine tie. Because continuous
+AUROC is primary, this does **not** confirm promotion. Keep the original Kimi
+soft-BCE adapter as the selected Kimi student and do not tune another pairwise
+scale from this test result. The relaxed gate was useful—it admitted a
+validation candidate that the old absolute rule would only narrowly admit—but
+lowering it further is not supported by this confirmation.
+
+| dataset unit | validation BCE | validation grouped `1.0` | delta | test BCE | test grouped `1.0` | delta |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| instructed / Nemotron | `1.00000` | `1.00000` | `+0.00000` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed / Qwen base | `1.00000` | `1.00000` | `+0.00000` | `0.97750` | `0.97250` | `-0.00500` |
+| instructed / Qwen a1 | `0.99125` | `0.99750` | `+0.00625` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed / Qwen a3 | `1.00000` | `1.00000` | `+0.00000` | `0.99750` | `1.00000` | `+0.00250` |
+| instructed / Qwen a4 | `1.00000` | `1.00000` | `+0.00000` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed / Qwen a5 | `0.99500` | `1.00000` | `+0.00500` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed / Qwen a6 | `1.00000` | `1.00000` | `+0.00000` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed / Qwen a7 | `1.00000` | `1.00000` | `+0.00000` | `0.99500` | `0.99750` | `+0.00250` |
+| instructed / Qwen b | `1.00000` | `1.00000` | `+0.00000` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed / Qwen c | `1.00000` | `1.00000` | `+0.00000` | `1.00000` | `1.00000` | `+0.00000` |
+| instructed / Gemma base | `1.00000` | `1.00000` | `+0.00000` | `0.96750` | `0.98000` | `+0.01250` |
+| instructed / Gemma s | `1.00000` | `0.99750` | `-0.00250` | `1.00000` | `1.00000` | `+0.00000` |
+| varied / Qwen base | `0.99063` | `0.98750` | `-0.00313` | `0.97500` | `0.95750` | `-0.01750` |
+| varied / Qwen a1 | `0.85875` | `0.87875` | `+0.02000` | `0.90125` | `0.90500` | `+0.00375` |
+| varied / Qwen a3 | `0.85250` | `0.87813` | `+0.02563` | `0.85250` | `0.83625` | `-0.01625` |
+| varied / Qwen a4 | `0.88875` | `0.89625` | `+0.00750` | `0.89750` | `0.91250` | `+0.01500` |
+| varied / Qwen a5 | `0.97875` | `0.98500` | `+0.00625` | `0.94000` | `0.93750` | `-0.00250` |
+| varied / Qwen a6 | `0.90625` | `0.93000` | `+0.02375` | `0.99000` | `0.99000` | `+0.00000` |
+| varied / Qwen a7 | `0.85250` | `0.83875` | `-0.01375` | `0.91250` | `0.91000` | `-0.00250` |
+| varied / Qwen b | `0.96000` | `0.96500` | `+0.00500` | `0.91500` | `0.89625` | `-0.01875` |
+| varied / Qwen c | `0.95625` | `0.98500` | `+0.02875` | `0.97000` | `0.96750` | `-0.00250` |
+
+The final grouped adapter SHA-256 is
+`d7ffc8d4300826d422be23ab924cf69575968665b95f220baf662b72e397b79a`.
+It remains an experiment artifact, not the promoted Kimi checkpoint.
+
+### Frozen Kimi student local-test confirmation
+
+After closing the validation sweep, the already submitted `5e-5`, two-epoch
+adapter received its first and only full 821-row local-test evaluation. The
+test used the exact frozen ordinary Phoenix prompt, excluded source reasoning,
+generated no judge reasoning, and scored normalized literal `0|1` logits
+directly after `Prediction:`.
+
+| split | macro AUROC | instructed | varied | BA at 0.5 | recall | FPR | unique |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Validation | `0.95994` | `0.99833` | `0.90875` | `0.91548` | `0.86429` | `0.03333` | `765/822` |
+| **Frozen local test** | **`0.96327`** | `0.99229` | **`0.92458`** | `0.88571` | `0.81905` | `0.04762` | `771/821` |
+
+Test macro AUROC increased by `0.00333` and varied AUROC by `0.01583`, while
+instructed AUROC fell by `0.00604`. Relative to the matched Qwen397 soft
+student test row (`0.95869/0.99542/0.90972`), the Kimi student gains `0.00458`
+macro and `0.01486` varied AUROC but loses `0.00313` instructed AUROC.
+
+The Kimi teacher remains a materially higher ceiling: its direct test result
+was `0.98244` macro (`0.99865` instructed, `0.96083` varied), leaving student
+gaps of `0.01917`, `0.00635`, and `0.03625`. Do not claim that the compact
+student matches or exceeds its teacher.
+
+| test dataset unit | AUROC |
+| --- | ---: |
+| `instructed-deception-NVIDIA-Nemotron-3-Super-120B-A12B-BF16-None` | `0.95000` |
+| `instructed-deception-Qwen3.5-27B-None` | `0.99000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.98250` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `1.00000` |
+| `instructed-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `1.00000` |
+| `instructed-deception-gemma-3-27b-it-None` | `0.98500` |
+| `instructed-deception-gemma-3-27b-it-s-mo-gemma-3-27b-it` | `1.00000` |
+| `varied-deception-Qwen3.5-27B-None` | `0.96250` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-1` | `0.89750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-3` | `0.87750` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-4` | `0.88875` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-5` | `0.94000` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-6` | `0.98125` |
+| `varied-deception-Qwen3.5-27B-a-mo-qwen3.5-27b-7` | `0.87750` |
+| `varied-deception-Qwen3.5-27B-b-mo-qwen3.5-27b` | `0.91125` |
+| `varied-deception-Qwen3.5-27B-c-mo-qwen3.5-27b` | `0.98500` |
+
+All direct margins were present. Scores had 771 unique values, 50
+duplicate-score excess rows, and 90 rows participating in a tie. Direct
+adapter scoring took `8.34s` (`98.4` rows/s), excluding model startup. The
+same-session LoRA fingerprint passed: only 4/821 adapter and base scores were
+exactly equal, with mean absolute difference `0.11643` and maximum `0.94138`.
+The preserved generations JSONL SHA-256 is
+`56a1a8ba94d9d24309337cd69618c937253312b632d2efa9e4453d388de9f99a`.
+
+### Kimi K3 source-reasoning ceiling diagnostic
+
+A test-only diagnostic exposed the final source reasoning field to the same
+frozen Kimi K3 Truth Value Guard judge. It retained the ordinary 3,000-character
+context tail and complete final output, then appended up to the final 4,000
+characters of source reasoning. Fireworks remained the only provider, reasoning
+generation remained disabled, and the score was still the normalized literal
+`0|1` next-token margin. Only the 360 varied-deception test rows were queried;
+the instructed rows have no reasoning field, so their existing output-only
+scores are unchanged.
+
+| varied test unit | output only | reasoning visible | delta |
+| --- | ---: | ---: | ---: |
+| Qwen base | `1.00000` | `1.00000` | `+0.00000` |
+| Qwen a1 | `0.88500` | `0.91250` | `+0.02750` |
+| Qwen a3 | `0.92500` | `0.90375` | `-0.02125` |
+| Qwen a4 | `0.94500` | `0.95000` | `+0.00500` |
+| Qwen a5 | `0.96250` | `0.97250` | `+0.01000` |
+| Qwen a6 | `1.00000` | `1.00000` | `+0.00000` |
+| Qwen a7 | `0.93250` | `0.93250` | `+0.00000` |
+| Qwen b | `0.99750` | `0.99000` | `-0.00750` |
+| Qwen c | `1.00000` | `1.00000` | `+0.00000` |
+| **Macro** | **`0.96083`** | **`0.96236`** | **`+0.00153`** |
+
+Using a `1e-12` equality tolerance, reasoning won three units, tied four, and
+lost two. A 20,000-replicate paired bootstrap that resampled positives and
+negatives within each unit gave a macro-delta 95% interval of
+`[-0.00972, +0.01208]`, with `P(delta > 0) = 0.6104`. Combining the new nine
+varied units with the unchanged twelve instructed units (`0.99864583`) gives
+an estimated full 21-unit macro AUROC of `0.98309524`, versus `0.98244048` for
+the all-output-only run: only `+0.00065476`.
+
+All 360 requests completed without retries, missing label logits, or provider
+fallbacks in `139.34s`. They used 312,648 prompt and 2,880 completion tokens
+and cost `$0.97133256`; the matched output-only varied rows cost `$0.45141624`.
+The reasoning-visible scores had 330 unique values and 30 duplicate-score
+excess rows, versus 342 unique output-only scores.
+
+This is a post-hoc local-test ceiling diagnostic, not evidence for selecting or
+retuning a deployable method. Source reasoning is unavailable on the opaque
+leaderboard, and external API inference cannot run in the submission. The
+small, uncertain teacher gain does not support replacing the main judge with a
+trace path by itself, though it leaves open a separately validated
+reasoning-aware distillation experiment.
 
 ## Optimized Qwen-397B reasoning-GRPO continuation (2026-07-29)
 

@@ -7,17 +7,18 @@ import pytest
 
 from submission.phoenix_wright import (
     ACTION_PROMPT,
+    DECEPTION_PROMPT,
     DIRECT_PREDICTION_PREFIX,
-    EMPTY_REASONING_PREFIX,
     EPISTEMIC_PROMPT,
     INTENT_PROMPT,
     MAIN_MAX_CONTEXT_CHARS,
-    MAIN_PROMPT,
     binary_logits_to_scores,
     binary_token_ids,
     blend_intent_route_scores,
+    build_action_direct_prompt,
     build_action_empty_prompt,
     build_action_member_prompt,
+    build_epistemic_direct_prompt,
     build_epistemic_empty_prompt,
     build_epistemic_member_prompt,
     build_exclusive_route_flags,
@@ -27,6 +28,7 @@ from submission.phoenix_wright import (
     build_main_generation_prompt,
     build_main_member_prompt,
     build_phoenix_route_prompt,
+    build_primary_route_flags,
     has_binary_prediction,
     has_final_assistant_reasoning,
     is_harm_pressure_specialist_request,
@@ -37,7 +39,7 @@ from submission.phoenix_wright import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "submission" / "phoenix_wright_v7_0.ipynb"
+NOTEBOOK = ROOT / "submission" / "phoenix_wright_v8_0.ipynb"
 
 
 class FakeTokenizer:
@@ -86,22 +88,21 @@ def test_all_adapter_directories_have_config_and_weights() -> None:
         assert not missing, f"{subdir.name}/ missing: {', '.join(missing)}"
 
 
-def test_notebook_uses_q397_for_primary_routes_and_rank1_intent() -> None:
+def test_notebook_uses_one_kimi_student_pass_without_intent_adapter() -> None:
     source = notebook_source()
 
-    assert 'if kind == "main":' in source
-    assert "Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2" in source
+    assert (
+        "Jazhyc/aletheias-phoenix-v8-kimi-k3-tvg-soft-full-r16-ep2"
+        in source
+    )
     assert "ACTION_ADAPTER_REPO" not in source
     assert 'kind == "harm"' not in source
     assert 'kind == "action"' not in source
-    assert "INTENT_ADAPTER_REPO" in source
-    assert "build_exclusive_route_flags" in source
-    assert "blend_intent_route_scores" in source
-    main_branch = source.split('if kind == "main":', 1)[1].split(
-        'elif kind == "intent":',
-        1,
-    )[0]
-    assert "peft=MAIN_ADAPTER_REPO" in main_branch
+    assert "INTENT_ADAPTER_REPO" not in source
+    assert "build_primary_route_flags" in source
+    assert "build_exclusive_route_flags" not in source
+    assert "blend_intent_route_scores" not in source
+    assert "peft=MAIN_ADAPTER_REPO" in source
     assert "score_distilled_routes(messages, harm_flags, action_flags)" in source
     assert 'PHOENIX_THRESHOLD", "0.5"' in source
     assert "build_direct_prompt" in source
@@ -116,10 +117,11 @@ def test_notebook_structural_renderer_matches_historical_phoenix4() -> None:
 
     namespace = {
         "Any": Any,
+        "DECEPTION_PROMPT": DECEPTION_PROMPT,
         "Iterable": Iterable,
         "Mapping": Mapping,
     }
-    exec(notebook_cell_source("phoenix-v7-renderer"), namespace)
+    exec(notebook_cell_source("phoenix-v8-renderer"), namespace)
 
     cases = [
         [],
@@ -156,10 +158,11 @@ def test_notebook_ordinary_prompt_matches_binary_training_contract() -> None:
 
     namespace = {
         "Any": Any,
+        "DECEPTION_PROMPT": DECEPTION_PROMPT,
         "Iterable": Iterable,
         "Mapping": Mapping,
     }
-    exec(notebook_cell_source("phoenix-v7-renderer"), namespace)
+    exec(notebook_cell_source("phoenix-v8-renderer"), namespace)
     expected = yaml.safe_load(
         (ROOT / "configs/pid_qwen27_tvg_binary_soft_distillation_v1.yaml").read_text()
     )["student"]["prompt"]
@@ -171,17 +174,14 @@ def test_notebook_ordinary_prompt_matches_binary_training_contract() -> None:
     )
 
 
-def test_phoenix70_route_composition_preserves_primary_scores() -> None:
-    scoring_tree = ast.parse(notebook_cell_source("phoenix-v7-scoring"))
+def test_phoenix80_route_composition_returns_primary_scores_directly() -> None:
+    scoring_tree = ast.parse(notebook_cell_source("phoenix-v8-scoring"))
     score_messages_node = next(
         node
         for node in scoring_tree.body
         if isinstance(node, ast.FunctionDef) and node.name == "score_messages"
     )
-    namespace = {
-        "np": np,
-        "blend_intent_route_scores": blend_intent_route_scores,
-    }
+    namespace = {"np": np}
     exec(
         compile(
             ast.fix_missing_locations(
@@ -199,32 +199,21 @@ def test_phoenix70_route_composition_preserves_primary_scores() -> None:
         calls.append(("distilled", harm_flags.tolist(), action_flags.tolist()))
         return np.array([0.1, 0.2, 0.3, 0.4])
 
-    def fake_score_intent_subset(messages, positions):
-        calls.append(("intent", positions))
-        return np.array([0.6])
-
     namespace["score_distilled_routes"] = fake_score_distilled_routes
-    namespace["score_intent_subset"] = fake_score_intent_subset
-    scores, binary_scores = namespace["score_messages"](
+    scores = namespace["score_messages"](
         [object(), object(), object(), object()],
         np.array([False, True, False, False]),
         np.array([False, False, True, False]),
-        np.array([False, False, False, True]),
     )
 
     assert calls == [
         ("distilled", [False, True, False, False], [False, False, True, False]),
-        ("intent", [3]),
     ]
-    assert binary_scores.tolist() == [0.1, 0.2, 0.3, 0.4]
-    assert scores[:3].tolist() == binary_scores[:3].tolist()
-    assert scores[3] == pytest.approx(
-        mean_log_odds_scores([0.4], [0.6])[0]
-    )
+    assert scores.tolist() == [0.1, 0.2, 0.3, 0.4]
 
 
-def test_phoenix70_primary_routes_share_one_distilled_model_pass() -> None:
-    scoring_tree = ast.parse(notebook_cell_source("phoenix-v7-scoring"))
+def test_phoenix80_primary_routes_share_one_distilled_model_pass() -> None:
+    scoring_tree = ast.parse(notebook_cell_source("phoenix-v8-scoring"))
     route_node = next(
         node
         for node in scoring_tree.body
@@ -233,8 +222,8 @@ def test_phoenix70_primary_routes_share_one_distilled_model_pass() -> None:
     )
     calls = []
 
-    def fake_load_judge(*, kind):
-        calls.append(("load", kind))
+    def fake_load_judge():
+        calls.append(("load", "main"))
         return object(), object(), [10, 11]
 
     def fake_score_prompts(model, tokenizer, label_ids, prompts):
@@ -246,10 +235,10 @@ def test_phoenix70_primary_routes_share_one_distilled_model_pass() -> None:
         "load_judge": fake_load_judge,
         "score_prompts": fake_score_prompts,
         "build_direct_prompt": lambda messages, tokenizer: f"main:{messages}",
-        "build_epistemic_empty_prompt": (
+        "build_epistemic_direct_prompt": (
             lambda messages, tokenizer: f"hpkr:{messages}"
         ),
-        "build_action_empty_prompt": (
+        "build_action_direct_prompt": (
             lambda messages, tokenizer: f"action:{messages}"
         ),
     }
@@ -304,9 +293,7 @@ def test_reasoning_prefix_removes_only_the_final_generated_label() -> None:
     assert not has_binary_prediction("unfinished rationale")
 
 
-def test_main_prompt_matches_blind_reasoning_renderer() -> None:
-    import yaml
-
+def test_main_prompt_uses_direct_binary_renderer() -> None:
     from experiments.privileged_information_distillation.core import (
         build_student_prompt,
     )
@@ -316,17 +303,13 @@ def test_main_prompt_matches_blind_reasoning_renderer() -> None:
         {"role": "assistant", "content": "Yes.", "reasoning": "hidden"},
     ]
 
-    config = yaml.safe_load(
-        (ROOT / "configs/privileged_information_distillation.yaml").read_text()
-    )["student"]
-
-    assert MAIN_PROMPT == config["prompt"]
     assert build_main_member_prompt(messages) == build_student_prompt(
         messages,
-        config["prompt"],
+        DECEPTION_PROMPT,
         MAIN_MAX_CONTEXT_CHARS,
         "tail",
     )
+    assert "reasoning_summary" not in DECEPTION_PROMPT
     assert (
         build_main_direct_prompt(messages, FakeTokenizer())
         == "<chat>" + DIRECT_PREDICTION_PREFIX
@@ -334,8 +317,7 @@ def test_main_prompt_matches_blind_reasoning_renderer() -> None:
     assert "hidden" not in build_main_member_prompt(messages)
 
 
-def test_epistemic_prompt_matches_frozen_experiment_renderer() -> None:
-    from experiments.liars_bench_hpkr_prompts.evaluate import PROMPTS
+def test_epistemic_prompt_uses_direct_binary_renderer() -> None:
     from experiments.privileged_information_distillation.core import (
         build_student_prompt,
     )
@@ -348,17 +330,20 @@ def test_epistemic_prompt_matches_frozen_experiment_renderer() -> None:
         {"role": "assistant", "content": "I do not know."},
     ]
 
-    assert EPISTEMIC_PROMPT == PROMPTS["knowledge_report_type"]
     assert build_epistemic_member_prompt(messages) == build_student_prompt(
         messages,
-        PROMPTS["knowledge_report_type"],
+        EPISTEMIC_PROMPT,
         6000,
         "head_tail",
     )
     assert (
-        build_epistemic_empty_prompt(messages, FakeTokenizer())
-        == "<chat>" + EMPTY_REASONING_PREFIX
+        build_epistemic_direct_prompt(messages, FakeTokenizer())
+        == "<chat>" + DIRECT_PREDICTION_PREFIX
     )
+    assert build_epistemic_empty_prompt(
+        messages, FakeTokenizer()
+    ) == build_epistemic_direct_prompt(messages, FakeTokenizer())
+    assert "reasoning_summary" not in EPISTEMIC_PROMPT
 
 
 def test_epistemic_router_excludes_forced_harm_choice() -> None:
@@ -387,8 +372,7 @@ def test_epistemic_router_excludes_forced_harm_choice() -> None:
     assert not is_harm_pressure_specialist_request(choice)
 
 
-def test_action_prompt_matches_frozen_experiment_renderer() -> None:
-    from experiments.liars_bench_distillation.prompts import ACTION_REPORT_PROMPT
+def test_action_prompt_uses_direct_binary_renderer() -> None:
     from experiments.privileged_information_distillation.core import (
         build_student_prompt,
     )
@@ -405,25 +389,28 @@ def test_action_prompt_matches_frozen_experiment_renderer() -> None:
         },
     ]
 
-    assert ACTION_PROMPT == ACTION_REPORT_PROMPT
     assert build_action_member_prompt(messages) == build_student_prompt(
         messages,
-        ACTION_REPORT_PROMPT,
+        ACTION_PROMPT,
         4500,
         "head_tail",
     )
     assert (
-        build_action_empty_prompt(messages, FakeTokenizer())
-        == "<chat>" + EMPTY_REASONING_PREFIX
+        build_action_direct_prompt(messages, FakeTokenizer())
+        == "<chat>" + DIRECT_PREDICTION_PREFIX
     )
+    assert build_action_empty_prompt(
+        messages, FakeTokenizer()
+    ) == build_action_direct_prompt(messages, FakeTokenizer())
     assert (
         build_phoenix_route_prompt(
             messages,
             FakeTokenizer(),
             action_report=True,
         )
-        == build_action_empty_prompt(messages, FakeTokenizer())
+        == build_action_direct_prompt(messages, FakeTokenizer())
     )
+    assert "reasoning_summary" not in ACTION_PROMPT
 
 
 def test_ordinary_phoenix_route_preserves_direct_prompt_exactly() -> None:
@@ -479,10 +466,15 @@ def test_harm_action_and_intent_routes_are_exclusive() -> None:
     harm_flags, action_flags, intent_flags = build_exclusive_route_flags(
         [harm, action, intent, ordinary]
     )
+    primary_harm_flags, primary_action_flags = build_primary_route_flags(
+        [harm, action, intent, ordinary]
+    )
 
     assert harm_flags.tolist() == [True, False, False, False]
     assert action_flags.tolist() == [False, True, False, False]
     assert intent_flags.tolist() == [False, False, True, False]
+    assert primary_harm_flags.tolist() == harm_flags.tolist()
+    assert primary_action_flags.tolist() == action_flags.tolist()
     assert not np.any(harm_flags & action_flags)
     assert not np.any(harm_flags & intent_flags)
     assert not np.any(action_flags & intent_flags)
@@ -513,10 +505,9 @@ def test_intent_prompt_matches_rank_one_training_renderer() -> None:
         ).read_text()
     )["student"])
 
-    assert INTENT_PROMPT == config["prompt"]
     assert build_intent_member_prompt(messages) == build_student_prompt(
         messages,
-        config["prompt"],
+        INTENT_PROMPT,
         config["max_prompt_chars"],
         config["context_truncation"],
         include_reasoning=config["include_reasoning"],
@@ -526,8 +517,9 @@ def test_intent_prompt_matches_rank_one_training_renderer() -> None:
     )
     assert (
         build_intent_empty_prompt(messages, FakeTokenizer())
-        == "<chat>" + EMPTY_REASONING_PREFIX
+        == "<chat>" + DIRECT_PREDICTION_PREFIX
     )
+    assert "reasoning_summary" not in INTENT_PROMPT
     assert has_final_assistant_reasoning(messages)
     assert not has_final_assistant_reasoning([
         {
@@ -574,27 +566,26 @@ def test_mean_log_odds_and_intent_mask_preserve_other_scores() -> None:
         blend_intent_route_scores(base, [], routes)
 
 
-def test_phoenix70_notebook_preserves_direct_runtime_contract() -> None:
+def test_phoenix80_notebook_preserves_direct_runtime_contract() -> None:
     source = notebook_source()
     ast.parse(source)
 
+    assert "method=phoenix_wright_v8.0 kimi_k3_distilled_routes" in source
     assert (
-        "method=phoenix_wright_v7.0 "
-        "q397_consolidated_routes_rank1_intent"
-    ) in source
-    assert "Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2" in source
-    assert 'if kind == "main":' in source
+        "Jazhyc/aletheias-phoenix-v8-kimi-k3-tvg-soft-full-r16-ep2"
+        in source
+    )
     assert 'kind == "harm"' not in source
     assert 'kind == "action"' not in source
-    assert "build_exclusive_route_flags" in source
-    assert "blend_intent_route_scores" in source
-    assert "builder = build_epistemic_empty_prompt" in source
-    assert "builder = build_action_empty_prompt" in source
+    assert "build_primary_route_flags" in source
+    assert "blend_intent_route_scores" not in source
+    assert "builder = build_epistemic_direct_prompt" in source
+    assert "builder = build_action_direct_prompt" in source
     assert "builder = build_direct_prompt" in source
     assert '"logits_to_keep": 1' in source
     assert "active_model.output.logits[:, -1, label_ids]" in source
     assert "torch.softmax(label_logits, dim=-1)[:, 1]" in source
-    assert "deceptive = binary_scores >= SUBMISSION_THRESHOLD" in source
+    assert "deceptive = scores >= SUBMISSION_THRESHOLD" in source
     assert "deceptive=deceptive" in source
     assert "model.generate" not in source
     assert "reply_to_score" not in source

@@ -25,19 +25,40 @@ opaque public labels returned by the Space.
   (per-family heads with scaler folded into weights), but was never submitted. The
   corrupted routing produces output byte-identical to `phoenix_wright_v6_3` on all
   counted units. See "Sonic v7 counted detail" for the full post-mortem.
-- **Active submission: `phoenix_wright_v6_3.ipynb` at AUROC `0.9303` / BA `0.8408`**
-  (2026-07-29 11:32). Best official Phoenix submission by AUROC. Multi-route judge
+- **Active submission: `phoenix_wright_v8_0.ipynb` at AUROC `0.9440` / BA `0.8488`**
+  (2026-07-30 02:32, 11m 47s). **New best official SAIN Groningen submission by a wide
+  margin.** Single-route direct-margin judge: Kimi K3 binary-soft-distilled
+  Qwen3.5-9B rank-16 adapter (`Jazhyc/aletheias-phoenix-v8-kimi-k3-tvg-soft-full-r16-ep2`,
+  two-epoch, full-data) scores every ordinary row at `Prediction:`. HP-KR and
+  action-report prompts share the same distilled adapter via direct prompts,
+  replacing the separate base-Qwen and legacy-adapter sessions of v6.3/v7.0.
+  No intent adapter, no score blending, no multi-route architecture. Beats v6.3
+  by +0.0137 AUROC and +0.0080 BA. Gap to rank 1 (Tiresias, 0.9451) is
+  **−0.0011** — essentially tied within leaderboard precision. See
+  "Phoenix v8.0 counted detail."
+- **Latest submitted: `sonic_v7_2.ipynb` at AUROC `0.9251` / BA `0.8371`**
+  (2026-07-30 03:23, 29m 38s). v7.1-style organism-detector router (per-family
+  LogisticRegression heads with StandardScaler folded in, threshold 0.7)
+  + Phoenix v8.0 Kimi K3 judge. **Regression vs judge-only v8.0: −0.0189 AUROC,**
+  −0.0117 BA. The per-family organism heads with proper scaler folding activate
+  correctly on in-distribution organisms (Metis Qwen a-mo family) but the router
+  damages the headline — the organism head does not transfer to Iris g-st
+  adapters and its spurious activations on some Notus rows override the strong
+  v8.0 judge output. The judge-only v8.0 submission is both stronger (+0.0189
+  AUROC) and 2.5× faster (11m47s vs 29m38s). See "Sonic v7.2 counted detail."
+- **Previously best: `phoenix_wright_v6_3.ipynb` at AUROC `0.9303` / BA `0.8408`**
+  (2026-07-29 11:32). Now superseded by v8.0 (+0.0137 AUROC). Multi-route judge
   (HP-KR base model for harm rows, action specialist, intent specialist) with
-  `Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2` adapter. Beats v6.2 by
-  +0.0070 AUROC and +0.0029 BA. Gap to rank 1 (Tiresias, 0.9451) is −0.0148 — the
-  smallest deficit of any SAIN Groningen submission. See "Phoenix v6.3 counted detail."
-- **Latest submitted: `sonic_v7.ipynb` at AUROC `0.9303` / BA `0.8408`**
-  (2026-07-29 21:06, 32m 39s). Organism-detector router + Phoenix v6.3 judge.
-  **Identical counted output to pw_v6_3** — the organism head trained on Metis
-  does not detect Iris g-st adapters, so the router is a no-op on counted data.
-  Runtime nearly double the judge-only submission with zero gain. The uncounted
-  reference rows (Metis, Eunomia) show slight differences where the organism head
-  fires on Metis organisms it was trained on. See "Sonic v7 counted detail."
+  `Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2` adapter. See
+  "Phoenix v6.3 counted detail."
+- **`phoenix_wright_v7_0.ipynb` at AUROC `0.9301` / BA `0.8383`**
+  (2026-07-29 16:25, 19m 1s). Same multi-route architecture as v6.3 but with
+  Kimi K3 judge adapter (`aletheias-phoenix-v7-kimi-k3-tvg-soft-r16-ep2`).
+  Slight regression vs v6.3: −0.0002 AUROC, −0.0025 BA. The Kimi K3 adapter
+  does not beat the v6.3 adapter on this task. See "Phoenix v7.0 counted detail."
+- **`sonic_v7.ipynb` at AUROC `0.9303` / BA `0.8408`**
+  (2026-07-29 21:06, 32m 39s). Submitted with broken organism head — scaler never
+  applied. **Identical counted output to pw_v6_3.** See "Sonic v7 counted detail."
 - **`phoenix_wright_v7_0.ipynb` at AUROC `0.9301` / BA `0.8383`**
   (2026-07-29 16:25, 19m 1s). Same multi-route architecture as v6.3 but with
   Kimi K3 judge adapter (`aletheias-phoenix-v7-kimi-k3-tvg-soft-r16-ep2`).

@@ -45,24 +45,28 @@ sbatch experiments/blackbox/run_judge.sh --config-name blackbox_reasoning_recall
 
 Submission mapping:
 
-- `submission/phoenix_wright_v7_0.ipynb` is the current Phoenix candidate and
+- `submission/phoenix_wright_v8_0.ipynb` is the current Phoenix candidate and
   must be tagged `black`. Every primary route uses the validation-selected
-  two-epoch Qwen3.5-397B FP8 binary-soft-distilled rank-16 Qwen3.5-9B adapter
+  two-epoch Kimi K3 binary-soft-distilled rank-16 Qwen3.5-9B adapter
   and normalized direct literal `0|1` margins. Ordinary rows preserve Phoenix
   4.0's structural renderer and the exact original binary-only training prompt.
-  HP-KR and action rows retain their independently frozen empty-scaffold
-  prompts but now share the same Q397 adapter/model session, replacing the
-  base-Qwen and legacy-v2 sessions. Remaining eligible trace-bearing rows retain
-  the rank-1 resolved-intent log-odds blend. Routes are mutually exclusive with
-  HP-KR, action, then intent precedence. Length-aware `48/32/16` batching,
+  HP-KR and action rows retain their semantic routing instructions but now
+  terminate directly at `Prediction:` with no reasoning-summary instruction or
+  scaffold. They share the same adapter/model session, replacing the base-Qwen
+  and legacy-v2 sessions. Phoenix 8.0 removes the rank-1 resolved-intent adapter
+  and its log-odds blend; source reasoning is never consumed. HP-KR takes
+  precedence over action, and those prompt routes remain mutually exclusive.
+  Length-aware `48/32/16` batching,
   `logits_to_keep=1`, and secondary threshold `0.5` remain unchanged. The
-  optimized adapter is published at
-  `Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2`. The
+  adapter is published at
+  `Jazhyc/aletheias-phoenix-v8-kimi-k3-tvg-soft-full-r16-ep2`. It uses all
+  3,693 instructed and 2,880 varied training rows. Its frozen ordinary
+  validation macro AUROC was `0.96411` (`0.99854` instructed, `0.91819`
+  varied), improving on the varied-only Kimi adapter's `0.95994`. The
   ordinary rubric contains no reasoning-summary instruction and the notebook
   does not generate judge reasoning. A matched one-epoch reasoning-GRPO
-  continuation from this checkpoint regressed from `0.95369` to `0.94500`
-  validation macro AUROC under the same vLLM direct-logit scorer, so Phoenix
-  7.0 deliberately retains the optimized distilled adapter.
+  prior Q397 reasoning-GRPO continuation regressed from `0.95369` to `0.94500`
+  validation macro AUROC under the same vLLM direct-logit scorer.
 - `submission/phoenix_wright_v5_3.ipynb` was the preceding controlled
   leaderboard-consistency submission candidate and must be tagged `black`. It
   keeps Phoenix 5.1's direct-logit inference, mutually exclusive

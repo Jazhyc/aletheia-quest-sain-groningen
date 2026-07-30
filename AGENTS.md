@@ -141,6 +141,25 @@ column. Keep the HP-KR, action, and intent routes unchanged and mutually
 exclusive. Corrected NDIF validation selected this adapter/prompt pair at
 `0.95375` macro AUROC. It remains black-box and must use `--tag black`.
 
+LoRA packaging dtype decision from 2026-07-29: retain FP32 master checkpoints
+for training and archival, but ship BF16 `adapter_model.safetensors` copies for
+competition NDIF inference. The exact Phoenix 7 rank-16 adapter, with all 256
+canonical Qwen3.5 multimodal PEFT tensor paths preserved, loaded successfully
+from `Jazhyc/aletheias-phoenix-v7-r16-bf16-canary`. On the complete 400-row
+public varied-Qwen unit at matched batch size 16, its direct-margin scores were
+bit-for-bit identical to the FP32 production adapter: 400/400 exact scores,
+zero maximum difference, identical ordering, and shared float32 score digest
+`c6d6619f5f7f0b1aa94ff2f6ace87704976d2c77a0869c20c01264afb6cd1cd7`.
+BF16 reduced the raw adapter from 116,429,720 to 58,233,888 bytes and projects
+the current full submission ZIP at about 68.5 MB. Do not substitute FP16 merely
+because it has the same nominal storage width: NDIF accepted the FP16 canary,
+but only 17/32 initial-canary scores were exact, mean absolute drift was
+`0.000875`, maximum drift was `0.010250`, and ordering changed. For each newly
+trained adapter, preserve an FP32 master, export a BF16 inference copy without
+changing tensor names/config, and run a matched NDIF parity canary before
+production promotion; do not assume this exact-equality result transfers across
+different weights or inference paths without checking.
+
 For development and training experiments, do not use NDIF; reserve NDIF for leaderboard evaluation/submission execution. Use local GPU Slurm jobs with vLLM for black-box judge experiments. Keep experiment code organized under `experiments/<method>/`, keep Slurm shell templates as `.sh` files, and write runtime logs under `logs/`; black-box Slurm jobs should redirect their main output to `logs/slurm/<method>/<split>-<job_id>.out` and automatically delete the temporary bootstrap file at `logs/slurm/%x-%j.bootstrap.out` after successful redirection. Store black-box experiment artifacts under `results/blackbox/`; per-run result directories are ignored, but `results/blackbox/leaderboard.md` is tracked and should show test-set results only. Default Slurm resources for these jobs are one `gpushort` GPU node with `--gpus-per-node=rtx_pro_6000:1`, `--cpus-per-task=1`, and 32 GB memory unless the user says otherwise. The cluster's 40 GB A100s are also sufficient for inference-only `Qwen/Qwen3.5-9B` BF16 evaluations with one rank-16 LoRA and a 4,096-token model context; when the RTX Pro 6000 queue is saturated, request `--gpus-per-node=a100:1` for this workload. A cold A100 vLLM 0.24 load/compile/CUDA-graph capture can be much slower than RTX: job `30159704` needed 29m40s for one startup plus nine 822-row conditions, so request at least 45 minutes for that shape unless the compile cache is known warm or fewer conditions are run. Do not generalize that memory result to training, larger models, or materially longer contexts without a separate memory check. For interactive black-box method development, prefer reserving a GPU node with `srun`, running one persistent vLLM server process, and pointing experiment clients at it over HTTP so model loading/compilation is paid once per session. Prefer direct `sbatch` templates first for unattended runs; add `submitit` only if Python-managed Slurm arrays become necessary. Slurm controller commands such as `sbatch`, `squeue`, `scancel`, and `sacct` should be run outside the sandbox automatically because sandboxed attempts cannot contact the controller.
 For prompt/logits judge sweeps, batch multiple prompt conditions inside a single
 Slurm job or one persistent vLLM session whenever practical, so Python import,

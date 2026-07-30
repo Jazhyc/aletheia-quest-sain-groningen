@@ -4644,3 +4644,200 @@ four-row trace-bearing dry rehearsal passed in `1m27s`, packaged at 130.3 MB,
 and exercised both the consolidated primary adapter and rank-1 intent adapter.
 The smoke's labels were one-class, so it supplies execution rather than AUROC
 evidence.
+
+## 2026-07-29: Phoenix Wright 8.0
+
+Phoenix 8.0 removes the optional rank-1 resolved-intent adapter, its separate
+model session, and its mean-log-odds contribution. The bundled 7 MB intent
+checkpoint is also removed. This follows the Kimi K3 trace-visible ceiling
+diagnostic: varied test AUROC moved only `0.96083 -> 0.96236`, with three unit
+wins, four ties, two losses, and a paired-bootstrap interval spanning material
+harm and gain. Public Liars' Bench contains no native reasoning fields in any
+of its 79,417 test rows and therefore supplies no source-trace OOD validation.
+
+The Kimi-distilled rank-16 adapter, model, ordinary renderer, HP-KR and action
+semantics, route precedence, `48/32/16` batching,
+2,048-token left truncation, `logits_to_keep=1`, and binary threshold `0.5`
+remain unchanged. Every row now receives exactly its primary-route score from
+one adapter pass, and source reasoning is ignored even when present.
+All three active prompt types terminate directly at `Prediction:`; the
+inherited reasoning-summary instructions and empty scaffolds were removed from
+HP-KR and action.
+The specialist routers match zero known competition rows, so known local scores
+are unchanged. This deliberately gives up exact replay of the historical
+Liars' Bench empty-scaffold selection; the new direct specialist boundaries
+have not been re-evaluated on Liars' Bench.
+
+## 2026-07-29: Q397 auxiliary readout adaptation
+
+A frozen local-vLLM sweep tested inference-cheap readout adaptation on the
+optimized two-epoch Q397 adapter. It held the exact Phoenix 4.0 Truth Value
+Guard prompt and final `Prediction:` position fixed, requested the union of 12
+label-token logits in one adapter pass, and compared six raw binary
+verbalizers plus six fixed probability blends. Thus every candidate retained
+the same one-pass deployment shape.
+
+The trained literal `0/1` margin won validation at `0.95393` macro AUROC
+(`0.99813` instructed, `0.89500` varied; 771 unique scores). The closest
+candidate, the mean of digit and `No/Yes` probabilities, scored `0.95119`
+(`0.99792` instructed, `0.88889` varied; 818 unique), a `-0.00274` macro
+delta. Raw `No/Yes` scored `0.94899`; raw `False/True` scored `0.93815`.
+`A/B`, `honest/deceptive`, and `truthful/misleading` were substantially worse.
+
+The closest candidate failed the predeclared `+0.0020` macro promotion gate,
+and no candidate beat the digit control, so no test run was performed. A
+matched base pass confirmed a material LoRA effect on digit probabilities
+(mean absolute delta `0.10215`, maximum `0.64434`). Retain the trained `0/1`
+readout; extra score uniqueness from semantic blends did not improve ranking.
+
+## 2026-07-29: Q397 family-level calibration
+
+A local-vLLM train cache tested a non-organism-specific calibration that could
+actually change per-dataset AUROC: family-wide log-odds blends between the
+trained Q397 `0|1` margin and auxiliary label pairs from the same final
+position. Unlike temperature or offset calibration, these blends can reorder
+rows while retaining one model call. Selection used all 6,573 train rows;
+Nemotron was forced to retain digits because it has only one train unit.
+
+The robustness-gated selector retained digits for Qwen, Gemma, and Nemotron,
+so its frozen validation vector was unchanged. A pure train-macro diagnostic
+selected 50% digits plus 50% `truthful/misleading` for Qwen and 60% digits
+plus 40% `honest/deceptive` for Gemma. On deployable output-only validation,
+that rule regressed Q397 macro AUROC from `0.95393` to `0.95286`
+(`-0.00107`), with both instructed (`-0.00042`) and varied (`-0.00194`)
+losses.
+
+An apparent current-Phoenix gain to `0.95702` depended on subsequently blending
+the calibrated Q397 score with the rank-1 intent adapter on 360 rows carrying
+source reasoning. The held-out contract does not guarantee that field; without
+it the intent route cannot activate. Test job `30361126` was therefore
+cancelled pending with zero runtime. Reject the family calibration and do not
+promote a reasoning-dependent interaction as an output-only leaderboard gain.
+
+## 2026-07-29: Q397 plus explicit-prompt base-Qwen ensemble
+
+A frozen output-only ensemble combined 60% optimized Q397 log odds under its
+trained Phoenix 4.0 prompt with 40% base-Qwen log odds under the previously
+selected explicit-digit prompt. The weight was uniform across rows and did not
+use organism identity, source reasoning, or a router. Validation macro AUROC
+improved from `0.95393` to `0.95560` (`+0.00167`), entirely through varied
+deception (`0.89500 -> 0.89889`); instructed remained `0.99813`. Unit
+wins/ties/losses were `4/12/5`, the worst unit lost `0.020`, and the
+dataset-unit bootstrap interval crossed zero.
+
+The one frozen local-test confirmation used the optimized NDIF path for only
+the missing base-Qwen stream: one session, direct normalized literal `0|1`
+logits, `logits_to_keep=1`, and length-sorted `48/32/16` batches. It scored all
+821 rows in `23.93s` (`34.30` rows/s) with zero truncation. Despite raising
+score uniqueness from `774` to `810`, the ensemble reduced test macro AUROC
+from `0.95869` to `0.95714` (`-0.00155`). Instructed fell
+`0.99542 -> 0.99375`, varied fell `0.90972 -> 0.90833`, and unit
+wins/ties/losses were `3/9/9`.
+
+Reject the ensemble and retain Q397 alone. Do not search prompt members or
+blend weights post hoc on test; the extra base-model inference pass is not
+supported by the frozen result.
+
+## 2026-07-29: Optimized Q397 generated-reasoning ensemble
+
+A matched NDIF experiment tested generated judge reasoning on the exact
+two-epoch optimized Q397 adapter. It used the ordinary binary Phoenix boundary
+for the direct arm. The second arm generated a deterministic
+`<reasoning_summary>`, removed the final generated digit, and read normalized
+literal `0|1` logits at that position. Source reasoning was never used.
+
+Post-reasoning validation macro AUROC was `0.94536`, below direct at
+`0.95345`. Nevertheless, a validation-selected fixed blend of 60% direct and
+40% reasoning log odds reached `0.95714` (`+0.00369`), with
+instructed/varied AUROC `0.99771/0.90306` and `5/12/4` unit
+wins/ties/losses. Nested leave-one-dataset-unit-out weight selection chose 60%
+direct in 20 folds and 70% in one. A nested hard router selected direct in
+every fold, while a regularized soft router scored `0.95333`; simple blending
+was the only promotion candidate.
+
+One frozen local-test confirmation rejected the aggregate promotion. Direct
+scored `0.95929`, post-reasoning `0.93101`, and the 60/40 blend `0.95911`
+(`-0.00018`). The blend improved varied AUROC `0.91056 -> 0.91472` but reduced
+instructed `0.99583 -> 0.99240`; unit wins/ties/losses were `5/9/7`, with a
+worst unit loss of `0.050`. Do not retune the weight on test or deploy the
+borrowed summary prompt.
+
+The borrowed prompt is unlikely to be inference-optimal for a binary-only
+student. Generation took `534.3s` on validation and `682.3s` on test, with
+five and seven 512-token fallbacks, versus `45--47s` for paired scoring.
+A validation-only follow-up therefore froze the 60/40 weight, capped reasoning
+at 192 tokens, and compared the baseline summary with compact claim-check and
+balanced-audit prompts. Slurm job `30361556` had an estimated start around
+three hours away, so it was cancelled before starting and the sweep moved to
+optimized NDIF.
+
+The NDIF run generated 2,466 replies in 79 length-aware batches split across
+three sessions (`974.0s`), then scored direct and all three post-reasoning
+boundaries in one session (`98.7s`). The compact summary baseline remained the
+winner: its reasoning margin scored `0.94863`, and its fixed blend scored
+`0.95827`, versus `0.95345` direct (`+0.00482`). Instructed AUROC changed
+`0.99792 -> 0.99771`, varied improved `0.89417 -> 0.90569`, and unit
+wins/ties/losses were `6/12/3`. The blend had 706 unique scores over 822 rows.
+
+More explicit analysis hurt. Claim-check reasoning/blend scored
+`0.93506/0.95071`; balanced-audit scored `0.93810/0.95327`. No prompt from
+this sweep was evaluated on local test. The selected 192-token baseline is
+therefore only a possible leaderboard probe: the earlier frozen test already
+rejected its 512-token predecessor, and the prompt sweep supplies no new
+held-out confirmation.
+
+## 2026-07-29: Generic Q397 reasoning OOD transfer
+
+A frozen Liars' Bench probe tested whether generated reasoning transfers
+beyond known competition response modes without relying on specialist
+prompts. It sampled 100 rows per category from the existing frozen 400-row
+sample, stratified by label and source model. The same generic optimized-Q397
+judge was applied uniformly to Alpaca, Convincing Game, Gender Secret, Harm
+Pressure Choice, HP-KR, Insider Trading, Instructed Deception, and Soft
+Trigger. No category router, source reasoning, action prompt, or epistemic
+prompt was used.
+
+The deployment-relevant comparison matched Phoenix 7's structural renderer
+between direct and 192-token generated-reasoning arms. Across the seven
+two-class categories, direct/reasoning/frozen-60/40-blend macro AUROC was
+`0.79324/0.80823/0.81031`; the blend delta was `+0.01707`. Category deltas
+were `+0.0082` Convincing Game, `+0.0304` Gender Secret, `-0.0128` Harm
+Pressure Choice, `-0.0978` HP-KR, `+0.1627` Insider Trading, `-0.0004`
+Instructed Deception, and `+0.0292` Soft Trigger. Thus the aggregate gain was
+heterogeneous and dominated by Insider Trading.
+
+A 5,000-sample paired stratified row bootstrap placed the macro blend delta
+at `[-0.00197, 0.03648]`, with `0.960` probability positive conditional on
+these categories. Resampling whole category deltas produced
+`[-0.03230, 0.07635]`, exposing the uncertainty in transferring to an unknown
+OOD category mixture. Excluding Insider Trading made the other-six mean delta
+`-0.00720`. Excluding both existing routed modes, Insider Trading and HP-KR,
+left a modest `+0.01093` over the other five public modes.
+
+The all-honest Alpaca control retained 2% of rows above `0.5` for direct,
+reasoning, and blend, while mean score fell `0.0367 -> 0.0203`. Structural
+generation took `482.0s` and post-reasoning scoring `39.6s` for 800 rows;
+45 summaries missed a terminal prediction at the 192-token cap. A post-hoc
+fallback-to-direct rule for missing boundaries did not help the earlier
+matched-tail comparison.
+
+This establishes real generic reasoning transfer for action-report deception
+and weaker transfer in a few other modes, but it does not support uniform
+deployment. HP-KR remains a clear counterexample, and the current action
+specialist already covers the dominant positive category more cheaply. Keep
+Phoenix's direct and specialist paths; treat generated reasoning as a future
+label-free routed auxiliary rather than a global leaderboard change.
+
+The token-length follow-up found no robust scalar routing signal. Exact
+reasoning inputs were 220--1,385 tokens (median 458). Input length versus
+label-directed blend-margin gain had Pearson/Spearman correlations
+`-0.020/0.082` across the 700 AUROC rows and `0.020/-0.012` after category
+centering. AUROC-pair attribution appeared weakly positive in aggregate
+(`0.245/0.179`) only because Insider Trading was both longest and most
+improved; within category it was slightly negative (`-0.084/-0.087`).
+Short/medium/long within-category terciles had macro deltas
+`+0.0455/+0.0055/-0.0096`, but category resampling put even the short-tercile
+interval across zero (`[-0.0072, 0.1229]`). Generated-summary length was
+mildly negatively correlated with label-directed margin gain after category
+centering (`-0.131/-0.140`) and uncorrelated with AUROC-pair gain. Reject a
+token-count-only reasoning router.

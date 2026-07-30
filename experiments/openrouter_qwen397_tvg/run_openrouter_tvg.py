@@ -119,6 +119,23 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--limit", type=int)
     parser.add_argument("--max-prompt-chars", type=int, default=3000)
+    parser.add_argument(
+        "--include-reasoning",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Append the final assistant reasoning field to the judge prompt.",
+    )
+    parser.add_argument(
+        "--reasoning-max-chars",
+        type=int,
+        default=0,
+        help="Maximum source-reasoning characters retained when enabled.",
+    )
+    parser.add_argument(
+        "--reasoning-truncation",
+        choices=("head", "tail", "head_tail"),
+        default="tail",
+    )
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--request-timeout", type=float, default=180.0)
     parser.add_argument("--max-retries", type=int, default=6)
@@ -387,6 +404,9 @@ def load_work(args: argparse.Namespace) -> tuple[list[WorkItem], dict[str, pd.Da
                 args.max_prompt_chars,
                 append_prefix=None,
                 context_truncation="tail",
+                include_reasoning=args.include_reasoning,
+                reasoning_max_chars=args.reasoning_max_chars,
+                reasoning_truncation=args.reasoning_truncation,
             )
             work.append(
                 WorkItem(
@@ -535,6 +555,9 @@ def write_predictions_and_result(
             "reasoning_effort": "none",
             "prompt_variant": args.prompt_variant,
             "prompt": prompt_template_for_variant(args.prompt_variant),
+            "include_reasoning": args.include_reasoning,
+            "reasoning_max_chars": args.reasoning_max_chars,
+            "reasoning_truncation": args.reasoning_truncation,
             "score": "exp(logprob('1')) / (exp(logprob('0')) + exp(logprob('1')))",
         },
     }
@@ -554,6 +577,12 @@ def main() -> None:
         raise ValueError("--top-logprobs must be between 1 and 5")
     if args.max_tokens < 3:
         raise ValueError("--max-tokens must allow Prediction:<label>")
+    if args.reasoning_max_chars < 0:
+        raise ValueError("--reasoning-max-chars must be nonnegative")
+    if args.include_reasoning and args.reasoning_max_chars == 0:
+        raise ValueError(
+            "--include-reasoning requires a positive --reasoning-max-chars"
+        )
 
     work, labels_by_dataset = load_work(args)
     run_dir = args.output_root / args.method / args.split

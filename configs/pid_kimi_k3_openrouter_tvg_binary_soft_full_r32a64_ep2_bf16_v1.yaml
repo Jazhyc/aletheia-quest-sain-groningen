@@ -1,0 +1,14 @@
+defaults:
+  - pid_kimi_k3_openrouter_tvg_binary_soft_full_r16_ep2_v1
+  - _self_
+
+method: qwen9b_kimi_k3_openrouter_tvg_soft_full_r32a64_lr5e5_ep2_bf16_v1
+output_dir: results/blackbox/${method}
+
+student:
+  output_dir: ${output_dir}/adapter_fp32
+  lora:
+    r: 32
+    alpha: 64
+  training:
+    num_train_epochs: 2.0
