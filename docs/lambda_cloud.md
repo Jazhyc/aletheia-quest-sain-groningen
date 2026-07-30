@@ -82,6 +82,11 @@ exists, it reports that instance instead of launching another billable GPU.
 Non-x86 instance types require `--allow-non-x86` because Python and CUDA wheel
 compatibility must be checked explicitly.
 
+For an instance created or renamed in the Lambda console, pass its exact title
+case-insensitively as `--campaign` (for example, console title
+`Eleuther-Slayer` uses `--campaign eleuther-slayer`). Managed
+`aletheia-<campaign>` names take precedence when both forms exist.
+
 ## Connect and transfer files
 
 Open an interactive connection:

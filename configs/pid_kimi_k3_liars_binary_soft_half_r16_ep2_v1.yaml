@@ -1,0 +1,17 @@
+defaults:
+  - pid_kimi_k3_openrouter_tvg_binary_soft_full_r16_ep2_v1
+  - _self_
+
+method: qwen9b_kimi_k3_tvg_soft_full_plus_liars50_r16_lr5e5_ep2_v1
+output_dir: results/blackbox/${method}
+
+student:
+  soft_teacher_artifact: results/blackbox/kimi_k3_tvg_soft_full_plus_liars_v1/train/soft_targets.jsonl
+  teacher_sources:
+    - artifact: results/blackbox/kimi_k3_tvg_soft_full_plus_liars_v1/train/student_rows.jsonl
+      dataset_name_contains: aletheias-quest/
+    - artifact: results/blackbox/kimi_k3_tvg_soft_full_plus_liars_v1/train/student_rows.jsonl
+      dataset_name_contains: liars-bench/
+      train_fraction: 0.5
+      train_fraction_seed: ${seed}
+  output_dir: ${output_dir}/adapter

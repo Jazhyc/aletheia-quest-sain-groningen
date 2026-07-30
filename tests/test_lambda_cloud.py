@@ -102,6 +102,26 @@ def test_campaign_matching_is_exact_and_validated() -> None:
         lambda_cloud.campaign_instance_name("../bad")
 
 
+def test_campaign_matching_accepts_exact_console_title_as_fallback() -> None:
+    instances = [
+        {"name": "Eleuther-Slayer", "id": "wanted"},
+        {"name": "Eleuther-Slayer-old", "id": "other"},
+    ]
+    assert lambda_cloud.matching_instances(instances, "eleuther-slayer") == [
+        {"name": "Eleuther-Slayer", "id": "wanted"}
+    ]
+
+
+def test_campaign_matching_prefers_managed_prefix_over_console_title() -> None:
+    instances = [
+        {"name": "aletheia-eleuther-slayer", "id": "managed"},
+        {"name": "Eleuther-Slayer", "id": "console"},
+    ]
+    assert lambda_cloud.matching_instances(instances, "eleuther-slayer") == [
+        {"name": "aletheia-eleuther-slayer", "id": "managed"}
+    ]
+
+
 def test_parser_requires_explicit_confirmation_for_launch() -> None:
     parser = lambda_cloud.build_parser()
     args = parser.parse_args(

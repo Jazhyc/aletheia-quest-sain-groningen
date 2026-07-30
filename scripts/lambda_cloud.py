@@ -210,7 +210,17 @@ def matching_instances(
     instances: Sequence[dict[str, Any]], campaign: str
 ) -> list[dict[str, Any]]:
     expected_name = campaign_instance_name(campaign)
-    return [item for item in instances if item.get("name") == expected_name]
+    prefixed = [item for item in instances if item.get("name") == expected_name]
+    if prefixed:
+        return prefixed
+    # Instances created or renamed in the Lambda console may use a human title
+    # instead of this helper's ``aletheia-`` prefix. Accept only a unique exact
+    # case-insensitive title match; never use substring or fuzzy matching.
+    return [
+        item
+        for item in instances
+        if str(item.get("name", "")).casefold() == campaign.casefold()
+    ]
 
 
 def require_campaign_instance(

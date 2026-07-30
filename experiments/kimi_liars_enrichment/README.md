@@ -63,3 +63,21 @@ The predeclared maximum mixture is label-balanced within category:
 Rejected pilot categories are omitted rather than replaced post hoc. The full
 cache therefore reaches 6,576 rows only if every category passes either the
 semantic-improvement branch or the strong-ordinary fallback.
+
+The completed full cache passed all frozen audit gates: 6,576/6,576 rows had
+literal label logits and valid soft targets. Teacher AUROC was `0.92676` for
+harm-pressure choice, `0.91493` for HP-KR, `0.97784` for Insider Trading, and
+`0.96236` for soft trigger. Composing it with the original 6,573 Phoenix 8
+rows produced a 13,149-row cache.
+
+On Lambda, train the full enrichment first and then the predeclared half-dose
+probe:
+
+```bash
+bash experiments/kimi_liars_enrichment/run_training_lambda.sh
+```
+
+Both arms retain the Phoenix 8 rank-16, two-epoch AdamW `5e-5` recipe. The
+probe changes only the Liars replay dose: it uses a stable label- and
+dataset-stratified 50% sample while retaining every original competition row.
+Validation compares both arms with the Phoenix 8 adapter in one vLLM session.
