@@ -85,3 +85,15 @@ def test_full_and_half_training_configs_use_combined_soft_cache():
             "train_fraction_seed": 0,
         },
     ]
+
+
+def test_interpolation_runner_compares_all_single_adapter_arms():
+    source = (
+        ROOT
+        / "experiments/kimi_liars_enrichment/run_interpolation_lambda.sh"
+    ).read_text()
+
+    for arm in ("anchor", "full25", "full50", "full75", "full", "half"):
+        assert f'--adapter "{arm}=' in source
+    assert "--continuous-margin-condition direct" in source
+    assert "while kill -0" in source
