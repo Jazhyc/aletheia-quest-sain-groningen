@@ -3,8 +3,15 @@
 The sonic family is our white-box submission. It mixes an activation probe and a
 text judge with a gate. Each version changes one part.
 
-**Start here:** `sonic_v4.md` for the baseline, then `sonic_v3_6.md` for
-the peak AUROC.
+**Current candidate:** `sonic_v8_0_1.ipynb` swaps Sonic v8.0's judge adapter
+for `Jazhyc/aletheias-phoenix-v8-1-kimi-k3-liars-full-r16-ep2` while preserving
+the v8.0 gate calibration. It is an intentionally uncalibrated main-leaderboard
+transfer probe. See `sonic_v8_0_1.md`.
+
+**Latest submitted:** `sonic_v8_0.ipynb`, AUROC `0.9505` / BA `0.8450`.
+See `sonic_v8_0.md`.
+
+For method history, start with `sonic_v4.md`, then `sonic_v3_6.md`.
 
 `sonic_v5` is **planned, not built**. It escalates the gate's disagreement
 rows — currently a dead branch where the probe is silenced — to the tested
@@ -64,6 +71,8 @@ Everything below `dev_data_row_ordering.md` in the table is **history**.
 
 | document | subject |
 | --- | --- |
+| `sonic_v8_0_1.md` | **Built 2026-07-30, unsubmitted.** Sonic v8.0 with only the Phoenix v8.1 competition-plus-Liars adapter swapped in; v8.0 judge-scale calibration deliberately retained. |
+| `sonic_v8_0.md` | **Submitted 2026-07-30, AUROC `0.9505` / BA `0.8450`.** Dual L40+L46 probe + Phoenix v8 judge under the retuned v4 sign gate. |
 | `sonic_v7.md` | **Designed 2026-07-29, notebook built.** Organism-detector router replaces the sign gate — per-sample routing between probe (on organisms) and judge (on base models). Detector needs offline training before the router can fire; falls back to v6.1 sign gate otherwise. |
 | `sonic_v6_1.md` | **Built 2026-07-29, unsubmitted.** v6 with retuned gate constants for the v6.2 judge (normalisation mismatch fix: 1-step BASE_CAP, 3-step MAX_CAP). |
 | `sonic_v6.md` | **Submitted 2026-07-29, AUROC `0.9230` / BA `0.8013`.** Dual L40+L46 probe + Phoenix v6.2 judge under v4 sign gate. Probe was given 5–10× too much influence (normalisation mismatch); Notus Nemotron collapsed. |
@@ -89,10 +98,8 @@ Everything below `dev_data_row_ordering.md` in the table is **history**.
 
 The scored results for every version are in `docs/official_submissions.md`.
 
-The current candidate is `sonic_v7.ipynb` (organism-detector router, falls back to v6.1).
-The latest submission is `sonic_v6.ipynb` at AUROC `0.9230` / BA `0.8013`.
-The best submission is `phoenix_wright_v6_2.ipynb` at AUROC `0.9233` / BA `0.8379`.
-The peak AUROC is `phoenix_wright_v6_2.ipynb` at `0.9233` / BA `0.8379`.
+The current candidate is `sonic_v8_0_1.ipynb`. The latest and best submitted
+Sonic is `sonic_v8_0.ipynb` at AUROC `0.9505` / BA `0.8450`.
 
 For scale: the leaderboard leader on 2026-07-27 is EleutherAI's `Tiresias.ipynb`
 at `0.9451`, and rank 2 is `whitebox_notus_v47.ipynb` at `0.9148`. Our Iris
