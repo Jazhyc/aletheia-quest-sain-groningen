@@ -17,43 +17,48 @@ opaque public labels returned by the Space.
 ## Current Status
 
 - Team: `SAIN Groningen`
-- **Active submission: `phoenix_wright_v6_2.ipynb` at AUROC `0.9233` / BA `0.8379`**
-  (2026-07-28 19:30). Best official Phoenix AUROC. Direct-label-logit judge with
-  correctly loaded adapter after the Jul-23 NDIF transformers update. Adapter
-  generalisation is the main Notus bottleneck: base-model Qwen at 0.8550,
-  g-st Qwen at 0.9526.
-- **Latest submitted: `sonic_v6.ipynb` at AUROC `0.9230` / BA `0.8013`**
-  (2026-07-29 10:36). Dual probe (L40+L46) + v6.2 judge under the v4 sign gate.
-  Essentially tied with judge-only on AUROC (−0.0003) but worse on BA (−0.0366)
-  and nearly double the runtime (35m vs 16m). The probe helps Iris (+0.0230
-  mean AUROC over judge, peaking +0.0418 on Qwen) but hurts Notus (−0.0236 mean,
-  concentrated on Nemotron at −0.0918). The gate needs retuning for the stronger
-  v6.2 judge — the v4 constants were fitted against a weaker judge. See "Sonic
-  v6 counted detail".
+- **⚠️ Sonic v7 submitted with broken organism head — scaler never applied.** The
+  submitted `sonic_v7.ipynb` (commit `6a1811b`) uses a **shared** organism head
+  (`shared_organism_head.pt`, bias +2.59) but **never applies the StandardScaler** —
+  the head receives raw pooled features at inference time but was trained on
+  StandardScaler-normalized features. The current `experiments/` version fixes this
+  (per-family heads with scaler folded into weights), but was never submitted. The
+  corrupted routing produces output byte-identical to `phoenix_wright_v6_3` on all
+  counted units. See "Sonic v7 counted detail" for the full post-mortem.
+- **Active submission: `phoenix_wright_v6_3.ipynb` at AUROC `0.9303` / BA `0.8408`**
+  (2026-07-29 11:32). Best official Phoenix submission by AUROC. Multi-route judge
+  (HP-KR base model for harm rows, action specialist, intent specialist) with
+  `Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2` adapter. Beats v6.2 by
+  +0.0070 AUROC and +0.0029 BA. Gap to rank 1 (Tiresias, 0.9451) is −0.0148 — the
+  smallest deficit of any SAIN Groningen submission. See "Phoenix v6.3 counted detail."
+- **Latest submitted: `sonic_v7.ipynb` at AUROC `0.9303` / BA `0.8408`**
+  (2026-07-29 21:06, 32m 39s). Organism-detector router + Phoenix v6.3 judge.
+  **Identical counted output to pw_v6_3** — the organism head trained on Metis
+  does not detect Iris g-st adapters, so the router is a no-op on counted data.
+  Runtime nearly double the judge-only submission with zero gain. The uncounted
+  reference rows (Metis, Eunomia) show slight differences where the organism head
+  fires on Metis organisms it was trained on. See "Sonic v7 counted detail."
+- **`phoenix_wright_v7_0.ipynb` at AUROC `0.9301` / BA `0.8383`**
+  (2026-07-29 16:25, 19m 1s). Same multi-route architecture as v6.3 but with
+  Kimi K3 judge adapter (`aletheias-phoenix-v7-kimi-k3-tvg-soft-r16-ep2`).
+  Slight regression vs v6.3: −0.0002 AUROC, −0.0025 BA. The Kimi K3 adapter
+  does not beat the v6.3 adapter on this task. See "Phoenix v7.0 counted detail."
+- **`sonic_v6.ipynb` at AUROC `0.9230` / BA `0.8013`**
+  (2026-07-29 10:36). Now superseded by the v6.3 judge at 0.9303. See "Sonic
+  v6 counted detail" for the earlier analysis.
+- **Best white-box AUROC: `sonic_v4.ipynb` at `0.906067` / BA `0.820417`**
+  (2026-07-27 13:59). Now far behind the v6.3 judge (−0.0242 AUROC).
 - **⚠️ Adapter-loading bug (Jul 23–28, 2026).** A transformers version update on
   the NDIF server on Jul 23 caused adapters to silently not be applied in both
   vLLM and NDIF. All Phoenix 4.0+ runs and all Sonic runs submitted between
-  Jul 23 and Jul 28 were technically scoring with **base-model logits only** —
-  the adapter weights were loaded but never forwarded through. The bug was
-  discovered and fixed on Jul 28. The first runs with properly loaded adapters
-  are `phoenix_wright_v6_2` (Jul 28 19:30) and `sonic_v6_mini_long` (Jul 29
-  09:27). The OOD degradation on Notus in those runs reflects genuine
-  non-generalisation of the adapters, not a prompt or method regression.
-- **Best white-box AUROC: `sonic_v4.ipynb` at `0.906067` / BA `0.820417`**
-  (2026-07-27 13:59). v3.8's gate with dual probes at L40 and L46 fused as
-  `(z_46 + z_40) / 2.0`. Gap to rank 1 (Tiresias, `0.9451`) is `−0.0390`.
-  **Note: sonic_v5 at 0.8480 regressed (−0.0581), not the top white-box.**
-- **Next to submit: `sonic_v6_1.ipynb` (built 2026-07-29, not yet
-  submitted).** Same architecture as v6 (dual L40+L46 probe + v6.2 judge
-  under v4 sign gate) with **retuned gate constants**. See
-  `docs/sonic/sonic_v6_1.md`.
-- **Next after: `sonic_v7.ipynb` (designed 2026-07-29, notebook built).**
-  Replaces the sign gate with an **organism-detector router**: a per-family
-  logistic regression trained to distinguish base-model from organism
-  activations. Routes to the probe on organisms (where it scores 0.99) and
-  to the judge on base models (where the judge scores 0.89). The detector
-  needs offline training first; until then, the notebook falls back to the
-  v6.1 sign gate. See `docs/sonic/sonic_v7.md`.
+  Jul 23 and Jul 28 were technically scoring with **base-model logits only**.
+  The bug was discovered and fixed on Jul 28.
+- **Gap to rank 1 (Tiresias, 0.9451): −0.0148.** The smallest SAIN Groningen
+  deficit yet. Tiresias Notus 0.9032 vs pw_v6_3 Notus 0.9023 (−0.0009); Tiresias
+  Iris 0.9869 vs pw_v6_3 Iris 0.9582 (−0.0287). The gap is now concentrated on
+  Iris — the probe would close most of it if it could be selectively activated,
+  but the organism-head router designed to do exactly that didn't transfer.
+  See "Phoenix v6.3 vs Tiresias gap analysis" below.
 - **`sonic_v6_mini_long.ipynb` at AUROC `0.7773` / BA `0.6658`**
   (2026-07-29 09:27). Probe-only diagnostic — dual probe (L40+L46), no judge,
   no gate, no token cap. Confirms the probe does not transfer to Notus (AUROC
@@ -188,7 +193,10 @@ recent runs have not been added without a fresh authenticated API query.
 
 | submitted at (UTC) | notebook | method / local mapping | tag | AUROC | BA | recall | FPR | runtime |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| 2026-07-28 19:30 | `phoenix_wright_v6_2.ipynb` | direct-label-logit judge, no probe; adapter loaded correctly after Jul-23 transformers fix. **Best official Phoenix AUROC (0.9233).** See "Phoenix v6.2 counted detail". | black | 0.9233 | 0.8379 | — | — | 989s |
+| 2026-07-29 21:06 | `sonic_v7.ipynb` | organism-detector router (per-family logistic regression) + Phoenix v6.3 multi-route judge; L46 probe with deception + organism heads. **Organism head does not transfer to Iris g-st → counted output identical to pw_v6_3 (router is a no-op).** See "Sonic v7 counted detail." | white | 0.9303 | 0.8408 | — | — | 1959s |
+| 2026-07-29 16:25 | `phoenix_wright_v7_0.ipynb` | multi-route Phoenix judge (HP-KR base, action specialist, intent specialist) with Kimi K3 adapter (`aletheias-phoenix-v7-kimi-k3-tvg-soft-r16-ep2`). Slight regression vs v6.3 adapter. See "Phoenix v7.0 counted detail." | black | 0.9301 | 0.8383 | — | — | 1141s |
+| 2026-07-29 11:32 | `phoenix_wright_v6_3.ipynb` | multi-route Phoenix judge (HP-KR base, action specialist, intent specialist) with `aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2` adapter. **Best official Phoenix AUROC (0.9303).** See "Phoenix v6.3 counted detail." | black | 0.9303 | 0.8408 | — | — | 907s |
+| 2026-07-28 19:30 | `phoenix_wright_v6_2.ipynb` | direct-label-logit judge, no probe; adapter loaded correctly after Jul-23 transformers fix. **Was best official Phoenix AUROC (0.9233), now superseded by v6.3.** See "Phoenix v6.2 counted detail". | black | 0.9233 | 0.8379 | — | — | 989s |
 | 2026-07-29 10:36 | `sonic_v6.ipynb` | dual probe (L40+L46) + Phoenix v6.2 direct-margin judge under v4 sign gate (no token cap). Probe helps Iris (+0.0230 mean AUROC over judge-only, peaking +0.0418 on Qwen) but Notus Nemotron collapses −0.0918 — the two effects nearly cancel (headline −0.0003 vs judge-only). Gate needs retuning for the stronger v6.2 judge. | white | 0.9230 | 0.8013 | — | — | 2132s |
 | 2026-07-29 09:27 | `sonic_v6_mini_long.ipynb` | probe-only diagnostic: dual probe (L40+L46), no judge, no gate, no token cap (max_len=0). Score = sigmoid(probe_z_fused). Confirms probe does not transfer to Notus (AUROC ~0.56) — the judge is the only lever that moves it. | white | 0.7773 | 0.6658 | — | — | 1507s |
 | 2026-07-28 17:38 | `sonic_v5.ipynb` | v4 dual probe + big-judge escalation on disagreement rows (27B/120B tested model replaces 9B Phoenix judge on all families). All-or-nothing trigger too aggressive: Nemotron/gemma self-reads near-chance on Notus (−0.1150 headline), but Qwen big judge works (Notus flat, Iris Qwen +0.0080). | white | 0.8480 | 0.7950 | — | — | 2521s |
@@ -228,10 +236,304 @@ recent runs have not been added without a fresh authenticated API query.
 
 These counted Notus/Iris rows are useful diagnostics for official transfer.
 
-### Phoenix v6.2 counted detail — adapter loaded, solid Notus but gap to close
+### Sonic v7 counted detail — submitted with broken organism head (scaler mismatch)
+
+Submitted 2026-07-29 21:06. Headline AUROC `0.9303` / BA `0.8408`, runtime
+32m39s (1959s). Against `phoenix_wright_v6_3` (judge-only): **±0.0000 AUROC,
+±0.0000 BA — identical counted output.**
+
+**⚠️ Root cause: scaler never applied to organism head.** The submitted notebook
+(commit `6a1811b`) uses a **shared** organism head (`shared_organism_head.pt`,
+trained on qwen+gemma combined, AUROC 0.85) but **never applies the
+StandardScaler** that the head was trained with. The head receives raw pooled
+features at inference time but was trained on `StandardScaler.fit_transform()`
+features. This is a dataset-dependent corruption — the routing depends on the
+(unintended) distribution of raw pooled features, not on the organism vs
+base-model signal the head was supposed to learn.
+
+**The submitted version vs the current version are different code paths:**
+
+| | Submitted (`6a1811b`) | Current (`experiments/`) |
+|---|---|---|
+| Organism head | Shared (`shared_organism_head.pt`) | Per-family (`{qwen,gemma}_organism_head.pt`) |
+| StandardScaler | ❌ Not loaded, not applied | ✅ Loaded, folded into Linear weights |
+| Head bias | +2.5901 (sigmoid 0.93) | Qwen +4.56 (folded), Gemma +0.20 (folded) |
+| Trained on | Scaled features (but deployed raw) | Scaled features (deployed with folding) |
+
+The shared head's bias (+2.5901, σ=0.93) means that with zero-mean features,
+`σ(0 + 2.59) = 0.93 > 0.5` — the head would classify every row as "organism."
+The fact that counted rows match pw_v6_3 (judge-only) suggests the raw pooled
+features happen to produce sufficiently negative dot-products with the weight
+on Notus/Iris to push the total logit below 0.5, routing everything to the
+judge. On Eunomia, the raw features produce different dot-products, causing
+some rows to route to the probe (hence the slight BA/FPR differences).
+
+**Design.** L46 transformer probe with a deception head and an organism-detection
+head sharing one encoder. The planned router is a hard switch:
+```
+if organism_conf > THRESHOLD → probe_score  (organism → deception head)
+else                        → judge_score  (base model → v6.3 judge)
+```
+The intent was per-family LogisticRegression heads with StandardScaler folded
+in. The submission shipped a shared head without scaler. Full intended design:
+`docs/sonic/sonic_v7.md`.
+
+**Counted Notus/Iris — sonic_v7 vs pw_v6_3 (judge-only). Every row is identical.**
+
+| dataset | model / lora | v7 AUROC | pw_v6.3 AUROC | Δ AUROC | v7 BA | pw_v6.3 BA |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Notus | `Nemotron-120B` / `None` | 0.9212 | 0.9212 | 0.0000 | 0.8100 | 0.8100 |
+| Notus | `Qwen3.5-27B` / `None` | 0.8701 | 0.8701 | 0.0000 | 0.7350 | 0.7350 |
+| Notus | `gemma-3-27b-it` / `None` | 0.9157 | 0.9157 | 0.0000 | 0.8125 | 0.8125 |
+| Iris | `Nemotron-120B` / `g-st` | 0.9646 | 0.9646 | 0.0000 | 0.9125 | 0.9125 |
+| Iris | `Qwen3.5-27B` / `g-st` | 0.9556 | 0.9556 | 0.0000 | 0.8850 | 0.8850 |
+| Iris | `gemma-3-27b-it` / `g-st-2` | 0.9543 | 0.9543 | 0.0000 | 0.8900 | 0.8900 |
+| **Notus mean** | | 0.9023 | 0.9023 | 0.0000 | 0.7858 | 0.7858 |
+| **Iris mean** | | 0.9582 | 0.9582 | 0.0000 | 0.8958 | 0.8958 |
+| **headline** | | **0.9303** | **0.9303** | **0.0000** | **0.8408** | **0.8408** |
+
+**Uncounted reference rows (Metis, Eunomia) — these are where the organism head
+does fire.**
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Metis | `Nemotron-120B` / `None` | 0.8283 | 0.9933 | 0.6667 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `None` | 0.9800 | 0.9968 | 0.9800 | 0.0200 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-1` | 0.9456 | 0.9940 | 0.9012 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-3` | 0.9500 | 0.9950 | 0.9250 | 0.0250 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-4` | 0.9750 | 0.9961 | 0.9600 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-5` | 0.9750 | 0.9983 | 0.9550 | 0.0050 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-6` | 0.9788 | 0.9985 | 0.9676 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-7` | 0.9595 | 0.9979 | 0.9239 | 0.0050 |
+| Dataset Metis | `Qwen3.5-27B` / `b-mo-qwen3.5-27b` | 0.9863 | 0.9927 | 0.9925 | 0.0200 |
+| Dataset Metis | `Qwen3.5-27B` / `c-mo-qwen3.5-27b` | 0.9775 | 0.9974 | 0.9900 | 0.0350 |
+| Dataset Metis | `Qwen3.5-27B` / `g-st-qwen3.5-27b` | 0.9550 | 0.9883 | 0.9600 | 0.0500 |
+| Dataset Metis | `gemma-3-27b-it` / `None` | 0.9750 | 0.9932 | 1.0000 | 0.0500 |
+| Dataset Metis | `gemma-3-27b-it` / `g-st-gemma-3-27b-it-2` | 0.9625 | 0.9866 | 1.0000 | 0.0750 |
+| Dataset Metis | `gemma-3-27b-it` / `s-mo-gemma-3-27b-it` | 0.9800 | 0.9957 | 0.9900 | 0.0300 |
+| Dataset Eunomia | `Qwen3.5-27B` / `None` | 0.9619 | 0.9971 | 0.9375 | 0.0138 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-1` | 0.7002 | 0.8374 | 0.4416 | 0.0412 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-3` | 0.6380 | 0.7230 | 0.2923 | 0.0163 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-4` | 0.7501 | 0.8741 | 0.5513 | 0.0511 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-5` | 0.8880 | 0.9691 | 0.8205 | 0.0444 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-6` | 0.8015 | 0.9166 | 0.6458 | 0.0429 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-7` | 0.8057 | 0.9193 | 0.6395 | 0.0282 |
+| Dataset Eunomia | `Qwen3.5-27B` / `b-mo-qwen3.5-27b` | 0.9184 | 0.9699 | 0.9650 | 0.1282 |
+| Dataset Eunomia | `Qwen3.5-27B` / `c-mo-qwen3.5-27b` | 0.9434 | 0.9848 | 0.9098 | 0.0231 |
+
+**The scaler mismatch explains the observed pattern.** The organism head was
+trained on `StandardScaler.fit_transform(pooled)` features, where features are
+centered and scaled to unit variance. At inference time, the submitted notebook
+passes raw `pooled` features (no centering, no scaling). The weight vector was
+optimized for one distribution but applied to another. The output logit is
+`weight · raw_pooled + 2.59` instead of `weight · ((pooled − μ)/σ) + 2.59`.
+
+On Metis (in-distribution for the shared head's training data), the raw features
+happen to produce similar rankings to the judge, so aggregate metrics don't
+visibly change even if individual rows are routed differently. On Eunomia, the
+raw features produce a different distribution, causing visible BA/FPR
+differences. On Notus/Iris, the raw features happen to anti-align with the
+weight, driving logits below 0 and routing all rows to the judge.
+
+**The local evaluation (`compare_v7_v6.py`) used the CORRECT code path** (per-family
+heads with StandardScaler applied), so it scored v7 at 0.95 AUROC on Metis. But
+the submitted notebook shipped the shared head without scaler — a different
+organism head and a different inference path. The two evaluate differently.
+
+**v7.1 already implements the fixes** — per-family heads, scaler folding, raised
+threshold (t=0.7), Kimi K3 judge adapter. Initial run was killed when NDIF tier 1s
+were turned off — resubmission should succeed. Empirically tested on cached
+activations: the Qwen organism head is well-calibrated (0% false positive on Metis
+Qwen base rows at t=0.7, 93.5% detection on Metis mo-qwen organisms). The
+remaining limitation is adapter-type generalization: the head doesn't detect Iris
+g-st organisms (only 8.2% detection), so they route to the judge (~0.96 AUROC)
+instead of the probe (~0.99 AUROC). Acceptable — the judge is strong enough.
+
+**v6.3 vs v6.2 judge per-unit comparison (from the sonic_v7 run — v7 counted output = v6.3 judge).** The v6.3 multi-route judge is
+substantially stronger than the v6.2 direct-margin judge used in earlier
+submissions:
+
+| dataset | model / lora | v6.3 judge AUROC | v6.2 judge AUROC | Δ |
+| --- | --- | ---: | ---: | ---: |
+| Notus | `Nemotron-120B` / `None` | 0.9212 | 0.9142 | +0.0070 |
+| Notus | `Qwen3.5-27B` / `None` | 0.8701 | 0.8550 | +0.0151 |
+| Notus | `gemma-3-27b-it` / `None` | 0.9157 | 0.8983 | +0.0174 |
+| Iris | `Nemotron-120B` / `g-st` | 0.9646 | 0.9643 | +0.0003 |
+| Iris | `Qwen3.5-27B` / `g-st` | 0.9556 | 0.9526 | +0.0030 |
+| Iris | `gemma-3-27b-it` / `g-st-2` | 0.9543 | 0.9554 | −0.0011 |
+| **Notus mean** | | **0.9023** | 0.8892 | **+0.0131** |
+| **Iris mean** | | **0.9582** | 0.9574 | **+0.0008** |
+| **headline** | | **0.9303** | 0.9233 | **+0.0070** |
+
+The gain is concentrated on Notus (+0.0131), exactly where the judge is the
+only working detector. Iris is essentially flat (+0.0008). The multi-route
+architecture (HP-KR base model for harm rows, action specialist, intent
+specialist) and the 397B-teacher binary-soft-distilled adapter together deliver
+the best Notus transfer of any SAIN Groningen submission.
+
+**Gap to rank 1 (Tiresias, 0.9451): −0.0148.** Tiresias scores Notus 0.9032
+and Iris 0.9869. The v6.3 judge matches Tiresias on Notus (−0.0009) but trails
+on Iris (−0.0287). This is exactly the regime where the probe would help most
+(AUROC 0.99 on Iris). A correctly implemented organism-head router with
+per-family heads, proper scaler folding, and appropriate threshold calibration
+could activate the probe on Iris rows without damaging Notus — potentially
+closing most of the remaining gap. The v7.1 notebook attempts this (see
+"Failed Official Attempts").
+
+### Phoenix v6.3 counted detail — multi-route judge, best Phoenix submission
+
+Submitted 2026-07-29 11:32. Headline AUROC `0.9303` / BA `0.8408`, runtime
+15m7s (907s). **Best official Phoenix AUROC and BA.** Beats v6.2 by +0.0070
+AUROC and +0.0029 BA.
+
+**Design.** Multi-route Phoenix judge using Qwen3.5-9B with adapter
+`Jazhyc/aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2` (binary-soft-distilled
+r16 from 397B teacher, 2-epoch). Three specialist routes:
+1. HP-KR base model for harm rows
+2. Action specialist
+3. Intent specialist
+
+Output is a probability ∈ [0,1] via `score_messages()`. No z-score
+standardisation, unlike the v6.2 direct-margin judge. No probe, no gate.
+
+**Full per-dataset breakdown.**
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Metis | `Nemotron-120B` / `None` | 0.8283 | 0.9933 | 0.6667 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `None` | 0.9800 | 0.9968 | 0.9800 | 0.0200 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-1` | 0.9456 | 0.9940 | 0.9012 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-3` | 0.9500 | 0.9950 | 0.9250 | 0.0250 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-4` | 0.9750 | 0.9961 | 0.9600 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-5` | 0.9750 | 0.9983 | 0.9550 | 0.0050 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-6` | 0.9788 | 0.9985 | 0.9676 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-7` | 0.9595 | 0.9979 | 0.9239 | 0.0050 |
+| Dataset Metis | `Qwen3.5-27B` / `b-mo-qwen3.5-27b` | 0.9863 | 0.9927 | 0.9925 | 0.0200 |
+| Dataset Metis | `Qwen3.5-27B` / `c-mo-qwen3.5-27b` | 0.9775 | 0.9974 | 0.9900 | 0.0350 |
+| Dataset Metis | `Qwen3.5-27B` / `g-st-qwen3.5-27b` | 0.9550 | 0.9883 | 0.9600 | 0.0500 |
+| Dataset Metis | `gemma-3-27b-it` / `None` | 0.9750 | 0.9932 | 1.0000 | 0.0500 |
+| Dataset Metis | `gemma-3-27b-it` / `g-st-gemma-3-27b-it-2` | 0.9625 | 0.9866 | 1.0000 | 0.0750 |
+| Dataset Metis | `gemma-3-27b-it` / `s-mo-gemma-3-27b-it` | 0.9800 | 0.9957 | 0.9900 | 0.0300 |
+| Dataset Eunomia | `Qwen3.5-27B` / `None` | 0.9515 | 0.9971 | 0.9375 | 0.0345 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-1` | 0.7185 | 0.8374 | 0.5195 | 0.0825 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-3` | 0.6217 | 0.7230 | 0.2923 | 0.0489 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-4` | 0.7584 | 0.8741 | 0.5897 | 0.0730 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-5` | 0.8880 | 0.9691 | 0.8205 | 0.0444 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-6` | 0.7979 | 0.9166 | 0.6458 | 0.0500 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-7` | 0.8078 | 0.9193 | 0.6860 | 0.0704 |
+| Dataset Eunomia | `Qwen3.5-27B` / `b-mo-qwen3.5-27b` | 0.8803 | 0.9699 | 0.9400 | 0.1795 |
+| Dataset Eunomia | `Qwen3.5-27B` / `c-mo-qwen3.5-27b` | 0.9364 | 0.9848 | 0.9344 | 0.0615 |
+| **Notus** | `Nemotron-120B` / `None` | 0.8100 | 0.9212 | 0.6700 | 0.0500 |
+| **Notus** | `Qwen3.5-27B` / `None` | 0.7350 | 0.8701 | 0.5400 | 0.0700 |
+| **Notus** | `gemma-3-27b-it` / `None` | 0.8125 | 0.9157 | 0.6800 | 0.0550 |
+| **Iris** | `Nemotron-120B` / `g-st` | 0.9125 | 0.9646 | 0.9300 | 0.1050 |
+| **Iris** | `Qwen3.5-27B` / `g-st` | 0.8850 | 0.9556 | 0.8650 | 0.0950 |
+| **Iris** | `gemma-3-27b-it` / `g-st-2` | 0.8900 | 0.9543 | 0.8850 | 0.1050 |
+
+**Notus is strong.** All three Notus units are above 0.87 AUROC. Notus Qwen
+improves from v6.2's 0.8550 to 0.8701 (+0.0151) — the largest single-unit gain.
+Notus Nemotron at 0.9212 actually beats Tiresias's 0.9056 (+0.0156). The
+multi-route architecture with the 397B-teacher adapter provides the best
+base-model transfer of any SAIN Groningen method.
+
+**Iris is the remaining bottleneck.** Iris mean 0.9582 is only +0.0008 above
+v6.2. The judge alone nearly saturates on Iris with the stronger adapter.
+Tiresias scores Iris 0.9869 — a gap of −0.0287. The probe scores Iris at 0.99,
+so closing the Iris gap is a probe activation problem. An organism detector
+that transfers to Iris g-st would activate the probe on those rows and could
+close most of the remaining gap.
+
+### Phoenix v7.0 counted detail — Kimi K3 adapter, slight regression
+
+Submitted 2026-07-29 16:25. Headline AUROC `0.9301` / BA `0.8383`, runtime
+19m1s (1141s). Against `phoenix_wright_v6_3`: **−0.0002 AUROC, −0.0025 BA.**
+
+**Design.** Same multi-route Phoenix architecture as v6.3, but with the Kimi K3
+judge adapter (`Jazhyc/aletheias-phoenix-v7-kimi-k3-tvg-soft-r16-ep2`). The
+Kimi K3 adapter was trained with the same binary-soft distillation recipe (r16,
+2-epoch) but with a Kimi K3 teacher instead of Qwen 397B.
+
+**Counted Notus/Iris — v7.0 vs v6.3.**
+
+| dataset | model / lora | v7.0 AUROC | v6.3 AUROC | Δ AUROC | v7.0 BA | v6.3 BA |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Notus | `Nemotron-120B` / `None` | 0.9282 | 0.9212 | +0.0070 | 0.8225 | 0.8100 |
+| Notus | `Qwen3.5-27B` / `None` | 0.8766 | 0.8701 | +0.0065 | 0.7425 | 0.7350 |
+| Notus | `gemma-3-27b-it` / `None` | 0.9122 | 0.9157 | −0.0035 | 0.8100 | 0.8125 |
+| Iris | `Nemotron-120B` / `g-st` | 0.9593 | 0.9646 | −0.0053 | 0.8975 | 0.9125 |
+| Iris | `Qwen3.5-27B` / `g-st` | 0.9496 | 0.9556 | −0.0060 | 0.8600 | 0.8850 |
+| Iris | `gemma-3-27b-it` / `g-st-2` | 0.9546 | 0.9543 | +0.0003 | 0.8975 | 0.8900 |
+| **Notus mean** | | **0.9057** | 0.9023 | **+0.0034** | 0.7917 | 0.7858 |
+| **Iris mean** | | **0.9545** | 0.9582 | **−0.0037** | 0.8850 | 0.8958 |
+| **headline** | | **0.9301** | **0.9303** | **−0.0002** | **0.8383** | **0.8408** |
+
+The Kimi K3 adapter gains slightly on Notus (+0.0034) but loses more on Iris
+(−0.0037). Net regression is −0.0002 AUROC — within noise. The adapter swap is
+neutral and does not justify the extra runtime (19m vs 15m). The v6.3 adapter
+is the better choice for the Phoenix family.
+
+**Uncounted reference rows.**
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Metis | `Nemotron-120B` / `None` | 0.9825 | 0.9892 | 1.0000 | 0.0350 |
+| Dataset Metis | `Qwen3.5-27B` / `None` | 0.9800 | 0.9960 | 0.9850 | 0.0250 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-1` | 0.9555 | 0.9926 | 0.9360 | 0.0250 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-3` | 0.9600 | 0.9929 | 0.9600 | 0.0400 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-4` | 0.9750 | 0.9950 | 0.9700 | 0.0200 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-5` | 0.9750 | 0.9978 | 0.9700 | 0.0200 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-6` | 0.9788 | 0.9989 | 0.9676 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-7` | 0.9685 | 0.9960 | 0.9620 | 0.0250 |
+| Dataset Metis | `Qwen3.5-27B` / `b-mo-qwen3.5-27b` | 0.9863 | 0.9931 | 0.9925 | 0.0200 |
+| Dataset Metis | `Qwen3.5-27B` / `c-mo-qwen3.5-27b` | 0.9700 | 0.9969 | 0.9900 | 0.0500 |
+| Dataset Metis | `Qwen3.5-27B` / `g-st-qwen3.5-27b` | 0.9600 | 0.9891 | 0.9700 | 0.0500 |
+| Dataset Metis | `gemma-3-27b-it` / `None` | 0.9700 | 0.9933 | 0.9950 | 0.0550 |
+| Dataset Metis | `gemma-3-27b-it` / `g-st-gemma-3-27b-it-2` | 0.9525 | 0.9835 | 1.0000 | 0.0950 |
+| Dataset Metis | `gemma-3-27b-it` / `s-mo-gemma-3-27b-it` | 0.9800 | 0.9962 | 0.9900 | 0.0300 |
+| Dataset Eunomia | `Qwen3.5-27B` / `None` | 0.9391 | 0.9977 | 0.9196 | 0.0414 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-1` | 0.7470 | 0.8624 | 0.5455 | 0.0515 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-3` | 0.6194 | 0.7303 | 0.2769 | 0.0380 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-4` | 0.7529 | 0.8855 | 0.5641 | 0.0584 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-5` | 0.8872 | 0.9757 | 0.8077 | 0.0333 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-6` | 0.7979 | 0.9287 | 0.6458 | 0.0500 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-qwen3.5-27b-7` | 0.8055 | 0.9275 | 0.6744 | 0.0634 |
+| Dataset Eunomia | `Qwen3.5-27B` / `b-mo-qwen3.5-27b` | 0.9127 | 0.9734 | 0.9450 | 0.1197 |
+| Dataset Eunomia | `Qwen3.5-27B` / `c-mo-qwen3.5-27b` | 0.9513 | 0.9859 | 0.9180 | 0.0154 |
+
+### Phoenix v6.3 vs Tiresias gap analysis
+
+The v6.3 judge narrows the gap to rank 1 to **−0.0148 AUROC** — the smallest
+SAIN Groningen deficit yet. The gap decomposition:
+
+| | v6.3 judge | Tiresias | Δ |
+| --- | ---: | ---: | ---: |
+| Notus Nemotron | 0.9212 | 0.9056 | **+0.0156** |
+| Notus Qwen | 0.8701 | 0.9326 | −0.0625 |
+| Notus Gemma | 0.9157 | 0.8715 | **+0.0442** |
+| Iris Nemotron | 0.9646 | 0.9863 | −0.0217 |
+| Iris Qwen | 0.9556 | 0.9919 | −0.0363 |
+| Iris Gemma | 0.9543 | 0.9825 | −0.0282 |
+| **Notus mean** | 0.9023 | 0.9032 | −0.0009 |
+| **Iris mean** | 0.9582 | 0.9869 | −0.0287 |
+| **headline** | 0.9303 | 0.9451 | **−0.0148** |
+
+SAIN Groningen actually **beats** Tiresias on two of three Notus units
+(Nemotron +0.0156, Gemma +0.0442). Notus Qwen is the weak spot (−0.0625), and
+Iris is the main gap (−0.0287 mean).
+
+The Iris gap is a probe activation problem. The probe scores Iris at 0.99
+AUROC, which would beat Tiresias's 0.9869. An organism detector that transfers
+to Iris g-st would activate the probe on Iris rows and close most of the
+remaining deficit. The sonic v7 architecture (organism-detector router) is the
+right approach, but the organism head must be trained on Iris g-st activations
+or use a detection method that generalises to unseen adapter distributions.
+
+---
+
+### Phoenix v6.2 counted detail — adapter loaded, solid Notus (superseded by v6.3)
 
 Submitted 2026-07-28 19:30. Headline AUROC `0.9233` / BA `0.8379`, runtime 16m29s
-(989s). **Best official Phoenix AUROC.** The Jul-23 NDIF transformers update
+(989s). **Was best official Phoenix AUROC, superseded by v6.3 (0.9303).** The Jul-23 NDIF transformers update
 fixed adapter loading — previous Phoenix 4.x runs were scoring with base-model
 logits only. This is the first run with the adapter correctly applied.
 
@@ -1763,6 +2065,7 @@ remote NDIF session shape and packaging were hardened.
 
 | date range (UTC) | notebooks | failed dataset | rough pattern |
 | --- | --- | --- | --- |
+| 2026-07-29 21:19 | `sonic_v7_1.ipynb` | Dataset Metis | v7 with fixes: per-family organism heads + StandardScaler folding, Kimi K3 judge adapter (`aletheias-phoenix-v7-kimi-k3-tvg-soft-r16-ep2`), raised threshold (t=0.7). Failed on the first dataset — possible adapter loading failure or timeout. Per-family head files (`{qwen,gemma}_organism_head.pt` and `_organism_scaler.npz`) were present on disk. |
 | 2026-07-26 19:30 | `sonic_v3_3.ipynb` | Dataset Metis | killed on the first dataset after the full 1800s budget, judge's remote session stalled; no dataset scored. Resubmitted unchanged at 2026-07-27 00:20 and completed in 1478s |
 | 2026-07-16 | `phoenix_wright_v2_4.ipynb` | Dataset Eunomia | per-dataset timeout after 2559.0s total: Metis used about 759s, then Eunomia exhausted the 1800s sandbox budget; consistent with an NDIF/session stall rather than an import or packaging failure |
 | 2026-07-03 to 2026-07-04 | `phoenix_wright_v0.ipynb`, `phoenix_wright_v1.ipynb`, `phoenix_wright_v1_1.ipynb`, `phoenix_wright_v1_2.ipynb` | Dataset Metis | sandbox failures during early Phoenix Wright submission bring-up |

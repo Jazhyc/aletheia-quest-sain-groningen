@@ -72,6 +72,20 @@ def notebook_cell_source(cell_id: str) -> str:
     )
 
 
+def test_all_adapter_directories_have_config_and_weights() -> None:
+    """Prevent runtime PEFT errors from missing adapter_config.json."""
+    adapters_dir = ROOT / "submission" / "phoenix_wright_adapters"
+    for subdir in sorted(adapters_dir.iterdir()):
+        if not subdir.is_dir():
+            continue
+        missing = []
+        if not (subdir / "adapter_model.safetensors").exists():
+            missing.append("adapter_model.safetensors")
+        if not (subdir / "adapter_config.json").exists():
+            missing.append("adapter_config.json")
+        assert not missing, f"{subdir.name}/ missing: {', '.join(missing)}"
+
+
 def test_notebook_uses_q397_for_primary_routes_and_rank1_intent() -> None:
     source = notebook_source()
 

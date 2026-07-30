@@ -1,0 +1,72 @@
+{
+  "date": "2026-07-30",
+  "description": "Clean local eval with MultiFamilyProbe (shared trunk, 60 epochs). Trained on manifest train split, evaluated on test split. No leakage.",
+  "split_sizes": {
+    "train": 6573,
+    "test": 821
+  },
+  "organism_head_cv": {
+    "qwen": {
+      "mean": 0.5,
+      "std": 0.0
+    },
+    "gemma": {
+      "mean": 0.5,
+      "std": 0.0
+    }
+  },
+  "organism_head_test": {
+    "qwen": {
+      "auroc": 0.5,
+      "t0.5": {
+        "fpr": 0.0,
+        "tpr": 0.0,
+        "tp": 0,
+        "fp": 0,
+        "tn": 80,
+        "fn": 640
+      },
+      "t0.7": {
+        "fpr": 0.0,
+        "tpr": 0.0,
+        "tp": 0,
+        "fp": 0,
+        "tn": 80,
+        "fn": 640
+      }
+    },
+    "gemma": {
+      "auroc": 0.5,
+      "t0.5": {
+        "fpr": 0.0,
+        "tpr": 0.0,
+        "tp": 0,
+        "fp": 0,
+        "tn": 40,
+        "fn": 40
+      },
+      "t0.7": {
+        "fpr": 0.0,
+        "tpr": 0.0,
+        "tp": 0,
+        "fp": 0,
+        "tn": 40,
+        "fn": 40
+      }
+    }
+  },
+  "gst_ood": {
+    "qwen": {
+      "mean_conf": 0.5,
+      "n": 400,
+      "t0.5_detected": 0,
+      "t0.7_detected": 0
+    },
+    "gemma": {
+      "mean_conf": 0.5,
+      "n": 400,
+      "t0.5_detected": 0,
+      "t0.7_detected": 0
+    }
+  }
+}
