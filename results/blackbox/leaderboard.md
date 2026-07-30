@@ -5,6 +5,7 @@ Submitted timestamps are UTC.
 
 | submitted_at | method | AUROC | bal_acc | recall | FPR | score_time | rows/s |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2026-07-30 04:37:17 | phoenix_wright_v8_1 (official private leaderboard) | **0.9661** | 0.8629 | 0.7458 | 0.0200 | 689.0s* | - |
 | 2026-07-29 21:31:16 | kimi_k3_fireworks_reasoning4000_tvg_binary_logit_v1 (varied only, n=360) | 0.9624 | 0.8806 | 0.7833 | 0.0222 | 139.3s | 2.6/s |
 | 2026-07-29 16:10:07 | qwen9b_kimi_k3_openrouter_tvg_soft_r16_lr5e5_ep2_v1_test_direct_margin | 0.9633 | 0.8857 | 0.8190 | 0.0476 | 8.3s | 98.4/s |
 | 2026-07-29 12:39:23 | kimi_k3_fireworks_nothink_tvg_binary_logit_v1 | 0.9824 | 0.9214 | 0.8595 | 0.0167 | 396.7s | 2.1/s |
@@ -56,3 +57,6 @@ Submitted timestamps are UTC.
 | - | qwen9b_pid_varied_datafrac10_adamw5e5_v1 | - | - | - | - | - | - |
 | - | qwen9b_pid_teacher_polarity_guard_variedonly_v1 | - | - | - | - | - | - |
 | - | qwen9b_pid_reasoning_headtail2400_variedonly_adamw5e5_v1 | - | - | - | - | - | - |
+
+`*` Phoenix 8.1 reports the official end-to-end notebook runtime rather than
+the local scoring-only timing used by the other rows.

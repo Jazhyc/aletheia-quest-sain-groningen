@@ -24,6 +24,14 @@ A BF16 canary was not exact (`0.938875 -> 0.938287` Liars macro AUROC), so the
 submission and public Hugging Face repository retain FP32. The public adapter
 is `Jazhyc/aletheias-phoenix-v8-1-kimi-k3-liars-full-r16-ep2`.
 
+The official private leaderboard run completed in `11m29s` with macro AUROC
+`0.9661`, balanced accuracy `0.8629`, recall `0.7458`, and FPR `0.0200`.
+Scenario-family means across the disclosed rows were approximately `0.9973`
+for the 14 Metis units, `0.9231` for the nine Eunomia units, `0.9413` for the
+three Notus units, and `0.9910` for the three Iris units. This validates the
+deadline OOD-transfer decision empirically; it does not retroactively make the
+local retention gate pass.
+
 ## 2026-07-28: Explicit digit semantics on the trained Phoenix v6.3 adapter
 
 The base-model verbalizer sweep's only directional winner was tested as an
