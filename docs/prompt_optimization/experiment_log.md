@@ -32,6 +32,27 @@ three Notus units, and `0.9910` for the three Iris units. This validates the
 deadline OOD-transfer decision empirically; it does not retroactively make the
 local retention gate pass.
 
+The post-submission optimization probe did not justify Phoenix 8.2. A
+9,861-row half-dose retrain and LoRA-delta interpolations at 25%, 50%, and 75%
+of the Phoenix 8-to-8.1 displacement were compared in one matched validation
+session and on the disjoint Liars holdout:
+
+| arm | validation macro AUROC | instructed | varied | Liars macro AUROC |
+| --- | ---: | ---: | ---: | ---: |
+| Phoenix 8 anchor | **`0.96298`** | `0.99854` | **`0.91556`** | `0.86245` |
+| 25% interpolation | `0.96274` | `0.99875` | `0.91472` | `0.91718` |
+| 50% interpolation | `0.96179` | `0.99875` | `0.91250` | `0.93514` |
+| 75% interpolation | `0.96220` | **`0.99896`** | `0.91319` | `0.93881` |
+| Phoenix 8.1 full dose | `0.96208` | **`0.99896`** | `0.91292` | **`0.93931`** |
+| half-dose retrain | `0.96292` | **`0.99896`** | `0.91486` | `0.93759` |
+
+The 75% interpolation was the only plausible frontier point, but its
+`+0.00012` validation movement came with `-0.00050` on Liars. On the frozen
+local test it scored `0.96595` versus `0.96655` for Phoenix 8.1
+(`-0.00060`); varied tied at `0.92500` and instructed regressed
+`0.99771 -> 0.99667`. Treat these movements as noise. Retain Phoenix 8.1; do
+not upload, rename, or submit the interpolation as Phoenix 8.2.
+
 ## 2026-07-28: Explicit digit semantics on the trained Phoenix v6.3 adapter
 
 The base-model verbalizer sweep's only directional winner was tested as an

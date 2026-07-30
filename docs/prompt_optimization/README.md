@@ -68,6 +68,10 @@ Submission mapping:
   does not generate judge reasoning. A matched one-epoch reasoning-GRPO
   prior Q397 reasoning-GRPO continuation regressed from `0.95369` to `0.94500`
   validation macro AUROC under the same vLLM direct-logit scorer.
+  A post-submission half-dose retrain and 25/50/75% LoRA interpolation sweep
+  failed to produce a Phoenix 8.2: the closest 75% arm moved validation only
+  `+0.00012`, lost `0.00050` on the Liars holdout, and lost `0.00060` on the
+  frozen local test. Preserve Phoenix 8.1.
 - `submission/phoenix_wright_v5_3.ipynb` was the preceding controlled
   leaderboard-consistency submission candidate and must be tagged `black`. It
   keeps Phoenix 5.1's direct-logit inference, mutually exclusive

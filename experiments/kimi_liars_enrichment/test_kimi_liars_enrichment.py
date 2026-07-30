@@ -95,5 +95,28 @@ def test_interpolation_runner_compares_all_single_adapter_arms():
 
     for arm in ("anchor", "full25", "full50", "full75", "full", "half"):
         assert f'--adapter "{arm}=' in source
+    arms_block = source.split("arms=(", maxsplit=1)[1].split(")", maxsplit=1)[0]
+    assert arms_block.index('"${full}"') < arms_block.index('"${anchor}"')
+    liars_command = source.split(
+        "python experiments/kimi_liars_enrichment/evaluate_pilot_margins.py",
+        maxsplit=1,
+    )[1]
+    assert liars_command.index('--adapter "full=') < liars_command.index(
+        '--adapter "anchor='
+    )
     assert "--continuous-margin-condition direct" in source
     assert "while kill -0" in source
+
+
+def test_phoenix82_test_gate_compares_candidate_after_production_anchor():
+    source = (
+        ROOT
+        / "experiments/kimi_liars_enrichment/run_phoenix82_test_lambda.sh"
+    ).read_text()
+
+    assert "--split test" in source
+    assert "--run-name test_phoenix82_frozen" in source
+    assert "--continuous-margin-condition direct" in source
+    assert source.index('--adapter-dir "${full}"') < source.index(
+        '--adapter-dir "${candidate}"'
+    )

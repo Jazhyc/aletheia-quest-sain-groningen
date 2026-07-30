@@ -120,3 +120,37 @@ The BF16 export SHA-256 was
 but it was not exact on the matched 800-row vLLM canary
 (`0.938875 -> 0.938287` macro AUROC). Phoenix 8.1 therefore deploys the FP32
 master.
+
+## Post-submission dose and interpolation probe
+
+After Phoenix 8.1 scored `0.9661` on the private leaderboard, the predeclared
+half-dose arm completed on the same Lambda H100. It retained all 6,573
+competition rows and a stratified 3,288-row Liars subset, for 9,861 rows and
+618 optimizer steps. Training took 3,461 seconds and ended at loss `0.8342`.
+
+Because the half-dose checkpoint did not clearly dominate the full-dose model,
+three CPU-only rank-16 LoRA-delta interpolations were also evaluated. `full25`,
+`full50`, and `full75` contain 25%, 50%, and 75% of the displacement from the
+Phoenix 8 anchor to the Phoenix 8.1 full-dose adapter. All six arms were scored
+in matched vLLM sessions:
+
+| arm | validation macro AUROC | instructed | varied | Liars macro AUROC |
+| --- | ---: | ---: | ---: | ---: |
+| Phoenix 8 anchor | **`0.96298`** | `0.99854` | **`0.91556`** | `0.86245` |
+| `full25` | `0.96274` | `0.99875` | `0.91472` | `0.91718` |
+| `full50` | `0.96179` | `0.99875` | `0.91250` | `0.93514` |
+| `full75` | `0.96220` | **`0.99896`** | `0.91319` | `0.93881` |
+| Phoenix 8.1 full dose | `0.96208` | **`0.99896`** | `0.91292` | **`0.93931`** |
+| half-dose retrain | `0.96292` | **`0.99896`** | `0.91486` | `0.93759` |
+
+The apparent `full75` improvement over Phoenix 8.1 was only `0.00012` on
+validation and accompanied by a `0.00050` Liars loss. A frozen local-test
+comparison rejected it: Phoenix 8.1 scored `0.96655` macro AUROC versus
+`0.96595` for `full75` (`-0.00060`). Varied tied at `0.92500`, while
+instructed fell from `0.99771` to `0.99667`.
+
+These differences are too small and directionally inconsistent to support a
+new release. The team therefore retained the already private-validated Phoenix
+8.1 adapter and explicitly rejected relabeling or resubmitting `full75` as
+Phoenix 8.2. Ignored raw artifacts live under
+`results/blackbox/kimi_k3_liars_enrichment_interpolation_v1/`.

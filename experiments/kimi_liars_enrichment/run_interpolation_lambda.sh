@@ -22,11 +22,12 @@ full="results/blackbox/qwen9b_kimi_k3_tvg_soft_full_plus_liars_r16_lr5e5_ep2_v1/
 half="results/blackbox/qwen9b_kimi_k3_tvg_soft_full_plus_liars50_r16_lr5e5_ep2_v1/adapter"
 interpolation_root="results/blackbox/kimi_k3_liars_enrichment_interpolation_v1"
 arms=(
+  # This adapter carries the tokenizer chat template used by both evaluators.
+  "${full}"
   "${anchor}"
   "${interpolation_root}/full25/adapter"
   "${interpolation_root}/full50/adapter"
   "${interpolation_root}/full75/adapter"
-  "${full}"
   "${half}"
 )
 for adapter in "${arms[@]}"; do
@@ -50,9 +51,9 @@ python experiments/privileged_information_distillation/evaluate_student_sft.py \
 python experiments/kimi_liars_enrichment/evaluate_pilot_margins.py \
   --eval-artifact results/blackbox/liars_bench_pid_aug_v1/eval.jsonl \
   --output-dir "${interpolation_root}/liars_pilot_interpolation_deadline" \
+  --adapter "full=${full}" \
   --adapter "anchor=${anchor}" \
   --adapter "full25=${interpolation_root}/full25/adapter" \
   --adapter "full50=${interpolation_root}/full50/adapter" \
   --adapter "full75=${interpolation_root}/full75/adapter" \
-  --adapter "full=${full}" \
   --adapter "half=${half}"
