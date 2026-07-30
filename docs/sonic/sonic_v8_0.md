@@ -117,28 +117,84 @@ judge on the full dev set and computing the mean and standard deviation of
   The notebook prints `judge_z` range at runtime — verify it spans roughly
   [−2, +2] (sd ≈ 0.5–1.0). If judge_z is compressed (sd ≪ 1), raise
   `JUDGE_LOGIT_SD`. If stretched (sd ≫ 1), lower it.
+  **Post-submission: ✓ RESOLVED.** The 5.638 constant proved accurate — Notus
+  is flat (±0.008 AUROC, no collapse) and Iris gains are real (+0.01–0.013).
+  The SD measurement on synthetic prompts matched is good enough.
 
 - **4-step MAX_CAP may be too conservative or too aggressive.** The v8 judge
   is stronger than v6.2, so the sign test opens the cap more often (larger
   |judge_z| means agreement is more informative). If Iris gains are too small,
   raise MAX_CAP to 5–6 steps. If Notus is degraded, lower to 3 steps.
+  **Post-submission: ✓ RESOLVED.** 4 steps is well-calibrated. Iris gained
+  +0.0125 (Qwen) and +0.0101 (Nemotron). Notus is not degraded (actually
+  improved +0.0049 mean). No major adjustment needed.
 
 - **The probe's calibration on Nemotron** (FPR 0.600 in v6, 0.090 in v7.2
   iris rows) is probe-dependent. The gate's sign test should prevent the worst
   damage, but per-family probe calibration offsets can affect BA without
   affecting AUROC.
+  **Post-submission: ✓ CONFIRMED, MINIMAL IMPACT.** BA dropped from 0.8488 to
+  0.8450 (−0.0038). Notus Nemotron FPR 0.055 vs judge-only 0.050 — a tiny
+  threshold shift. Iris Nemotron FPR actually improved (0.085 vs 0.090). The
+  calibration offset is real but harmless at this magnitude.
 
-- **NDIF dual extraction.** Two `.save()` calls in one trace doubles the
-  failure surface. The retry logic (MAX_ATTEMPTS=4) handles transient errors.
-  Persistent NDIF issues would collapse both probes → judge-only fallback.
 
-## Expected outcome
+## Results — submitted 2026-07-30
 
-The v8 judge alone scores headline AUROC 0.9440. The probe's largest
-contributions are on Iris Qwen (+0.032 over v8 judge) and Iris Nemotron
-(+0.019). At 4-step MAX_CAP, the probe should capture most of this gap on
-agreement rows while staying silent on Notus (probe_z ≈ 0). Conservative
-projection: headline AUROC ~0.950–0.955.
+**Headline: AUROC 0.9505, Balanced Accuracy 0.8450.** Runtime 30m 55s.
+
+| | sonic v8.0 | phoenix v8 (judge-only) | sonic v7.2 (organism router) |
+|---|---|---|---|
+| **Headline AUROC** | **0.9505** | 0.9440 | 0.9251 |
+| **Headline BA** | **0.8450** | 0.8488 | 0.8371 |
+| **Runtime** | 30m 55s | 11m 47s | 29m 38s |
+
+### Per-validation-dataset
+
+**Notus (base-model detection):**
+
+| Model | AUROC | Bal.Acc | Recall | FPR |
+|-------|-------|---------|--------|-----|
+| nvidia/Nemotron-3-Super-120B | 0.9522 | 0.8400 | 0.7350 | 0.0550 |
+| Qwen/Qwen3.5-27B | 0.8947 | 0.7200 | 0.5000 | 0.0600 |
+| google/gemma-3-27b-it | 0.9379 | 0.8025 | 0.6500 | 0.0450 |
+
+**Iris (general steering detection):**
+
+| Model | AUROC | Bal.Acc | Recall | FPR |
+|-------|-------|---------|--------|-----|
+| Nemotron g-st | 0.9812 | 0.9125 | 0.9100 | 0.0850 |
+| Qwen g-st | 0.9791 | 0.9150 | 0.8650 | 0.0350 |
+| Gemma g-st-2 | 0.9577 | 0.8800 | 0.8300 | 0.0700 |
+
+**Eunomia (varied deception, reference):**
+
+| Model | AUROC | Bal.Acc | Recall | FPR |
+|-------|-------|---------|--------|-----|
+| Qwen base | 0.9917 | 0.9450 | 0.9107 | 0.0207 |
+| a-mo-1 | 0.8876 | 0.7509 | 0.5584 | 0.0567 |
+| a-mo-3 | 0.7933 | 0.6249 | 0.2769 | 0.0272 |
+| a-mo-4 | 0.9071 | 0.7766 | 0.5897 | 0.0365 |
+| a-mo-5 | 0.9796 | 0.8983 | 0.8077 | 0.0111 |
+| a-mo-6 | 0.9236 | 0.8119 | 0.6667 | 0.0429 |
+| a-mo-7 | 0.9321 | 0.8126 | 0.6744 | 0.0493 |
+| b-mo | 0.9663 | 0.9109 | 0.9500 | 0.1282 |
+| c-mo | 0.9862 | 0.9477 | 0.9262 | 0.0308 |
+
+### Key deltas vs judge-only (phoenix v8)
+
+| Unit | sonic v8.0 | phoenix v8 | Δ |
+|------|:----------:|:----------:|:--:|
+| Iris Qwen g-st | 0.9791 | 0.9666 | **+0.0125** |
+| Iris Nemotron g-st | 0.9812 | 0.9711 | **+0.0101** |
+| Iris Gemma g-st | 0.9577 | 0.9556 | +0.0021 |
+| Notus Nemotron | 0.9522 | 0.9444 | +0.0078 |
+| Notus Qwen | 0.8947 | 0.8873 | +0.0074 |
+| Notus Gemma | 0.9379 | 0.9386 | −0.0007 |
+
+The probe delivers its largest gains on Iris (+0.0125 Qwen, +0.0101 Nemotron)
+at negligible Notus cost (−0.0007 Gemma, +0.0074–0.0078 on the other two).
+Net headline gain over judge-only: **+0.0065 AUROC**.
 
 ## Build
 

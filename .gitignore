@@ -53,3 +53,4 @@ dump/
 # Local Lambda Cloud connection state (known hosts and campaign metadata)
 .lambda/
 *_pp.md
+legacy_submissions/phoenix_wright_adapters/

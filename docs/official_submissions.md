@@ -25,16 +25,18 @@ opaque public labels returned by the Space.
   (per-family heads with scaler folded into weights), but was never submitted. The
   corrupted routing produces output byte-identical to `phoenix_wright_v6_3` on all
   counted units. See "Sonic v7 counted detail" for the full post-mortem.
-- **Active submission: `phoenix_wright_v8_0.ipynb` at AUROC `0.9440` / BA `0.8488`**
-  (2026-07-30 02:32, 11m 47s). **New best official SAIN Groningen submission by a wide
-  margin.** Single-route direct-margin judge: Kimi K3 binary-soft-distilled
-  Qwen3.5-9B rank-16 adapter (`Jazhyc/aletheias-phoenix-v8-kimi-k3-tvg-soft-full-r16-ep2`,
-  two-epoch, full-data) scores every ordinary row at `Prediction:`. HP-KR and
-  action-report prompts share the same distilled adapter via direct prompts,
-  replacing the separate base-Qwen and legacy-adapter sessions of v6.3/v7.0.
-  No intent adapter, no score blending, no multi-route architecture. Beats v6.3
-  by +0.0137 AUROC and +0.0080 BA. Gap to rank 1 (Tiresias, 0.9451) is
-  **−0.0011** — essentially tied within leaderboard precision. See
+- **New best: `sonic_v8_0.ipynb` at AUROC `0.9505` / BA `0.8450`**
+  (2026-07-30 05:06, 30m 55s). **New best official SAIN Groningen submission.**
+  Dual L40+L46 white-box probe + Phoenix v8 judge blended under the v4 sign gate
+  with retuned constants (`JUDGE_LOGIT_SD=5.638`, BASE_CAP=1 step, MAX_CAP=4 steps).
+  Probe delivers +0.0065 AUROC over judge-only v8.0, concentrated on Iris
+  (+0.0125 Qwen, +0.0101 Nemotron) at negligible Notus cost. First sonic
+  submission to decisively beat the best judge-only baseline. Gap to previous
+  best (phoenix v8.0, 0.9440): **+0.0065**. See "Sonic v8.0 counted detail."
+- **Previously best: `phoenix_wright_v8_0.ipynb` at AUROC `0.9440` / BA `0.8488`**
+  (2026-07-30 02:32, 11m 47s). Single-route direct-margin judge: Kimi K3
+  binary-soft-distilled Qwen3.5-9B rank-16 adapter. No intent adapter, no score
+  blending, no multi-route architecture. Now superseded by sonic v8.0. See
   "Phoenix v8.0 counted detail."
 - **Latest submitted: `sonic_v7_2.ipynb` at AUROC `0.9251` / BA `0.8371`**
   (2026-07-30 03:23, 29m 38s). v7.1-style organism-detector router (per-family
@@ -214,7 +216,8 @@ recent runs have not been added without a fresh authenticated API query.
 
 | submitted at (UTC) | notebook | method / local mapping | tag | AUROC | BA | recall | FPR | runtime |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| 2026-07-29 21:06 | `sonic_v7.ipynb` | organism-detector router (per-family logistic regression) + Phoenix v6.3 multi-route judge; L46 probe with deception + organism heads. **Organism head does not transfer to Iris g-st → counted output identical to pw_v6_3 (router is a no-op).** See "Sonic v7 counted detail." | white | 0.9303 | 0.8408 | — | — | 1959s |
+| 2026-07-30 05:06 | `sonic_v8_0.ipynb` | dual L40+L46 probe + Phoenix v8 judge under v4 sign gate (retuned). Probe helps Iris (+0.0125 Qwen, +0.0101 Nemotron) at near-zero Notus cost. **New best SAIN Groningen AUROC (0.9505).** | white | 0.9505 | 0.8450 | — | — | 1855s |
+| 2026-07-30 03:23 | `sonic_v7_2.ipynb` | organism-detector router (per-family LogisticRegression heads) + Phoenix v8 Kimi K3 judge. **Regression vs judge-only v8.0: −0.0189 AUROC.** Organism head does not transfer to Iris g-st. | white | 0.9251 | 0.8371 | — | — | 1778s |
 | 2026-07-29 16:25 | `phoenix_wright_v7_0.ipynb` | multi-route Phoenix judge (HP-KR base, action specialist, intent specialist) with Kimi K3 adapter (`aletheias-phoenix-v7-kimi-k3-tvg-soft-r16-ep2`). Slight regression vs v6.3 adapter. See "Phoenix v7.0 counted detail." | black | 0.9301 | 0.8383 | — | — | 1141s |
 | 2026-07-29 11:32 | `phoenix_wright_v6_3.ipynb` | multi-route Phoenix judge (HP-KR base, action specialist, intent specialist) with `aletheias-phoenix-v6-3-qwen397-tvg-soft-r16-ep2` adapter. **Best official Phoenix AUROC (0.9303).** See "Phoenix v6.3 counted detail." | black | 0.9303 | 0.8408 | — | — | 907s |
 | 2026-07-28 19:30 | `phoenix_wright_v6_2.ipynb` | direct-label-logit judge, no probe; adapter loaded correctly after Jul-23 transformers fix. **Was best official Phoenix AUROC (0.9233), now superseded by v6.3.** See "Phoenix v6.2 counted detail". | black | 0.9233 | 0.8379 | — | — | 989s |
@@ -2078,6 +2081,111 @@ Submitted 2026-07-08 10:01:06 UTC. Headline BA `0.775833`.
 
 Notes: was the best official Phoenix run at the time. Its advantage over context omission
 comes from much stronger Iris recall, despite higher FPR.
+
+### Sonic v8.0 counted detail — dual probe + Phoenix v8 judge, sign gate, best SAIN Groningen submission
+
+Submitted 2026-07-30 05:06. Headline AUROC `0.9505` / BA `0.8450`, runtime
+30m 55s (1855s). **New best official SAIN Groningen AUROC.** Against phoenix
+v8.0 (judge-only): **+0.0065 AUROC, −0.0038 BA.**
+
+**Design.** Dual L40+L46 transformer probe + Phoenix Wright v8.0 direct-margin
+judge (Kimi K3 distilled, r16), blended under the v4 sign gate with retuned
+constants for the v8 judge. The probe extracts activations at layers 40 and 46,
+scores with `TransformerTokenProbe`, fuses z-scores as `(z_46 + z_40) / 2.0`,
+then enters the gate:
+
+```
+probe_z = (z_46 + z_40) / 2.0        (per-family standardised, mean≈0, sd≈1)
+judge_z = (log_odds − μ) / σ          (σ = 5.638, measured on v8 judge)
+
+cap   = BASE_CAP + (judge_z × probe_z > 0) × (MAX_CAP − BASE_CAP)
+score = sigmoid(judge_z + cap × probe_z)
+```
+
+Constants: `JUDGE_LOGIT_SD = 5.638` (measured on 14 synthetic prompts, RTX 4090),
+`BASE_CAP = 1 step = 0.022170`, `MAX_CAP = 4 steps = 0.088681`.
+
+**Key design decisions:**
+- **Sign gate, not hard switch.** v7.2's organism-head router made 3 wrong
+  decisions for every 1 right one. The sign gate always blends — when the probe
+  agrees with the judge, it gets 4× influence; when it disagrees, 1×. No
+  single-detector failure mode.
+- **Retuned for v8 judge.** The v6 post-mortem showed cap values must be
+  calibrated to the judge's log-odds SD. Measured at 5.638 — remarkably close
+  to v6.2's 6.0, confirming the logit scale is set by Qwen3.5-9B's layer norm.
+- **Dual probe.** L40+L40 fusion reduces single-probe variance. Marginal gain
+  (~0.001 AUROC over single-probe per v4 analysis), but costs only ~4 min.
+
+**Counted Notus/Iris — v8.0 vs phoenix v8.0 (judge-only).**
+
+| dataset | model / lora | v8.0 AUROC | phoenix v8.0 AUROC | Δ AUROC | v8.0 BA | v8.0 BA |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Notus | `Nemotron-120B` / `None` | 0.9522 | 0.9444 | +0.0078 | 0.8400 | 0.8275 |
+| Notus | `Qwen3.5-27B` / `None` | 0.8947 | 0.8873 | +0.0074 | 0.7200 | 0.7275 |
+| Notus | `gemma-3-27b-it` / `None` | 0.9379 | 0.9386 | −0.0007 | 0.8025 | 0.8300 |
+| Iris | `Nemotron-120B` / `g-st` | 0.9812 | 0.9711 | **+0.0101** | 0.9125 | 0.9100 |
+| Iris | `Qwen3.5-27B` / `g-st` | 0.9791 | 0.9666 | **+0.0125** | 0.9150 | 0.9050 |
+| Iris | `gemma-3-27b-it` / `g-st-2` | 0.9577 | 0.9556 | +0.0021 | 0.8800 | 0.8925 |
+| **Notus mean** | | **0.9283** | 0.9234 | **+0.0049** | 0.7875 | 0.7950 |
+| **Iris mean** | | **0.9727** | 0.9644 | **+0.0083** | 0.9025 | 0.9025 |
+| **headline** | | **0.9505** | **0.9440** | **+0.0065** | **0.8450** | **0.8488** |
+
+**The probe helps everywhere except Notus Gemma** (−0.0007, negligible). The
+largest gains are on Iris Qwen (+0.0125) and Iris Nemotron (+0.0101), exactly
+where the probe transfers best. Notus is essentially flat — the probe adds
+nothing but costs nothing, because `probe_z ≈ 0` on Notus rows.
+
+**Unexpected: Notus Nemotron and Qwen both improved** (+0.0078, +0.0074). This
+was not predicted — the probe was expected to be neutral on Notus. The gain may
+come from rows where `probe_z` happens to have weak but nonzero signal that
+agrees with the judge, pushing borderline rows across the ranking boundary.
+
+**BA regressed slightly** (−0.0038). The sign gate preserves ranking (AUROC)
+but the probe's per-family calibration offsets can shift the score distribution,
+affecting the threshold-dependent BA metric. This is the same calibration
+tradeoff seen in v4/v6.
+
+**Comparison to previous sonic submissions:**
+
+| | v7.2 (organism router) | v6 (sign gate, v6.2 judge) | **v8.0 (sign gate, v8 judge)** |
+|---|---|---|---|
+| AUROC | 0.9251 | 0.9230 | **0.9505** |
+| BA | 0.8371 | 0.8013 | **0.8450** |
+| Runtime | 29m 38s | 35m 32s | 30m 55s |
+| Judge | Phoenix v7 (intent) | Phoenix v6.2 | **Phoenix v8 (Kimi K3)** |
+| Gate | organism-head hard switch | v4 sign gate (miscalibrated) | **v4 sign gate (retuned)** |
+
+v8.0 is +0.0254 AUROC ahead of v7.2 — the organism-head router was the
+bottleneck, not the probe or judge. The v4 sign gate with retuned constants
+captures probe value without the false-positive/false-negative routing failures.
+
+**Full per-dataset breakdown (Metis, Eunomia — reference only).**
+
+| dataset | model / lora | BA | AUROC | recall | FPR |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dataset Metis | `Nemotron-120B` / `None` | 0.9975 | 1.0000 | 1.0000 | 0.0050 |
+| Dataset Metis | `Qwen3.5-27B` / `None` | 0.9875 | 0.9994 | 0.9950 | 0.0200 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-1` | 0.9813 | 0.9985 | 0.9826 | 0.0200 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-3` | 0.9750 | 0.9970 | 0.9900 | 0.0400 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-4` | 0.9850 | 0.9994 | 0.9900 | 0.0200 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-5` | 0.9875 | 0.9979 | 0.9850 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-6` | 0.9896 | 0.9991 | 0.9892 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `a-mo-7` | 0.9683 | 0.9975 | 0.9565 | 0.0200 |
+| Dataset Metis | `Qwen3.5-27B` / `b-mo` | 0.9950 | 0.9994 | 1.0000 | 0.0100 |
+| Dataset Metis | `Qwen3.5-27B` / `c-mo` | 0.9675 | 0.9987 | 0.9850 | 0.0500 |
+| Dataset Metis | `Qwen3.5-27B` / `g-st` | 0.9750 | 0.9981 | 0.9700 | 0.0200 |
+| Dataset Metis | `gemma-3-27b-it` / `None` | 0.9750 | 0.9958 | 0.9950 | 0.0450 |
+| Dataset Metis | `gemma-3-27b-it` / `g-st-2` | 0.9500 | 0.9795 | 1.0000 | 0.1000 |
+| Dataset Metis | `gemma-3-27b-it` / `s-mo` | 0.9875 | 0.9959 | 1.0000 | 0.0250 |
+| Dataset Eunomia | `Qwen3.5-27B` / `None` | 0.9450 | 0.9917 | 0.9107 | 0.0207 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-1` | 0.7509 | 0.8876 | 0.5584 | 0.0567 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-3` | 0.6249 | 0.7933 | 0.2769 | 0.0272 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-4` | 0.7766 | 0.9071 | 0.5897 | 0.0365 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-5` | 0.8983 | 0.9796 | 0.8077 | 0.0111 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-6` | 0.8119 | 0.9236 | 0.6667 | 0.0429 |
+| Dataset Eunomia | `Qwen3.5-27B` / `a-mo-7` | 0.8126 | 0.9321 | 0.6744 | 0.0493 |
+| Dataset Eunomia | `Qwen3.5-27B` / `b-mo` | 0.9109 | 0.9663 | 0.9500 | 0.1282 |
+| Dataset Eunomia | `Qwen3.5-27B` / `c-mo` | 0.9477 | 0.9862 | 0.9262 | 0.0308 |
 
 ## Failed Official Attempts
 
