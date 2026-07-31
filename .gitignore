@@ -30,3 +30,6 @@ venv/
 
 # Local Lambda Cloud connection state (known hosts and campaign metadata)
 .lambda/
+
+# Internal Tooling
+.serena/
