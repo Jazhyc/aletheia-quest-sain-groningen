@@ -34,6 +34,12 @@ Recent history uses short, imperative commit subjects, for example `Simplify ada
 
 Before agent-assisted work, read `llms.txt` for competition context and check `README.md` for the current submission contract. For black-box judge, prompt, ensemble, or Phoenix Wright method work, check `docs/prompt_optimization/` directly before searching broad experiment outputs; it contains the prompt rationale, experiment log, proposals, and submission mapping. Preserve the single-notebook rule in `submission/` and rehearse changes with `--dry` whenever possible. When developing a new competition method, create and work on a separate feature branch instead of `master`. Add or update tests for non-trivial code changes, then run the relevant validation command. After completing a coherent feature or fix, commit the finished work with a short imperative message.
 
+The `report/` directory is a separate Git repository synced to Overleaf. Maintain
+`black.tex` and `white.tex` as the two track entry points with shared formatting in
+`template.tex`; edit only the track relevant to the active branch. Keep LaTeX build
+products ignored in the report repository, and commit report changes there separately
+from changes to this competition repository.
+
 As of the 2026-07-25 organizer rule amendment reported by the team, the main
 competition metric is mean per-dataset AUROC, read from the continuous `score`
 column. The public competition page may temporarily retain the earlier
