@@ -141,6 +141,27 @@ column. Keep the HP-KR, action, and intent routes unchanged and mutually
 exclusive. Corrected NDIF validation selected this adapter/prompt pair at
 `0.95375` macro AUROC. It remains black-box and must use `--tag black`.
 
+Phoenix Wright 8.1 is the final private-validated submission in this checkout.
+The sole notebook is `submission/phoenix_wright_v8_1.ipynb`; its FP32 rank-16
+adapter is hosted at
+`Jazhyc/aletheias-phoenix-v8-1-kimi-k3-liars-full-r16-ep2`. The official run
+scored `0.9661` mean private per-dataset AUROC (`0.8629` balanced accuracy,
+`0.7458` recall, `0.0200` FPR). Its exact 13,149-row Kimi K3 binary-logit
+annotation artifact is the public MIT Hugging Face dataset
+`Jazhyc/aletheias-phoenix-v8-1-kimi-k3-distillation`:
+<https://huggingface.co/datasets/Jazhyc/aletheias-phoenix-v8-1-kimi-k3-distillation>.
+It contains 6,573 competition and 6,576 Liars' Bench source-referenced rows,
+literal `0|1` log-probabilities, normalized soft targets, pinned revisions,
+route metadata, and exact prompt hashes. Its Parquet SHA-256 is
+`49800e649321b1dd9bfa020c559304c62fb0a09d092c08866c9ce640a05a07f5`.
+Upstream conversations and labels are deliberately not copied into the MIT
+Parquet; use the dataset's `render_prompts.py` to materialize them locally
+under their original licenses and verify all teacher/student prompt hashes.
+For report or reproducibility work, consult this dataset card and
+`experiments/kimi_liars_enrichment/README.md` before searching ignored caches.
+The post-submission half-dose and interpolation sweep did not justify Phoenix
+8.2; preserve Phoenix 8.1.
+
 LoRA packaging dtype decision from 2026-07-29: retain FP32 master checkpoints
 for training and archival, but ship BF16 `adapter_model.safetensors` copies for
 competition NDIF inference. The exact Phoenix 7 rank-16 adapter, with all 256
