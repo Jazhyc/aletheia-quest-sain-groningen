@@ -121,6 +121,27 @@ but it was not exact on the matched 800-row vLLM canary
 (`0.938875 -> 0.938287` macro AUROC). Phoenix 8.1 therefore deploys the FP32
 master.
 
+## Public distillation artifact
+
+The exact Kimi K3 binary-logit annotations used for Phoenix 8.1 are published
+under MIT at
+[`Jazhyc/aletheias-phoenix-v8-1-kimi-k3-distillation`](https://huggingface.co/datasets/Jazhyc/aletheias-phoenix-v8-1-kimi-k3-distillation).
+Its Parquet has 13,149 source-referenced rows and records the literal `0|1`
+log-probabilities, normalized soft target, selected teacher/student prompt
+routes, pinned upstream revisions, and byte-level prompt hashes. To keep the
+artifact genuinely MIT, it does not copy upstream conversations or labels;
+the bundled renderer materializes those fields locally under their original
+licenses and verifies every prompt hash. The public Parquet SHA-256 is
+`49800e649321b1dd9bfa020c559304c62fb0a09d092c08866c9ce640a05a07f5`.
+
+Regenerate the upload directory from the frozen ignored caches with:
+
+```bash
+python experiments/kimi_liars_enrichment/export_hf_dataset.py \
+  --output-dir /tmp/phoenix-v8-1-kimi-distillation-hf \
+  --hf-hub-cache "${HF_HUB_CACHE}"
+```
+
 ## Post-submission dose and interpolation probe
 
 After Phoenix 8.1 scored `0.9661` on the private leaderboard, the predeclared

@@ -71,7 +71,10 @@ Submission mapping:
   A post-submission half-dose retrain and 25/50/75% LoRA interpolation sweep
   failed to produce a Phoenix 8.2: the closest 75% arm moved validation only
   `+0.00012`, lost `0.00050` on the Liars holdout, and lost `0.00060` on the
-  frozen local test. Preserve Phoenix 8.1.
+  frozen local test. Preserve Phoenix 8.1. The matching 13,149-row Kimi
+  binary-logit annotation artifact, pinned source references, and exact prompt
+  renderer are published under MIT as the Hugging Face dataset
+  `Jazhyc/aletheias-phoenix-v8-1-kimi-k3-distillation`.
 - `submission/phoenix_wright_v5_3.ipynb` was the preceding controlled
   leaderboard-consistency submission candidate and must be tagged `black`. It
   keeps Phoenix 5.1's direct-logit inference, mutually exclusive

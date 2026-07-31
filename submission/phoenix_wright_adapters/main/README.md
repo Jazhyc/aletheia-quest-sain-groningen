@@ -43,3 +43,7 @@ A BF16 canary was not exact for these weights, so Phoenix 8.1 retains the FP32
 master for deployment.
 This adapter is intended for the matching competition notebook and is not a
 general-purpose truth classifier.
+
+The matching MIT Kimi binary-logit annotation artifact and exact prompt
+renderer are published at
+`Jazhyc/aletheias-phoenix-v8-1-kimi-k3-distillation` (Hugging Face dataset).
